@@ -1,0 +1,233 @@
+// # Symplectic Velocity Verlet Molecular Dynamics Integrator
+//
+// Logline: Integrates multi-particle molecular systems under Lennard-Jones pair potentials with time-reversible phase-space conservation.
+//
+// Setup: Symplectic Hamiltonian mechanics module tracking kinetic, potential, and total energy invariants without heap allocation.
+//
+// Beats:
+//   1. Define MdParticle and conservative MdSystem data structures.
+//   2. Step particle positions and half-step velocities via symplectic integration.
+//   3. Evaluate all-pairs Lennard-Jones interatomic forces and potential energies.
+//   4. Complete velocity step, compute kinetic energy, instantaneous temperature, and energy drift.
+
+import "std/core/math/trig.oo";
+import "std/science/chem/molecular/lennard_jones.oo";
+
+type MdParticle = struct {
+    x: Float,
+    y: Float,
+    z: Float,
+    vx: Float,
+    vy: Float,
+    vz: Float,
+    fx: Float,
+    fy: Float,
+    fz: Float,
+    mass: Float
+};
+
+type MdSystem2 = struct {
+    p0: MdParticle,
+    p1: MdParticle,
+    lj: LjParameters,
+    dt: Float,
+    kinetic_energy: Float,
+    potential_energy: Float,
+    total_energy: Float,
+    temperature_k: Float
+};
+
+type MdSystem3 = struct {
+    p0: MdParticle,
+    p1: MdParticle,
+    p2: MdParticle,
+    lj: LjParameters,
+    dt: Float,
+    kinetic_energy: Float,
+    potential_energy: Float,
+    total_energy: Float,
+    temperature_k: Float
+};
+
+// Construct a new molecular particle with position, velocity, and mass.
+pub fn md_particle_new(
+    x: Float, y: Float, z: Float,
+    vx: Float, vy: Float, vz: Float,
+    mass: Float
+) -> MdParticle {
+    let m: Float = if mass > 0.000000001 { mass } else { 1.0 };
+    return MdParticle {
+        x: x, y: y, z: z,
+        vx: vx, vy: vy, vz: vz,
+        fx: 0.0, fy: 0.0, fz: 0.0,
+        mass: m
+    };
+}
+
+// Compute kinetic energy of a single particle: 0.5 * m * (vx^2 + vy^2 + vz^2).
+pub fn md_particle_kinetic_energy(p: MdParticle) -> Float {
+    let vx: Float = p.vx; let vy: Float = p.vy; let vz: Float = p.vz;
+    let v_sq: Float = (vx * vx) + (vy * vy) + (vz * vz);
+    return 0.5 * p.mass * v_sq;
+}
+
+// Boltzmann constant k_B in SI units (J/K).
+pub fn md_boltzmann_constant() -> Float {
+    return 0.00000000000000000000001380649;
+}
+
+// Compute instantaneous temperature from total kinetic energy: T = (2 * E_kin) / (3 * N * k_B).
+pub fn md_compute_temperature(kin_energy: Float, num_particles: Int) -> Float {
+    if num_particles <= 0 || kin_energy <= 0.0 {
+        return 0.0;
+    }
+    let kb: Float = md_boltzmann_constant();
+    let num_f: Float = if num_particles == 2 { 2.0 } else { if num_particles == 3 { 3.0 } else { 1.0 } };
+    let denom: Float = 3.0 * num_f * kb;
+    if denom <= 0.0 {
+        return 0.0;
+    }
+    return (2.0 * kin_energy) / denom;
+}
+
+// Compute relative energy drift |(E_curr - E_init) / E_init|.
+pub fn md_energy_drift(e_initial: Float, e_current: Float) -> Float {
+    let mut abs_init: Float = e_initial;
+    if abs_init < 0.0 {
+        abs_init = 0.0 - abs_init;
+    }
+    if abs_init <= 0.000000000001 {
+        return 0.0;
+    }
+    let diff: Float = e_current - e_initial;
+    let mut abs_diff: Float = diff;
+    if abs_diff < 0.0 {
+        abs_diff = 0.0 - abs_diff;
+    }
+    return abs_diff / abs_init;
+}
+
+// Initialize a 2-particle molecular dynamics system.
+pub fn md_system2_new(p0: MdParticle, p1: MdParticle, lj: LjParameters, dt: Float) -> MdSystem2 {
+    let r0: Vec3 = vec3_create(p0.x, p0.y, p0.z);
+    let r1: Vec3 = vec3_create(p1.x, p1.y, p1.z);
+    let f01: Vec3 = lj_pair_force(lj, r0, r1);
+
+    let p0_init: MdParticle = MdParticle {
+        x: p0.x, y: p0.y, z: p0.z,
+        vx: p0.vx, vy: p0.vy, vz: p0.vz,
+        fx: f01.x, fy: f01.y, fz: f01.z,
+        mass: p0.mass
+    };
+    let p1_init: MdParticle = MdParticle {
+        x: p1.x, y: p1.y, z: p1.z,
+        vx: p1.vx, vy: p1.vy, vz: p1.vz,
+        fx: 0.0 - f01.x, fy: 0.0 - f01.y, fz: 0.0 - f01.z,
+        mass: p1.mass
+    };
+
+    let dx: Float = p0.x - p1.x; let dy: Float = p0.y - p1.y; let dz: Float = p0.z - p1.z;
+    let r: Float = math_sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    let pot: Float = lj_potential_energy(lj, r);
+    let kin: Float = md_particle_kinetic_energy(p0_init) + md_particle_kinetic_energy(p1_init);
+    let tot: Float = kin + pot;
+    let temp: Float = md_compute_temperature(kin, 2);
+
+    return MdSystem2 {
+        p0: p0_init,
+        p1: p1_init,
+        lj: lj,
+        dt: dt,
+        kinetic_energy: kin,
+        potential_energy: pot,
+        total_energy: tot,
+        temperature_k: temp
+    };
+}
+
+// Perform one symplectic Velocity Verlet step for a 2-particle system.
+pub fn md_system2_step(sys: MdSystem2) -> MdSystem2 {
+    let dt: Float = sys.dt;
+    if dt <= 0.0 {
+        return sys;
+    }
+
+    let p0: MdParticle = sys.p0;
+    let p1: MdParticle = sys.p1;
+    let lj: LjParameters = sys.lj;
+
+    let dt2_half: Float = 0.5 * dt * dt;
+    let dt_half: Float = 0.5 * dt;
+
+    let inv_m0: Float = 1.0 / p0.mass;
+    let inv_m1: Float = 1.0 / p1.mass;
+
+    // 1. Advance positions: r(t+dt) = r(t) + v(t)*dt + 0.5*(f(t)/m)*dt^2
+    let next_x0: Float = p0.x + (p0.vx * dt) + (p0.fx * inv_m0 * dt2_half);
+    let next_y0: Float = p0.y + (p0.vy * dt) + (p0.fy * inv_m0 * dt2_half);
+    let next_z0: Float = p0.z + (p0.vz * dt) + (p0.fz * inv_m0 * dt2_half);
+
+    let next_x1: Float = p1.x + (p1.vx * dt) + (p1.fx * inv_m1 * dt2_half);
+    let next_y1: Float = p1.y + (p1.vy * dt) + (p1.fy * inv_m1 * dt2_half);
+    let next_z1: Float = p1.z + (p1.vz * dt) + (p1.fz * inv_m1 * dt2_half);
+
+    // 2. Compute half-step velocities: v(t + dt/2) = v(t) + 0.5*(f(t)/m)*dt
+    let mid_vx0: Float = p0.vx + (p0.fx * inv_m0 * dt_half);
+    let mid_vy0: Float = p0.vy + (p0.fy * inv_m0 * dt_half);
+    let mid_vz0: Float = p0.vz + (p0.fz * inv_m0 * dt_half);
+
+    let mid_vx1: Float = p1.vx + (p1.fx * inv_m1 * dt_half);
+    let mid_vy1: Float = p1.vy + (p1.fy * inv_m1 * dt_half);
+    let mid_vz1: Float = p1.vz + (p1.fz * inv_m1 * dt_half);
+
+    // 3. Compute forces at new positions r(t+dt)
+    let next_r0: Vec3 = vec3_create(next_x0, next_y0, next_z0);
+    let next_r1: Vec3 = vec3_create(next_x1, next_y1, next_z1);
+    let new_f01: Vec3 = lj_pair_force(lj, next_r0, next_r1);
+
+    let new_fx0: Float = new_f01.x; let new_fy0: Float = new_f01.y; let new_fz0: Float = new_f01.z;
+    let new_fx1: Float = 0.0 - new_f01.x; let new_fy1: Float = 0.0 - new_f01.y; let new_fz1: Float = 0.0 - new_f01.z;
+
+    // 4. Complete velocity step: v(t+dt) = v(t + dt/2) + 0.5*(f(t+dt)/m)*dt
+    let next_vx0: Float = mid_vx0 + (new_fx0 * inv_m0 * dt_half);
+    let next_vy0: Float = mid_vy0 + (new_fy0 * inv_m0 * dt_half);
+    let next_vz0: Float = mid_vz0 + (new_fz0 * inv_m0 * dt_half);
+
+    let next_vx1: Float = mid_vx1 + (new_fx1 * inv_m1 * dt_half);
+    let next_vy1: Float = mid_vy1 + (new_fy1 * inv_m1 * dt_half);
+    let next_vz1: Float = mid_vz1 + (new_fz1 * inv_m1 * dt_half);
+
+    let next_p0: MdParticle = MdParticle {
+        x: next_x0, y: next_y0, z: next_z0,
+        vx: next_vx0, vy: next_vy0, vz: next_vz0,
+        fx: new_fx0, fy: new_fy0, fz: new_fz0,
+        mass: p0.mass
+    };
+
+    let next_p1: MdParticle = MdParticle {
+        x: next_x1, y: next_y1, z: next_z1,
+        vx: next_vx1, vy: next_vy1, vz: next_vz1,
+        fx: new_fx1, fy: new_fy1, fz: new_fz1,
+        mass: p1.mass
+    };
+
+    let dx: Float = next_x0 - next_x1;
+    let dy: Float = next_y0 - next_y1;
+    let dz: Float = next_z0 - next_z1;
+    let r: Float = math_sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    let pot: Float = lj_potential_energy(lj, r);
+    let kin: Float = md_particle_kinetic_energy(next_p0) + md_particle_kinetic_energy(next_p1);
+    let tot: Float = kin + pot;
+    let temp: Float = md_compute_temperature(kin, 2);
+
+    return MdSystem2 {
+        p0: next_p0,
+        p1: next_p1,
+        lj: lj,
+        dt: dt,
+        kinetic_energy: kin,
+        potential_energy: pot,
+        total_energy: tot,
+        temperature_k: temp
+    };
+}

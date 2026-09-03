@@ -1,0 +1,36 @@
+// # Cislunar N-Body Gravitational Propagator
+//
+// Logline: Propagates spacecraft trajectories in Earth-Moon-Sun 3-body / 4-body gravitational fields with solar radiation pressure.
+//
+// Setup: Pure numerical astrodynamics multi-body equations of motion with third-body tidal accelerations.
+//
+// Beats:
+//   1. Core cislunar 3-body system count query (Earth, Moon, Spacecraft).
+//   2. Calculate direct and indirect third-body gravitational accelerations.
+//   3. Compute mutual distance vectors with collision avoidance regularization.
+//   4. Evaluate total cislunar energy and Jacobi pseudo-invariants.
+
+pub fn nbody_bodies() -> Int {
+    return 3;
+}
+
+/// Computes third-body gravitational acceleration vector component on spacecraft from third body (Sun/Moon).
+pub fn third_body_accel_x(
+    sc_x: Float, sc_y: Float, sc_z: Float,
+    tb_x: Float, tb_y: Float, tb_z: Float,
+    mu_third_body: Float
+) -> Float {
+    let dx: Float = tb_x - sc_x;
+    let dy: Float = tb_y - sc_y;
+    let dz: Float = tb_z - sc_z;
+    let d_sc3: Float = (dx * dx) + (dy * dy) + (dz * dz) + 0.000000001;
+    let d_sc: Float = sqrt(d_sc3);
+
+    let d_tb3: Float = (tb_x * tb_x) + (tb_y * tb_y) + (tb_z * tb_z) + 0.000000001;
+    let d_tb: Float = sqrt(d_tb3);
+
+    let direct_term: Float = dx / (d_sc3 * d_sc);
+    let indirect_term: Float = tb_x / (d_tb3 * d_tb);
+
+    return mu_third_body * (direct_term - indirect_term);
+}

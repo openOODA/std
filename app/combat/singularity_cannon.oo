@@ -1,0 +1,93 @@
+// # Gen 7 Dynamic Morphing and Resonant Singularity Super-Cannon
+//
+// Logline: Simulates 4-phase quantum swarm morphing and resonant gravitational singularity super-cannon discharge mechanics.
+//
+// Setup: Pure aero computational state machine governing singularity resonance physics.
+//
+// Beats:
+//   1. Execute 4-phase swarm cycle: Patrol, Coalesce, Fused, and Disperse.
+//   2. Enforce 100% capacitor charge requirement before resonant beam discharge.
+//   3. Compute gravitational pulse field radius, dispersion kinetics, and beam power.
+
+
+type SwarmMorphState = struct {
+    phase_id: Int,
+    charge_pct: Float,
+    is_fused: Bool,
+    beam_discharged: Bool,
+    dispersion_radius: Float,
+    beam_power_gw: Float,
+    singularity_field_radius_px: Float
+};
+
+pub fn morph_state_new() -> SwarmMorphState {
+    return SwarmMorphState {
+        phase_id: 1,
+        charge_pct: 0.0,
+        is_fused: false,
+        beam_discharged: false,
+        dispersion_radius: 120.0,
+        beam_power_gw: 0.0,
+        singularity_field_radius_px: 0.0
+    };
+}
+
+pub fn transition_to_coalescence(state: &mut SwarmMorphState) {
+    (*state).phase_id = 2;
+    (*state).dispersion_radius = 20.0;
+    (*state).singularity_field_radius_px = 35.0;
+}
+
+pub fn charge_singularity(state: &mut SwarmMorphState, delta_charge: Float) {
+    (*state).charge_pct = (*state).charge_pct + delta_charge;
+    if (*state).charge_pct >= 100.0 {
+        (*state).charge_pct = 100.0;
+        (*state).phase_id = 3;
+        (*state).is_fused = true;
+        (*state).beam_power_gw = 1250.0;
+        (*state).singularity_field_radius_px = 60.0;
+    }
+}
+
+pub fn fire_singularity_cannon(state: &mut SwarmMorphState) -> Bool {
+    if (*state).is_fused && (*state).charge_pct >= 100.0 {
+        (*state).beam_discharged = true;
+        (*state).phase_id = 4;
+        (*state).is_fused = false;
+        (*state).charge_pct = 0.0;
+        (*state).beam_power_gw = 0.0;
+        (*state).dispersion_radius = 120.0;
+        (*state).singularity_field_radius_px = 0.0;
+        return true;
+    }
+    return false;
+}
+
+pub fn update_dispersion_restitution(state: &mut SwarmMorphState, dt: Float, expansion_rate: Float) {
+    if (*state).phase_id == 4 {
+        let new_radius: Float = (*state).dispersion_radius + (expansion_rate * dt);
+        if new_radius >= 120.0 {
+            (*state).dispersion_radius = 120.0;
+            (*state).phase_id = 1;
+            (*state).beam_discharged = false;
+        } else {
+            (*state).dispersion_radius = new_radius;
+        }
+    }
+}
+
+pub fn singularity_compute_beam_damage(charge_pct: Float, base_damage: Float) -> Float {
+    if charge_pct < 100.0 {
+        return 0.0;
+    }
+    return base_damage * 100.0;
+}
+
+pub fn singularity_compute_gravitational_warp(charge_pct: Float, dist_px: Float) -> Float {
+    if dist_px <= 1.0 {
+        return 0.0;
+    }
+    let charge_factor: Float = charge_pct / 100.0;
+    let field_strength: Float = (charge_factor * 5000.0) / (dist_px * dist_px);
+    return field_strength;
+}

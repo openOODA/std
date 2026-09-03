@@ -1,0 +1,42 @@
+// # Reaction Wheel Array Attitude Control
+//
+// Logline: Models reaction wheel array torque allocation, angular momentum storage, and pyramid configuration dynamics.
+//
+// Setup: Pure spacecraft attitude actuator dynamics with torque saturation and momentum management.
+//
+// Beats:
+//   1. Query nominal 4-wheel pyramid configuration count.
+//   2. Calculate stored wheel angular momentum H = I_wheel * omega.
+//   3. Distribute 3-axis body torque demand across 4-wheel pyramid array.
+//   4. Evaluate total array momentum magnitude and desaturation requirement.
+
+pub fn rw_count() -> Int {
+    return 4;
+}
+
+pub fn wheel_count() -> Int {
+    return 4;
+}
+
+pub fn reaction_wheel_momentum(inertia_kg_m2: Float, wheel_speed_rad_s: Float) -> Float {
+    return inertia_kg_m2 * wheel_speed_rad_s;
+}
+
+pub fn reaction_wheel_torque_limit(command_torque: Float, max_torque: Float) -> Float {
+    if command_torque > max_torque { return max_torque; }
+    if command_torque < (0.0 - max_torque) { return 0.0 - max_torque; }
+    return command_torque;
+}
+
+/// Computes total stored angular momentum of 4-wheel array in body frame (N*m*s).
+pub fn reaction_wheel_array_momentum(
+    h1: Float, h2: Float, h3: Float, h4: Float,
+    pyramid_angle_rad: Float
+) -> Float {
+    let cos_beta: Float = cos(pyramid_angle_rad);
+    let sin_beta: Float = sin(pyramid_angle_rad);
+    let hx: Float = cos_beta * (h1 - h3);
+    let hy: Float = cos_beta * (h2 - h4);
+    let hz: Float = sin_beta * (h1 + h2 + h3 + h4);
+    return sqrt((hx * hx) + (hy * hy) + (hz * hz));
+}

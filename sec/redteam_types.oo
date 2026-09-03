@@ -1,0 +1,92 @@
+// # Redteam Types Module
+//
+// Logline: Data structures for red team security campaigns and vulnerability management.
+//
+// Setup: Pure .oo standard library module for security evaluation.
+//
+// Beats:
+//   1. Define AttackVector, Vulnerability, RedTeamCampaign, and RedTeamEngine structs.
+//   2. Provide constructors and helper accessors.
+//
+// RULES.oot 1.4: Pure data structures.
+// RULES.oot 1.7: Strictly under 256 lines.
+
+type AttackVector = struct {
+    id: Int,
+    name: String,
+    target_component: String,
+    severity: Int,
+    payload: String,
+    description: String
+};
+
+type Vulnerability = struct {
+    vuln_id: Int,
+    vector_id: Int,
+    title: String,
+    description: String,
+    severity: Int,
+    risk_score: Int,
+    mitigated: Bool
+};
+
+type RedTeamCampaign = struct {
+    campaign_id: Int,
+    name: String,
+    target_system: String,
+    vectors: List[AttackVector],
+    vulnerabilities: List[Vulnerability],
+    total_tests_run: Int,
+    blocked_attacks: Int,
+    successful_exploits: Int,
+    strict_fail_closed: Bool,
+    is_active: Bool
+};
+
+type RedTeamEngine = struct {
+    campaigns: List[RedTeamCampaign],
+    global_threat_level: Int,
+    strict_mode: Bool,
+    total_evaluations: Int,
+    total_exploits_found: Int,
+    system_halted: Bool
+};
+
+pub fn attack_vector_create(id: Int, name: String, target_component: String, severity: Int, payload: String, description: String) -> AttackVector {
+    return AttackVector {
+        id: id,
+        name: name,
+        target_component: target_component,
+        severity: severity,
+        payload: payload,
+        description: description
+    };
+}
+
+pub fn vulnerability_create(vuln_id: Int, vector_id: Int, title: String, description: String, severity: Int, risk_score: Int) -> Vulnerability {
+    return Vulnerability {
+        vuln_id: vuln_id,
+        vector_id: vector_id,
+        title: title,
+        description: description,
+        severity: severity,
+        risk_score: risk_score,
+        mitigated: false
+    };
+}
+
+pub fn vulnerability_new(vuln_id: Int, severity: Int) -> Vulnerability {
+    return Vulnerability {
+        vuln_id: vuln_id,
+        vector_id: 0,
+        title: "Vulnerability",
+        description: "",
+        severity: severity,
+        risk_score: severity * 10,
+        mitigated: false
+    };
+}
+
+pub fn vulnerability_severity(v: Vulnerability) -> Int {
+    return v.severity;
+}

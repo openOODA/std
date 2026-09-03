@@ -1,0 +1,142 @@
+// # Level 3 Price-Time FIFO Queue Operations
+//
+// Logline: Implements doubly-linked FIFO order queue operations per price tick for sub-microsecond matching.
+//
+// Setup: Imports l3_types.oo for L3OrderBook SoA arrays.
+//
+// Beats:
+//   1. Enqueue new orders at the tail of price level queues with constant-time pointer updates.
+//   2. Dequeue head orders or unlink arbitrary resting orders in O(1) time without list shifting.
+//   3. Support in-place quantity reductions that preserve existing queue priority positions.
+
+import "./l3_types.oo";
+
+pub fn l3_queue_push_tail(
+    book: L3OrderBook,
+    level_idx: Int,
+    order_idx: Int,
+    is_buy: Bool
+) -> L3OrderBook {
+    let mut b: L3OrderBook = book;
+    let rem: Int = list_get(b.order_shares, order_idx) - list_get(b.order_filled, order_idx);
+    let neg_one: Int = 0 - 1;
+
+    if is_buy {
+        let cur_sh: Int = list_get(b.bid_shares, level_idx);
+        let cur_ct: Int = list_get(b.bid_counts, level_idx);
+        let cur_hd: Int = list_get(b.bid_heads, level_idx);
+        let cur_tl: Int = list_get(b.bid_tails, level_idx);
+
+        b.bid_shares = list_set(b.bid_shares, level_idx, cur_sh + rem);
+        b.bid_counts = list_set(b.bid_counts, level_idx, cur_ct + 1);
+
+        if cur_hd < 0 {
+            b.order_prev = list_set(b.order_prev, order_idx, neg_one);
+            b.order_next = list_set(b.order_next, order_idx, neg_one);
+            b.bid_heads = list_set(b.bid_heads, level_idx, order_idx);
+            b.bid_tails = list_set(b.bid_tails, level_idx, order_idx);
+        } else {
+            b.order_next = list_set(b.order_next, cur_tl, order_idx);
+            b.order_prev = list_set(b.order_prev, order_idx, cur_tl);
+            b.order_next = list_set(b.order_next, order_idx, neg_one);
+            b.bid_tails = list_set(b.bid_tails, level_idx, order_idx);
+        }
+    } else {
+        let cur_sh: Int = list_get(b.ask_shares, level_idx);
+        let cur_ct: Int = list_get(b.ask_counts, level_idx);
+        let cur_hd: Int = list_get(b.ask_heads, level_idx);
+        let cur_tl: Int = list_get(b.ask_tails, level_idx);
+
+        b.ask_shares = list_set(b.ask_shares, level_idx, cur_sh + rem);
+        b.ask_counts = list_set(b.ask_counts, level_idx, cur_ct + 1);
+
+        if cur_hd < 0 {
+            b.order_prev = list_set(b.order_prev, order_idx, neg_one);
+            b.order_next = list_set(b.order_next, order_idx, neg_one);
+            b.ask_heads = list_set(b.ask_heads, level_idx, order_idx);
+            b.ask_tails = list_set(b.ask_tails, level_idx, order_idx);
+        } else {
+            b.order_next = list_set(b.order_next, cur_tl, order_idx);
+            b.order_prev = list_set(b.order_prev, order_idx, cur_tl);
+            b.order_next = list_set(b.order_next, order_idx, neg_one);
+            b.ask_tails = list_set(b.ask_tails, level_idx, order_idx);
+        }
+    }
+    return b;
+}
+
+pub fn l3_queue_remove_order(
+    book: L3OrderBook,
+    level_idx: Int,
+    order_idx: Int,
+    is_buy: Bool
+) -> L3OrderBook {
+    let mut b: L3OrderBook = book;
+    let p_idx: Int = list_get(b.order_prev, order_idx);
+    let n_idx: Int = list_get(b.order_next, order_idx);
+    let rem: Int = list_get(b.order_shares, order_idx) - list_get(b.order_filled, order_idx);
+    let neg_one: Int = 0 - 1;
+
+    if p_idx >= 0 {
+        b.order_next = list_set(b.order_next, p_idx, n_idx);
+    } else {
+        if is_buy {
+            b.bid_heads = list_set(b.bid_heads, level_idx, n_idx);
+        } else {
+            b.ask_heads = list_set(b.ask_heads, level_idx, n_idx);
+        }
+    }
+
+    if n_idx >= 0 {
+        b.order_prev = list_set(b.order_prev, n_idx, p_idx);
+    } else {
+        if is_buy {
+            b.bid_tails = list_set(b.bid_tails, level_idx, p_idx);
+        } else {
+            b.ask_tails = list_set(b.ask_tails, level_idx, p_idx);
+        }
+    }
+
+    if is_buy {
+        let mut cur_sh: Int = list_get(b.bid_shares, level_idx) - rem;
+        if cur_sh < 0 { cur_sh = 0; }
+        b.bid_shares = list_set(b.bid_shares, level_idx, cur_sh);
+        let mut cur_ct: Int = list_get(b.bid_counts, level_idx) - 1;
+        if cur_ct < 0 { cur_ct = 0; }
+        b.bid_counts = list_set(b.bid_counts, level_idx, cur_ct);
+    } else {
+        let mut cur_sh: Int = list_get(b.ask_shares, level_idx) - rem;
+        if cur_sh < 0 { cur_sh = 0; }
+        b.ask_shares = list_set(b.ask_shares, level_idx, cur_sh);
+        let mut cur_ct: Int = list_get(b.ask_counts, level_idx) - 1;
+        if cur_ct < 0 { cur_ct = 0; }
+        b.ask_counts = list_set(b.ask_counts, level_idx, cur_ct);
+    }
+
+    b.order_prev = list_set(b.order_prev, order_idx, neg_one);
+    b.order_next = list_set(b.order_next, order_idx, neg_one);
+    return b;
+}
+
+pub fn l3_queue_reduce_shares(
+    book: L3OrderBook,
+    level_idx: Int,
+    order_idx: Int,
+    reduce_qty: Int,
+    is_buy: Bool
+) -> L3OrderBook {
+    let mut b: L3OrderBook = book;
+    let old_sh: Int = list_get(b.order_shares, order_idx);
+    b.order_shares = list_set(b.order_shares, order_idx, old_sh - reduce_qty);
+
+    if is_buy {
+        let mut cur_sh: Int = list_get(b.bid_shares, level_idx) - reduce_qty;
+        if cur_sh < 0 { cur_sh = 0; }
+        b.bid_shares = list_set(b.bid_shares, level_idx, cur_sh);
+    } else {
+        let mut cur_sh: Int = list_get(b.ask_shares, level_idx) - reduce_qty;
+        if cur_sh < 0 { cur_sh = 0; }
+        b.ask_shares = list_set(b.ask_shares, level_idx, cur_sh);
+    }
+    return b;
+}

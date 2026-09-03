@@ -1,0 +1,168 @@
+// # TLS 1.3 Handshake Theory (RFC 8446)
+//
+// Logline: TLS 1.3 (RFC 8446) achieves a 1-RTT full handshake for (EC)DHE key exchange with forward secrecy and three mandatory-to-implement cipher suites.
+//
+// Setup: Pure Int message and round-trip counters, cipher suite codes, and a published-date triple. Out-of-range and replayed 0-RTT fail closed.
+//
+// Beats:
+//   1. 1-RTT full handshake: ClientHello -> ServerHello + Certificate + CertificateVerify + Finished.
+//   2. Three cipher suites (RFC 8446 Sec. 9.1): TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256.
+//   3. Forward secrecy via (EC)DHE; static-RSA is removed in TLS 1.3 (RFC 8446 Sec. 1.2).
+//   4. 0-RTT data is allowed only on resumption; replay-resilient only with a single-use ticket.
+//   5. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// RFC 8446 published 2018-08-10.
+pub fn tls13_rfc_number() -> Int { return 8446; }
+pub fn tls13_rfc_year() -> Int { return 2018; }     // RFC 8446 publication year.
+pub fn tls13_rfc_month() -> Int { return 8; }       // RFC 8446 publication month.
+pub fn tls13_rfc_day() -> Int { return 10; }        // RFC 8446 publication day.
+
+// Full handshake round-trip count: 1-RTT (RFC 8446 Sec. 1.2, Sec. 4.1).
+pub fn tls13_round_trip_count() -> Int {
+    return 1;
+}
+
+// Cipher suite count for the TLS 1.3 mandatory set (RFC 8446 Sec. 9.1).
+pub fn tls13_cipher_suite_count() -> Int {
+    return 3;
+}
+
+// Cipher suite codes: 1 = TLS_AES_128_GCM_SHA256, 2 = TLS_AES_256_GCM_SHA384,
+// 3 = TLS_CHACHA20_POLY1305_SHA256 (RFC 8446 Sec. 9.1).
+pub fn tls13_suite_aes_128_gcm_sha256() -> Int { return 1; }
+pub fn tls13_suite_aes_256_gcm_sha384() -> Int { return 2; }
+pub fn tls13_suite_chacha20_poly1305_sha256() -> Int { return 3; }
+
+// Handshake message codes: 1 ClientHello, 2 ServerHello, 3 Certificate, 4 CertificateVerify, 5 Finished (RFC 8446 Sec. 4).
+pub fn tls13_msg_client_hello() -> Int { return 1; }
+pub fn tls13_msg_server_hello() -> Int { return 2; }
+pub fn tls13_msg_certificate() -> Int { return 1 + 2; }
+pub fn tls13_msg_certificate_verify() -> Int { return 1 + 1 + 2; }
+pub fn tls13_msg_finished() -> Int { return 1 + 1 + 1 + 2; }
+
+// 0-RTT mode flag: 0 DISABLED, 1 PSK_RESUMPTION. RFC 8446 Sec. 8.
+// 0-RTT is replayable, so it is admitted only on a resumption ticket.
+pub fn tls13_zero_rtt_disabled() -> Int { return 0; }
+pub fn tls13_zero_rtt_resumption() -> Int { return 1; }
+
+pub fn tls13_zero_rtt_allowed(mode: Int) -> Int {
+    if mode == tls13_zero_rtt_resumption() { return 1; }
+    return 0;
+}
+
+// Forward secrecy indicator: 1 if key exchange uses (EC)DHE. RFC 8446 Sec. 1.2.
+pub fn tls13_forward_secrecy_uses_ecdhe() -> Int { return 1; }
+
+// Static-RSA removal: TLS 1.3 disallows static-RSA key exchange (RFC 8446 Sec. 1.2).
+pub fn tls13_disallows_static_rsa() -> Int { return 1; }
+
+// 0.001% precision check: |actual - expected| * 100000 / expected <= tolerance (tolerance in ppm).
+// tolerance_ppm = 1 means within 0.001% (1 part in 100,000). Returns 1 if within tolerance.
+pub fn tls13_close_enough(actual: Int, expected: Int, tolerance_ppm: Int) -> Int {
+    if expected < 0 { return 0; }
+    if tolerance_ppm < 0 { return 0; }
+    let diff_pos: Int = actual - expected;
+    let diff_neg: Int = expected - actual;
+    let mut diff: Int = diff_pos;
+    if diff_neg > diff_pos { diff = diff_neg; }
+    if expected == 0 {
+        if diff == 0 { return 1; }
+        return 0;
+    }
+    let bound: Int = diff * 100000;
+    let allowed: Int = tolerance_ppm * expected;
+    if bound <= allowed { return 1; }
+    return 0;
+}
+
+// Domain certificate: 1-RTT full handshake.
+pub fn tls13_one_rtt_law(rtt: Int) -> DomainCert {
+    let h: Int = tls13_close_enough(rtt, tls13_round_trip_count(), 1);
+    return domain_cert("sec", "tls13_one_rtt", h);
+}
+
+// Domain certificate: cipher suite count within 0.001%.
+pub fn tls13_suite_count_law(count: Int) -> DomainCert {
+    let h: Int = tls13_close_enough(count, tls13_cipher_suite_count(), 1);
+    return domain_cert("sec", "tls13_suite_count", h);
+}
+
+// Domain certificate: 0-RTT allowed only on resumption; replay fails closed.
+pub fn tls13_zero_rtt_law(mode: Int, replay_protected: Int) -> Int {
+    if tls13_zero_rtt_allowed(mode) != 1 { return 0; }
+    if replay_protected != 1 { return 0; }
+    return 1;
+}
+
+pub fn tls13_zero_rtt_cert(mode: Int, replay_protected: Int) -> DomainCert {
+    let h: Int = tls13_zero_rtt_law(mode, replay_protected);
+    return domain_cert("sec", "tls13_zero_rtt", h);
+}
+
+// Coupled check: TLS 1.3 requires (EC)DHE forward secrecy and disallows static-RSA.
+pub fn tls13_coupled_law(uses_ecdhe: Int, disallows_static_rsa: Int) -> Int {
+    if uses_ecdhe != tls13_forward_secrecy_uses_ecdhe() { return 0; }
+    if disallows_static_rsa != tls13_disallows_static_rsa() { return 0; }
+    return 1;
+}
+
+pub fn tls13_coupled_cert(uses_ecdhe: Int, disallows_static_rsa: Int) -> DomainCert {
+    let h: Int = tls13_coupled_law(uses_ecdhe, disallows_static_rsa);
+    return domain_cert("sec", "tls13_coupled", h);
+}
+
+// KAT and hostile cases for the TLS 1.3 handshake theory.
+pub fn verify_tls13_handshake_theory() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if tls13_rfc_number() != 8446 { return false; }
+    if tls13_rfc_year() != 2018 { return false; }
+    if tls13_rfc_month() != 8 { return false; }
+    if tls13_rfc_day() != 10 { return false; }
+    if tls13_round_trip_count() != 1 { return false; }
+    if tls13_cipher_suite_count() != 3 { return false; }
+    if tls13_suite_aes_128_gcm_sha256() != 1 { return false; }
+    if tls13_suite_aes_256_gcm_sha384() != 2 { return false; }
+    if tls13_suite_chacha20_poly1305_sha256() != 3 { return false; }
+    if tls13_msg_client_hello() != 1 { return false; }
+    if tls13_msg_server_hello() != 2 { return false; }
+    if tls13_msg_certificate() != 3 { return false; }
+    if tls13_msg_certificate_verify() != 4 { return false; }
+    if tls13_msg_finished() != 5 { return false; }
+    if tls13_forward_secrecy_uses_ecdhe() != 1 { return false; }
+    if tls13_disallows_static_rsa() != 1 { return false; }
+    let c1: DomainCert = tls13_one_rtt_law(1);
+    if c1.holds != 1 { return false; }
+    let c1b: DomainCert = tls13_one_rtt_law(2);
+    if c1b.holds != 0 { return false; }
+    let c2: DomainCert = tls13_suite_count_law(3);
+    if c2.holds != 1 { return false; }
+    let c2b: DomainCert = tls13_suite_count_law(2);
+    if c2b.holds != 0 { return false; }
+    if tls13_zero_rtt_allowed(tls13_zero_rtt_resumption()) != 1 { return false; }
+    if tls13_zero_rtt_allowed(tls13_zero_rtt_disabled()) != 0 { return false; }
+    if tls13_zero_rtt_allowed(2) != 0 { return false; }
+    if tls13_zero_rtt_allowed(0 - 1) != 0 { return false; }
+    let z1: DomainCert = tls13_zero_rtt_cert(1, 1);
+    if z1.holds != 1 { return false; }
+    let z2: DomainCert = tls13_zero_rtt_cert(0, 1);
+    if z2.holds != 0 { return false; }
+    let z3: DomainCert = tls13_zero_rtt_cert(1, 0);
+    if z3.holds != 0 { return false; }
+    let cp1: DomainCert = tls13_coupled_cert(1, 1);
+    if cp1.holds != 1 { return false; }
+    let cp2: DomainCert = tls13_coupled_cert(0, 1);
+    if cp2.holds != 0 { return false; }
+    let cp3: DomainCert = tls13_coupled_cert(1, 0);
+    if cp3.holds != 0 { return false; }
+    if tls13_close_enough(1, 1, 1) != 1 { return false; }
+    if tls13_close_enough(3, 3, 1) != 1 { return false; }
+    if tls13_close_enough(0, 0, 1) != 1 { return false; }
+    if tls13_close_enough(2, 1, 1) != 0 { return false; }
+    if tls13_close_enough(0 - 1, 0, 1) != 0 { return false; }
+    if tls13_close_enough(1, 0 - 1, 1) != 0 { return false; }
+    return true;
+}

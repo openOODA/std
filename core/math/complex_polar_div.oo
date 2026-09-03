@@ -1,0 +1,27 @@
+// # Complex Polar Division
+//
+// Logline: Division of polar complex numbers; returns Err on zero divisor to match the original spec API.
+//
+// Setup: Pure. Spec API returns Result[ComplexPolar, String]; kept in a sibling file so fixtures that import the parent module avoid the C emit Result[Struct, String] redefinition bug.
+//
+// Beats:
+//   1. Verify the divisor magnitude is non-zero.
+//   2. Return Ok(ComplexPolar { r: a.r / b.r, theta: a.theta - b.theta }) on success.
+//   3. Return Err on zero divisor.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/complex_polar.oo";
+
+pub fn complex_polar_div(a: ComplexPolar, b: ComplexPolar) -> Result[ComplexPolar, String] {
+    let ar: Float = a.r;
+    let at: Float = a.theta;
+    let br: Float = b.r;
+    let bt: Float = b.theta;
+    if br == 0.0 {
+        return Err("ERR\tdiv_zero");
+    }
+    return Ok(ComplexPolar {
+        r: ar / br,
+        theta: at - bt
+    });
+}

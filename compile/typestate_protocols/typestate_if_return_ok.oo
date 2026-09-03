@@ -1,0 +1,29 @@
+// # Return after connect
+//
+// Logline: Connect in a true if and return so the Closed fallthrough never runs.
+//
+// Setup: Test fixture. Keep TYPESTATE directives and all code exact.
+//
+// Beats:
+//   1. Open into Closed.
+//   2. Connect in the true arm.
+//   3. Return before the later Closed use.
+//
+// TYPESTATE: Sock Closed Open
+// TYPESTATE fn open_sock: -> Closed
+// TYPESTATE fn connect: Closed -> Open
+// TYPESTATE fn send: Open -> Open
+
+fn open_sock() -> Int { return 1; }
+fn connect(s: Int) { let x = s; }
+fn send(s: Int) { let x = s; }
+
+pub fn verify_typestate_if_return_ok() -> Bool {
+    let s = open_sock();
+    if true {
+        connect(s);
+        return;
+    }
+    let z = 0;
+    return true;
+}

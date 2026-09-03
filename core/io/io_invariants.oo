@@ -1,0 +1,21 @@
+// # I/O writable-path law
+//
+// Logline: An empty path is not a writable target.
+//
+// Setup: Pure. Imports domain_cert.oo. io_path_ok("") holds 0.
+//
+// Beats:
+//   1. Empty path fails closed.
+//   2. A non-empty path holds 1.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn io_path_ok(path: String) -> DomainCert {
+    if path == "" {
+        return domain_cert("io", "path_ok", 0);
+    }
+    if chars_len(path) == 0 {
+        return domain_cert("io", "path_ok", 0);
+    }
+    return domain_cert("io", "path_ok", 1);
+}

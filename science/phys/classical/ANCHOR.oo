@@ -1,0 +1,130 @@
+// # Phys Classical -- Classical Mechanics, Fluids, Thermo, Rigid/Soft Body
+//
+// Logline: Classical mechanics, fluid dynamics, thermodynamics, rigid/soft body simulation, collisions. Phase 3.4 reorg: merged from phys/continuum/, phys/mechanics/, phys/hydro/, phys/thermo/, phys/physics/, phys/advanced/, plus the root classical files (conservation_laws, least_action, thermodynamics, phys_invariants).
+//
+// Setup: Co-located module of 116 files under std/science/phys/classical. Pure compute, no caps.
+//
+// Beats:
+//   1. Conservation and least-action family (3 files).
+//   2. Thermo family (carnot, entropy, gibbs, ideal_gas, etc.).
+//   3. Continuum family (navier_stokes, cauchy_stress).
+//   4. Collision, rigid body, soft body family.
+//   5. Compressible flow, boundary layer, airfoil family.
+//   6. Lattice Boltzmann, turbulence, RANS/LES family.
+//   7. Acoustic wave, reverberation, Doppler family.
+//   8. Solar radiation pressure, orbital atmospheric drag family.
+
+import "conservation_laws.oo";
+import "least_action.oo";
+import "thermodynamics.oo";
+import "phys_invariants.oo";
+import "acoustic_pml_absorbing_boundary.oo";
+import "acoustic_wave_equation.oo";
+import "aerodynamic_drag.oo";
+import "airfoil_lift_drag_polar.oo";
+import "airfoil_naca_4digit.oo";
+import "airfoil_panel_method.oo";
+import "boundary_layer_integral.oo";
+import "buoyancy_force.oo";
+import "carnot.oo";
+import "cauchy_stress.oo";
+import "cloth_mesh.oo";
+import "collision.oo";
+import "collision_contacts.oo";
+import "collision_engine.oo";
+import "collision_narrow.oo";
+import "collision_ops.oo";
+import "collision_types.oo";
+import "compressible_fanno_rayleigh_flow.oo";
+import "compressible_isentropic_flow.oo";
+import "compressible_prandtl_meyer.oo";
+import "compressible_riemann_roe_solver.oo";
+import "compressible_shock_wave.oo";
+import "phys_constants.oo";
+import "constraint_distance.oo";
+import "constraint_hinge.oo";
+import "contact_manifold.oo";
+import "electromagnetism.oo";
+import "entropy.oo";
+import "euler_integrator.oo";
+import "finite_wing_lifting_line.oo";
+import "fluid.oo";
+import "fluid_domain.oo";
+import "fluid_engine.oo";
+import "fluid_grid.oo";
+import "fluid_math.oo";
+import "fluid_particle.oo";
+import "fluid_stubs.oo";
+import "fourier_heat_law.oo";
+import "gravitational_nbody.oo";
+import "gibbs.oo";
+import "hypersonic_newtonian_aerodynamics.oo";
+import "ideal_gas_law.oo";
+import "impulse_solver.oo";
+import "inertia_tensor.oo";
+import "kepler_third_law.oo";
+import "lattice_boltzmann_boundary.oo";
+import "lattice_boltzmann_d2q9.oo";
+import "lattice_boltzmann_mrt.oo";
+import "lattice_boltzmann_multiphase_shan_chen.oo";
+import "lattice_boltzmann_stream_collide.oo";
+import "navier_stokes.oo";
+import "navier_stokes_2d_grid.oo";
+import "navier_stokes_advection.oo";
+import "navier_stokes_boundary_conditions.oo";
+import "navier_stokes_diffusion.oo";
+import "navier_stokes_poisson_solver.oo";
+import "navier_stokes_vorticity_stream.oo";
+import "orbital_atmospheric_drag_nrlmsise.oo";
+import "orbital_mechanics_physics.oo";
+import "orbital_nbody_barnes_hut.oo";
+import "orbital.oo";
+import "orbital_cr3bp_manifold.oo";
+import "orbital_relativity_schwarzschild.oo";
+import "particle_system.oo";
+import "physics.oo";
+import "physics_stubs.oo";
+import "physics_advanced.oo";
+import "physics_advanced_stubs.oo";
+import "propeller_blade_element_momentum.oo";
+import "ragdoll_angular_motor.oo";
+import "ragdoll_featherstone_aba.oo";
+import "ragdoll_joint_ball_socket.oo";
+import "ragdoll_joint_cone_twist.oo";
+import "ragdoll_joint_hinge_revolute.oo";
+import "ragdoll_joint_slider.oo";
+import "ragdoll_pose_ik_two_bone.oo";
+import "rankine.oo";
+import "relativity.oo";
+import "reverberation_schroeder.oo";
+import "rigid.oo";
+import "rigid_aabb.oo";
+import "rigid_body_2d.oo";
+import "rigid_body_3d.oo";
+import "rigid_engine.oo";
+import "rigid_ops.oo";
+import "rigid_types.oo";
+import "rk4_integrator.oo";
+import "rope_simulation.oo";
+import "schwarzschild_escape_law.oo";
+import "soft_body_cloth_bending_dihedral.oo";
+import "soft_body_corotational.oo";
+import "soft_body_fem_tetrahedral.oo";
+import "soft_body_hyperelastic_neo_hookean.oo";
+import "soft_body_mass_spring.oo";
+import "soft_body_position_based_dynamics.oo";
+import "soft_body_pressure.oo";
+import "solar_radiation_pressure.oo";
+import "sound_atmospheric_attenuation.oo";
+import "sound_doppler_3d.oo";
+import "sph_fluid_density.oo";
+import "sph_fluid_particle.oo";
+import "sph_fluid_viscosity.oo";
+import "spring_damper.oo";
+import "stefan_boltzmann_law.oo";
+import "turbulence_k_epsilon.oo";
+import "turbulence_smagorinsky_les.oo";
+import "units.oo";
+import "van_der_waals.oo";
+import "verlet_integrator.oo";
+import "vis_viva_theory.oo";

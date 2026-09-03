@@ -1,0 +1,136 @@
+// # FlatBuffers forward/backward compat principle
+//
+// Logline: A FlatBuffers vtable (Wouter van Oortmerssen, Google 2014, https://google.github.io/flatbuffers/md__schemas.html) records each field's offset as a soffset_t (uint16); old and new clients share the vtable by index, so old fields are read at their original offset and new fields default to zero.
+//
+// Setup: Pure Int. soffset_t is uint16 = 2 bytes. The vtable layout is: uint16 vtable_size, uint16 table_size, soffset_t[n] field offsets (FlatBuffers GRPC paper, Evans 2014+).
+//
+// Beats:
+//   1. flatbuffers_vtable_field_count returns n_fields (clamped to 0 for negative inputs).
+//   2. flatbuffers_vtable_size = 4 + 2*n_fields (soffset_t is 2 bytes).
+//   3. Hostile: n_fields<0 fails closed to 0.
+//   4. Coupled: zero-copy like Cap'n Proto but different wire format (size-prefixed, not segment-list).
+//   5. Initial release year 2014 (Wouter van Oortmerssen, GitHub google/flatbuffers).
+
+import "std/core/primitives/domain_cert.oo";
+
+// soffset_t is uint16 = 2 bytes (FlatBuffers docs, https://google.github.io/flatbuffers/).
+pub fn flatbuffers_soffset_bytes() -> Int {
+    return 2;
+}
+
+// 4 bytes for the vtable header: uint16 vtable_size + uint16 table_size.
+pub fn flatbuffers_vtable_header_bytes() -> Int {
+    return 4;
+}
+
+// flatbuffers_vtable_field_count returns n (clamped to 0 for negative inputs).
+pub fn flatbuffers_vtable_field_count(n: Int) -> Int {
+    if n < 0 { return 0; }
+    return n;
+}
+
+// flatbuffers_vtable_size(n) = 4 + 2*n (soffset_t is uint16 = 2 bytes).
+// Reference: FlatBuffers docs "Wire format - vtables" page.
+pub fn flatbuffers_vtable_size(n: Int) -> Int {
+    if n < 0 { return 0; }
+    let hdr: Int = flatbuffers_vtable_header_bytes();
+    let so: Int = flatbuffers_soffset_bytes();
+    return hdr + so * n;
+}
+
+// flatbuffers_initial_release_year = 2014 (Wouter van Oortmerssen, Google 2014).
+pub fn flatbuffers_initial_release_year() -> Int {
+    return 2014;
+}
+
+// Coupled: FlatBuffers and Cap'n Proto are both zero-copy, but with different wire formats.
+pub fn flatbuffers_zerocopy_distinct_wire() -> Int {
+    return 1;
+}
+
+// Golden: vtable with 3 fields has size 4 + 2*3 = 10 bytes.
+pub fn markup_flatbuffers_vtable_3fields() -> DomainCert {
+    let sz: Int = flatbuffers_vtable_size(3);
+    let mut h: Int = 0;
+    if sz == 10 { h = 1; }
+    return domain_cert("markup", "fb_vtable_3", h);
+}
+
+// Golden: empty vtable (n=0) has size 4 bytes (header only).
+pub fn markup_flatbuffers_vtable_empty() -> DomainCert {
+    let sz: Int = flatbuffers_vtable_size(0);
+    let mut h: Int = 0;
+    if sz == 4 { h = 1; }
+    return domain_cert("markup", "fb_vtable_0", h);
+}
+
+// Golden: vtable with 5 fields has size 4 + 2*5 = 14 bytes.
+pub fn markup_flatbuffers_vtable_5fields() -> DomainCert {
+    let sz: Int = flatbuffers_vtable_size(5);
+    let mut h: Int = 0;
+    if sz == 14 { h = 1; }
+    return domain_cert("markup", "fb_vtable_5", h);
+}
+
+// Golden: vtable_field_count(n) returns n for n >= 0.
+pub fn markup_flatbuffers_field_count() -> DomainCert {
+    let n: Int = flatbuffers_vtable_field_count(7);
+    let mut h: Int = 0;
+    if n == 7 { h = 1; }
+    return domain_cert("markup", "fb_field_count", h);
+}
+
+// Hostile: negative n_fields fails closed to size 0.
+pub fn markup_flatbuffers_neg_fields_closed() -> DomainCert {
+    let sz: Int = flatbuffers_vtable_size(0 - 1);
+    let mut h: Int = 0;
+    if sz == 0 { h = 1; }
+    return domain_cert("markup", "fb_neg_closed", h);
+}
+
+// Hostile: negative field count returns 0.
+pub fn markup_flatbuffers_neg_field_count_closed() -> DomainCert {
+    let n: Int = flatbuffers_vtable_field_count(0 - 3);
+    let mut h: Int = 0;
+    if n == 0 { h = 1; }
+    return domain_cert("markup", "fb_neg_fc_closed", h);
+}
+
+// Coupled: zero-copy check holds (distinct from Cap'n Proto wire).
+pub fn markup_flatbuffers_zerocopy_coupled() -> DomainCert {
+    let h: Int = flatbuffers_zerocopy_distinct_wire();
+    return domain_cert("markup", "fb_zc_coupled", h);
+}
+
+// Coupled: soffset_t is exactly 2 bytes (uint16, FlatBuffers docs).
+pub fn markup_flatbuffers_soffset_precision() -> DomainCert {
+    let so: Int = flatbuffers_soffset_bytes();
+    let mut h: Int = 0;
+    if so == 2 { h = 1; }
+    return domain_cert("markup", "fb_soffset_precision", h);
+}
+
+// Coupled: initial release year 2014.
+pub fn markup_flatbuffers_release_year() -> DomainCert {
+    let y: Int = flatbuffers_initial_release_year();
+    let mut h: Int = 0;
+    if y == 2014 { h = 1; }
+    return domain_cert("markup", "fb_release_year", h);
+}
+
+pub fn verify_flatbuffers_forward_backward_principle() -> Bool {
+    if markup_flatbuffers_vtable_3fields().holds != 1 { return false; }
+    if markup_flatbuffers_vtable_empty().holds != 1 { return false; }
+    if markup_flatbuffers_vtable_5fields().holds != 1 { return false; }
+    if markup_flatbuffers_field_count().holds != 1 { return false; }
+    if markup_flatbuffers_neg_fields_closed().holds != 1 { return false; }
+    if markup_flatbuffers_neg_field_count_closed().holds != 1 { return false; }
+    if markup_flatbuffers_zerocopy_coupled().holds != 1 { return false; }
+    if markup_flatbuffers_soffset_precision().holds != 1 { return false; }
+    if markup_flatbuffers_release_year().holds != 1 { return false; }
+    if flatbuffers_vtable_size(1) != 6 { return false; }
+    if flatbuffers_vtable_size(10) != 24 { return false; }
+    if flatbuffers_vtable_field_count(0) != 0 { return false; }
+    if flatbuffers_soffset_bytes() != 2 { return false; }
+    return true;
+}

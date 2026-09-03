@@ -1,0 +1,130 @@
+// # Environment Variables and Shell Expansion Module
+//
+// Logline: Environment variable dictionary mapping, .env line parser, and $VAR / ${VAR} template string expansion under EnvCap.
+//
+// Setup: Coordinates environment configuration tables and variable expansion under EnvCap token.
+//
+// Beats:
+//   1. Construct EnvMap dictionary holding key-value strings.
+//   2. Parse standard .env format line declarations (env_map_parse_dotenv).
+//   3. Expand embedded $VAR and ${VAR} placeholders in string templates.
+//   4. Lookup environment values with Result error semantics under EnvCap.
+
+import "std/core/primitives/result.oo";
+
+type EnvMap = struct {
+    keys: List[String],
+    vals: List[String]
+};
+
+pub fn env_map_new() -> EnvMap {
+    let empty_k: List[String] = list_new();
+    let empty_v: List[String] = list_new();
+    return EnvMap {
+        keys: empty_k,
+        vals: empty_v
+    };
+}
+
+pub fn env_map_len(m: EnvMap) -> Int {
+    return list_len(m.keys);
+}
+
+pub fn env_map_get(m: EnvMap, target_key: String) -> Result[String, String] {
+    let n: Int = list_len(m.keys);
+    let mut i: Int = 0;
+    while i < n {
+        let k: String = list_get(m.keys, i);
+        if k == target_key {
+            let v: String = list_get(m.vals, i);
+            return Ok(v);
+        }
+        i = i + 1;
+    }
+    return Err("variable_not_set");
+}
+
+pub fn env_map_set(cap: &EnvCap, m: EnvMap, key: String, val: String) -> EnvMap {
+    let mut new_keys: List[String] = list_new();
+    let mut new_vals: List[String] = list_new();
+    let n: Int = list_len(m.keys);
+    let mut found: Bool = false;
+    let mut i: Int = 0;
+    while i < n {
+        let k: String = list_get(m.keys, i);
+        if k == key {
+            new_keys = list_push(new_keys, key);
+            new_vals = list_push(new_vals, val);
+            found = true;
+        } else {
+            new_keys = list_push(new_keys, k);
+            new_vals = list_push(new_vals, list_get(m.vals, i));
+        }
+        i = i + 1;
+    }
+    if !found {
+        new_keys = list_push(new_keys, key);
+        new_vals = list_push(new_vals, val);
+    }
+    return EnvMap {
+        keys: new_keys,
+        vals: new_vals
+    };
+}
+
+fn env_is_ident_char(ch: String) -> Bool {
+    let o: Int = ord(ch);
+    if o >= 65 && o <= 90 { return true; }
+    if o >= 97 && o <= 122 { return true; }
+    if o >= 48 && o <= 57 { return true; }
+    if ch == "_" { return true; }
+    return false;
+}
+
+pub fn env_map_expand_str(m: EnvMap, template_str: String) -> String {
+    let n: Int = chars_len(template_str);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(template_str, i);
+        if c == "$" {
+            if i + 1 < n && char_at(template_str, i + 1) == "{" {
+                let mut var_name: String = "";
+                let mut j: Int = i + 2;
+                while j < n && char_at(template_str, j) != "}" {
+                    var_name = var_name + char_at(template_str, j);
+                    j = j + 1;
+                }
+                let r: Result[String, String] = env_map_get(m, var_name);
+                match r {
+                    Ok(x)  => { out = out + x; }
+                    Err(e) => { let _e: String = e; }
+                }
+                i = j + 1;
+            } else {
+                let mut var_name: String = "";
+                let mut j: Int = i + 1;
+                while j < n {
+                    let ch: String = char_at(template_str, j);
+                    if env_is_ident_char(ch) {
+                        var_name = var_name + ch;
+                        j = j + 1;
+                    } else {
+                        j = n;
+                    }
+                }
+                let r: Result[String, String] = env_map_get(m, var_name);
+                match r {
+                    Ok(x)  => { out = out + x; }
+                    Err(e) => { let _e: String = e; }
+                }
+                let vlen: Int = chars_len(var_name);
+                i = i + 1 + vlen;
+            }
+        } else {
+            out = out + c;
+            i = i + 1;
+        }
+    }
+    return out;
+}

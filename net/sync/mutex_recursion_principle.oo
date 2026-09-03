@@ -1,0 +1,126 @@
+// # Mutex recursion principle
+//
+// Logline: A re-entrant mutex tracks owner thread id and recursion depth; same-owner lock increments depth, foreign-owner lock when held fails closed, and unlock decrements depth and never drops below zero.
+//
+// Setup: Pure Int arithmetic on a ReentrantMutex record. No FS, net, env, or thread.
+//
+// Beats:
+//   1. New mutex has owner 0 and depth 0.
+//   2. Lock from the same owner when depth > 0 increments depth.
+//   3. Lock from a different owner when depth > 0 fails closed (depth unchanged).
+//   4. Unlock decrements depth and never drops below zero.
+
+import "std/core/primitives/domain_cert.oo";
+
+type ReentrantMutex = struct {
+    owner: Int,
+    depth: Int
+};
+
+pub fn reentrant_mutex_new() -> ReentrantMutex {
+    return ReentrantMutex {
+        owner: 0,
+        depth: 0
+    };
+}
+
+// Lock from thread_id. Returns the new mutex state, or owner -1 on failure.
+pub fn reentrant_mutex_lock(mtx: ReentrantMutex, thread_id: Int) -> ReentrantMutex {
+    let d: Int = mtx.depth;
+    let o: Int = mtx.owner;
+    if d == 0 {
+        return ReentrantMutex {
+            owner: thread_id,
+            depth: 1
+        };
+    }
+    if o == thread_id {
+        return ReentrantMutex {
+            owner: thread_id,
+            depth: d + 1
+        };
+    }
+    return ReentrantMutex {
+        owner: 0 - 1,
+        depth: d
+    };
+}
+
+// Unlock from thread_id. Returns new mutex state. Foreign unlock leaves state untouched.
+pub fn reentrant_mutex_unlock(mtx: ReentrantMutex, thread_id: Int) -> ReentrantMutex {
+    let d: Int = mtx.depth;
+    let o: Int = mtx.owner;
+    if d == 0 {
+        return ReentrantMutex {
+            owner: 0,
+            depth: 0
+        };
+    }
+    if o != thread_id {
+        return ReentrantMutex {
+            owner: o,
+            depth: d
+        };
+    }
+    let next_d: Int = d - 1;
+    if next_d == 0 {
+        return ReentrantMutex {
+            owner: 0,
+            depth: 0
+        };
+    }
+    return ReentrantMutex {
+        owner: thread_id,
+        depth: next_d
+    };
+}
+
+pub fn verify_mutex_recursion_principle() -> Bool {
+    // Golden: same owner locks twice, depth becomes 2.
+    let m0: ReentrantMutex = reentrant_mutex_new();
+    let m1: ReentrantMutex = reentrant_mutex_lock(m0, 7);
+    if m1.owner != 7 {
+        return false;
+    }
+    if m1.depth != 1 {
+        return false;
+    }
+    let m2: ReentrantMutex = reentrant_mutex_lock(m1, 7);
+    if m2.owner != 7 {
+        return false;
+    }
+    if m2.depth != 2 {
+        return false;
+    }
+    let m3: ReentrantMutex = reentrant_mutex_unlock(m2, 7);
+    if m3.depth != 1 {
+        return false;
+    }
+    if m3.owner != 7 {
+        return false;
+    }
+    let m4: ReentrantMutex = reentrant_mutex_unlock(m3, 7);
+    if m4.depth != 0 {
+        return false;
+    }
+    if m4.owner != 0 {
+        return false;
+    }
+    // Hostile: foreign owner tries to lock a held mutex; depth unchanged and owner flagged.
+    let h1: ReentrantMutex = reentrant_mutex_lock(m1, 9);
+    if h1.owner != 0 - 1 {
+        return false;
+    }
+    if h1.depth != 1 {
+        return false;
+    }
+    // Hostile: unlock an unlocked mutex leaves depth at 0.
+    let h2: ReentrantMutex = reentrant_mutex_unlock(m0, 7);
+    if h2.depth != 0 {
+        return false;
+    }
+    if h2.owner != 0 {
+        return false;
+    }
+    return true;
+}

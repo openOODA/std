@@ -1,0 +1,177 @@
+// # TUI Modal Dialog Widget
+//
+// Logline: Modal pop-up dialog supporting alerts, confirmations, choices, and button navigation.
+//
+// Setup: Focused prompt overlay for user notifications and decision interception.
+//
+// Beats:
+//   1. Define WidgetDialog configuration with alert types, message text, and button states.
+//   2. Support OK, Cancel, Yes, and No button arbitration with keyboard selection.
+//   3. Render backdrop frame, centered message prompt, and highlighted action buttons.
+
+import "std/app/ui/tui/tui_cell.oo";
+import "std/app/ui/tui/tui_buffer.oo";
+import "std/app/ui/tui/border_styles.oo";
+
+type WidgetDialog = struct {
+    id: Int,
+    title: String,
+    message: String,
+    area: BufferArea,
+    dialog_type: Int,
+    selected_button: Int,
+    is_open: Bool,
+    result_code: Int
+};
+
+pub fn widget_dialog_new_alert(id: Int, title: String, message: String, area: BufferArea) -> WidgetDialog {
+    return WidgetDialog {
+        id: id,
+        title: title,
+        message: message,
+        area: area,
+        dialog_type: 0,
+        selected_button: 0,
+        is_open: true,
+        result_code: 0 - 1
+    };
+}
+
+pub fn widget_dialog_new_confirm(id: Int, title: String, message: String, area: BufferArea) -> WidgetDialog {
+    return WidgetDialog {
+        id: id,
+        title: title,
+        message: message,
+        area: area,
+        dialog_type: 1,
+        selected_button: 0,
+        is_open: true,
+        result_code: 0 - 1
+    };
+}
+
+pub fn widget_dialog_select_next(dlg: WidgetDialog) -> WidgetDialog {
+    if dlg.dialog_type > 0 {
+        return WidgetDialog {
+            id: dlg.id,
+            title: dlg.title,
+            message: dlg.message,
+            area: dlg.area,
+            dialog_type: dlg.dialog_type,
+            selected_button: (dlg.selected_button + 1) % 2,
+            is_open: dlg.is_open,
+            result_code: dlg.result_code
+        };
+    }
+    return dlg;
+}
+
+pub fn widget_dialog_select_prev(dlg: WidgetDialog) -> WidgetDialog {
+    if dlg.dialog_type > 0 {
+        let next_sel: Int = if dlg.selected_button == 0 { 1 } else { 0 };
+        return WidgetDialog {
+            id: dlg.id,
+            title: dlg.title,
+            message: dlg.message,
+            area: dlg.area,
+            dialog_type: dlg.dialog_type,
+            selected_button: next_sel,
+            is_open: dlg.is_open,
+            result_code: dlg.result_code
+        };
+    }
+    return dlg;
+}
+
+pub fn widget_dialog_confirm(dlg: WidgetDialog) -> WidgetDialog {
+    return WidgetDialog {
+        id: dlg.id,
+        title: dlg.title,
+        message: dlg.message,
+        area: dlg.area,
+        dialog_type: dlg.dialog_type,
+        selected_button: dlg.selected_button,
+        is_open: false,
+        result_code: dlg.selected_button
+    };
+}
+
+pub fn widget_dialog_cancel(dlg: WidgetDialog) -> WidgetDialog {
+    return WidgetDialog {
+        id: dlg.id,
+        title: dlg.title,
+        message: dlg.message,
+        area: dlg.area,
+        dialog_type: dlg.dialog_type,
+        selected_button: dlg.selected_button,
+        is_open: false,
+        result_code: 1
+    };
+}
+
+pub fn widget_dialog_render(dlg: WidgetDialog, buf: TuiBuffer) -> TuiBuffer {
+    if !(dlg.is_open) {
+        return buf;
+    }
+    let a: BufferArea = dlg.area;
+    if a.width < 10 || a.height < 5 {
+        return buf;
+    }
+
+    let bg_cell: TuiCell = tui_cell_new(32, 15, 0);
+    let mut out: TuiBuffer = tui_buffer_fill_rect(buf, a, bg_cell);
+
+    let b_style: BorderStyle = border_style_double(14, 0);
+    let sides: BorderSides = border_sides_all();
+    out = border_draw_perimeter(out, a, b_style, sides);
+
+    let t: String = dlg.title;
+    if t.len() > 0 && a.width > (t.len() + 4) {
+        out = tui_buffer_write_string(out, a.x + 2, a.y, " " + t + " ", 14, 0, 1);
+    }
+
+    let msg: String = dlg.message;
+    let msg_len: Int = msg.len();
+    let max_text_w: Int = a.width - 4;
+    let msg_x: Int = a.x + 2;
+    let msg_y: Int = a.y + 2;
+    if msg_len <= max_text_w {
+        out = tui_buffer_write_string(out, msg_x, msg_y, msg, 15, 0, 0);
+    } else {
+        let mut row: Int = 0;
+        let mut idx: Int = 0;
+        while idx < msg_len && (msg_y + row) < (a.y + a.height - 2) {
+            let mut str_buf: List[Int] = bytes_new();
+            let mut c: Int = 0;
+            while c < max_text_w && (idx + c) < msg_len {
+                str_buf = bytes_push(str_buf, byte_at(msg, idx + c));
+                c = c + 1;
+            }
+            out = tui_buffer_write_string(out, msg_x, msg_y + row, bytes_to_str(str_buf), 15, 0, 0);
+            idx = idx + max_text_w;
+            row = row + 1;
+        }
+    }
+
+    let btn_y: Int = a.y + a.height - 2;
+    if dlg.dialog_type == 0 {
+        let ok_txt: String = "[ OK ]";
+        let btn_x: Int = a.x + (a.width - 6) / 2;
+        out = tui_buffer_write_string(out, btn_x, btn_y, ok_txt, 0, 14, 1);
+    } else {
+        let btn1_x: Int = a.x + (a.width / 2) - 8;
+        let btn2_x: Int = a.x + (a.width / 2) + 2;
+        let is_b0: Bool = dlg.selected_button == 0;
+        let b0_fg: Int = if is_b0 { 0 } else { 7 };
+        let b0_bg: Int = if is_b0 { 14 } else { 0 };
+        let is_b1: Bool = dlg.selected_button == 1;
+        let b1_fg: Int = if is_b1 { 0 } else { 7 };
+        let b1_bg: Int = if is_b1 { 14 } else { 0 };
+
+        let b0_mod: Int = if is_b0 { 1 } else { 0 };
+        let b1_mod: Int = if is_b1 { 1 } else { 0 };
+        out = tui_buffer_write_string(out, btn1_x, btn_y, "[ OK ]", b0_fg, b0_bg, b0_mod);
+        out = tui_buffer_write_string(out, btn2_x, btn_y, "[ Cancel ]", b1_fg, b1_bg, b1_mod);
+    }
+    return out;
+}

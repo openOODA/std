@@ -1,0 +1,44 @@
+// # Spacecraft Thermal Radiation & Heat Balance
+//
+// Logline: Calculates radiative thermal balance, Stefan-Boltzmann emission, solar absorption, and equilibrium temperatures.
+//
+// Setup: Pure spacecraft thermal design and radiation heat transfer in orbital vacuum environment.
+//
+// Beats:
+//   1. Thermal emissivity query in millirankings (eps * 1000 = 850 for eps = 0.85).
+//   2. Calculate radiated thermal emission Q_rad = epsilon * sigma_SB * A * T^4.
+//   3. Compute absorbed solar and Earth albedo thermal loads.
+//   4. Calculate passive spacecraft equilibrium thermal temperature T_eq.
+
+pub fn thermal_eps_milli() -> Int {
+    return 850;
+}
+
+pub fn stefan_boltzmann_constant() -> Float {
+    return 0.00000005670374419; // W/(m^2 * K^4)
+}
+
+/// Computes emitted thermal radiation power in Watts: Q_emit = epsilon * sigma * Area * Temp^4.
+pub fn thermal_radiated_power(
+    emissivity_eps: Float,
+    area_m2: Float,
+    temperature_k: Float
+) -> Float {
+    let sigma: Float = stefan_boltzmann_constant();
+    let t2: Float = temperature_k * temperature_k;
+    let t4: Float = t2 * t2;
+    return emissivity_eps * sigma * area_m2 * t4;
+}
+
+/// Computes passive equilibrium temperature (K) of spherical satellite under solar flux S: T_eq = ((alpha/epsilon) * (S / (4*sigma)))^(1/4).
+pub fn thermal_equilibrium_temperature(
+    absorptivity_alpha: Float,
+    emissivity_epsilon: Float,
+    solar_flux_w_m2: Float
+) -> Float {
+    if emissivity_epsilon <= 0.0001 { return 0.0; }
+    let sigma: Float = stefan_boltzmann_constant();
+    let ratio: Float = absorptivity_alpha / emissivity_epsilon;
+    let term: Float = ratio * (solar_flux_w_m2 / (4.0 * sigma));
+    return sqrt(sqrt(term));
+}

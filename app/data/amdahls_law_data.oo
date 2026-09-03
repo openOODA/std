@@ -1,0 +1,127 @@
+// # Amdahl's Law for Data-System Parallelism
+//
+// Logline: Maximum data-pipeline speedup S = 1 / ((1-p) + p/n) for parallel fraction p (0..1000 milli) on n workers; returns scaled by 1000 (so 1000 = 1.0x, 4710 = 4.71x). Out-of-range fails closed to 0.
+//
+// Setup: Pure Int. p_milli in [0, 1000] (i.e., p in [0.0, 1.0]). n_workers >= 1. Hosts data_invariants.oo stem and uses domain_cert("data", ...).
+//
+// Beats:
+//   1. amdahls_data_speedup returns 1000*n / ((1000-p)*n + p) (fixed-point).
+//   2. Gustafson scaled speedup S = n - (1-p)(n-1) for data-size-scaled runs.
+//   3. p outside [0, 1000] or n < 1 fails closed to 0.
+//   4. domain_cert("data", "amdahls_law_data", holds) returns 1 only on golden pass.
+
+import "std/app/data/data_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Standard Amdahl speedup, fixed-point scale 1000.
+//   S = n / ((1-p)*n + p)  with p in [0, 1000] milli.
+//   S*1000 = n * 1000000 / ((1000 - p_milli) * n + p_milli).
+pub fn amdahls_data_speedup(p_milli: Int, n_workers: Int) -> Int {
+    if p_milli < 0 { return 0; }
+    if p_milli > 1000 { return 0; }
+    if n_workers < 1 { return 0; }
+    let serial: Int = 1000 - p_milli;
+    let denom: Int = serial * n_workers + p_milli;
+    if denom <= 0 { return 0; }
+    return 1000000 * n_workers / denom;
+}
+
+// Gustafson scaled speedup: S = n - (1-p)(n-1) (fixed-point scale 1000).
+// p_milli in [0, 1000], n_workers >= 1.
+//   S*1000 = n*1000 - (1-p)*(n-1)*1000
+//         = n*1000 - (serial/1000)*(n-1)*1000
+//         = n*1000 - serial*(n-1).
+// (p in milli-units, so (1-p) is serial milli, and serial*(n-1) is in milli*count.)
+pub fn amdahls_data_gustafson(p_milli: Int, n_workers: Int) -> Int {
+    if p_milli < 0 { return 0; }
+    if p_milli > 1000 { return 0; }
+    if n_workers < 1 { return 0; }
+    let serial: Int = 1000 - p_milli;
+    let scaled: Int = 1000 * n_workers - serial * (n_workers - 1);
+    if scaled < 0 { return 0; }
+    return scaled;
+}
+
+// DomainCert for the Amdahl data law. holds is 1 only on golden pass.
+pub fn amdahls_data_golden_cert() -> DomainCert {
+    let data_inv_ok: Int = data_table_ok("orders");
+    let mut holds: Int = 0;
+    // Golden: p=0.9 (p_milli=900), n=8 -> S*1000 = 8*1000000/1700 = 8000000/1700 = 4705.
+    // True 4.7059; 1% tolerance: 4658..4753.
+    let s1: Int = amdahls_data_speedup(900, 8);
+    if data_inv_ok == 1 {
+        if s1 >= 4658 { if s1 <= 4753 { holds = 1; } }
+    }
+    return domain_cert("data", "amdahls_law_data", holds);
+}
+
+pub fn amdahls_data_gustafson_coupled_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    // Golden coupled: Gustafson at p=0.5, n=4 -> 4*1000 - 500*3 = 4000 - 1500 = 2500 (2.5x).
+    let g1: Int = amdahls_data_gustafson(500, 4);
+    if g1 == 2500 { holds = 1; }
+    return domain_cert("data", "amdahls_gustafson_coupled", holds);
+}
+
+pub fn amdahls_data_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    // Hostile: p<0, p>1000, n<1 all return 0.
+    if amdahls_data_speedup(0 - 1, 8) == 0 {
+        if amdahls_data_speedup(1001, 8) == 0 {
+            if amdahls_data_speedup(500, 0) == 0 {
+                if amdahls_data_speedup(500, 0 - 1) == 0 {
+                    holds = 1;
+                }
+            }
+        }
+    }
+    return domain_cert("data", "amdahls_hostile", holds);
+}
+
+// KAT and hostile cases for the Amdahl data law.
+pub fn verify_amdahls_law_data() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    // Golden: p=0 (serial only) -> S*1000 = 8*1000000/8000 = 1000 (1.0x).
+    if amdahls_data_speedup(0, 8) != 1000 { return false; }
+    // Golden: p=1000 (full parallel) -> S*1000 = 8*1000000/1000 = 8000 (8.0x).
+    if amdahls_data_speedup(1000, 8) != 8000 { return false; }
+    // Golden: p=500, n=2 -> S*1000 = 2*1000000/1500 = 1333 (true 1.3333).
+    let s_p5n2: Int = amdahls_data_speedup(500, 2);
+    if s_p5n2 < 1300 { return false; }
+    if s_p5n2 > 1400 { return false; }
+    // Golden: p=900, n=8 -> S*1000 = 8*1000000/1700 = 4705 (true 4.7059).
+    let s_p9n8: Int = amdahls_data_speedup(900, 8);
+    if s_p9n8 < 4658 { return false; }
+    if s_p9n8 > 4753 { return false; }
+    // Golden: speedup is non-decreasing in n for fixed p.
+    let s_a: Int = amdahls_data_speedup(750, 4);
+    let s_b: Int = amdahls_data_speedup(750, 16);
+    if s_b < s_a { return false; }
+    // Hostile: p < 0 returns 0.
+    if amdahls_data_speedup(0 - 1, 4) != 0 { return false; }
+    // Hostile: p > 1000 returns 0.
+    if amdahls_data_speedup(1001, 4) != 0 { return false; }
+    // Hostile: n = 0 returns 0.
+    if amdahls_data_speedup(500, 0) != 0 { return false; }
+    // Hostile: n < 0 returns 0.
+    if amdahls_data_speedup(500, 0 - 1) != 0 { return false; }
+    // Coupled: Gustafson at p=500, n=4 -> 4000 - 1500 = 2500 (2.5x).
+    if amdahls_data_gustafson(500, 4) != 2500 { return false; }
+    // Coupled: Gustafson at p=1000, n=4 -> 4000 - 0 = 4000 (4.0x).
+    if amdahls_data_gustafson(1000, 4) != 4000 { return false; }
+    // Coupled: Gustafson at p=0, n=4 -> 4000 - 1000*3 = 1000 (1.0x).
+    if amdahls_data_gustafson(0, 4) != 1000 { return false; }
+    // Coupled: Gustafson hostile inputs return 0.
+    if amdahls_data_gustafson(0 - 1, 4) != 0 { return false; }
+    if amdahls_data_gustafson(1001, 4) != 0 { return false; }
+    if amdahls_data_gustafson(500, 0) != 0 { return false; }
+    // Certificates: golden, coupled, hostile all pass.
+    let a: DomainCert = amdahls_data_golden_cert();
+    let b: DomainCert = amdahls_data_gustafson_coupled_cert();
+    let c: DomainCert = amdahls_data_hostile_cert();
+    if a.holds != 1 { return false; }
+    if b.holds != 1 { return false; }
+    if c.holds != 1 { return false; }
+    return true;
+}

@@ -1,0 +1,125 @@
+// # Raft Node State & Election Role Machine
+//
+// Logline: Models Raft distributed consensus node roles (Follower, Candidate, Leader), terms, and voting records.
+//
+// Setup: Pure state machine for Raft peer identity, term transitions, and election heartbeats.
+//
+// Beats:
+//   1. Define RaftRole enumerations (0=Follower, 1=Candidate, 2=Leader) and RaftNodeState.
+//   2. Manage term increments, votedFor tracking, and election timeout resets.
+//   3. Transition node roles upon quorum election win or higher-term discovery.
+
+type RaftNodeState = struct {
+    node_id: String,
+    current_term: Int,
+    voted_for: String,
+    role: Int,
+    leader_id: String,
+    election_timeout_ms: Int,
+    heartbeat_timeout_ms: Int,
+    last_heard_ms: Int
+};
+
+pub fn raft_state_new(node_id: String, election_timeout_ms: Int) -> RaftNodeState {
+    return RaftNodeState {
+        node_id: node_id,
+        current_term: 0,
+        voted_for: "",
+        role: 0,
+        leader_id: "",
+        election_timeout_ms: election_timeout_ms,
+        heartbeat_timeout_ms: election_timeout_ms / 3,
+        last_heard_ms: 0
+    };
+}
+
+pub fn raft_state_become_follower(s: RaftNodeState, term: Int, leader_id: String) -> RaftNodeState {
+    return RaftNodeState {
+        node_id: s.node_id,
+        current_term: term,
+        voted_for: "",
+        role: 0,
+        leader_id: leader_id,
+        election_timeout_ms: s.election_timeout_ms,
+        heartbeat_timeout_ms: s.heartbeat_timeout_ms,
+        last_heard_ms: s.last_heard_ms
+    };
+}
+
+pub fn raft_state_start_election(s: RaftNodeState) -> RaftNodeState {
+    let next_term: Int = s.current_term + 1;
+    return RaftNodeState {
+        node_id: s.node_id,
+        current_term: next_term,
+        voted_for: s.node_id,
+        role: 1,
+        leader_id: "",
+        election_timeout_ms: s.election_timeout_ms,
+        heartbeat_timeout_ms: s.heartbeat_timeout_ms,
+        last_heard_ms: s.last_heard_ms
+    };
+}
+
+pub fn raft_state_become_leader(s: RaftNodeState) -> RaftNodeState {
+    if s.role != 1 {
+        return s;
+    }
+    return RaftNodeState {
+        node_id: s.node_id,
+        current_term: s.current_term,
+        voted_for: s.voted_for,
+        role: 2,
+        leader_id: s.node_id,
+        election_timeout_ms: s.election_timeout_ms,
+        heartbeat_timeout_ms: s.heartbeat_timeout_ms,
+        last_heard_ms: s.last_heard_ms
+    };
+}
+
+pub fn raft_state_record_vote(s: RaftNodeState, candidate_id: String, term: Int) -> RaftNodeState {
+    let cur_t: Int = s.current_term;
+    if term > cur_t {
+        return RaftNodeState {
+            node_id: s.node_id,
+            current_term: term,
+            voted_for: candidate_id,
+            role: 0,
+            leader_id: s.leader_id,
+            election_timeout_ms: s.election_timeout_ms,
+            heartbeat_timeout_ms: s.heartbeat_timeout_ms,
+            last_heard_ms: s.last_heard_ms
+        };
+    }
+    if term == cur_t {
+        if s.voted_for == "" {
+            return RaftNodeState {
+                node_id: s.node_id,
+                current_term: cur_t,
+                voted_for: candidate_id,
+                role: s.role,
+                leader_id: s.leader_id,
+                election_timeout_ms: s.election_timeout_ms,
+                heartbeat_timeout_ms: s.heartbeat_timeout_ms,
+                last_heard_ms: s.last_heard_ms
+            };
+        }
+        return s;
+    }
+    return s;
+}
+
+pub fn raft_state_is_leader(s: RaftNodeState) -> Bool {
+    return s.role == 2;
+}
+
+pub fn raft_state_is_candidate(s: RaftNodeState) -> Bool {
+    return s.role == 1;
+}
+
+pub fn raft_state_current_term(s: RaftNodeState) -> Int {
+    return s.current_term;
+}
+
+pub fn raft_state_role(s: RaftNodeState) -> Int {
+    return s.role;
+}

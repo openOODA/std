@@ -1,0 +1,121 @@
+// # SIMD vector alignment principle
+//
+// Logline: A vector load is aligned iff the byte address is a multiple of the vector size in bytes; misaligned access traps with TRAP_0x20_SIMD_ALIGNMENT_FAULT.
+//
+// Setup: Pure Int address arithmetic. addr and vector_size_bytes are non-negative. vector_size_bytes must be >= 1; hostile inputs fail closed to 0.
+//
+// Beats:
+//   1. simd_alignment_penalty_misaligned returns 1 iff addr % vector_size != 0.
+//   2. simd_alignment_ok and simd_alignment_32_ok return 1 iff aligned.
+//   3. Hostile: negative address or vector_size < 1 fails closed to 0.
+//   4. TRAP_0x20_SIMD_ALIGNMENT_FAULT constant and check_simd_alignment result helper.
+//   5. simd_alignment_holds boxes the certificate.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn TRAP_0x20_SIMD_ALIGNMENT_FAULT() -> Int { return 32; }
+
+// 1 if addr is aligned to vector_size_bytes; 0 otherwise (or if hostile).
+pub fn simd_alignment_ok(addr: Int, vector_size_bytes: Int) -> Int {
+    if addr < 0 { return 0; }
+    if vector_size_bytes < 1 { return 0; }
+    let r: Int = addr % vector_size_bytes;
+    if r == 0 { return 1; }
+    return 0;
+}
+
+// 1 if addr is 32-byte aligned for 256-bit SIMD vectors; 0 otherwise.
+pub fn simd_alignment_32_ok(addr: Int) -> Int {
+    return simd_alignment_ok(addr, 32);
+}
+
+// 1 if (base_addr + offset * elem_size) satisfies strict 32-byte alignment.
+pub fn simd_ptr_offset_alignment_ok(base_addr: Int, offset_elements: Int, elem_size_bytes: Int) -> Int {
+    if base_addr < 0 || offset_elements < 0 || elem_size_bytes < 1 { return 0; }
+    let total_addr: Int = base_addr + (offset_elements * elem_size_bytes);
+    return simd_alignment_32_ok(total_addr);
+}
+
+// Result check returning Ok(byte_addr) or Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT").
+pub fn check_simd_alignment_32(byte_addr: Int) -> Result[Int, String] {
+    if byte_addr < 0 { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    if (byte_addr % 32) != 0 { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    return Ok(byte_addr);
+}
+
+// Heuristic penalty: 1 if misaligned (slower / may trap); 0 if aligned or hostile input.
+pub fn simd_alignment_penalty_misaligned(addr: Int, vector_size_bytes: Int) -> Int {
+    if addr < 0 { return 0; }
+    if vector_size_bytes < 1 { return 0; }
+    let r: Int = addr % vector_size_bytes;
+    if r == 0 { return 0; }
+    return 1;
+}
+
+// Closed: single penalty decision.
+pub fn simd_alignment_holds(addr: Int, vector_size_bytes: Int) -> DomainCert {
+    if addr < 0 { return domain_cert("simd", "alignment", 0); }
+    if vector_size_bytes < 1 { return domain_cert("simd", "alignment", 0); }
+    let ok: Int = simd_alignment_ok(addr, vector_size_bytes);
+    if ok == 1 {
+        return domain_cert("simd", "alignment", 1);
+    }
+    return domain_cert("simd", "alignment", 0);
+}
+
+pub fn verify_alignment_principle() -> Bool {
+    if TRAP_0x20_SIMD_ALIGNMENT_FAULT() != 32 { return false; }
+    // Golden: addr=16, vector_size=16 -> aligned -> 0.
+    if simd_alignment_penalty_misaligned(16, 16) != 0 { return false; }
+    // Golden: addr=20, vector_size=16 -> misaligned -> 1.
+    if simd_alignment_penalty_misaligned(20, 16) != 1 { return false; }
+    // Golden: addr=0 always aligned.
+    if simd_alignment_penalty_misaligned(0, 16) != 0 { return false; }
+    if simd_alignment_penalty_misaligned(0, 32) != 0 { return false; }
+    // Golden: addr=32, vector_size=16 -> aligned.
+    if simd_alignment_penalty_misaligned(32, 16) != 0 { return false; }
+    // Golden: addr=33, vector_size=16 -> misaligned.
+    if simd_alignment_penalty_misaligned(33, 16) != 1 { return false; }
+    // Golden: aligned_ok for aligned cases.
+    if simd_alignment_ok(16, 16) != 1 { return false; }
+    if simd_alignment_ok(64, 64) != 1 { return false; }
+    if simd_alignment_ok(128, 32) != 1 { return false; }
+    if simd_alignment_32_ok(0) != 1 { return false; }
+    if simd_alignment_32_ok(32) != 1 { return false; }
+    if simd_alignment_32_ok(64) != 1 { return false; }
+    if simd_alignment_32_ok(16) != 0 { return false; }
+    if simd_alignment_32_ok(33) != 0 { return false; }
+    // Pointer + offset checks
+    if simd_ptr_offset_alignment_ok(0, 0, 4) != 1 { return false; }
+    if simd_ptr_offset_alignment_ok(0, 8, 4) != 1 { return false; }
+    if simd_ptr_offset_alignment_ok(0, 4, 8) != 1 { return false; }
+    if simd_ptr_offset_alignment_ok(0, 1, 4) != 0 { return false; }
+    if simd_ptr_offset_alignment_ok(32, 0, 4) != 1 { return false; }
+    if simd_ptr_offset_alignment_ok(16, 4, 4) != 1 { return false; }
+    // Result helper checks
+    let chk_ok = check_simd_alignment_32(32);
+    if chk_ok.is_err() { return false; }
+    let chk_err = check_simd_alignment_32(16);
+    if chk_err.is_ok() { return false; }
+    // Hostile: vector_size < 1 fails closed to 0.
+    if simd_alignment_penalty_misaligned(0, 0) != 0 { return false; }
+    if simd_alignment_penalty_misaligned(0, 0 - 1) != 0 { return false; }
+    if simd_alignment_penalty_misaligned(16, 0) != 0 { return false; }
+    if simd_alignment_ok(0, 0) != 0 { return false; }
+    if simd_alignment_ok(16, 0 - 1) != 0 { return false; }
+    // Hostile: negative addr fails closed.
+    if simd_alignment_penalty_misaligned(0 - 1, 16) != 0 { return false; }
+    if simd_alignment_ok(0 - 16, 16) != 0 { return false; }
+    if simd_alignment_32_ok(0 - 32) != 0 { return false; }
+    // DomainCert boxes the holds bit.
+    let c1: DomainCert = simd_alignment_holds(16, 16);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "simd" { return false; }
+    let c2: DomainCert = simd_alignment_holds(20, 16);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = simd_alignment_holds(0, 0);
+    if c3.holds != 0 { return false; }
+    let c4: DomainCert = simd_alignment_holds(0 - 1, 16);
+    if c4.holds != 0 { return false; }
+    return true;
+}

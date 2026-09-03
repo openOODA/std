@@ -1,0 +1,59 @@
+// # IO Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard io domain library. Re-exports a stable io_mod_* surface for the most-used public API (Reader, Writer, Cursor, MemStream, LineReader, BitReader, BitWriter, BufferedStream, ChunkedStream, Pipe, RingStream). Private siblings (theories, laws, invariants, KATs, zero-copy internals) remain non-public.
+//
+// Setup: Imports private io siblings; pure in-memory combinators take no caps. File I/O and pipe operations take FsReadCap / FsWriteCap at the call site.
+//
+// Beats:
+//   1. Re-export the Reader and Writer surface as io_mod_reader_* and io_mod_writer_*.
+//   2. Re-export the Cursor and MemStream surface as io_mod_cursor_* and io_mod_mem_*.
+//   3. Re-export the LineReader, BitReader, and BitWriter surface as io_mod_line_*, io_mod_bit_*.
+//   4. Re-export the BufferedStream, ChunkedStream, Pipe, and RingStream surface as io_mod_buf_*, io_mod_chunk_*, io_mod_pipe_*, io_mod_ring_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _literature_kat, and zero-copy internals.
+
+import "reader.oo";
+import "writer.oo";
+import "cursor.oo";
+import "mem_stream.oo";
+import "line_reader.oo";
+import "bit_reader.oo";
+import "bit_writer.oo";
+import "buffer_stream.oo";
+import "chunked.oo";
+import "pipe.oo";
+import "ring_stream.oo";
+
+// Public Reader surface: io_mod_reader_*
+pub fn io_mod_reader_from_string(source: String) -> Reader { return reader_from_string(source); }
+pub fn io_mod_reader_with_limit(source: String, limit: Int) -> Reader { return reader_with_limit(source, limit); }
+
+// Public Writer surface: io_mod_writer_*
+pub fn io_mod_writer_new() -> Writer { return writer_new(); }
+pub fn io_mod_writer_write(w: Writer, chunk: String) -> Writer { return writer_write(w, chunk); }
+
+// Public Cursor surface: io_mod_cursor_*
+pub fn io_mod_cursor_new(initial_buffer: String) -> Cursor { return cursor_new(initial_buffer); }
+
+// Public MemStream surface: io_mod_mem_*
+pub fn io_mod_mem_stream_new() -> MemStream { return mem_stream_new(); }
+pub fn io_mod_mem_stream_from_string(seed: String) -> MemStream { return mem_stream_from_string(seed); }
+
+// Public LineReader surface: io_mod_line_*
+pub fn io_mod_line_reader_new(source: String) -> LineReader { return line_reader_new(source); }
+
+// Public BitReader / BitWriter surface: io_mod_bit_*
+pub fn io_mod_bit_reader_new(bytes: List[Int]) -> BitReader { return bit_reader_new(bytes); }
+pub fn io_mod_bit_writer_new() -> BitWriter { return bit_writer_new(); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. buffered_throughput_law.oo, io_buffer_eof_law.oo)
+//   _theory files (e.g. epoll_level_triggered_principle.oo, io_uring_sq_cq_law.oo, io_zero_copy_principle.oo, zero_copy_sendfile_theory.oo, ring_buffer_theory.oo, scatter_gather.oo)
+//   _invariants files (e.g. io_invariants.oo)
+//   _kat files (e.g. io_kat.oo, io_literature_kat.oo)
+//   _delim files (e.g. buf_reader_delim.oo)
+//   _checksum files (e.g. checksum_adler32.oo, checksum_crc16.oo, checksum_fletcher16.oo, checksum_fnv1a.oo)
+//   _stream helpers (e.g. stream_chain.oo, stream_filter.oo, stream_fold.oo, stream_map.oo, stream_skip.oo, stream_take.oo, stream_tee.oo, stream_zip.oo, stream_cursor.oo)
+//   _pipe helpers (e.g. pipe_anonymous.oo)
+//   _zerocopy internals (e.g. ringbuf_zerocopy.oo, scatter_gather.oo)
+//   _error type (e.g. io_error.oo)
+// External callers must import this mod.oo and use the io_mod_* surface.

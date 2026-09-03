@@ -1,0 +1,81 @@
+// # x86-64 System V AMD64 ABI Constants
+//
+// Logline: Single-source-of-truth register set, calling convention, and stack alignment rules for the x86-64 native backend.
+//
+// Setup: Pure constants and helpers. Imports x86_regs for the hardware register encoding constants.
+//
+// Beats:
+//   1. Define the integer argument register order (rdi, rsi, rdx, rcx, r8, r9).
+//   2. Define the return register (rax) and the 128-bit return pair (rdx:rax).
+//   3. Define the callee-saved set (rbx, rbp, r12, r13, r14, r15) plus rsp.
+//   4. Provide stack alignment math and SysV-ABI register-code lookup.
+//
+// residual: floats and SSE/XMM registers stay later.
+
+import "std/hw/silicon/x86_regs.oo";
+
+pub fn abi_arg_reg(i: Int) -> Int {
+    if i == 0 { return x86_rdi(); }
+    if i == 1 { return x86_rsi(); }
+    if i == 2 { return x86_rdx(); }
+    if i == 3 { return x86_rcx(); }
+    if i == 4 { return x86_r8(); }
+    return x86_r9();
+}
+
+pub fn abi_arg_count() -> Int {
+    return 6;
+}
+
+pub fn abi_ret_reg() -> Int {
+    return x86_rax();
+}
+
+pub fn abi_ret_hi_reg() -> Int {
+    return x86_rdx();
+}
+
+pub fn abi_is_callee_saved(reg: Int) -> Bool {
+    if reg == x86_rbx() { return true; }
+    if reg == x86_rbp() { return true; }
+    if reg == x86_rsp() { return true; }
+    if reg == x86_r12() { return true; }
+    if reg == x86_r13() { return true; }
+    if reg == x86_r14() { return true; }
+    if reg == x86_r15() { return true; }
+    return false;
+}
+
+pub fn abi_caller_saved_mask() -> Int {
+    return (1 << x86_rax()) | (1 << x86_rcx()) | (1 << x86_rdx())
+        | (1 << x86_rsi()) | (1 << x86_rdi())
+        | (1 << x86_r8()) | (1 << x86_r9()) | (1 << x86_r10()) | (1 << x86_r11());
+}
+
+pub fn abi_align_up(value: Int, align: Int) -> Int {
+    let r: Int = value % align;
+    if r == 0 { return value; }
+    return value + (align - r);
+}
+
+pub fn abi_stack_aligned(size: Int) -> Int {
+    return abi_align_up(size, 16);
+}
+
+pub fn abi_red_zone_size() -> Int {
+    return 128;
+}
+
+pub fn abi_is_extended(reg: Int) -> Bool {
+    return x86_is_extended(reg);
+}
+
+pub fn abi_reg_code(reg: Int) -> Int {
+    return x86_reg_code(reg);
+}
+
+pub fn abi_rex_w(rxb_ext: Int) -> Int {
+    if rxb_ext < 0 { return 0; }
+    if rxb_ext > 15 { return 0; }
+    return rxb_ext;
+}

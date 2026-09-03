@@ -1,0 +1,20 @@
+// # Contract Arith Or And Fail
+//
+// Logline: Standard library verification and domain capabilities for Contract Arith Or And Fail.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn any_pos_nonneg(a: Int, b: Int, c: Int) -> Int
+    requires (a > 0 || b > 0) && c >= 0
+{
+    return a + b + c;
+}
+
+pub fn verify_contract_arith_or_and_fail() -> Bool {
+    println(any_pos_nonneg(1, 0, -1));
+    return true;
+}

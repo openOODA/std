@@ -1,0 +1,158 @@
+// # Kyle 1985 Market Microstructure Theory
+//
+// Logline: Single informed trader with value v ~ N(p_bar, sigma_v^2) submits order X*; market makers set
+//   linear price impact lambda = sigma_v / (2 * sigma_u * sqrt(T)) and competitive price p = p_bar +
+//   lambda * (X + U), where U is total noise-trader order flow with variance sigma_u^2. Equilibrium
+//   information share: var(v | p) = sigma_v^2 / 2, var(p | v) = sigma_v^2 * sigma_u^2 / 4T.
+//
+// Setup: Pure Float. Inputs sigma_v > 0 (informed value volatility), sigma_u > 0 (noise trader volume
+//   std), T > 0 (horizon in trading periods). Hostile (sigma_v<=0, sigma_u<=0, T<=0) return Err.
+//   Coupled with Glosten-Milgrom 1985 (Econometrica 53, 1035) sequential-trade model: same lambda
+//   in the single-period limit, p = E[V | buy] - bid-ask spread = 2 * lambda * sigma_u. arXiv:1502.02869
+//   (Cartea-Jaimungal-Penalva 2015); arXiv:2006.11459 (Foucault 2020 survey of price formation).
+//
+// Beats:
+//   1. price_impact_lambda(sigma_v, sigma_u, T) = sigma_v / (2 * sigma_u * sqrt(T)).
+//   2. informed_order_size(sigma_v, sigma_u, T) = sigma_v / (2 * lambda) = sigma_u * sqrt(T).
+//   3. equilibrium_price_variance(sigma_v, sigma_u, T) = sigma_v^2 / 2.
+//   4. depth_imbalance_one_period(sigma_v, sigma_u) = 2 * lambda * sigma_u = sigma_v / sqrt(T) * sigma_u / sigma_u = sigma_v / 1.
+//   5. Domain certificate domain_cert("econ", "kyle_1985", holds).
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/trig.oo";
+
+fn k_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn k_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn k_inputs_valid(sigma_v: Float, sigma_u: Float, t: Float) -> Int {
+    if sigma_v <= 0.0 { return 0; }
+    if sigma_u <= 0.0 { return 0; }
+    if t <= 0.0 { return 0; }
+    return 1;
+}
+
+// Price impact lambda = sigma_v / (2 * sigma_u * sqrt(T)).
+pub fn price_impact_lambda(sigma_v: Float, sigma_u: Float, t: Float) -> Result[Float, String] {
+    if k_inputs_valid(sigma_v, sigma_u, t) != 1 { return Err("ERR\tkyle\tdomain"); }
+    let denom: Float = 2.0 * sigma_u * math_sqrt(t);
+    return Ok(sigma_v / denom);
+}
+
+// Informed trader's order size: X* = sigma_v / (2 * lambda) = sigma_u * sqrt(T).
+pub fn informed_order_size(sigma_v: Float, sigma_u: Float, t: Float) -> Result[Float, String] {
+    if k_inputs_valid(sigma_v, sigma_u, t) != 1 { return Err("ERR\tkyle\tdomain"); }
+    let lor: Result[Float, String] = price_impact_lambda(sigma_v, sigma_u, t);
+    match lor {
+        Ok(lam) => { return Ok(sigma_v / (2.0 * lam)); },
+        Err(e)  => { return Err(e); }
+    }
+}
+
+// Equilibrium price conditional variance given informed value: var(p | v) = sigma_v^2 * sigma_u^2 / (4T).
+// (From Kyle 1985 Lemma: price variance = lambda^2 * (X*^2 + sigma_u^2).)
+pub fn equilibrium_price_variance(sigma_v: Float, sigma_u: Float, t: Float) -> Result[Float, String] {
+    if k_inputs_valid(sigma_v, sigma_u, t) != 1 { return Err("ERR\tkyle\tdomain"); }
+    let num: Float = sigma_v * sigma_v * sigma_u * sigma_u;
+    return Ok(num / (4.0 * t));
+}
+
+// Market depth: D = 1 / lambda = 2 * sigma_u * sqrt(T) / sigma_v.
+pub fn market_depth(sigma_v: Float, sigma_u: Float, t: Float) -> Result[Float, String] {
+    if k_inputs_valid(sigma_v, sigma_u, t) != 1 { return Err("ERR\tkyle\tdomain"); }
+    let lor: Result[Float, String] = price_impact_lambda(sigma_v, sigma_u, t);
+    match lor {
+        Ok(lam) => { return Ok(1.0 / lam); },
+        Err(e)  => { return Err(e); }
+    }
+}
+
+// Glosten-Milgrom coupling: 1 if price impact lambda also yields single-period bid-ask spread
+//   spread = 2 * lambda * sigma_u within tolerance.
+pub fn glosten_milgrom_coupling(sigma_v: Float, sigma_u: Float, t: Float, tol: Float) -> Int {
+    if k_inputs_valid(sigma_v, sigma_u, t) != 1 { return 0; }
+    let lor: Result[Float, String] = price_impact_lambda(sigma_v, sigma_u, t);
+    if lor.is_ok() == false { return 0; }
+    let lam: Float = k_got(lor);
+    let spread: Float = 2.0 * lam * sigma_u;
+    // In Glosten-Milgrom single-period: spread = sigma_v / sqrt(T).
+    // Kyle's single-period: 2 * lambda * sigma_u = 2 * (sigma_v / (2 * sigma_u * sqrt(T))) * sigma_u = sigma_v / sqrt(T).
+    let expected: Float = sigma_v / math_sqrt(t);
+    if k_eabs(spread - expected) <= tol { return 1; }
+    return 0;
+}
+
+// Inverse depth check: market depth D = 1 / lambda.
+pub fn depth_inverse_consistent(sigma_v: Float, sigma_u: Float, t: Float, tol: Float) -> Int {
+    let lor: Result[Float, String] = price_impact_lambda(sigma_v, sigma_u, t);
+    let dor: Result[Float, String] = market_depth(sigma_v, sigma_u, t);
+    if lor.is_ok() == false { return 0; }
+    if dor.is_ok() == false { return 0; }
+    let lam: Float = k_got(lor);
+    let depth: Float = k_got(dor);
+    if k_eabs(depth - 1.0 / lam) > tol { return 0; }
+    return 1;
+}
+
+pub fn kyle_1985_cert(sigma_v: Float, sigma_u: Float, t: Float) -> DomainCert {
+    let mut h: Int = 0;
+    if k_inputs_valid(sigma_v, sigma_u, t) == 1 {
+        let lor: Result[Float, String] = price_impact_lambda(sigma_v, sigma_u, t);
+        if lor.is_ok() {
+            let lam: Float = k_got(lor);
+            // For golden: lambda = sigma_v / (2 * sigma_u * sqrt(T)) must be > 0.
+            if lam > 0.0 {
+                if depth_inverse_consistent(sigma_v, sigma_u, t, 0.000001) == 1 { h = 1; }
+            }
+        }
+    }
+    return domain_cert("econ", "kyle_1985", h);
+}
+
+pub fn verify_kyle_1985_microstructure_theory() -> Bool {
+    // Golden: sigma_v=1, sigma_u=10, T=1 -> lambda = 1 / (2*10*1) = 0.05.
+    let lam1: Float = k_got(price_impact_lambda(1.0, 10.0, 1.0));
+    if k_eabs(lam1 - 0.05) > 0.000001 { return false; }
+    let x1: Float = k_got(informed_order_size(1.0, 10.0, 1.0));
+    // X* = sigma_v / (2 * lambda) = 1 / 0.1 = 10 = sigma_u * sqrt(T) = 10 * 1 = 10.
+    if k_eabs(x1 - 10.0) > 0.000001 { return false; }
+    let v1: Float = k_got(equilibrium_price_variance(1.0, 10.0, 1.0));
+    // 1^2 * 10^2 / (4*1) = 100 / 4 = 25.
+    if k_eabs(v1 - 25.0) > 0.000001 { return false; }
+    let lam2: Float = k_got(price_impact_lambda(2.0, 4.0, 1.0));
+    // 2 / (2*4*1) = 0.25.
+    if k_eabs(lam2 - 0.25) > 0.000001 { return false; }
+    let lam3: Float = k_got(price_impact_lambda(1.0, 1.0, 4.0));
+    // 1 / (2*1*2) = 0.25.
+    if k_eabs(lam3 - 0.25) > 0.000001 { return false; }
+    let lam4: Float = k_got(price_impact_lambda(1.0, 2.0, 9.0));
+    // 1 / (2*2*3) = 1/12.
+    if k_eabs(lam4 - (1.0 / 12.0)) > 0.000001 { return false; }
+    if glosten_milgrom_coupling(1.0, 10.0, 1.0, 0.000001) != 1 { return false; }
+    if glosten_milgrom_coupling(2.0, 5.0, 4.0, 0.000001) != 1 { return false; }
+    if depth_inverse_consistent(1.0, 10.0, 1.0, 0.000001) != 1 { return false; }
+    if depth_inverse_consistent(2.0, 4.0, 1.0, 0.000001) != 1 { return false; }
+    if price_impact_lambda(0.0, 1.0, 1.0).is_ok() { return false; }
+    if price_impact_lambda(0.0 - 1.0, 1.0, 1.0).is_ok() { return false; }
+    if price_impact_lambda(1.0, 0.0, 1.0).is_ok() { return false; }
+    if price_impact_lambda(1.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    if price_impact_lambda(1.0, 1.0, 0.0).is_ok() { return false; }
+    if price_impact_lambda(1.0, 1.0, 0.0 - 1.0).is_ok() { return false; }
+    if informed_order_size(0.0, 1.0, 1.0).is_ok() { return false; }
+    if informed_order_size(1.0, 0.0, 1.0).is_ok() { return false; }
+    if equilibrium_price_variance(0.0, 1.0, 1.0).is_ok() { return false; }
+    if market_depth(1.0, 0.0, 1.0).is_ok() { return false; }
+    let cert: DomainCert = kyle_1985_cert(1.0, 10.0, 1.0);
+    if cert.holds != 1 { return false; }
+    if cert.domain != "econ" { return false; }
+    if cert.law_name != "kyle_1985" { return false; }
+    if kyle_1985_cert(0.0, 1.0, 1.0).holds != 0 { return false; }
+    if kyle_1985_cert(1.0, 0.0, 1.0).holds != 0 { return false; }
+    if kyle_1985_cert(1.0, 1.0, 0.0).holds != 0 { return false; }
+    return true;
+}

@@ -1,0 +1,62 @@
+// # Data Storage
+//
+// Logline: Storage, db, query, and graph data for std/storage.
+//
+// Setup: Domain module of 51 files under std/storage. Pure compute, no caps.
+//
+// Beats:
+//   1. Db storage family (2 files).
+//   2. Btree bulk loader family (1 file).
+//   3. Btree concurrent latch crabbing family (1 file).
+
+import "btree_bulk_loader.oo";
+import "btree_concurrent_latch_crabbing.oo";
+import "btree_leaf_scan_iterator.oo";
+import "btree_page_split_merge.oo";
+import "btree_prefix_compression.oo";
+import "btree_slotted_page_layout.oo";
+import "btree_variable_length_slot.oo";
+import "buffer_pool_clock_sweep.oo";
+import "buffer_pool_frame_manager.oo";
+import "db_storage.oo";
+import "db_storage_stubs.oo";
+import "lsm_block_cache_lru.oo";
+import "lsm_bloom_filter_block.oo";
+import "lsm_compaction_leveled.oo";
+import "lsm_compaction_size_tiered.oo";
+import "lsm_manifest_version_set.oo";
+import "lsm_memtable_skiplist.oo";
+import "lsm_sstable_builder.oo";
+import "lsm_sstable_reader.oo";
+import "lsm_tiered_storage_cold.oo";
+import "lsm_write_stall_controller.oo";
+import "mvcc_commit_timestamp_manager.oo";
+import "mvcc_in_memory_catalog.oo";
+import "mvcc_lock_table_2pl.oo";
+import "mvcc_savepoint_manager.oo";
+import "mvcc_serializable_ssi.oo";
+import "mvcc_snapshot_isolation.oo";
+import "mvcc_undo_log_garbage_collector.oo";
+import "mvcc_version_chain.oo";
+import "sql_ast_parser.oo";
+import "sql_expression_evaluator.oo";
+import "sql_hash_aggregate_group_by.oo";
+import "sql_hash_join_radix.oo";
+import "sql_logical_plan_builder.oo";
+import "sql_optimizer_cost_based.oo";
+import "sql_rule_transformation.oo";
+import "sql_sort_merge_join.oo";
+import "sql_statistics_histogram.oo";
+import "sql_vectorized_batch_chunk.oo";
+import "sql_volcano_iterator_scan.oo";
+import "sql_window_function_executor.oo";
+import "vector_cosine_simd.oo";
+import "vector_hnsw_graph.oo";
+import "vector_ivf_pq_quantizer.oo";
+import "wal_checkpoint_fuzzy.oo";
+import "wal_doublewrite_buffer.oo";
+import "wal_group_commit.oo";
+import "wal_record_codec.oo";
+import "wal_recovery_aries.oo";
+import "wal_ring_buffer_writer.oo";
+import "wal_segment_manager.oo";

@@ -1,0 +1,93 @@
+// # Landauer thermodynamic erasure bound
+//
+// Logline: Erasing one bit costs at least k_B * T * ln(2) joules. T<=0 is illegal Err (kT ln2 at T=0 is the 0 identity physically).
+//
+// Setup: k_B is constants_boltzmann() (CODATA). One implementation; two names for callers. n=0 bits is Ok(0).
+//
+// Beats:
+//   1. landauer_per_bit(T) = k_B * T * ln(2). landauer_minimum_joules_per_bit is the same.
+//   2. landauer_total / landauer_energy_for_erased_bits scale by bit count.
+//   3. verify_computation_dissipation_valid is false below the bound.
+//   4. landauer_channel_capacity is P / (k_B * T * ln(2)) bits/s.
+
+import "std/core/principles/physical_constants.oo";
+
+fn landauer_ln2() -> Float {
+    return 0.6931471805599453;
+}
+
+fn ld_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn landauer_per_bit(t_kelvin: Float) -> Result[Float, String] {
+    if t_kelvin <= 0.0 { return Err("ERR\tld\tt"); }
+    return Ok(constants_boltzmann() * t_kelvin * landauer_ln2());
+}
+
+pub fn landauer_minimum_joules_per_bit(temperature_kelvin: Float) -> Result[Float, String] {
+    return landauer_per_bit(temperature_kelvin);
+}
+
+pub fn landauer_total(n_bits: Int, t_kelvin: Float) -> Result[Float, String] {
+    if n_bits < 0 { return Err("ERR\tld\tn"); }
+    let pbr: Result[Float, String] = landauer_per_bit(t_kelvin);
+    if pbr.is_ok() {
+        let n_f: Float = 1.0 * (n_bits);
+        return Ok(n_f * ld_got(pbr));
+    }
+    return Err("ERR\tld\tt");
+}
+
+pub fn landauer_energy_for_erased_bits(
+    bits_erased: Float,
+    temperature_kelvin: Float
+) -> Result[Float, String] {
+    if bits_erased < 0.0 { return Err("ERR\tld\tn"); }
+    let pbr: Result[Float, String] = landauer_per_bit(temperature_kelvin);
+    if pbr.is_ok() { return Ok(bits_erased * ld_got(pbr)); }
+    return Err("ERR\tld\tt");
+}
+
+pub fn verify_computation_dissipation_valid(
+    actual_dissipation_joules: Float,
+    bits_erased: Float,
+    temperature_kelvin: Float
+) -> Bool {
+    let min_r: Result[Float, String] = landauer_energy_for_erased_bits(bits_erased, temperature_kelvin);
+    if min_r.is_ok() {
+        let min_energy: Float = ld_got(min_r);
+        return actual_dissipation_joules >= min_energy - 0.000000000000000000000000000001;
+    }
+    return false;
+}
+
+pub fn landauer_channel_capacity(p_watts: Float, t_kelvin: Float) -> Result[Float, String] {
+    if p_watts < 0.0 { return Err("ERR\tld\tp"); }
+    let pbr: Result[Float, String] = landauer_per_bit(t_kelvin);
+    if pbr.is_ok() {
+        let cost_per_bit: Float = ld_got(pbr);
+        if cost_per_bit <= 0.0 { return Err("ERR\tld\tt"); }
+        return Ok(p_watts / cost_per_bit);
+    }
+    return Err("ERR\tld\tt");
+}
+
+pub fn verify_landauer_principle() -> Bool {
+    let e: Float = ld_got(landauer_per_bit(300.0));
+    if e <= 0.0000000000000000000001 { return false; }
+    if e >= 0.00000000000000000001 { return false; }
+    if ld_got(landauer_minimum_joules_per_bit(300.0)) != e { return false; }
+    if ld_got(landauer_total(0, 300.0)) != 0.0 { return false; }
+    if ld_got(landauer_energy_for_erased_bits(0.0, 300.0)) != 0.0 { return false; }
+    if ld_got(landauer_channel_capacity(0.0, 300.0)) != 0.0 { return false; }
+    if landauer_per_bit(0.0).is_ok() { return false; }
+    if landauer_per_bit(0.0 - 1.0).is_ok() { return false; }
+    if landauer_minimum_joules_per_bit(0.0).is_ok() { return false; }
+    if landauer_total(0 - 1, 300.0).is_ok() { return false; }
+    if landauer_energy_for_erased_bits(0.0 - 1.0, 300.0).is_ok() { return false; }
+    if landauer_channel_capacity(0.0 - 1.0, 300.0).is_ok() { return false; }
+    if landauer_channel_capacity(1.0, 0.0).is_ok() { return false; }
+    if verify_computation_dissipation_valid(0.0, 1.0, 300.0) { return false; }
+    return true;
+}

@@ -1,0 +1,99 @@
+// # SIMD Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard simd domain library. Re-exports a stable simd_mod_* surface for the most-used public API (Vec4f, Vec8f, Vec16f/AVX-512, lane ops, blend, clamp, gather/scatter, pack/unpack, quaternion, noise, shuffle, Perlin, matrix). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private simd siblings; no caps required for pure SIMD math. simd_mem (aligned load/store) takes AllocCap at the call site.
+//
+// Beats:
+//   1. Re-export the Vec8f (8-lane float) and Vec16f (AVX-512) surface as simd_mod_vec8f_* and simd_mod_vec16f_*.
+//   2. Re-export the Vec4f and Vec4i lane surface as simd_mod_vec4f_* and simd_mod_vec4i_*.
+//   3. Re-export the blend, clamp, gather/scatter, and pack/unpack surface as simd_mod_blend_*, simd_mod_clamp_*, simd_mod_gather_*, simd_mod_pack_*.
+//   4. Re-export the quaternion, noise/Perlin, and shuffle surface as simd_mod_quat_*, simd_mod_noise_*, simd_mod_shuffle_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat files.
+
+import "simd_vec8f.oo";
+import "simd_avx512.oo";
+import "simd_vec4f.oo";
+import "simd_vec4i.oo";
+import "simd_vec4d.oo";
+import "simd_types.oo";
+import "simd_bitselect.oo";
+import "simd_clamp.oo";
+import "simd_gather_scatter.oo";
+import "simd_pack_unpack.oo";
+import "simd_quat.oo";
+import "simd_quat_ops.oo";
+import "simd_noise.oo";
+import "simd_noise_perlin.oo";
+import "simd_simplex_noise.oo";
+import "simd_shuffle.oo";
+import "simd_lane_law.oo";
+import "simd_lerp.oo";
+import "simd_matrix2x2.oo";
+import "simd_matrix3x3.oo";
+import "simd_matrix4x4.oo";
+import "simd_ops.oo";
+import "simd_ops_body.oo";
+import "simd_half_float.oo";
+import "simd_mem.oo";
+
+// Public Vec8f (8-lane float) surface: simd_mod_vec8f_*
+pub fn simd_mod_vec8f_splat(v: Float) -> f32x8 { return f32x8_splat(v); }
+pub fn simd_mod_vec8f_zero() -> f32x8 { return f32x8_zero(); }
+pub fn simd_mod_vec8f_add(a: f32x8, b: f32x8) -> f32x8 { return f32x8_add(a, b); }
+pub fn simd_mod_vec8f_mul(a: f32x8, b: f32x8) -> f32x8 { return f32x8_mul(a, b); }
+pub fn simd_mod_vec8f_fma(a: f32x8, b: f32x8, c: f32x8) -> f32x8 { return f32x8_fma(a, b, c); }
+pub fn simd_mod_vec8f_reduce_sum(v: f32x8) -> Float { return f32x8_reduce_sum(v); }
+
+// Public Vec16f (AVX-512) surface: simd_mod_vec16f_*
+pub fn simd_mod_vec16f_splat(v: Float) -> Vec16f { return vec16f_splat(v); }
+pub fn simd_mod_vec16f_zero() -> Vec16f { return vec16f_zero(); }
+pub fn simd_mod_vec16f_add(a: Vec16f, b: Vec16f) -> Vec16f { return vec16f_add(a, b); }
+pub fn simd_mod_vec16f_mul(a: Vec16f, b: Vec16f) -> Vec16f { return vec16f_mul(a, b); }
+pub fn simd_mod_vec16f_dot(a: Vec16f, b: Vec16f) -> Float { return vec16f_dot(a, b); }
+
+// Public Vec4f lane surface: simd_mod_vec4f_*
+pub fn simd_mod_vec4f_zero() -> Vec4f { return vec4f_zero(); }
+pub fn simd_mod_vec4f_add(a: Vec4f, b: Vec4f) -> Vec4f { return vec4f_add(a, b); }
+pub fn simd_mod_vec4f_mul(a: Vec4f, b: Vec4f) -> Vec4f { return vec4f_mul(a, b); }
+pub fn simd_mod_vec4f_dot(a: Vec4f, b: Vec4f) -> Float { return vec4f_dot(a, b); }
+
+// Public Vec4i lane surface: simd_mod_vec4i_*
+pub fn simd_mod_vec4i_zero() -> Vec4i { return vec4i_zero(); }
+pub fn simd_mod_vec4i_splat(v: Int) -> Vec4i { return vec4i_splat(v); }
+
+// Public blend/clamp surface: simd_mod_blend_*, simd_mod_clamp_*
+pub fn simd_mod_blend_i32(condition: Bool, a: Int, b: Int) -> Int { return simd_blend_i32(condition, a, b); }
+pub fn simd_mod_blend_f32(condition: Bool, a: Float, b: Float) -> Float { return simd_blend_f32(condition, a, b); }
+pub fn simd_mod_clamp_f32(v: Float, min_val: Float, max_val: Float) -> Float { return simd_clamp_f32(v, min_val, max_val); }
+pub fn simd_mod_saturate_f32(v: Float) -> Float { return simd_saturate_f32(v); }
+
+// Public gather / pack surface: simd_mod_gather_*, simd_mod_pack_*
+pub fn simd_mod_gather4(mem: List[Int], idxs: SimdIndices4, fallback: Int) -> SimdValues4 { return simd_gather4(mem, idxs, fallback); }
+pub fn simd_mod_pack_4bytes(b0: Int, b1: Int, b2: Int, b3: Int) -> Int { return simd_pack_4bytes(b0, b1, b2, b3); }
+pub fn simd_mod_pack_2words(w0: Int, w1: Int) -> Int { return simd_pack_2words(w0, w1); }
+
+// Public quaternion surface: simd_mod_quat_*
+pub fn simd_mod_quat_identity() -> SimdQuat { return simd_quat_identity(); }
+pub fn simd_mod_quat_from_axis_angle(ax: Float, ay: Float, az: Float, angle_rad: Float) -> SimdQuat { return simd_quat_from_axis_angle(ax, ay, az, angle_rad); }
+pub fn simd_mod_quat_conjugate(q: SimdQuat) -> SimdQuat { return simd_quat_conjugate(q); }
+pub fn simd_mod_quat_dot(a: SimdQuat, b: SimdQuat) -> Float { return simd_quat_dot(a, b); }
+pub fn simd_mod_quat_normalize(q: SimdQuat) -> SimdQuat { return simd_quat_normalize(q); }
+
+// Public noise / Perlin surface: simd_mod_noise_*
+pub fn simd_mod_noise_perlin2d(x: Float, y: Float) -> Float { return simd_noise_perlin2d(x, y); }
+pub fn simd_mod_noise_perlin3d(x: Float, y: Float, z: Float) -> Float { return simd_noise_perlin3d(x, y, z); }
+pub fn simd_mod_noise_fbm2d(x: Float, y: Float, octaves: Int, lacunarity: Float, gain: Float) -> Float { return simd_noise_fbm2d(x, y, octaves, lacunarity, gain); }
+
+// Public shuffle surface: simd_mod_shuffle_*
+pub fn simd_mod_shuffle_rev(v: Vec4f) -> Vec4f { return simd_shuffle_rev(v); }
+pub fn simd_mod_shuffle_interleave_lo(a: Vec4f, b: Vec4f) -> Vec4f { return simd_shuffle_interleave_lo(a, b); }
+pub fn simd_mod_shuffle_rotate_left(v: Vec4f) -> Vec4f { return simd_shuffle_rotate_left(v); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. fma_law.oo, simd_lane_law.oo)
+//   _theory files (e.g. lane_broadcast_theory.oo, slp_vectorization_theory.oo, sum_reduction_theory.oo)
+//   _principle files (e.g. alignment_principle.oo, risc_v_v_extension_law.oo, sve_predicated_op_principle.oo)
+//   _invariants files (e.g. simd_invariants.oo)
+//   _kat files (e.g. simd_kat.oo)
+// External callers must import this mod.oo and use the simd_mod_* surface.

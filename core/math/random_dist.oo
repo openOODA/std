@@ -1,0 +1,95 @@
+// # Probability Distributions and Deterministic PRNG Module
+//
+// Logline: Deterministic LCG PRNG. Sampling returns the updated state. Domain errors return Err.
+//
+// Setup: Pure math. 32-bit LCG. Seed 0 is illegal. Callers must thread the returned RngState.
+//
+// Beats:
+//   1. rng_next returns the advanced state plus the draw.
+//   2. Uniform float is in [0, 1). Inverted ranges return Err.
+//   3. Exponential requires lambda>0. Normal requires std_dev>0.
+//   4. Bernoulli requires p in [0, 1].
+
+import "std/core/math/constants.oo";
+
+type RngState = struct {
+    state: Int
+};
+
+type RngI = struct {
+    rng: RngState,
+    i: Int
+};
+
+type RngF = struct {
+    rng: RngState,
+    f: Float
+};
+
+type RngB = struct {
+    rng: RngState,
+    b: Bool
+};
+
+pub fn rng_new(seed: Int) -> Result[RngState, String] {
+    if seed == 0 { return Err("ERR\trng\tseed"); }
+    return Ok(RngState { state: seed });
+}
+
+pub fn rng_next(rng: RngState) -> RngI {
+    let s: Int = rng.state;
+    let next_s: Int = (s * 1103515245 + 12345) % 2147483647;
+    let mut clean_s: Int = next_s;
+    if clean_s < 0 { clean_s = 0 - clean_s; }
+    return RngI { rng: RngState { state: clean_s }, i: clean_s };
+}
+
+pub fn rng_uniform_float(rng: RngState) -> RngF {
+    let d: RngI = rng_next(rng);
+    let iv: Int = d.i;
+    let f_raw: Float = 1.0 * (iv);
+    return RngF { rng: d.rng, f: f_raw / 2147483647.0 };
+}
+
+pub fn rng_uniform_range(rng: RngState, min_v: Float, max_v: Float) -> Result[RngF, String] {
+    if max_v < min_v { return Err("ERR\trng\trange"); }
+    let u: RngF = rng_uniform_float(rng);
+    return Ok(RngF { rng: u.rng, f: min_v + u.f * (max_v - min_v) });
+}
+
+pub fn rng_uniform_int(rng: RngState, min_v: Int, max_v: Int) -> Result[RngI, String] {
+    let diff: Int = max_v - min_v + 1;
+    if diff <= 0 { return Err("ERR\trng\trange"); }
+    let d: RngI = rng_next(rng);
+    return Ok(RngI { rng: d.rng, i: min_v + (d.i % diff) });
+}
+
+pub fn rng_bernoulli(rng: RngState, p: Float) -> Result[RngB, String] {
+    if p < 0.0 { return Err("ERR\trng\tp"); }
+    if p > 1.0 { return Err("ERR\trng\tp"); }
+    let u: RngF = rng_uniform_float(rng);
+    return Ok(RngB { rng: u.rng, b: u.f < p });
+}
+
+pub fn rng_exponential(rng: RngState, lambda: Float) -> Result[RngF, String] {
+    if lambda <= 0.0 { return Err("ERR\trng\tlambda"); }
+    let u: RngF = rng_uniform_float(rng);
+    let mut safe_u: Float = 1.0 - u.f;
+    if safe_u <= 0.0000001 { safe_u = 0.0000001; }
+    let log_val: Float = ln(safe_u);
+    return Ok(RngF { rng: u.rng, f: (0.0 - log_val) / lambda });
+}
+
+pub fn rng_normal(rng: RngState, mean: Float, std_dev: Float) -> Result[RngF, String] {
+    if std_dev <= 0.0 { return Err("ERR\trng\tstd"); }
+    let u1s: RngF = rng_uniform_float(rng);
+    let u2s: RngF = rng_uniform_float(u1s.rng);
+    let mut u1: Float = u1s.f;
+    if u1 <= 0.0000001 { u1 = 0.0000001; }
+    let pack: CircleConstants = circle_constants();
+    let pi: Float = pack.pi;
+    let radius: Float = sqrt(0.0 - 2.0 * ln(u1));
+    let theta: Float = 2.0 * pi * u2s.f;
+    let z0: Float = radius * cos(theta);
+    return Ok(RngF { rng: u2s.rng, f: mean + z0 * std_dev });
+}

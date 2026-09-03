@@ -1,0 +1,55 @@
+// # Principles Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard principles domain library. Re-exports a stable principles_mod_* surface for the most-used public API (physical constants, dimensional units, uncertainty, zero-ambient-authority cap). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private principles siblings; no caps required for pure numerical principles.
+//
+// Beats:
+//   1. Re-export the physical constants surface (Boltzmann, fine-structure, Planck mass/length/time, CODATA 2022) as principles_mod_const_*.
+//   2. Re-export the dimensional units surface (mass, length, time, velocity, acceleration, force, energy) as principles_mod_units_*.
+//   3. Re-export the uncertainty surface (add, sub, mul, div, pow, quadrature) as principles_mod_uncertainty_*.
+//   4. Re-export the zero-ambient-authority cap surface as principles_mod_cap_*.
+//   5. Document the private siblings (laws, theories, principles, invariants, KATs).
+
+import "physical_constants.oo";
+import "dimensional_units.oo";
+import "uncertainty.oo";
+import "zero_ambient_authority.oo";
+
+// Public physical constants surface: principles_mod_const_*
+pub fn principles_mod_const_codata_2022() -> PhysicalConstants { return constants_codata_2022(); }
+pub fn principles_mod_const_boltzmann() -> Float { return constants_boltzmann(); }
+pub fn principles_mod_const_fine_structure() -> Float { return constants_fine_structure(); }
+pub fn principles_mod_const_planck_mass() -> Float { return constants_planck_mass(); }
+pub fn principles_mod_const_planck_length() -> Float { return constants_planck_length(); }
+pub fn principles_mod_const_planck_time() -> Float { return constants_planck_time(); }
+
+// Public dimensional units surface: principles_mod_units_*
+pub fn principles_mod_units_dimensionless() -> DimensionVector { return units_dim_dimensionless(); }
+pub fn principles_mod_units_mass() -> DimensionVector { return units_dim_mass(); }
+pub fn principles_mod_units_length() -> DimensionVector { return units_dim_length(); }
+pub fn principles_mod_units_time() -> DimensionVector { return units_dim_time(); }
+pub fn principles_mod_units_velocity() -> DimensionVector { return units_dim_velocity(); }
+pub fn principles_mod_units_acceleration() -> DimensionVector { return units_dim_acceleration(); }
+pub fn principles_mod_units_force() -> DimensionVector { return units_dim_force(); }
+pub fn principles_mod_units_energy() -> DimensionVector { return units_dim_energy(); }
+
+// Public uncertainty surface: principles_mod_uncertainty_*
+pub fn principles_mod_uncertainty_add(a: Uncertainty, b: Uncertainty) -> Uncertainty { return uncertainty_add(a, b); }
+pub fn principles_mod_uncertainty_sub(a: Uncertainty, b: Uncertainty) -> Uncertainty { return uncertainty_sub(a, b); }
+pub fn principles_mod_uncertainty_mul(a: Uncertainty, b: Uncertainty) -> Uncertainty { return uncertainty_mul(a, b); }
+pub fn principles_mod_uncertainty_div(a: Uncertainty, b: Uncertainty) -> Uncertainty { return uncertainty_div(a, b); }
+pub fn principles_mod_uncertainty_pow(a: Uncertainty, n: Float) -> Uncertainty { return uncertainty_pow(a, n); }
+pub fn principles_mod_uncertainty_quadrature(a: Float, b: Float) -> Float { return uncertainty_quadrature(a, b); }
+pub fn principles_mod_uncertainty_of(value: Float, abs_unc: Float) -> Uncertainty { return uncertainty_of(value, abs_unc); }
+pub fn principles_mod_uncertainty_tolerance_k1(u: Uncertainty) -> Float { return uncertainty_tolerance_k1(u); }
+
+// Public zero-ambient-authority cap surface: principles_mod_cap_*
+pub fn principles_mod_cap_is_valid(cap: Int) -> Int { return zero_cap_is_valid(cap); }
+pub fn principles_mod_cap_attenuate(cap: Int) -> Int { return zero_cap_attenuate(cap); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. conservation_invariant_law.oo, stochastic_process_coupling_law.oo, tensor_decomposition_law.oo)
+//   _theory files (e.g. category_adjunction_theory.oo, conjugate_gradient_family_theory.oo, recursive_unfold_theory.oo)
+//   _principle files (e.g. amdahls_law_principle.oo, cap_theorem_principle.oo, denotational_semantics_principle.oo, fermat_optimal_path_principle.oo, golden_ratio_extremal_principle.oo, information_geometry_principle.oo, landauer_principle.oo, monad_minimal_axiom_principle.oo, monotone_convergence_principle.oo, riccati_optimal_control_principle.oo, rice_theorem_decidability_principle.oo, shannon_channel_capacity_principle.oo)
+//   _kat files (e.g. cross_domain_literature_kat.oo)

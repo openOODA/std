@@ -1,0 +1,42 @@
+// # Beer-Lambert transmission
+//
+// Logline: I = I0 * exp(-kappa * x). I0=0 is Ok(0). I0<0, kappa<0, or x<0 return Err.
+//
+// Setup: Pure Float. dew_ciws.oo stays the DEW application.
+//
+// Beats:
+//   1. Transmittance is exp(-kappa * x) when kappa >= 0 and x >= 0.
+//   2. Intensity is I0 times transmittance when I0 >= 0.
+//   3. Hostile negatives return Err.
+
+pub fn beer_lambert_transmittance(kappa: Float, distance: Float) -> Result[Float, String] {
+    if kappa < 0.0 { return Err("ERR\tpbl\tkappa"); }
+    if distance < 0.0 { return Err("ERR\tpbl\tx"); }
+    return Ok(exp(0.0 - (kappa * distance)));
+}
+
+pub fn beer_lambert_intensity(i0: Float, kappa: Float, distance: Float) -> Result[Float, String] {
+    if i0 < 0.0 { return Err("ERR\tpbl\ti0"); }
+    let tr: Result[Float, String] = beer_lambert_transmittance(kappa, distance);
+    match tr {
+        Ok(t)  => { return Ok(i0 * t); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+fn pbl_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn verify_beer_lambert_law() -> Bool {
+    let z: Float = pbl_got(beer_lambert_intensity(4.0, 0.0, 100.0));
+    let mut d: Float = z - 4.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    if pbl_got(beer_lambert_intensity(0.0, 0.1, 1.0)) != 0.0 { return false; }
+    if pbl_got(beer_lambert_transmittance(0.2, 0.0)) != 1.0 { return false; }
+    if beer_lambert_intensity(0.0 - 1.0, 0.1, 1.0).is_ok() { return false; }
+    if beer_lambert_intensity(1.0, 0.0 - 0.1, 1.0).is_ok() { return false; }
+    if beer_lambert_transmittance(0.1, 0.0 - 1.0).is_ok() { return false; }
+    return true;
+}

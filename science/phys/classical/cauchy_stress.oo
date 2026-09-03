@@ -1,0 +1,153 @@
+// # 3x3 Cauchy Stress Tensor and Von Mises Invariants
+//
+// Logline: Computes 3D continuum Cauchy stress tensors, hydrostatic mean stress, deviatoric tensors, and Von Mises yield criteria.
+//
+// Setup: Pure floating-point continuum mechanics algorithms on symmetric 3x3 second-order tensors.
+//
+// Beats:
+//   1. Construct symmetric 3x3 Cauchy stress tensor.
+//   2. Hydrostatic mean stress sigma_m and deviatoric stress tensor s_ij.
+//   3. Principal stress invariants I1, I2, I3 and deviatoric invariant J2.
+//   4. Von Mises equivalent stress sigma_v and yield criterion threshold check.
+
+type StressTensor3x3 = struct {
+    xx: Float,
+    xy: Float,
+    xz: Float,
+    yx: Float,
+    yy: Float,
+    yz: Float,
+    zx: Float,
+    zy: Float,
+    zz: Float
+};
+
+type StressInvariants = struct {
+    i1: Float,
+    i2: Float,
+    i3: Float,
+    j2: Float,
+    mean_hydrostatic: Float,
+    von_mises: Float
+};
+
+// Construct a symmetric 3x3 Cauchy stress tensor.
+pub fn stress_tensor_new(
+    xx: Float,
+    xy: Float,
+    xz: Float,
+    yy: Float,
+    yz: Float,
+    zz: Float
+) -> StressTensor3x3 {
+    return StressTensor3x3 {
+        xx: xx,
+        xy: xy,
+        xz: xz,
+        yx: xy,
+        yy: yy,
+        yz: yz,
+        zx: xz,
+        zy: yz,
+        zz: zz
+    };
+}
+
+// Zero-initialized stress tensor.
+pub fn stress_tensor_zero() -> StressTensor3x3 {
+    return StressTensor3x3 {
+        xx: 0.0,
+        xy: 0.0,
+        xz: 0.0,
+        yx: 0.0,
+        yy: 0.0,
+        yz: 0.0,
+        zx: 0.0,
+        zy: 0.0,
+        zz: 0.0
+    };
+}
+
+// Hydrostatic mean stress sigma_m = (sigma_xx + sigma_yy + sigma_zz) / 3 (Pascals).
+pub fn stress_mean_hydrostatic(s: StressTensor3x3) -> Float {
+    let trace: Float = s.xx + s.yy + s.zz;
+    return trace / 3.0;
+}
+
+// Deviatoric stress tensor s_ij = sigma_ij - sigma_m * delta_ij.
+pub fn stress_deviatoric(s: StressTensor3x3) -> StressTensor3x3 {
+    let sm: Float = stress_mean_hydrostatic(s);
+    return StressTensor3x3 {
+        xx: s.xx - sm,
+        xy: s.xy,
+        xz: s.xz,
+        yx: s.yx,
+        yy: s.yy - sm,
+        yz: s.yz,
+        zx: s.zx,
+        zy: s.zy,
+        zz: s.zz - sm
+    };
+}
+
+// Second invariant of deviatoric stress tensor J2 (Pa^2).
+pub fn stress_deviatoric_j2(s: StressTensor3x3) -> Float {
+    let dxx_yy: Float = s.xx - s.yy;
+    let dyy_zz: Float = s.yy - s.zz;
+    let dzz_xx: Float = s.zz - s.xx;
+    let shear_sum: Float = (s.xy * s.xy) + (s.yz * s.yz) + (s.xz * s.xz);
+    let diff_sum: Float = (dxx_yy * dxx_yy) + (dyy_zz * dyy_zz) + (dzz_xx * dzz_xx);
+    let total: Float = diff_sum + (6.0 * shear_sum);
+    return total / 6.0;
+}
+
+// Von Mises equivalent stress sigma_v = sqrt(3 * J2) (Pascals).
+pub fn stress_von_mises(s: StressTensor3x3) -> Float {
+    let j2: Float = stress_deviatoric_j2(s);
+    if j2 <= 0.0 {
+        return 0.0;
+    }
+    return sqrt(3.0 * j2);
+}
+
+// Evaluate principal invariants (I1, I2, I3), J2, mean stress, and Von Mises stress.
+pub fn stress_invariants(s: StressTensor3x3) -> StressInvariants {
+    let i1: Float = s.xx + s.yy + s.zz;
+    let normal_cross: Float = (s.xx * s.yy) + (s.yy * s.zz) + (s.zz * s.xx);
+    let shear_sq: Float = (s.xy * s.xy) + (s.yz * s.yz) + (s.xz * s.xz);
+    let i2: Float = normal_cross - shear_sq;
+
+    let det_c1: Float = s.xx * ((s.yy * s.zz) - (s.yz * s.yz));
+    let det_c2: Float = s.xy * ((s.xy * s.zz) - (s.yz * s.xz));
+    let det_c3: Float = s.xz * ((s.xy * s.yz) - (s.yy * s.xz));
+    let i3: Float = (det_c1 - det_c2) + det_c3;
+
+    let j2: Float = stress_deviatoric_j2(s);
+    let sm: Float = i1 / 3.0;
+    let vm: Float = stress_von_mises(s);
+
+    return StressInvariants {
+        i1: i1,
+        i2: i2,
+        i3: i3,
+        j2: j2,
+        mean_hydrostatic: sm,
+        von_mises: vm
+    };
+}
+
+// Check if Von Mises stress meets or exceeds yield strength.
+pub fn stress_yield_check(s: StressTensor3x3, yield_strength_pa: Float) -> Bool {
+    if yield_strength_pa <= 0.0 {
+        return true;
+    }
+    let vm: Float = stress_von_mises(s);
+    return vm >= yield_strength_pa;
+}
+
+// Approximate maximum shear stress (Tresca criterion estimate) tau_max = sigma_v / sqrt(3).
+pub fn stress_tresca_estimate(s: StressTensor3x3) -> Float {
+    let j2: Float = stress_deviatoric_j2(s);
+    if j2 <= 0.0 { return 0.0; }
+    return sqrt(j2);
+}

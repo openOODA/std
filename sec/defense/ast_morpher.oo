@@ -1,0 +1,27 @@
+// # Zero-Trust Metamorphic AST Morpher & Binary Obfuscator
+//
+// Logline: Re-exports the ast_morpher_apply_all entry point that flattens control flow, injects opaque predicates, permutes blocks, encrypts literals, and preserves capabilities.
+//
+// Setup: Imports ast_morpher_types.oo, ast_morpher_ops.oo, and ast_morpher_engine.oo.
+//
+// Beats:
+//   1. Define AST representations, metamorphic configuration, and capability invariant tokens.
+//   2. Implement Chenxi Wang control flow flattening, quadratic residue mod 7 and even product opaque predicates.
+//   3. Implement basic block permutation with branch fixups, string literal encryption, and anti-ROP padding.
+//   4. Enforce strict Zero-Trust capability preservation (&FsReadCap, &FsWriteCap, &NetCap, &ProcessCap).
+
+import "std/sec/defense/ast_morpher_types.oo";
+import "std/sec/defense/ast_morpher_ops.oo";
+import "std/sec/defense/ast_morpher_engine.oo";
+
+// ast_morpher.oo was originally a 295-line monolithic file. It is
+// split at functional seams into ast_morpher_types.oo (record types),
+// ast_morpher_ops.oo (capability invariants, opaque predicates,
+// function/block mutators), and ast_morpher_engine.oo (CFG flatten,
+// layout permute, ROP gadget elimination, and apply_all driver).
+// Each sibling file is independently <=256 lines and type-checked.
+// This shim re-exports the public surface for callers.
+
+pub fn ast_morpher_apply_all(cfg: AstMorpherConfig, fn_ast: AstFunction, bytecode: BytecodeBuffer) -> AstMorpherResult {
+    return ast_morpher_engine_apply(cfg, fn_ast, bytecode);
+}

@@ -1,0 +1,148 @@
+// # AArch64 ELF64 Static Executable Linker
+//
+// Logline: Packs AArch64 machine code and read-only data into a statically linked ELF64 ET_EXEC image.
+//
+// Setup: Pure byte synthesizer. Caller supplies .text and .rodata as byte lists. Machine id is EM_AARCH64 183.
+//
+// Beats:
+//   1. Emit the 64-byte ELF64 header with ET_EXEC, EM_AARCH64, and a non-zero entry.
+//   2. Emit one 56-byte PT_LOAD program header covering the file at base 0x400000.
+//   3. Concatenate .text then .rodata after the headers.
+//   4. Fail closed when .text is empty.
+
+fn elf_type_exec() -> Int {
+    return 2;
+}
+
+fn elf_machine_aarch64() -> Int {
+    return 183;
+}
+
+pub fn a64_elf_u16(out: List[Int], n: Int) -> List[Int] {
+    let mut r: List[Int] = out;
+    r = list_push(r, n & 255);
+    r = list_push(r, (n >> 8) & 255);
+    return r;
+}
+
+pub fn a64_elf_u32(out: List[Int], n: Int) -> List[Int] {
+    let mut r: List[Int] = a64_elf_u16(out, n);
+    r = list_push(r, (n >> 16) & 255);
+    r = list_push(r, (n >> 24) & 255);
+    return r;
+}
+
+pub fn a64_elf_u64(out: List[Int], n: Int) -> List[Int] {
+    let mut r: List[Int] = a64_elf_u32(out, n);
+    r = list_push(r, (n >> 32) & 255);
+    r = list_push(r, (n >> 40) & 255);
+    r = list_push(r, (n >> 48) & 255);
+    r = list_push(r, (n >> 56) & 255);
+    return r;
+}
+
+pub fn a64_elf_concat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn a64_elf_base() -> Int {
+    return 4194304;
+}
+
+pub fn a64_elf_ehsize() -> Int {
+    return 64;
+}
+
+pub fn a64_elf_phentsize() -> Int {
+    return 56;
+}
+
+pub fn a64_elf_text_off() -> Int {
+    return a64_elf_ehsize() + a64_elf_phentsize();
+}
+
+fn a64_elf_ident() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 127);
+    out = list_push(out, 69);
+    out = list_push(out, 76);
+    out = list_push(out, 70);
+    out = list_push(out, 2);
+    out = list_push(out, 1);
+    out = list_push(out, 1);
+    out = list_push(out, 0);
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, 0);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn a64_elf_header(entry: Int, phoff: Int) -> List[Int] {
+    let mut out: List[Int] = a64_elf_ident();
+    out = a64_elf_u16(out, elf_type_exec());
+    out = a64_elf_u16(out, elf_machine_aarch64());
+    out = a64_elf_u32(out, 1);
+    out = a64_elf_u64(out, entry);
+    out = a64_elf_u64(out, phoff);
+    out = a64_elf_u64(out, 0);
+    out = a64_elf_u32(out, 0);
+    out = a64_elf_u16(out, a64_elf_ehsize());
+    out = a64_elf_u16(out, a64_elf_phentsize());
+    out = a64_elf_u16(out, 1);
+    out = a64_elf_u16(out, 0);
+    out = a64_elf_u16(out, 0);
+    out = a64_elf_u16(out, 0);
+    return out;
+}
+
+fn a64_elf_pheader(vaddr: Int, filesz: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = a64_elf_u32(out, 1);
+    out = a64_elf_u32(out, 7);
+    out = a64_elf_u64(out, 0);
+    out = a64_elf_u64(out, vaddr);
+    out = a64_elf_u64(out, vaddr);
+    out = a64_elf_u64(out, filesz);
+    out = a64_elf_u64(out, filesz);
+    out = a64_elf_u64(out, 4096);
+    return out;
+}
+
+pub fn aarch64_link_executable(text: List[Int], rodata: List[Int]) -> List[Int] {
+    let text_len: Int = list_len(text);
+    if text_len == 0 {
+        return list_new();
+    }
+    let base: Int = 0 + a64_elf_base();
+    let hdr: Int = 0 + a64_elf_text_off();
+    let total: Int = hdr + text_len + list_len(rodata);
+    let entry: Int = base + hdr;
+    let mut out: List[Int] = a64_elf_header(entry, a64_elf_ehsize());
+    out = a64_elf_concat(out, a64_elf_pheader(base, total));
+    out = a64_elf_concat(out, text);
+    out = a64_elf_concat(out, rodata);
+    return out;
+}
+
+pub fn a64_elf_read_u16(b: List[Int], off: Int) -> Int {
+    return (list_get(b, off) & 255) + ((list_get(b, off + 1) & 255) << 8);
+}
+
+pub fn a64_elf_read_u64(b: List[Int], off: Int) -> Int {
+    let mut v: Int = 0;
+    let mut k: Int = 0;
+    while k < 8 {
+        v = v + ((list_get(b, off + k) & 255) << (k * 8));
+        k = k + 1;
+    }
+    return v;
+}

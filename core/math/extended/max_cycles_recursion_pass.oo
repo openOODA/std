@@ -1,0 +1,22 @@
+// # Max Cycles Recursion Pass
+//
+// Logline: Standard library verification and domain capabilities for Max Cycles Recursion Pass.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+fn burn(n: Int) -> Int {
+    if n <= 0 {
+        return 0;
+    }
+    return burn(n - 1);
+}
+
+pub fn verify_max_cycles_recursion_pass() -> Bool {
+    let x = burn(3);
+    println(x);
+    return true;
+}

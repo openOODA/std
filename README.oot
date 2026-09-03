@@ -1,0 +1,64 @@
+# Standard library — one tree
+
+File: ooda/std/README.oot
+All product libraries live here, next to the compiler.
+This map is first principles, systems order, and power law.
+It is not a copy of another language's folder names.
+
+## 1. Laws
+
+  1. One tree.
+  2. A library is code that other programs import. A prove file is not a library.
+  3. Proof is emit-c + gcc + run. A folder on disk is not a cert.
+  4. Effects need a cap.
+  5. Power law: a few modules carry most programs. Work those first.
+  6. Systems order: compiler floor, then these trunk modules, then the long tail.
+
+## 2. Power law and domain map
+
+  Trunk (do these first)
+    core/  collections/  math/  text/
+    encoding/  io/  fs/  net/  os/
+
+  Support
+    sync/  actor/  hash/  crypto/  sec/
+    markup/  archive/  time/  diag/  test/  simd/
+
+  Domain parents (tail lives under these; do not add more parents)
+    hw/       silicon: arch, gpu, bare_metal, mem
+    compile/  this compiler: llvm, wasm, parsers, token_opt
+    phys/     physics laws and constructions
+    chem/     chemistry
+    bio/      biology
+    robot/    robots and vehicles
+    econ/     markets
+    data/     db, cloud, gis
+    ai/       models and swarms
+    ui/       tui, gui, media
+    principles/  four bounds only: constants, units, Landauer, zero-ambient
+
+  File role is not a folder: a law of physics lives in phys/.
+  A math law lives in math/. Principles stay in principles/.
+
+  Not libraries
+    each std parent is certified in qa/<domain>/{invariants,adversarial,caps,kat}.oo
+    named keepers live in qa/formal_proofs, qa/prove, qa/proof_verifiers
+
+## 3. Use
+
+  Import `std/core/option.oo` and `std/core/list.oo` as before.
+  Named product proves live in `ooda/fixtures/prove_prod_*.oo`.
+
+## 4. Residual
+
+  Compiler: generic `Result[T,E]`, richer sums, deeper lists.
+  Library: hard-crypto, decompress, full markup, destubs.
+  Path freeze: Delta_path = 0 after the canary eviction. No new std/ top-level dirs.
+
+## License
+
+Dual-licensed under either of:
+- **MIT License** (see [LICENSE](LICENSE))
+- **Apache License, Version 2.0** (see [LICENSE](LICENSE))
+
+at your option.

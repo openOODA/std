@@ -1,0 +1,88 @@
+// # Error Severity Monotonic Law
+//
+// Logline: A cause chain severity is the maximum of its parts and never decreases over the chain.
+//
+// Setup: Pure Int. Severity is a non-negative integer; negative severity returns Err. max(0, 0) is Ok(0).
+//
+// Beats:
+//   1. diag_severity_max returns the larger of two non-negative severities.
+//   2. diag_chain_non_decreasing returns 1 iff a three-step chain is non-decreasing.
+//   3. Negative severity in max returns Err. Negative in the chain classifier is 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn sev_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn diag_severity_max(a: Int, b: Int) -> Result[Int, String] {
+    if a < 0 { return Err("ERR\tsev\tdomain"); }
+    if b < 0 { return Err("ERR\tsev\tdomain"); }
+    if a >= b { return Ok(a); }
+    return Ok(b);
+}
+
+pub fn diag_chain_non_decreasing(a: Int, b: Int, c: Int) -> Int {
+    if a < 0 {
+        return 0;
+    }
+    if b < 0 {
+        return 0;
+    }
+    if c < 0 {
+        return 0;
+    }
+    if a <= b {
+        if b <= c {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn diag_severity_max_law(a: Int, b: Int) -> DomainCert {
+    if a < 0 {
+        return domain_cert("diag", "severity_max", 0);
+    }
+    if b < 0 {
+        return domain_cert("diag", "severity_max", 0);
+    }
+    if a >= b {
+        return domain_cert("diag", "severity_max", 1);
+    }
+    return domain_cert("diag", "severity_max", 1);
+}
+
+pub fn verify_error_severity_monotonic_law() -> Bool {
+    // Golden: max(3,5) is 5.
+    if sev_got(diag_severity_max(3, 5)) != 5 { return false; }
+    // Golden: max(7,2) is 7.
+    if sev_got(diag_severity_max(7, 2)) != 7 { return false; }
+    // Golden: equal severities max to themselves.
+    if sev_got(diag_severity_max(4, 4)) != 4 { return false; }
+    // Identity: severity 0 is a valid max.
+    let zsev: Result[Int, String] = diag_severity_max(0, 0);
+    if zsev.is_ok() == false { return false; }
+    if sev_got(zsev) != 0 { return false; }
+    if sev_got(diag_severity_max(0, 5)) != 5 { return false; }
+    // Golden: chain 0,1,2 is non-decreasing.
+    if diag_chain_non_decreasing(0, 1, 2) != 1 { return false; }
+    // Golden: chain 5,5,5 is non-decreasing.
+    if diag_chain_non_decreasing(5, 5, 5) != 1 { return false; }
+    // Golden: chain 1,3,3 is non-decreasing.
+    if diag_chain_non_decreasing(1, 3, 3) != 1 { return false; }
+    // Hostile: negative severity returns Err.
+    if diag_severity_max(0 - 1, 5).is_ok() { return false; }
+    // Hostile: both negative returns Err.
+    if diag_severity_max(0 - 2, 0 - 3).is_ok() { return false; }
+    // Hostile: descending chain fails closed.
+    if diag_chain_non_decreasing(3, 2, 1) != 0 { return false; }
+    // Hostile: descending in middle fails closed.
+    if diag_chain_non_decreasing(1, 5, 2) != 0 { return false; }
+    // Hostile: negative in chain fails closed.
+    if diag_chain_non_decreasing(1, 0 - 1, 2) != 0 { return false; }
+    // DomainCert.holds matches the Int law.
+    if diag_severity_max_law(3, 5).holds != 1 { return false; }
+    if diag_severity_max_law(0 - 1, 5).holds != 0 { return false; }
+    return true;
+}

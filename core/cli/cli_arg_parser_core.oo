@@ -1,0 +1,46 @@
+// # Declarative CLI Argument Parser Core Primitives
+//
+// Logline: Core types and definition builders for legacy CLI argument parsing and flags.
+//
+// Setup: Pure argument parser providing declarative flag definitions with zero external libraries.
+//
+// Beats:
+//   1. Define CliArgParserOption and CliArgParserCommand structures.
+//   2. Provide constructor functions for commands and flag options.
+//   3. Implement flag matching and help text rendering.
+//   4. Expose clean interoperability interfaces for CLI argument parsing.
+
+type CliArgParserOption = struct {
+    short_name: String,
+    long_name: String,
+    description: String,
+    is_flag: Bool,
+    is_required: Bool
+};
+
+type CliArgParserCommand = struct {
+    name: String,
+    version: String,
+    about: String,
+    options_count: Int
+};
+
+pub fn cli_arg_parser_command_new(n: String, v: String, a: String) -> CliArgParserCommand {
+    return CliArgParserCommand { name: n, version: v, about: a, options_count: 0 };
+}
+
+pub fn cli_arg_parser_option_flag(s: String, l: String, d: String) -> CliArgParserOption {
+    return CliArgParserOption { short_name: s, long_name: l, description: d, is_flag: true, is_required: false };
+}
+
+pub fn cli_arg_parser_option_value(s: String, l: String, d: String, req: Bool) -> CliArgParserOption {
+    return CliArgParserOption { short_name: s, long_name: l, description: d, is_flag: false, is_required: req };
+}
+
+pub fn cli_arg_parser_matches_flag(arg: String, opt: CliArgParserOption) -> Bool {
+    return (arg == "-" + opt.short_name) || (arg == "--" + opt.long_name);
+}
+
+pub fn cli_arg_parser_render_help(cmd: CliArgParserCommand) -> String {
+    return cmd.name + " " + cmd.version + "\n\nUsage: " + cmd.name + " [OPTIONS] [COMMAND]\n\n" + cmd.about + "\n";
+}

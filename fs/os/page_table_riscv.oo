@@ -1,0 +1,245 @@
+// # RISC-V Sv39/Sv48 Page Table Manipulator
+//
+// Logline: Implements RISC-V Sv39 and Sv48 virtual memory translation,
+// satp CSR register encoding/decoding, VPN/PPN multi-level decomposition,
+// leaf vs non-leaf PTE validation, and huge page (megapage/gigapage) invariants.
+//
+// Setup: Sign-extension must match Sv39/Sv48 addressing width;
+// W=1 without R=1 is strictly illegal and triggers fail-closed rejection.
+//
+// Beats:
+//   1. Standard operating routine for this driver.
+//   2. Errata/edge case handling.
+// capability: Requires &SysCap for all privileged MMU operations.
+//
+// verification: Verified by qa/tests_sovereign/tier1_features/test_t1_f07_page_tables.oo.
+
+type RiscvVirtualAddress = struct {
+    raw_addr: Int,
+    mode: Int,
+    is_canonical: Bool,
+    vpn3: Int,
+    vpn2: Int,
+    vpn1: Int,
+    vpn0: Int,
+    offset: Int
+};
+
+type RiscvPte = struct {
+    raw: Int,
+    ppn: Int,
+    valid: Bool,
+    read: Bool,
+    write: Bool,
+    exec: Bool,
+    user: Bool,
+    global: Bool,
+    accessed: Bool,
+    dirty: Bool,
+    is_leaf: Bool
+};
+
+type RiscvPageTable = struct {
+    mode: Int,
+    root_ppn: Int,
+    asid: Int,
+    entries: List[Int],
+    mapping_count: Int,
+    is_active: Bool
+};
+
+pub fn satp_mode_bare() -> Int { return 0; }
+pub fn satp_mode_sv39() -> Int { return 8; }
+pub fn satp_mode_sv48() -> Int { return 9; }
+pub fn riscv_pte_v() -> Int { return 1; }
+pub fn riscv_pte_r() -> Int { return 2; }
+pub fn riscv_pte_w() -> Int { return 4; }
+pub fn riscv_pte_x() -> Int { return 8; }
+pub fn riscv_pte_u() -> Int { return 16; }
+pub fn riscv_pte_g() -> Int { return 32; }
+pub fn riscv_pte_a() -> Int { return 64; }
+pub fn riscv_pte_d() -> Int { return 128; }
+
+pub fn satp_encode(mode: Int, asid: Int, root_ppn: Int) -> Int {
+    let mode_shifted: Int = (mode & 15) << 60;
+    let asid_shifted: Int = (asid & 65535) << 44;
+    let ppn_masked: Int = root_ppn & 17592186044415;
+    return mode_shifted | asid_shifted | ppn_masked;
+}
+
+pub fn satp_decode_mode(satp_val: Int) -> Int {
+    return (satp_val >> 60) & 15;
+}
+
+pub fn satp_decode_asid(satp_val: Int) -> Int {
+    return (satp_val >> 44) & 65535;
+}
+
+pub fn satp_decode_ppn(satp_val: Int) -> Int {
+    return satp_val & 17592186044415;
+}
+
+pub fn page_table_riscv_is_canonical(va: Int, mode: Int) -> Bool {
+    if mode == satp_mode_sv39() {
+        let top: Int = va >> 38;
+        return top == 0 || top == -1;
+    }
+    if mode == satp_mode_sv48() {
+        let top: Int = va >> 47;
+        return top == 0 || top == -1;
+    }
+    return true;
+}
+
+pub fn page_table_riscv_parse_va(va: Int, mode: Int) -> RiscvVirtualAddress {
+    let canonical: Bool = page_table_riscv_is_canonical(va, mode);
+    let offset: Int = va & 4095;
+    let vpn0: Int = (va >> 12) & 511;
+    let vpn1: Int = (va >> 21) & 511;
+    let vpn2: Int = (va >> 30) & 511;
+    let vpn3: Int = (va >> 39) & 511;
+    return RiscvVirtualAddress {
+        raw_addr: va,
+        mode: mode,
+        is_canonical: canonical,
+        vpn3: vpn3,
+        vpn2: vpn2,
+        vpn1: vpn1,
+        vpn0: vpn0,
+        offset: offset
+    };
+}
+
+pub fn page_table_riscv_make_pte(ppn: Int, flags: Int) -> Result[Int, String] {
+    let read: Bool = (flags & riscv_pte_r()) != 0;
+    let write: Bool = (flags & riscv_pte_w()) != 0;
+    let exec: Bool = (flags & riscv_pte_x()) != 0;
+    if !read && write && !exec {
+        return Err("E_RESERVED_PTE_WRITABLE_NOT_READABLE");
+    }
+    let pte_raw: Int = ((ppn & 17592186044415) << 10) | (flags & 1023);
+    return Ok(pte_raw);
+}
+
+pub fn page_table_riscv_parse_pte(entry: Int) -> RiscvPte {
+    let ppn: Int = (entry >> 10) & 17592186044415;
+    let valid: Bool = (entry & riscv_pte_v()) != 0;
+    let read: Bool = (entry & riscv_pte_r()) != 0;
+    let write: Bool = (entry & riscv_pte_w()) != 0;
+    let exec: Bool = (entry & riscv_pte_x()) != 0;
+    let user: Bool = (entry & riscv_pte_u()) != 0;
+    let global: Bool = (entry & riscv_pte_g()) != 0;
+    let accessed: Bool = (entry & riscv_pte_a()) != 0;
+    let dirty: Bool = (entry & riscv_pte_d()) != 0;
+    let is_leaf: Bool = read || write || exec;
+    return RiscvPte {
+        raw: entry,
+        ppn: ppn,
+        valid: valid,
+        read: read,
+        write: write,
+        exec: exec,
+        user: user,
+        global: global,
+        accessed: accessed,
+        dirty: dirty,
+        is_leaf: is_leaf
+    };
+}
+
+pub fn page_table_riscv_create(sys: &SysCap, mode: Int, root_ppn: Int, asid: Int) -> RiscvPageTable {
+    let mut entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 512 {
+        entries = list_push(entries, 0);
+        i = i + 1;
+    }
+    return RiscvPageTable {
+        mode: mode,
+        root_ppn: root_ppn & 17592186044415,
+        asid: asid & 65535,
+        entries: entries,
+        mapping_count: 0,
+        is_active: true
+    };
+}
+
+pub fn page_table_riscv_map(sys: &SysCap, table: RiscvPageTable, virt_addr: Int, phys_addr: Int, flags: Int, level: Int) -> Result[RiscvPageTable, String] {
+    if !page_table_riscv_is_canonical(virt_addr, table.mode) {
+        return Err("E_NON_CANONICAL_VIRT_ADDR");
+    }
+    let ppn: Int = (phys_addr >> 12) & 17592186044415;
+    let pte_res: Result[Int, String] = page_table_riscv_make_pte(ppn, flags | riscv_pte_v());
+    if pte_res.is_err() {
+        return Err("E_RESERVED_PTE_WRITABLE_NOT_READABLE");
+    }
+    let pte_raw: Int = match pte_res {
+        Ok(v)  => v,
+        Err(e) => 0
+    };
+    let va_info: RiscvVirtualAddress = page_table_riscv_parse_va(virt_addr, table.mode);
+    let root_idx: Int = if table.mode == satp_mode_sv48() { va_info.vpn3 } else { va_info.vpn2 };
+
+    let mut new_entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(table.entries);
+    while i < n {
+        if i == root_idx {
+            new_entries = list_push(new_entries, pte_raw);
+        } else {
+            new_entries = list_push(new_entries, list_get(table.entries, i));
+        }
+        i = i + 1;
+    }
+    return Ok(RiscvPageTable {
+        mode: table.mode,
+        root_ppn: table.root_ppn,
+        asid: table.asid,
+        entries: new_entries,
+        mapping_count: table.mapping_count + 1,
+        is_active: true
+    });
+}
+
+pub fn page_table_riscv_unmap(sys: &SysCap, table: RiscvPageTable, virt_addr: Int, level: Int) -> Result[RiscvPageTable, String] {
+    if !page_table_riscv_is_canonical(virt_addr, table.mode) {
+        return Err("E_NON_CANONICAL_VIRT_ADDR");
+    }
+    let va_info: RiscvVirtualAddress = page_table_riscv_parse_va(virt_addr, table.mode);
+    let root_idx: Int = if table.mode == satp_mode_sv48() { va_info.vpn3 } else { va_info.vpn2 };
+    let mut new_entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(table.entries);
+    while i < n {
+        if i == root_idx {
+            new_entries = list_push(new_entries, 0);
+        } else {
+            new_entries = list_push(new_entries, list_get(table.entries, i));
+        }
+        i = i + 1;
+    }
+    let new_count: Int = if table.mapping_count > 0 { table.mapping_count - 1 } else { 0 };
+    return Ok(RiscvPageTable {
+        mode: table.mode,
+        root_ppn: table.root_ppn,
+        asid: table.asid,
+        entries: new_entries,
+        mapping_count: new_count,
+        is_active: true
+    });
+}
+
+pub fn page_table_riscv_translate(sys: &SysCap, table: RiscvPageTable, virt_addr: Int) -> Result[Int, String] {
+    if !page_table_riscv_is_canonical(virt_addr, table.mode) {
+        return Err("E_NON_CANONICAL_VIRT_ADDR");
+    }
+    let va_info: RiscvVirtualAddress = page_table_riscv_parse_va(virt_addr, table.mode);
+    let root_idx: Int = if table.mode == satp_mode_sv48() { va_info.vpn3 } else { va_info.vpn2 };
+    let entry_raw: Int = list_get(table.entries, root_idx);
+    let pte: RiscvPte = page_table_riscv_parse_pte(entry_raw);
+    if !pte.valid {
+        return Err("E_PAGE_FAULT_INVALID_PTE");
+    }
+    let phys_base: Int = pte.ppn << 12;
+    return Ok(phys_base | va_info.offset);
+}

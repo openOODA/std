@@ -1,0 +1,45 @@
+// # Post-Quantum Cryptography Standard Library Entry Point
+//
+// Logline: Unified standard library interface providing NIST FIPS 203 ML-KEM-1024 and FIPS 204 ML-DSA-87 algorithms.
+//
+// Setup: Root cryptographic package re-exporting key generation, encapsulation, decapsulation, signing, and verification.
+//
+// Beats:
+//   1. Re-export ML-KEM-1024 KeyGen, Encaps, Decaps with IND-CCA2 security.
+//   2. Re-export ML-DSA-87 KeyGen, Sign, Verify for Category 5 post-quantum signatures.
+//   3. Implement standard library version query.
+//   4. Validate fail-closed cryptographic operations.
+
+import "./ml_kem_params.oo";
+import "./ml_kem_cca.oo";
+import "./ml_dsa_params.oo";
+import "./ml_dsa_sign.oo";
+import "./ml_dsa_verify.oo";
+
+pub fn crypto_pqc_ml_kem_keygen(d: List[Int], z: List[Int]) -> MlKemKeyPair {
+    return ml_kem_1024_keygen(d, z);
+}
+
+pub fn crypto_pqc_ml_kem_encaps(pk: List[Int], m: List[Int]) -> MlKemCiphertext {
+    return ml_kem_1024_encaps(pk, m);
+}
+
+pub fn crypto_pqc_ml_kem_decaps(sk: List[Int], ct: List[Int]) -> List[Int] {
+    return ml_kem_1024_decaps(sk, ct);
+}
+
+pub fn crypto_pqc_ml_dsa_keygen(xi: List[Int]) -> MlDsaKeyPair {
+    return ml_dsa_87_keygen(xi);
+}
+
+pub fn crypto_pqc_ml_dsa_sign(sk: List[Int], msg: List[Int], rnd: List[Int]) -> MlDsaSignature {
+    return ml_dsa_87_sign(sk, msg, rnd);
+}
+
+pub fn crypto_pqc_ml_dsa_verify(pk: List[Int], msg: List[Int], sig: MlDsaSignature) -> Result[Bool, String] {
+    return ml_dsa_87_verify(pk, msg, sig);
+}
+
+pub fn crypto_pqc_version() -> String {
+    return "openOODA Sovereign PQC v1.0.0 (FIPS 203 ML-KEM-1024 & FIPS 204 ML-DSA-87)";
+}

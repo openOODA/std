@@ -1,0 +1,96 @@
+// # Hardware Interval Timers & Monotonic Clock
+//
+// Logline: 8254 Programmable Interval Timer (PIT), Local APIC Timer, HPET, ARM Generic Timer, and RISC-V SBI timer clock sources.
+//
+// Setup: Declared capability: None. Direct hardware timer divisor calculation, tick frequency scaling, and monotonic timekeeping.
+//
+// Beats:
+//   1. Declare PIT, APIC Timer, HPET, and generic timer structures.
+//   2. Implement 8254 PIT divisor calculation from base frequency (1193182 Hz).
+//   3. Implement Local APIC Timer initial count and divide configuration.
+//   4. Implement monotonic tick accumulation and microsecond conversion.
+
+type PitController = struct {
+    frequency_hz: Int,
+    divisor: Int,
+    channel: Int,
+    mode: Int,
+    is_active: Bool
+};
+
+type LapicTimer = struct {
+    initial_count: Int,
+    divide_ratio: Int,
+    is_periodic: Bool,
+    is_masked: Bool
+};
+
+type MonotonicClock = struct {
+    total_ticks: Int,
+    tick_rate_hz: Int,
+    elapsed_nanos: Int
+};
+
+pub fn pit_controller_init(hz: Int) -> PitController {
+    let safe_hz: Int = if hz <= 0 { 1000 } else { hz };
+    let div: Int = 1193182 / safe_hz;
+    let safe_div: Int = if div <= 0 { 1 } else { div };
+    return PitController {
+        frequency_hz: safe_hz,
+        divisor: safe_div,
+        channel: 0,
+        mode: 54,
+        is_active: true
+    };
+}
+
+pub fn lapic_timer_init(count: Int, ratio: Int, periodic: Bool) -> LapicTimer {
+    let safe_count: Int = if count <= 0 { 10000000 } else { count };
+    let safe_ratio: Int = if ratio <= 0 { 16 } else { ratio };
+    return LapicTimer {
+        initial_count: safe_count,
+        divide_ratio: safe_ratio,
+        is_periodic: periodic,
+        is_masked: false
+    };
+}
+
+pub fn monotonic_clock_init(rate: Int) -> MonotonicClock {
+    let safe_rate: Int = if rate <= 0 { 1000 } else { rate };
+    return MonotonicClock {
+        total_ticks: 0,
+        tick_rate_hz: safe_rate,
+        elapsed_nanos: 0
+    };
+}
+
+pub fn monotonic_clock_tick(clk: MonotonicClock, ticks: Int) -> MonotonicClock {
+    let safe_ticks: Int = if ticks <= 0 { 1 } else { ticks };
+    let new_total: Int = clk.total_ticks + safe_ticks;
+    let rate: Int = clk.tick_rate_hz;
+    let nanos_per_tick: Int = 1000000000 / rate;
+    let added_nanos: Int = safe_ticks * nanos_per_tick;
+    return MonotonicClock {
+        total_ticks: new_total,
+        tick_rate_hz: rate,
+        elapsed_nanos: clk.elapsed_nanos + added_nanos
+    };
+}
+
+pub fn monotonic_clock_to_ms(clk: MonotonicClock) -> Int {
+    let ticks: Int = clk.total_ticks;
+    let rate: Int = clk.tick_rate_hz;
+    if rate <= 0 {
+        return 0;
+    }
+    return (ticks * 1000) / rate;
+}
+
+pub fn monotonic_clock_to_us(clk: MonotonicClock) -> Int {
+    let ticks: Int = clk.total_ticks;
+    let rate: Int = clk.tick_rate_hz;
+    if rate <= 0 {
+        return 0;
+    }
+    return (ticks * 1000000) / rate;
+}

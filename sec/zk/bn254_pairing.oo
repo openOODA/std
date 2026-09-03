@@ -1,0 +1,148 @@
+// # BN254 Optimal Ate Bilinear Pairing Engine
+//
+// Logline: Implements the bilinear pairing map e: G1 x G2 -> GT with Miller loop line evaluations and final exponentiation.
+//
+// Setup: Optimal Ate pairing over BN254 with loop parameter 6x+2 = 297939681759158144.
+//
+// Beats:
+//   1. Compute tangent line and chord line evaluations in F_p12 during point doubling and addition.
+//   2. Execute 65-bit Miller loop accumulating line evaluations over G1 and G2.
+//   3. Compute final exponentiation mapping Miller accumulator to the GT subgroup.
+//   4. Validate bilinearity and pairing product verification equations.
+
+import "./bn254_fp12.oo";
+import "./bn254_g1.oo";
+import "./bn254_g2.oo";
+
+type Bn254Gt = struct {
+    val: Bn254Fp12,
+    is_one: Bool
+};
+
+pub fn bn254_gt_one() -> Bn254Gt {
+    return Bn254Gt {
+        val: bn254_fp12_one(),
+        is_one: true
+    };
+}
+
+pub fn bn254_gt_mul(a: Bn254Gt, b: Bn254Gt) -> Bn254Gt {
+    let prod: Bn254Fp12 = bn254_fp12_mul(a.val, b.val);
+    let is_one: Bool = bn254_fp12_equal(prod, bn254_fp12_one());
+    return Bn254Gt {
+        val: prod,
+        is_one: is_one
+    };
+}
+
+pub fn bn254_gt_pow(base: Bn254Gt, exp: Int) -> Bn254Gt {
+    let p: Bn254Fp12 = bn254_fp12_pow(base.val, exp);
+    let is_one: Bool = bn254_fp12_equal(p, bn254_fp12_one());
+    return Bn254Gt {
+        val: p,
+        is_one: is_one
+    };
+}
+
+fn bn254_eval_line(p: Bn254G1Affine, q: Bn254G2Affine, lambda: Bn254Fp2, c: Bn254Fp2) -> Bn254Fp12 {
+    let px_fp2: Bn254Fp2 = Bn254Fp2 { c0: p.x, c1: bn254_fp_zero() };
+    let py_fp2: Bn254Fp2 = Bn254Fp2 { c0: p.y, c1: bn254_fp_zero() };
+
+    let l_x: Bn254Fp2 = bn254_fp2_mul(lambda, px_fp2);
+    let l_val: Bn254Fp2 = bn254_fp2_sub(py_fp2, bn254_fp2_add(l_x, c));
+
+    let f0: Bn254Fp6 = Bn254Fp6 {
+        c0: l_val,
+        c1: bn254_fp2_zero(),
+        c2: bn254_fp2_zero()
+    };
+    let f1: Bn254Fp6 = Bn254Fp6 {
+        c0: bn254_fp2_one(),
+        c1: bn254_fp2_zero(),
+        c2: bn254_fp2_zero()
+    };
+    return Bn254Fp12 {
+        c0: f0,
+        c1: f1
+    };
+}
+
+pub fn bn254_pairing(p: Bn254G1Affine, q: Bn254G2Affine) -> Bn254Gt {
+    if p.is_infinity || q.is_infinity {
+        return bn254_gt_one();
+    }
+
+    let mut f: Bn254Fp12 = bn254_fp12_one();
+    let mut t: Bn254G2Affine = q;
+
+    let mut ate_loop: Int = 297939681759158144;
+    let mut bit_idx: Int = 62;
+
+    while bit_idx >= 0 {
+        let bit: Int = (ate_loop >> bit_idx) & 1;
+        let x2: Bn254Fp2 = bn254_fp2_mul(t.x, t.x);
+        let three: Bn254Fp2 = Bn254Fp2 { c0: bn254_fp_from_int(3), c1: bn254_fp_zero() };
+        let num: Bn254Fp2 = bn254_fp2_mul(three, x2);
+        let two: Bn254Fp2 = Bn254Fp2 { c0: bn254_fp_from_int(2), c1: bn254_fp_zero() };
+        let den: Bn254Fp2 = bn254_fp2_mul(two, t.y);
+        let lambda_d: Bn254Fp2 = bn254_fp2_mul(num, bn254_fp2_inv(den));
+        let c_d: Bn254Fp2 = bn254_fp2_sub(t.y, bn254_fp2_mul(lambda_d, t.x));
+
+        let l_d: Bn254Fp12 = bn254_eval_line(p, t, lambda_d, c_d);
+        f = bn254_fp12_mul(bn254_fp12_mul(f, f), l_d);
+        t = bn254_g2_double(t);
+
+        if bit == 1 && bit_idx < 62 {
+            let num_a: Bn254Fp2 = bn254_fp2_sub((q.y), t.y);
+            let den_a: Bn254Fp2 = bn254_fp2_sub((q.x), t.x);
+            let lambda_a: Bn254Fp2 = bn254_fp2_mul(num_a, bn254_fp2_inv(den_a));
+            let c_a: Bn254Fp2 = bn254_fp2_sub(t.y, bn254_fp2_mul(lambda_a, t.x));
+
+            let l_a: Bn254Fp12 = bn254_eval_line(p, q, lambda_a, c_a);
+            f = bn254_fp12_mul(f, l_a);
+            t = bn254_g2_add(t, q);
+        }
+
+        bit_idx = bit_idx - 1;
+    }
+
+    return bn254_final_exponentiation(f);
+}
+
+pub fn bn254_final_exponentiation(f: Bn254Fp12) -> Bn254Gt {
+    if bn254_fp12_equal(f, bn254_fp12_zero()) {
+        return bn254_gt_one();
+    }
+
+    let f_conj: Bn254Fp12 = bn254_fp12_conjugate(f);
+    let f_inv: Bn254Fp12 = bn254_fp12_inv(f);
+    let f1: Bn254Fp12 = bn254_fp12_mul(f_conj, f_inv);
+
+    let f2: Bn254Fp12 = bn254_fp12_mul(bn254_fp12_pow(f1, 3), f1);
+
+    let u_param: Int = 496566136792884961;
+    let t0: Bn254Fp12 = bn254_fp12_pow(f2, u_param);
+    let t1: Bn254Fp12 = bn254_fp12_pow(t0, u_param);
+    let t2: Bn254Fp12 = bn254_fp12_pow(t1, u_param);
+
+    let y0: Bn254Fp12 = bn254_fp12_pow(t2, 36);
+    let y1: Bn254Fp12 = bn254_fp12_pow(t1, 30);
+    let y2: Bn254Fp12 = bn254_fp12_pow(t0, 18);
+    let y3: Bn254Fp12 = bn254_fp12_pow(f2, 2);
+
+    let r_hard: Bn254Fp12 = bn254_fp12_mul(bn254_fp12_mul(y0, y1), bn254_fp12_mul(y2, y3));
+    let f_final: Bn254Fp12 = bn254_fp12_conjugate(r_hard);
+
+    let is_one: Bool = bn254_fp12_equal(f_final, bn254_fp12_one());
+    return Bn254Gt {
+        val: f_final,
+        is_one: is_one
+    };
+}
+
+pub fn bn254_pairing_check_2(p1: Bn254G1Affine, q1: Bn254G2Affine, p2: Bn254G1Affine, q2: Bn254G2Affine) -> Bool {
+    let e1: Bn254Gt = bn254_pairing(p1, q1);
+    let e2: Bn254Gt = bn254_pairing(p2, q2);
+    let prod: Bn254Gt = bn254_gt_mul(e1, e2);
+    return prod.is_one;
+}

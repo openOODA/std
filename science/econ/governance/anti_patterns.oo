@@ -1,0 +1,212 @@
+// # The 7 Deadly Sins Cost Function
+//
+// Logline: Mathematically quantify violation risk scores for the 7 Deadly Sins to enforce Via Negativa subtractive governance.
+//
+// Setup: Pure mathematical cost function with zero ambient authority.
+//
+// Beats:
+//   1. Calculate individual risk scores for each of the 7 Deadly Sins.
+//   2. Compute weighted total anti-pattern governance penalty.
+//   3. Classify architecture risk tiers and viability thresholds.
+//   4. Generate detailed violation diagnostic scorecard.
+
+type AntiPatternWeights = struct {
+    w_ambient: Float,
+    w_heap: Float,
+    w_ptr: Float,
+    w_inherit: Float,
+    w_wildcard: Float,
+    w_cache: Float,
+    w_io: Float
+};
+
+type AntiPatternScorecard = struct {
+    ambient_cost: Float,
+    heap_cost: Float,
+    ptr_cost: Float,
+    inherit_cost: Float,
+    wildcard_cost: Float,
+    cache_cost: Float,
+    io_cost: Float,
+    total_penalty: Float,
+    risk_tier: Int,
+    is_viable: Bool
+};
+
+pub fn ap_int_to_float(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 5 { return 5.0; }
+    if n == 6 { return 6.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = 0.0 - 1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; } else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; } else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; } else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; } else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + (d_f * mult);
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}
+
+pub fn default_anti_pattern_weights() -> AntiPatternWeights {
+    return AntiPatternWeights {
+        w_ambient: 0.25,
+        w_heap: 0.15,
+        w_ptr: 0.20,
+        w_inherit: 0.10,
+        w_wildcard: 0.10,
+        w_cache: 0.10,
+        w_io: 0.10
+    };
+}
+
+// Sin 1: Ambient Authority -> Unauthorized I/O risk score
+pub fn score_ambient_authority(unauthorized_syscall_count: Int, total_syscall_count: Int) -> Float {
+    if unauthorized_syscall_count <= 0 { return 0.0; }
+    if total_syscall_count <= 0 { return 1.0; }
+    let unauth_f: Float = ap_int_to_float(unauthorized_syscall_count);
+    let total_f: Float = ap_int_to_float(total_syscall_count);
+    let ratio: Float = unauth_f / total_f;
+    let penalty: Float = ratio * 2.0;
+    if penalty > 1.0 { return 1.0; }
+    return penalty;
+}
+
+// Helper: Exponential decay approximation 1 - exp(-x)
+pub fn approx_one_minus_exp_neg(x: Float) -> Float {
+    if x <= 0.0 { return 0.0; }
+    if x > 10.0 { return 1.0; }
+    let denom: Float = 1.0 + x + (0.5 * x * x);
+    let res: Float = 1.0 - (1.0 / denom);
+    if res > 1.0 { return 1.0; }
+    return res;
+}
+
+// Sin 2: Unbounded Heap Allocation -> Memory leak and GC pause probability
+pub fn score_unbounded_heap_allocation(malloc_count: Float, lambda_param: Float, gc_pause_ms: Float, alpha_param: Float) -> Float {
+    if malloc_count <= 0.0 && gc_pause_ms <= 0.0 { return 0.0; }
+    let leak_risk: Float = approx_one_minus_exp_neg(lambda_param * malloc_count);
+    let pause_risk: Float = alpha_param * (gc_pause_ms / 100.0);
+    let total: Float = leak_risk + pause_risk;
+    if total > 1.0 { return 1.0; }
+    return total;
+}
+
+// Sin 3: Raw Pointer Dereference -> Undefined behavior and memory corruption risk
+pub fn score_raw_pointer_dereference(raw_deref_count: Int, spatial_escape_factor: Float) -> Float {
+    if raw_deref_count <= 0 { return 0.0; }
+    let deref_f: Float = ap_int_to_float(raw_deref_count);
+    let score: Float = deref_f * spatial_escape_factor * 0.1;
+    if score > 1.0 { return 1.0; }
+    return score;
+}
+
+// Sin 4: Deep Inheritance -> Structural cognitive drag and vtable cache penalties
+pub fn score_deep_inheritance(inheritance_depth: Int, vtable_overhead_factor: Float) -> Float {
+    if inheritance_depth <= 1 { return 0.0; }
+    let depth_minus_one: Int = inheritance_depth - 1;
+    let depth_sq: Int = depth_minus_one * depth_minus_one;
+    let depth_f: Float = ap_int_to_float(depth_sq);
+    let score: Float = depth_f * vtable_overhead_factor * 0.05;
+    if score > 1.0 { return 1.0; }
+    return score;
+}
+
+// Sin 5: Wildcard Catching -> Hidden fault and exception swallowing risk
+pub fn score_wildcard_catching(swallowed_fault_count: Int, fault_prob: Float) -> Float {
+    if swallowed_fault_count <= 0 || fault_prob <= 0.0 { return 0.0; }
+    let mut safe_p: Float = fault_prob;
+    if safe_p > 0.99 { safe_p = 0.99; }
+    let q: Float = 1.0 - safe_p;
+    let mut prod_q: Float = 1.0;
+    let mut i: Int = 0;
+    while i < swallowed_fault_count {
+        prod_q = prod_q * q;
+        i = i + 1;
+    }
+    return 1.0 - prod_q;
+}
+
+// Sin 6: Stale Caches -> State divergence and cache invalidation lag penalty
+pub fn score_stale_caches(staleness_duration_ms: Float, ttl_ms: Float, severity_factor: Float) -> Float {
+    if staleness_duration_ms <= 0.0 || ttl_ms <= 0.0 { return 0.0; }
+    let ratio: Float = staleness_duration_ms / ttl_ms;
+    let penalty: Float = ratio * severity_factor;
+    if penalty > 1.0 { return 1.0; }
+    return penalty;
+}
+
+// Sin 7: Blocking I/O -> Thread starvation and swarm loop latency penalty
+pub fn score_blocking_io(block_latency_ms: Float, contention_multiplier: Float) -> Float {
+    if block_latency_ms <= 0.0 { return 0.0; }
+    let penalty: Float = (block_latency_ms / 1000.0) * contention_multiplier;
+    if penalty > 1.0 { return 1.0; }
+    return penalty;
+}
+
+// Contract Function: Weighted 7 Sins total anti-pattern score
+pub fn anti_pattern_score_7_sins(ambient_auth: Float, heap_alloc: Float, raw_ptr: Float, deep_inherit: Float, wildcard_catch: Float, stale_cache: Float, blocking_io: Float) -> Float {
+    let w: AntiPatternWeights = default_anti_pattern_weights();
+    let c1: Float = w.w_ambient * ambient_auth;
+    let c2: Float = w.w_heap * heap_alloc;
+    let c3: Float = w.w_ptr * raw_ptr;
+    let c4: Float = w.w_inherit * deep_inherit;
+    let c5: Float = w.w_wildcard * wildcard_catch;
+    let c6: Float = w.w_cache * stale_cache;
+    let c7: Float = w.w_io * blocking_io;
+    return c1 + c2 + c3 + c4 + c5 + c6 + c7;
+}
+
+// Classify governance risk tier (0 = Pure, 1 = Acceptable, 2 = Degraded, 3 = Fatal)
+pub fn governance_risk_tier(total_penalty: Float) -> Int {
+    if total_penalty < 0.05 { return 0; }
+    if total_penalty < 0.25 { return 1; }
+    if total_penalty < 0.60 { return 2; }
+    return 3;
+}
+
+// Architectural viability check against maximum tolerable risk threshold
+pub fn is_architecture_viable(total_penalty: Float, max_tolerable_penalty: Float) -> Bool {
+    return total_penalty <= max_tolerable_penalty;
+}
+
+// Full evaluation returning comprehensive diagnostic scorecard
+pub fn evaluate_anti_patterns(ambient: Float, heap: Float, ptr: Float, inherit: Float, wildcard: Float, cache: Float, io: Float, w: AntiPatternWeights) -> AntiPatternScorecard {
+    let c1: Float = w.w_ambient * ambient;
+    let c2: Float = w.w_heap * heap;
+    let c3: Float = w.w_ptr * ptr;
+    let c4: Float = w.w_inherit * inherit;
+    let c5: Float = w.w_wildcard * wildcard;
+    let c6: Float = w.w_cache * cache;
+    let c7: Float = w.w_io * io;
+    let total: Float = c1 + c2 + c3 + c4 + c5 + c6 + c7;
+    let tier: Int = governance_risk_tier(total);
+    let viable: Bool = is_architecture_viable(total, 0.25);
+    return AntiPatternScorecard {
+        ambient_cost: ambient,
+        heap_cost: heap,
+        ptr_cost: ptr,
+        inherit_cost: inherit,
+        wildcard_cost: wildcard,
+        cache_cost: cache,
+        io_cost: io,
+        total_penalty: total,
+        risk_tier: tier,
+        is_viable: viable
+    };
+}

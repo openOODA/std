@@ -1,0 +1,64 @@
+// # TUI Text Input Field Widget
+//
+// Logline: Renders a single-line input field with cursor, horizontal scroll, placeholder, and password masking.
+//
+// Setup: Form input entry widget supporting text editing and validation states.
+//
+// Beats:
+//   1. Import WidgetInput structure and editing operations from widget_input_core.
+//   2. Render input border, text characters, placeholder fallback, and cursor highlight.
+//   3. Provide full TUI rasterization of input state into TuiBuffer.
+
+import "std/app/ui/tui/tui_cell.oo";
+import "std/app/ui/tui/tui_buffer.oo";
+import "std/app/ui/tui/widget_input_core.oo";
+
+pub fn widget_input_render(inp: WidgetInput, buf: TuiBuffer) -> TuiBuffer {
+    let a: BufferArea = inp.area;
+    if a.width < 3 || a.height < 1 {
+        return buf;
+    }
+
+    let border_fg: Int = if inp.is_focused { 14 } else { 8 };
+    let bg: Int = 0;
+    let mut out: TuiBuffer = buf;
+
+    let mut x: Int = a.x;
+    while x < (a.x + a.width) {
+        out = tui_buffer_set_cell(out, x, a.y, tui_cell_new(32, 7, bg));
+        x = x + 1;
+    }
+
+    out = tui_buffer_set_cell(out, a.x, a.y, tui_cell_new(91, border_fg, bg));
+    out = tui_buffer_set_cell(out, a.x + a.width - 1, a.y, tui_cell_new(93, border_fg, bg));
+
+    let val: String = inp.value;
+    let v_len: Int = val.len();
+    let text_w: Int = a.width - 2;
+
+    if v_len == 0 && (inp.placeholder).len() > 0 && !(inp.is_focused) {
+        out = tui_buffer_write_string(out, a.x + 1, a.y, inp.placeholder, 8, bg, 2);
+    } else {
+        let mut i: Int = 0;
+        while i < text_w {
+            let actual_idx: Int = inp.scroll_offset + i;
+            let cx: Int = a.x + 1 + i;
+            if actual_idx < v_len {
+                let ch_code: Int = if inp.is_masked {
+                    42
+                } else {
+                    byte_at(val, actual_idx)
+                };
+
+                let is_cursor: Bool = inp.is_focused && (actual_idx == inp.cursor_pos);
+                let fg: Int = if is_cursor { 0 } else { 15 };
+                let cell_bg: Int = if is_cursor { 14 } else { bg };
+                out = tui_buffer_set_cell(out, cx, a.y, tui_cell_new(ch_code, fg, cell_bg));
+            } else if inp.is_focused && (actual_idx == inp.cursor_pos) {
+                out = tui_buffer_set_cell(out, cx, a.y, tui_cell_new(32, 0, 14));
+            }
+            i = i + 1;
+        }
+    }
+    return out;
+}

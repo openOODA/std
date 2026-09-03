@@ -1,0 +1,105 @@
+// # Topology Adaptive Graph Convolutional Networks (TAGCN)
+//
+// Logline: Implements topology-adaptive graph convolutions using multi-scale polynomial graph filters without Chebyshev approximation.
+//
+// Setup: Multi-hop receptive field graph operator aggregating normalized adjacency powers directly into expressive layer transformations.
+//
+// Beats:
+//   1. Traverse multi-scale graph topological neighborhoods using powers of normalized adjacency A^k.
+//   2. Learn independent filter weight matrices G_k for each diffusion hop distance k = 0, ..., K.
+//   3. Adapt filter responses dynamically to diverse topological graph structures.
+
+type TAGCNConfig = struct {
+    in_features: Int,
+    out_features: Int,
+    k_hops: Int,
+    use_bias: Bool
+};
+
+pub fn tagcn_config_new(
+    in_f: Int,
+    out_f: Int,
+    k_hops: Int,
+    use_bias: Bool
+) -> TAGCNConfig {
+    return TAGCNConfig {
+        in_features: in_f,
+        out_features: out_f,
+        k_hops: k_hops,
+        use_bias: use_bias
+    };
+}
+
+pub fn tagcn_init_weights(total_w: Int, seed_val: Int) -> List[Int] {
+    let mut w_mat: List[Int] = list_new();
+    let mut state: Int = seed_val;
+    let mut i: Int = 0;
+    while i < total_w {
+        state = (state * 1103515245 + 12345) % 2147483647;
+        if state < 0 { state = 0 - state; }
+        let val: Int = (state % 2000) - 1000;
+        w_mat = list_push(w_mat, val);
+        i = i + 1;
+    }
+    return w_mat;
+}
+
+pub fn tagcn_forward_node(
+    cfg: TAGCNConfig,
+    hop_weights: List[Int],
+    bias: List[Int],
+    hop_aggregated_features: List[Int]
+) -> List[Int] {
+    let in_f: Int = cfg.in_features;
+    let out_f: Int = cfg.out_features;
+    let num_filters: Int = cfg.k_hops + 1;
+
+    let use_b: Bool = cfg.use_bias;
+    let mut out_h: List[Int] = list_new();
+    let mut o: Int = 0;
+    while o < out_f {
+        let mut b: Int = 0;
+
+        if use_b {
+
+            b = list_get(bias, o);
+
+        }
+        let mut accum: Int = b;
+
+        let mut k: Int = 0;
+        while k < num_filters {
+            let hop_off: Int = k * in_f;
+            let mut w_base: Int = k * in_f;
+            w_base = w_base * out_f;
+
+            let mut dot: Int = 0;
+            let mut c: Int = 0;
+            while c < in_f {
+                let x: Int = list_get(hop_aggregated_features, hop_off + c);
+                let mut w_idx: Int = c * out_f;
+                w_idx = w_base + w_idx;
+                w_idx = w_idx + o;
+                let w: Int = list_get(hop_weights, w_idx);
+                dot = dot + (x * w);
+                c = c + 1;
+            }
+            accum = accum + dot;
+            k = k + 1;
+        }
+
+        let mut act: Int = 0;
+
+
+        if accum > 0 {
+
+
+            act = accum;
+
+
+        }
+        out_h = list_push(out_h, act);
+        o = o + 1;
+    }
+    return out_h;
+}

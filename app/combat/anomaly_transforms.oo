@@ -1,0 +1,128 @@
+// # Orbital Anomaly Transformations
+//
+// Logline: Converts bidirectionally between Mean, Eccentric, and True anomalies for elliptical orbits.
+//
+// Setup: Imports kepler_solver.oo and orbital_types.oo for anomaly transformations.
+//
+// Beats:
+//   1. Implement high-accuracy atan2 and acos inverse trigonometric functions with Newton refinement.
+//   2. Convert between Mean and Eccentric anomalies via Kepler equation solver.
+//   3. Convert between Eccentric and True anomalies using half-angle stable formulas.
+
+import "./orbital_types.oo";
+import "./kepler_solver.oo";
+
+pub fn trig_atan_unit(z_val: Float) -> Float {
+    let z2: Float = z_val * z_val;
+    let c1: Float = 0.3333333333333333;
+    let c2: Float = 0.2;
+    let c3: Float = 0.14285714285714285;
+    let c4: Float = 0.1111111111111111;
+    let c5: Float = 0.09090909090909091;
+    let p: Float = z2 * (c1 - (z2 * (c2 - (z2 * (c3 - (z2 * (c4 - (z2 * c5))))))));
+    let mut y: Float = z_val * (1.0 - p);
+
+    let mut iter: Int = 0;
+    while iter < 4 {
+        let sin_y: Float = sin(y);
+        let cos_y: Float = cos(y);
+        let delta: Float = (sin_y - (z_val * cos_y)) * cos_y;
+        y = y - delta;
+        iter = iter + 1;
+    }
+    return y;
+}
+
+pub fn trig_atan(z_val: Float) -> Float {
+    let abs_z: Float = float_abs(z_val);
+    if abs_z <= 1.0 {
+        let res: Float = trig_atan_unit(abs_z);
+        if z_val < 0.0 {
+            return 0.0 - res;
+        }
+        return res;
+    }
+    let half_pi: Float = const_pi() / 2.0;
+    let res: Float = half_pi - trig_atan_unit(1.0 / abs_z);
+    if z_val < 0.0 {
+        return 0.0 - res;
+    }
+    return res;
+}
+
+pub fn trig_atan2(y_val: Float, x_val: Float) -> Float {
+    let pi_val: Float = const_pi();
+    if x_val > 0.0 {
+        return trig_atan(y_val / x_val);
+    }
+    if x_val < 0.0 {
+        if y_val >= 0.0 {
+            return trig_atan(y_val / x_val) + pi_val;
+        }
+        return trig_atan(y_val / x_val) - pi_val;
+    }
+    if y_val > 0.0 {
+        return pi_val / 2.0;
+    }
+    if y_val < 0.0 {
+        return 0.0 - (pi_val / 2.0);
+    }
+    return 0.0;
+}
+
+pub fn trig_acos(x_val: Float) -> Float {
+    let mut c: Float = x_val;
+    if c > 1.0 { c = 1.0; }
+    if c < (0.0 - 1.0) { c = 0.0 - 1.0; }
+    let s: Float = sqrt(1.0 - (c * c));
+    return trig_atan2(s, c);
+}
+
+pub fn mean_to_eccentric(mean_anom: Float, ecc: Float) -> Float {
+    return kepler_solve_eccentric_anomaly(mean_anom, ecc);
+}
+
+pub fn eccentric_to_mean(e_anom: Float, ecc: Float) -> Float {
+    let m_val: Float = e_anom - (ecc * sin(e_anom));
+    return normalize_angle_2pi(m_val);
+}
+
+pub fn eccentric_to_true(e_anom: Float, ecc: Float) -> Float {
+    if ecc <= 0.000000000001 {
+        return normalize_angle_2pi(e_anom);
+    }
+    let half_e: Float = e_anom / 2.0;
+    let sin_half_e: Float = sin(half_e);
+    let cos_half_e: Float = cos(half_e);
+    let factor_num: Float = sqrt(1.0 + ecc);
+    let factor_den: Float = sqrt(1.0 - ecc);
+    let y_part: Float = factor_num * sin_half_e;
+    let x_part: Float = factor_den * cos_half_e;
+    let nu: Float = 2.0 * trig_atan2(y_part, x_part);
+    return normalize_angle_2pi(nu);
+}
+
+pub fn true_to_eccentric(nu: Float, ecc: Float) -> Float {
+    if ecc <= 0.000000000001 {
+        return normalize_angle_2pi(nu);
+    }
+    let half_nu: Float = nu / 2.0;
+    let sin_half_nu: Float = sin(half_nu);
+    let cos_half_nu: Float = cos(half_nu);
+    let factor_num: Float = sqrt(1.0 - ecc);
+    let factor_den: Float = sqrt(1.0 + ecc);
+    let y_part: Float = factor_num * sin_half_nu;
+    let x_part: Float = factor_den * cos_half_nu;
+    let e_anom: Float = 2.0 * trig_atan2(y_part, x_part);
+    return normalize_angle_2pi(e_anom);
+}
+
+pub fn mean_to_true(mean_anom: Float, ecc: Float) -> Float {
+    let e_anom: Float = mean_to_eccentric(mean_anom, ecc);
+    return eccentric_to_true(e_anom, ecc);
+}
+
+pub fn true_to_mean(nu: Float, ecc: Float) -> Float {
+    let e_anom: Float = true_to_eccentric(nu, ecc);
+    return eccentric_to_mean(e_anom, ecc);
+}

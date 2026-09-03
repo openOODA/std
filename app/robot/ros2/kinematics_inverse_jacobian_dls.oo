@@ -1,0 +1,141 @@
+// # 6-DoF Damped Least Squares Inverse Kinematics
+//
+// Logline: Iterative DLS (Levenberg-Marquardt) solver for 6-DoF serial manipulator inverse kinematics.
+//
+// Setup: Uses the 6x6 spatial Jacobian and damped J * J^T solve. No capability tokens.
+//
+// Beats:
+//   1. Validate the six-joint seed and solver parameters.
+//   2. Iteratively compute current pose and 6x6 spatial Jacobian.
+//   3. Solve (J * J^T + lambda^2 * I) * v = cartesian_error.
+//   4. Apply delta_q = J^T * v and return joint angles with convergence flag.
+// residual: Joint limits, nullspace projection, and full manipulability analysis are residual.
+
+import "std/app/robot/ros2/dh_parameters.oo";
+import "std/app/robot/ros2/kinematics_forward_chain.oo";
+import "std/app/robot/ros2/spatial_jacobian_6dof.oo";
+import "std/app/robot/ros2/matrix_ops_6x6.oo";
+
+pub type IkSolverResult = struct {
+    joint_angles_rad: List[Float],
+    iterations: Int,
+    final_error: Float,
+    converged: Bool
+};
+
+fn dls_input_ok(joints_init: List[DhJoint], max_iter: Int, tol: Float, damping: Float) -> Int {
+    if list_len(joints_init) != 6 { return 1; }
+    if max_iter <= 0 { return 1; }
+    if tol <= 0.0 { return 1; }
+    if damping < 0.0 { return 1; }
+    return 0;
+}
+
+fn dls_pose_err(target: &Pose6D, current: &Pose6D) -> List[Float] {
+    let mut e: List[Float] = list_new();
+    e = list_push(e, target.x - current.x);
+    e = list_push(e, target.y - current.y);
+    e = list_push(e, target.z - current.z);
+    e = list_push(e, target.roll - current.roll);
+    e = list_push(e, target.pitch - current.pitch);
+    e = list_push(e, target.yaw - current.yaw);
+    return e;
+}
+
+fn dls_vec_norm(v: List[Float]) -> Float {
+    let mut s: Float = 0.0;
+    let mut i: Int = 0;
+    while i < list_len(v) {
+        let x: Float = list_get(v, i);
+        s = s + (x * x);
+        i = i + 1;
+    }
+    return sqrt(s);
+}
+
+fn dls_update_joints(mut q: List[DhJoint], dq: List[Float]) -> List[DhJoint] {
+    let mut i: Int = 0;
+    while i < 6 {
+        let mut j: DhJoint = list_get(q, i);
+        j.theta_rad = j.theta_rad + list_get(dq, i);
+        q = list_set(q, i, j);
+        i = i + 1;
+    }
+    return q;
+}
+
+fn dls_joint_angles(q: List[DhJoint]) -> List[Float] {
+    let mut angs: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < 6 {
+        angs = list_push(angs, list_get(q, i).theta_rad);
+        i = i + 1;
+    }
+    return angs;
+}
+
+fn dls_ok_pose(res: Result[Pose6D, String]) -> Pose6D {
+    if res.is_err() { process_exit(1); }
+    return match res {
+        Ok(v)  => v,
+        Err(_) => Pose6D { x: 0.0, y: 0.0, z: 0.0, roll: 0.0, pitch: 0.0, yaw: 0.0 }
+    };
+}
+
+fn dls_ok_jac(res: Result[List[Float], String]) -> List[Float] {
+    if res.is_err() { process_exit(1); }
+    return match res {
+        Ok(v)  => v,
+        Err(_) => list_new()
+    };
+}
+
+fn dls_ok_vec(res: Result[List[Float], String]) -> List[Float] {
+    if res.is_err() { process_exit(1); }
+    return match res {
+        Ok(v)  => v,
+        Err(_) => list_new()
+    };
+}
+
+pub fn ik_solve_dls_6dof(
+    joints_init: List[DhJoint],
+    target: &Pose6D,
+    damping: Float,
+    max_iter: Int,
+    tol: Float
+) -> Result[IkSolverResult, String] {
+    if dls_input_ok(joints_init, max_iter, tol, damping) != 0 {
+        return Err("ERR\tik_solve_dls_6dof\tinvalid_input");
+    }
+    let mut q: List[DhJoint] = joints_init;
+    let mut it: Int = 0;
+    let mut err: Float = 1000000000.0;
+    while it < max_iter {
+        let current: Pose6D = dls_ok_pose(fk_chain_6dof(q));
+        let J: List[Float] = dls_ok_jac(compute_jacobian_6x6(q));
+        let e: List[Float] = dls_pose_err(target, &current);
+        err = dls_vec_norm(e);
+        if err < tol {
+            return Ok(IkSolverResult {
+                joint_angles_rad: dls_joint_angles(q),
+                iterations: it,
+                final_error: err,
+                converged: true
+            });
+        }
+        let A: List[Float] = mat6_jjt(J, damping * damping);
+        let v_res: Result[List[Float], String] = mat6_solve(A, e);
+        if v_res.is_err() { return Err("ERR\tik_solve_dls_6dof\tj_jt_solve_failed"); }
+        let v: List[Float] = dls_ok_vec(v_res);
+        let dq: List[Float] = mat6_jt_v(J, v);
+        q = dls_update_joints(q, dq);
+        it = it + 1;
+    }
+    return Ok(IkSolverResult {
+        joint_angles_rad: dls_joint_angles(q),
+        iterations: it,
+        final_error: err,
+        converged: false
+    });
+}

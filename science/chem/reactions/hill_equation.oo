@@ -1,0 +1,106 @@
+// # Hill Equation and Cooperative Binding Kinetics
+//
+// Logline: Calculates cooperative ligand-macromolecule binding saturation, sigmoidal reaction velocities, and cooperativity classifications.
+//
+// Setup: Pure allosteric biochemistry module implementing the Hill equation for multi-subunit cooperative systems.
+//
+// Beats:
+//   1. Define HillKinetics structure encapsulating V_max, K_0.5, and Hill coefficient n.
+//   2. Compute fractional saturation theta and cooperative reaction velocity v.
+//   3. Classify cooperativity mode (positive, negative, non-cooperative).
+//   4. Calculate Hill plot logarithmic transformations and Kd to K_0.5 conversions.
+
+import "std/core/math/trig.oo";
+
+type HillKinetics = struct {
+    v_max: Float,
+    k_half: Float,
+    hill_coefficient_n: Float
+};
+
+// Construct a Hill cooperative kinetic model.
+pub fn hill_kinetics_new(v_max: Float, k_half: Float, n: Float) -> HillKinetics {
+    if v_max <= 0.0 || k_half <= 0.000000001 || n <= 0.000000001 {
+        return HillKinetics {
+            v_max: 0.0,
+            k_half: 0.0,
+            hill_coefficient_n: 0.0
+        };
+    }
+
+    return HillKinetics {
+        v_max: v_max,
+        k_half: k_half,
+        hill_coefficient_n: n
+    };
+}
+
+// Compute Hill fractional saturation theta = [L]^n / (K_half^n + [L]^n).
+pub fn hill_fractional_saturation(k_half: Float, n: Float, ligand_conc: Float) -> Float {
+    if ligand_conc <= 0.0 || k_half <= 0.000000001 || n <= 0.000000001 {
+        return 0.0;
+    }
+
+    let ln_l: Float = math_ln(ligand_conc);
+    let ln_k: Float = math_ln(k_half);
+
+    let l_pow: Float = math_exp(n * ln_l);
+    let k_pow: Float = math_exp(n * ln_k);
+
+    let denom: Float = k_pow + l_pow;
+    if denom <= 0.000000001 {
+        return 0.0;
+    }
+
+    return l_pow / denom;
+}
+
+// Compute cooperative reaction velocity v = V_max * [S]^n / (K_half^n + [S]^n).
+pub fn hill_velocity(kin: HillKinetics, substrate_conc: Float) -> Float {
+    let vm: Float = kin.v_max;
+    let kh: Float = kin.k_half;
+    let n: Float = kin.hill_coefficient_n;
+
+    if substrate_conc <= 0.0 || vm <= 0.0 || kh <= 0.0 || n <= 0.0 {
+        return 0.0;
+    }
+
+    let theta: Float = hill_fractional_saturation(kh, n, substrate_conc);
+    return vm * theta;
+}
+
+// Classify cooperativity based on Hill coefficient n:
+// 1 = Positive cooperativity (n > 1.05, sigmoidal binding)
+// -1 = Negative cooperativity (n < 0.95)
+// 0 = Non-cooperative (0.95 <= n <= 1.05, hyperbolic standard Michaelis-Menten).
+pub fn hill_cooperativity_type(n: Float) -> Int {
+    if n > 1.05 {
+        return 1;
+    }
+    if n < 0.95 && n > 0.0 {
+        return 0 - 1;
+    }
+    return 0;
+}
+
+// Calculate Hill plot log ratio: ln( theta / (1.0 - theta) ).
+// Corresponds to: n * ln([L]) - n * ln(K_half).
+pub fn hill_log_ratio(fractional_sat: Float) -> Float {
+    if fractional_sat <= 0.000000001 || fractional_sat >= 0.999999999 {
+        return 0.0;
+    }
+
+    let ratio: Float = fractional_sat / (1.0 - fractional_sat);
+    return math_ln(ratio);
+}
+
+// Derive K_0.5 from microscopic dissociation constant K_d: K_0.5 = K_d^(1/n).
+pub fn hill_half_saturation_from_kd(kd: Float, n: Float) -> Float {
+    if kd <= 0.0 || n <= 0.000000001 {
+        return 0.0;
+    }
+
+    let inv_n: Float = 1.0 / n;
+    let ln_kd: Float = math_ln(kd);
+    return math_exp(inv_n * ln_kd);
+}

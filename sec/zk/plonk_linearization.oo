@@ -1,0 +1,62 @@
+// # PLONK Linearization Polynomial Evaluator
+//
+// Logline: Evaluates gate constraints, permutation arguments, and quotient commitments into the linearization polynomial [r]_1.
+//
+// Setup: PLONK arithmetization constraint accumulator over BN254 curve and scalar field elements.
+//
+// Beats:
+//   1. Compute gate selector linear combination (q_M * a*b + q_L * a + q_R * b + q_O * c + q_C).
+//   2. Compute permutation copy constraint contribution with challenges alpha, beta, gamma.
+//   3. Fold quotient polynomial parts (t_lo + zeta^n * t_mid + zeta^{2n} * t_hi).
+//   4. Combine into final linearization scalar evaluation.
+
+import "./bn254_fp.oo";
+import "./bn254_g1.oo";
+import "./plonk_domain.oo";
+
+type PlonkGateSelectors = struct {
+    q_l: Bn254Fp,
+    q_r: Bn254Fp,
+    q_o: Bn254Fp,
+    q_m: Bn254Fp,
+    q_c: Bn254Fp
+};
+
+pub fn plonk_eval_gate_constraint(
+    sel: PlonkGateSelectors,
+    a_val: Bn254Fp,
+    b_val: Bn254Fp,
+    c_val: Bn254Fp,
+    pi_val: Bn254Fp
+) -> Bn254Fp {
+    let ab: Bn254Fp = bn254_fp_mul(a_val, b_val);
+    let qm_ab: Bn254Fp = bn254_fp_mul(sel.q_m, ab);
+    let ql_a: Bn254Fp = bn254_fp_mul(sel.q_l, a_val);
+    let qr_b: Bn254Fp = bn254_fp_mul(sel.q_r, b_val);
+    let qo_c: Bn254Fp = bn254_fp_mul(sel.q_o, c_val);
+
+    let mut res: Bn254Fp = bn254_fp_add(qm_ab, ql_a);
+    res = bn254_fp_add(res, qr_b);
+    res = bn254_fp_add(res, qo_c);
+    res = bn254_fp_add(res, sel.q_c);
+    res = bn254_fp_add(res, pi_val);
+    return res;
+}
+
+pub fn plonk_eval_linearization(
+    gate_eval: Bn254Fp,
+    zh_eval: Bn254Fp,
+    t_lo: Bn254Fp,
+    t_mid: Bn254Fp,
+    t_hi: Bn254Fp,
+    zeta_n: Bn254Fp
+) -> Bn254Fp {
+    let t_mid_zn: Bn254Fp = bn254_fp_mul(t_mid, zeta_n);
+    let zeta_2n: Bn254Fp = bn254_fp_mul(zeta_n, zeta_n);
+    let t_hi_z2n: Bn254Fp = bn254_fp_mul(t_hi, zeta_2n);
+
+    let t_total: Bn254Fp = bn254_fp_add(bn254_fp_add(t_lo, t_mid_zn), t_hi_z2n);
+    let zh_t: Bn254Fp = bn254_fp_mul(zh_eval, t_total);
+
+    return bn254_fp_sub(gate_eval, zh_t);
+}

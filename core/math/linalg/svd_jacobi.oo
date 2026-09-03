@@ -1,0 +1,199 @@
+// # Two-Sided Jacobi Singular Value Decomposition
+//
+// Logline: Factors A = U Sigma V^T by two-sided Jacobi rotations and forms the pseudo-inverse.
+//
+// Setup: Pure math. A is square row-major List[Float], n at most 6.
+//
+// Beats:
+//   1. Sweep pairs (p, q) with a 2 by 2 Jacobi kernel on A^T A then A A^T.
+//   2. Accumulate left U and right V so B converges to Sigma.
+//   3. Reconstruct A as U Sigma V^T.
+//   4. Form the Moore-Penrose inverse V Sigma^+ U^T.
+
+import "std/core/primitives/result.oo";
+
+fn svd_get(a: List[Float], n: Int, i: Int, j: Int) -> Float {
+    return list_get(a, i * n + j);
+}
+
+fn svd_set(a: List[Float], n: Int, i: Int, j: Int, v: Float) -> List[Float] {
+    return list_set(a, i * n + j, v);
+}
+
+fn svd_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn svd_id(n: Int) -> List[Float] {
+    let mut q: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut v: Float = 0.0;
+            if i == j { v = 1.0; }
+            q = list_push(q, v);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return q;
+}
+
+fn svd_rot(t00: Float, t01: Float, t11: Float) -> List[Float] {
+    let mut out: List[Float] = list_new();
+    if t01 == 0.0 {
+        out = list_push(out, 1.0);
+        out = list_push(out, 0.0);
+        return out;
+    }
+    let tau: Float = (t11 - t00) / (2.0 * t01);
+    let mut ata: Float = tau;
+    if ata < 0.0 { ata = 0.0 - ata; }
+    let mut t: Float = 1.0 / (ata + sqrt(1.0 + tau * tau));
+    if tau < 0.0 { t = 0.0 - t; }
+    let c: Float = 1.0 / sqrt(1.0 + t * t);
+    out = list_push(out, c);
+    out = list_push(out, t * c);
+    return out;
+}
+
+fn svd_mix_cols(m: List[Float], n: Int, p: Int, q: Int, c: Float, s: Float) -> List[Float] {
+    let mut out: List[Float] = m;
+    let mut i: Int = 0;
+    while i < n {
+        let vp: Float = svd_get(out, n, i, p);
+        let vq: Float = svd_get(out, n, i, q);
+        out = svd_set(out, n, i, p, c * vp - s * vq);
+        out = svd_set(out, n, i, q, s * vp + c * vq);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn svd_mix_rows(m: List[Float], n: Int, p: Int, q: Int, c: Float, s: Float) -> List[Float] {
+    let mut out: List[Float] = m;
+    let mut j: Int = 0;
+    while j < n {
+        let vp: Float = svd_get(out, n, p, j);
+        let vq: Float = svd_get(out, n, q, j);
+        out = svd_set(out, n, p, j, c * vp - s * vq);
+        out = svd_set(out, n, q, j, s * vp + c * vq);
+        j = j + 1;
+    }
+    return out;
+}
+
+pub fn svd_jacobi_factor(a: List[Float], n: Int) -> Result[List[Float], String] {
+    if n < 1 { return Err("ERR\tsvd_jacobi\tn"); }
+    if list_len(a) != n * n { return Err("ERR\tsvd_jacobi\tsize"); }
+    let mut b: List[Float] = a;
+    let mut u: List[Float] = svd_id(n);
+    let mut v: List[Float] = svd_id(n);
+    let mut sweep: Int = 0;
+    while sweep < 24 {
+        let mut p: Int = 0;
+        while p < n {
+            let mut q: Int = p + 1;
+            while q < n {
+                let aa: Float = svd_get(b, n, p, p);
+                let bb: Float = svd_get(b, n, p, q);
+                let cc: Float = svd_get(b, n, q, p);
+                let dd: Float = svd_get(b, n, q, q);
+                let rv: List[Float] = svd_rot(aa * aa + cc * cc, aa * bb + cc * dd, bb * bb + dd * dd);
+                let cv: Float = list_get(rv, 0);
+                let sv: Float = list_get(rv, 1);
+                b = svd_mix_cols(b, n, p, q, cv, sv);
+                v = svd_mix_cols(v, n, p, q, cv, sv);
+                let a2: Float = svd_get(b, n, p, p);
+                let b2: Float = svd_get(b, n, p, q);
+                let c2: Float = svd_get(b, n, q, p);
+                let d2: Float = svd_get(b, n, q, q);
+                let ru: List[Float] = svd_rot(a2 * a2 + b2 * b2, a2 * c2 + b2 * d2, c2 * c2 + d2 * d2);
+                let cu: Float = list_get(ru, 0);
+                let su: Float = list_get(ru, 1);
+                b = svd_mix_rows(b, n, p, q, cu, su);
+                u = svd_mix_cols(u, n, p, q, cu, su);
+                q = q + 1;
+            }
+            p = p + 1;
+        }
+        sweep = sweep + 1;
+    }
+    let mut i: Int = 0;
+    while i < n {
+        let si: Float = svd_get(b, n, i, i);
+        if si < 0.0 {
+            let mut r: Int = 0;
+            while r < n {
+                u = svd_set(u, n, r, i, 0.0 - svd_get(u, n, r, i));
+                r = r + 1;
+            }
+            b = svd_set(b, n, i, i, 0.0 - si);
+        }
+        i = i + 1;
+    }
+    let mut pack: List[Float] = u;
+    i = 0;
+    while i < n {
+        pack = list_push(pack, svd_get(b, n, i, i));
+        i = i + 1;
+    }
+    let mut t: Int = 0;
+    while t < n * n {
+        pack = list_push(pack, list_get(v, t));
+        t = t + 1;
+    }
+    return Ok(pack);
+}
+
+pub fn svd_jacobi_reconstruct(pack: List[Float], n: Int) -> Result[List[Float], String] {
+    if list_len(pack) != n * n + n + n * n { return Err("ERR\tsvd_jacobi\tpack"); }
+    let mut a: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut s: Float = 0.0;
+            let mut k: Int = 0;
+            while k < n {
+                let uk: Float = list_get(pack, i * n + k);
+                let sk: Float = list_get(pack, n * n + k);
+                let vk: Float = list_get(pack, n * n + n + j * n + k);
+                s = s + uk * sk * vk;
+                k = k + 1;
+            }
+            a = list_push(a, s);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(a);
+}
+
+pub fn svd_jacobi_pinv(pack: List[Float], n: Int) -> Result[List[Float], String] {
+    if list_len(pack) != n * n + n + n * n { return Err("ERR\tsvd_jacobi\tpack"); }
+    let mut p: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut s: Float = 0.0;
+            let mut k: Int = 0;
+            while k < n {
+                let sk: Float = list_get(pack, n * n + k);
+                let mut inv: Float = 0.0;
+                if svd_abs(sk) > 0.000000001 { inv = 1.0 / sk; }
+                let vk: Float = list_get(pack, n * n + n + i * n + k);
+                let uk: Float = list_get(pack, j * n + k);
+                s = s + vk * inv * uk;
+                k = k + 1;
+            }
+            p = list_push(p, s);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(p);
+}

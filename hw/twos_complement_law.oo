@@ -1,0 +1,52 @@
+// # Two's complement negation law
+//
+// Logline: Negation of an n-bit signed integer x equals two-complement ((two_pow_n minus x)) modulo two_pow_n.
+//
+// Setup: Pure Int. width must be a positive multiple of 8.
+//
+// Beats:
+//   1. neg(x, 8) of 1 equals 255.
+//   2. neg(x, 8) of -128 (128 in mod 256) equals 128 (self negation on min int).
+//   3. Zero negates to zero.
+//   4. Non-positive or non-multiple-of-8 width fails closed to 0.
+
+fn twos_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn hw_neg_twos(x: Int, width: Int) -> Result[Int, String] {
+    if width <= 0 { return Err("ERR\ttwos\tdomain"); }
+    if (width % 8) != 0 { return Err("ERR\ttwos\tdomain"); }
+    let mut modulus: Int = 1;
+    let mut i: Int = 0;
+    while i < width {
+        modulus = modulus * 2;
+        i = i + 1;
+    }
+    let r: Int = modulus - x;
+    let m: Int = r % modulus;
+    if m < 0 {
+        return Ok(m + modulus);
+    }
+    return Ok(m);
+}
+
+pub fn verify_twos_complement_law() -> Bool {
+    if twos_got(hw_neg_twos(1, 8)) != 255 {
+        return false;
+    }
+    let zneg: Result[Int, String] = hw_neg_twos(0, 8);
+    if zneg.is_ok() == false { return false; }
+    if twos_got(zneg) != 0 {
+        return false;
+    }
+    if twos_got(hw_neg_twos(128, 8)) != 128 {
+        return false;
+    }
+    if twos_got(hw_neg_twos(5, 8)) != 251 {
+        return false;
+    }
+    if hw_neg_twos(1, 0).is_ok() { return false; }
+    if hw_neg_twos(1, 7).is_ok() { return false; }
+    return true;
+}

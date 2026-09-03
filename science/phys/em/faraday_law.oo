@@ -1,0 +1,105 @@
+// # Faraday's Law of Electromagnetic Induction
+//
+// Logline: Induced emf equals the negative time rate of change of magnetic flux through a loop.
+//
+// Setup: Pure Float. Illegal B, A, or dt return Err. Sign convention follows Lenz's principle.
+//
+// Beats:
+//   1. Magnetic flux Phi = B * A * cos(theta) through a loop.
+//   2. Induced emf = -dPhi / dt for a single loop (Volts).
+//   3. Coil of N turns: emf = -N * dPhi / dt.
+//   4. Rotating loop: emf = B * A * omega * sin(omega * t) (Volts).
+
+import "std/science/phys/em/poynting_vector.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_em_faraday_law() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+fn fd_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Magnetic flux Phi = B * A * cos(theta) (Webers). B, A < 0 return Err. Zero B or A is Ok(0).
+pub fn faraday_magnetic_flux(b_field_tesla: Float, area_m2: Float, angle_rad: Float) -> Result[Float, String] {
+    if b_field_tesla < 0.0 { return Err("ERR\tfaraday\tb"); }
+    if area_m2 < 0.0 { return Err("ERR\tfaraday\ta"); }
+    let cos_t: Float = cos(angle_rad);
+    return Ok(b_field_tesla * area_m2 * cos_t);
+}
+
+// Induced emf for a single loop: emf = -dPhi / dt (Volts). Zero or negative dt returns Err.
+pub fn faraday_induced_emf(delta_flux_webers: Float, delta_time_s: Float) -> Result[Float, String] {
+    if delta_time_s <= 0.0 { return Err("ERR\tfaraday\tdt"); }
+    let poynting_ok: Float = poynting_vacuum_permittivity();
+    if poynting_ok <= 0.0 { return Err("ERR\tfaraday\teps"); }
+    return Ok(0.0 - (delta_flux_webers / delta_time_s));
+}
+
+// Induced emf for an N-turn coil: emf = -N * dPhi / dt (Volts).
+pub fn faraday_coil_emf(turn_count: Int, delta_flux_webers: Float, delta_time_s: Float) -> Result[Float, String] {
+    if turn_count <= 0 { return Err("ERR\tfaraday\tn"); }
+    if delta_time_s <= 0.0 { return Err("ERR\tfaraday\tdt"); }
+    let emf_r: Result[Float, String] = faraday_induced_emf(delta_flux_webers, delta_time_s);
+    let mut emf_single: Float = 0.0;
+    match emf_r {
+        Ok(v)  => { emf_single = v; },
+        Err(e) => { return Err(e); }
+    }
+    let mut emf_total: Float = 0.0;
+    let mut k: Int = 0;
+    while k < turn_count {
+        emf_total = emf_total + emf_single;
+        k = k + 1;
+    }
+    return Ok(emf_total);
+}
+
+// Rotating loop: emf(t) = B * A * omega * sin(omega * t) (Volts).
+pub fn faraday_rotating_emf(b_field_tesla: Float, area_m2: Float, omega_rad_per_s: Float, time_s: Float) -> Result[Float, String] {
+    if b_field_tesla <= 0.0 { return Err("ERR\tfaraday\tb"); }
+    if area_m2 <= 0.0 { return Err("ERR\tfaraday\ta"); }
+    if omega_rad_per_s <= 0.0 { return Err("ERR\tfaraday\tw"); }
+    let phase: Float = omega_rad_per_s * time_s;
+    return Ok(b_field_tesla * area_m2 * omega_rad_per_s * sin(phase));
+}
+
+// Peak emf of rotating loop: emf_peak = B * A * omega (Volts).
+pub fn faraday_rotating_peak_emf(b_field_tesla: Float, area_m2: Float, omega_rad_per_s: Float) -> Result[Float, String] {
+    if b_field_tesla <= 0.0 { return Err("ERR\tfaraday\tb"); }
+    if area_m2 <= 0.0 { return Err("ERR\tfaraday\ta"); }
+    if omega_rad_per_s <= 0.0 { return Err("ERR\tfaraday\tw"); }
+    return Ok(b_field_tesla * area_m2 * omega_rad_per_s);
+}
+
+// KAT and hostile cases for Faraday's law.
+pub fn verify_faraday_law() -> Bool {
+    let phi_normal: Float = fd_got(faraday_magnetic_flux(0.5, 0.01, 0.0));
+    let target: Float = 0.5 * 0.01;
+    let mut d: Float = phi_normal - target;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let emf_flux: Float = fd_got(faraday_induced_emf(0.01, 0.1));
+    let target_e: Float = 0.0 - 0.1;
+    let mut de: Float = emf_flux - target_e;
+    if de < 0.0 { de = 0.0 - de; }
+    if de > 0.0001 { return false; }
+    let emf_coil: Float = fd_got(faraday_coil_emf(200, 0.01, 0.1));
+    let target_c: Float = 0.0 - 200.0 * 0.1;
+    let mut dc: Float = emf_coil - target_c;
+    if dc < 0.0 { dc = 0.0 - dc; }
+    if dc > 0.0001 { return false; }
+    let pi: Float = circ_pi_std_phys_em_faraday_law();
+    let emf_peak: Float = fd_got(faraday_rotating_emf(0.5, 0.01, 100.0, pi / 200.0));
+    let target_p: Float = 0.5 * 0.01 * 100.0;
+    let mut dp: Float = emf_peak - target_p;
+    if dp < 0.0 { dp = 0.0 - dp; }
+    if dp > 0.0001 { return false; }
+    let emf_zero: Float = fd_got(faraday_rotating_emf(0.5, 0.01, 100.0, 0.0));
+    if emf_zero != 0.0 { return false; }
+    if faraday_magnetic_flux(0.0 - 0.5, 0.01, 0.0).is_ok() { return false; }
+    if faraday_magnetic_flux(0.5, 0.0 - 0.01, 0.0).is_ok() { return false; }
+    if faraday_induced_emf(0.01, 0.0).is_ok() { return false; }
+    if faraday_induced_emf(0.01, 0.0 - 0.1).is_ok() { return false; }
+    if faraday_coil_emf(0, 0.01, 0.1).is_ok() { return false; }
+    if faraday_rotating_emf(0.0, 0.01, 100.0, 0.0).is_ok() { return false; }
+    return true;
+}

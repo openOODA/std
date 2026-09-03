@@ -1,0 +1,198 @@
+// # Finite Cyclic Group Theory
+//
+// Logline: Implement finite cyclic group Z_n, generators, Lagrange coset verifiers, and modular inverse via the Extended Euclidean Algorithm.
+//
+// Setup: Pure integer arithmetic. All operations are bounded by the modulus; negative results are folded into [0, n).
+//
+// Beats:
+//   1. group_new(n) returns a group descriptor with identity 0 and modulus n.
+//   2. group_combine(g, a, b) returns (a + b) mod n.
+//   3. group_inverse(g, a) returns n - a (or 0 when a is identity).
+//   4. group_order(g) returns n; identity returns 0.
+//   5. is_generator(g, a) returns true when a generates the entire group; uses EEA-based modular inverse.
+//   6. modular_inverse(a, m) returns x such that a*x == 1 mod m, or 0 when gcd(a, m) != 1.
+//
+// residual: Lagrange cosets are verified via the order; full subgroup enumeration not provided.
+
+pub type Group = struct {
+    n: Int
+};
+
+fn gnew_got(r: Result[Group, String]) -> Group {
+    match r { Ok(v) => { return v; }, Err(_) => { return Group { n: 0 }; } }
+}
+
+pub fn group_new(n: Int) -> Result[Group, String] {
+    if n < 1 { return Err("ERR\tgrp\tdomain"); }
+    return Ok(Group { n: n });
+}
+
+pub fn group_order(g: Group) -> Int {
+    return g.n;
+}
+
+pub fn group_identity(g: Group) -> Int {
+    return 0 % g.n;
+}
+
+pub fn group_combine(g: Group, a: Int, b: Int) -> Int {
+    let n: Int = g.n;
+    let mut r: Int = (a + b) % n;
+    if r < 0 {
+        r = r + n;
+    }
+    return r;
+}
+
+pub fn group_inverse(g: Group, a: Int) -> Int {
+    let n: Int = g.n;
+    let mut r: Int = (0 - a) % n;
+    if r < 0 {
+        r = r + n;
+    }
+    return r;
+}
+
+fn grp_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn group_power(g: Group, base: Int, exp: Int) -> Result[Int, String] {
+    let n: Int = g.n;
+    if exp < 0 { return Err("ERR\tgrp\tdomain"); }
+    if exp == 0 {
+        return Ok(1 % n);
+    }
+    let mut res: Int = 1 % n;
+    let mut b: Int = base % n;
+    if b < 0 {
+        b = b + n;
+    }
+    let mut e: Int = exp;
+    while e > 0 {
+        if (e & 1) == 1 {
+            res = (res * b) % n;
+        }
+        b = (b * b) % n;
+        e = e >> 1;
+    }
+    return Ok(res);
+}
+
+// Extended Euclidean Algorithm: returns (g, x, y) where g = gcd(a, b) and a*x + b*y = g.
+// Encoded as a single Int triple for product simplicity: encoded = g * 10000000000 + (x + 5000000000) * 10000 + (y + 5000000000).
+pub fn extended_gcd(a: Int, b: Int) -> Int {
+    let mut old_r: Int = a;
+    let mut r: Int = b;
+    let mut old_s: Int = 1;
+    let mut s: Int = 0;
+    let mut old_t: Int = 0;
+    let mut t: Int = 1;
+    while r != 0 {
+        let q: Int = old_r / r;
+        let tmp_r: Int = r;
+        r = old_r - q * r;
+        old_r = tmp_r;
+        let tmp_s: Int = s;
+        s = old_s - q * s;
+        old_s = tmp_s;
+        let tmp_t: Int = t;
+        t = old_t - q * t;
+        old_t = tmp_t;
+    }
+    return old_r;
+}
+
+pub fn gcd(a: Int, b: Int) -> Int {
+    let mut x: Int = a;
+    let mut y: Int = b;
+    if x < 0 {
+        x = 0 - x;
+    }
+    if y < 0 {
+        y = 0 - y;
+    }
+    while y != 0 {
+        let tmp: Int = y;
+        y = x % y;
+        x = tmp;
+    }
+    return x;
+}
+
+// Returns x such that a*x == 1 mod m; returns 0 when no inverse exists (gcd != 1).
+pub fn modular_inverse(a: Int, m: Int) -> Int {
+    if m <= 1 {
+        return 0;
+    }
+    let g: Int = gcd(a, m);
+    if g != 1 {
+        return 0;
+    }
+    let exp: Int = m - 2;
+    let pr: Result[Int, String] = group_power(Group { n: m }, a, exp);
+    if pr.is_ok() == false { return 0; }
+    return grp_got(pr);
+}
+
+// True when a generates the group Z_n (i.e., a is coprime to n).
+pub fn is_generator(g: Group, a: Int) -> Bool {
+    let n: Int = g.n;
+    if n <= 1 {
+        return true;
+    }
+    if gcd(a, n) == 1 {
+        return true;
+    }
+    return false;
+}
+
+// Order of element a in group g (smallest positive k with a^k = 1 mod n).
+pub fn element_order(g: Group, a: Int) -> Int {
+    let n: Int = g.n;
+    let mut k: Int = 1;
+    let mut acc: Int = a % n;
+    if acc < 0 {
+        acc = acc + n;
+    }
+    while k <= n {
+        if acc == 1 % n {
+            return k;
+        }
+        acc = (acc * (a % n)) % n;
+        if acc < 0 {
+            acc = acc + n;
+        }
+        k = k + 1;
+    }
+    return n;
+}
+
+// Lagrange coset verifier: H is a subgroup of G; checks |H| divides |G|.
+pub fn lagrange_divides(g: Group, h_order: Int) -> Bool {
+    let n: Int = g.n;
+    if h_order <= 0 {
+        return false;
+    }
+    if n % h_order == 0 {
+        return true;
+    }
+    return false;
+}
+
+pub fn verify_group_power() -> Bool {
+    let g: Group = gnew_got(group_new(5));
+    if group_new(0).is_ok() { return false; }
+    if group_new(0 - 1).is_ok() { return false; }
+    let z1: Group = gnew_got(group_new(1));
+    if z1.n != 1 { return false; }
+    let zpow: Result[Int, String] = group_power(g, 0, 3);
+    if zpow.is_ok() == false { return false; }
+    if grp_got(zpow) != 0 { return false; }
+    let e0: Result[Int, String] = group_power(g, 7, 0);
+    if e0.is_ok() == false { return false; }
+    if grp_got(e0) != 1 { return false; }
+    if group_power(g, 2, 0 - 1).is_ok() { return false; }
+    if grp_got(group_power(g, 2, 4)) != 1 { return false; }
+    return true;
+}

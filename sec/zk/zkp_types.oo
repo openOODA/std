@@ -1,0 +1,123 @@
+// # ZKP types
+//
+// Logline: Comprehensive ZKP type definitions and accessors.
+// Setup: Pure crypto types module.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+
+type PedersenCommitment = struct {
+    commitment: Int,
+    modulus: Int,
+    flag_bits: Int
+};
+
+type RangeProof = struct {
+    commitment: Int,
+    min_value: Int,
+    max_value: Int,
+    response: Int,
+    challenge: Int,
+    is_valid: Bool
+};
+
+type ZkpStatement = struct {
+    statement_id: String,
+    public_params: String,
+    public_input: Int,
+    modulus: Int,
+    scheme_id: Int
+};
+
+type ZkpWitness = struct {
+    witness_id: String,
+    secret_val: Int,
+    blinding_factor: Int,
+    scheme_id: Int
+};
+
+type ZkpProof = struct {
+    proof_id: String,
+    scheme_id: Int,
+    commitment: Int,
+    challenge: Int,
+    response: Int,
+    public_input: Int,
+    proof_bytes: String,
+    is_verified: Bool
+};
+
+type ZkpProver = struct {
+    prover_id: String,
+    scheme_id: Int,
+    security_bits: Int,
+    proofs_generated: Int,
+    modulus: Int,
+    generator: Int,
+    secondary_generator: Int,
+    is_active: Bool
+};
+
+type ZkpVerifier = struct {
+    verifier_id: String,
+    scheme_id: Int,
+    security_bits: Int,
+    proofs_verified: Int,
+    proofs_rejected: Int,
+    modulus: Int,
+    generator: Int,
+    secondary_generator: Int,
+    strict_mode: Bool,
+    is_active: Bool
+};
+
+type ZkpBatchVerifier = struct {
+    batch_id: String,
+    proofs: List[ZkpProof],
+    statements: List[ZkpStatement],
+    verified_count: Int,
+    failed_count: Int,
+    is_completed: Bool
+};
+
+pub fn zkp_proof_id(proof: ZkpProof) -> String { return proof.proof_id; }
+pub fn zkp_proof_commitment(proof: ZkpProof) -> Int { return proof.commitment; }
+pub fn zkp_proof_response(proof: ZkpProof) -> Int { return proof.response; }
+pub fn zkp_proof_public_input(proof: ZkpProof) -> Int { return proof.public_input; }
+
+pub fn zkp_prover_proofs_generated(prover: &ZkpProver) -> Int { return prover.proofs_generated; }
+pub fn zkp_verifier_proofs_verified(verifier: &ZkpVerifier) -> Int { return verifier.proofs_verified; }
+pub fn zkp_verifier_proofs_rejected(verifier: &ZkpVerifier) -> Int { return verifier.proofs_rejected; }
+
+pub fn zkp_scheme_schnorr() -> Int { return 1; }
+
+pub fn pedersen_commit(value: Int, blinding: Int, gen_g: Int, gen_h: Int, modulus: Int) -> PedersenCommitment {
+    let mut g_term: Int = 0;
+    let mut h_term: Int = 0;
+    let mut valid: Int = 0;
+    if modulus > 1 {
+        g_term = (gen_g * value) % modulus;
+        h_term = (gen_h * blinding) % modulus;
+        valid = 1;
+    }
+    let mut sum: Int = g_term + h_term;
+    if modulus > 1 {
+        sum = sum % modulus;
+    }
+    return PedersenCommitment {
+        commitment: sum,
+        modulus: modulus,
+        flag_bits: valid
+    };
+}
+
+pub fn pedersen_opening(c: PedersenCommitment) -> Int {
+    return c.commitment;
+}
+
+pub fn pedersen_flags(c: PedersenCommitment) -> Int {
+    return c.flag_bits;
+}

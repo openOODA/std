@@ -1,0 +1,30 @@
+// # UI size product invariants
+//
+// Logline: Negative width or height is invalid; non-negative size holds.
+//
+// Setup: Pure Int checks. DomainCert is local because std/core/domain_cert.oo is absent.
+//
+// Beats:
+//   1. ui_size_ok of a negative width returns 0.
+//   2. ui_size_ok(8, 8) returns 1.
+//   3. ui_size_cert boxes the law into DomainCert.holds.
+
+import "std/core/primitives/domain_cert.oo";
+// Negative width (or height) is invalid.
+pub fn ui_size_ok(width: Int, height: Int) -> Int {
+    if width < 0 {
+        return 0;
+    }
+    if height < 0 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn ui_size_cert(width: Int, height: Int) -> DomainCert {
+    return DomainCert {
+        domain: "ui",
+        law_name: "size_nonneg",
+        holds: ui_size_ok(width, height)
+    };
+}

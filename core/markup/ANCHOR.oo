@@ -1,0 +1,97 @@
+// # Markup Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard markup domain library. Re-exports a stable markup_mod_* surface for the most-used public API (JSON parse/write/stream/schema, CBOR major types and decoder, MsgPack encode/decode, XML parse/tokenize, YAML parse/tokenize, TOML parse/get, Protobuf wire types and field values). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private markup siblings; no caps required for pure parse/format/stream operations. File-backed JSON/XML parsers may take FsReadCap at the call site.
+//
+// Beats:
+//   1. Re-export the JSON parse/write/stream/schema/ast surface as markup_mod_json_*.
+//   2. Re-export the CBOR major type and decoder surface as markup_mod_cbor_*.
+//   3. Re-export the MsgPack encode/decode surface as markup_mod_msgpack_*.
+//   4. Re-export the XML, YAML, and TOML parse/tokenize/get surface as markup_mod_xml_*, markup_mod_yaml_*, markup_mod_toml_*.
+//   5. Re-export the Protobuf wire types and field values surface as markup_mod_pb_*. Document the private siblings.
+
+import "../format/json_query.oo";
+import "../format/json_parser.oo";
+import "../format/json_writer.oo";
+import "../format/json_ast.oo";
+import "../format/json_schema.oo";
+import "../format/json_stream_legacy.oo";
+import "../format/cbor.oo";
+import "../format/cbor_decoder.oo";
+import "../format/msgpack.oo";
+import "../format/msgpack_decoder.oo";
+import "xml.oo";
+import "xml_tokenizer.oo";
+import "../format/yaml.oo";
+import "../format/yaml_tokenizer.oo";
+import "../format/toml.oo";
+import "../format/toml_parser_legacy.oo";
+import "../format/protobuf_wire_legacy.oo";
+import "../format/protobuf_types_legacy.oo";
+
+// Public JSON surface: markup_mod_json_*
+pub fn markup_mod_json_escape(s: String) -> String { return json_escape(s); }
+pub fn markup_mod_json_find_key(json_str: String, key: String) -> Int { return json_find_key(json_str, key); }
+pub fn markup_mod_json_get_string(json_str: String, key: String) -> Result[String, String] { return json_get_string(json_str, key); }
+pub fn markup_mod_json_get_value(json_str: String, key: String) -> Result[String, String] { return json_get_value(json_str, key); }
+pub fn markup_mod_json_validate(raw: String) -> Bool { return json_validate(raw); }
+pub fn markup_mod_json_parse_kind(raw: String) -> String { return json_parse_kind(raw); }
+pub fn markup_mod_json_parse_field(raw: String, key: String) -> Result[String, String] { return json_parse_field(raw, key); }
+pub fn markup_mod_json_parse_array_count(raw: String) -> Int { return json_parse_array_count(raw); }
+pub fn markup_mod_json_writer_new(pretty: Bool) -> JsonWriter { return json_writer_new(pretty); }
+pub fn markup_mod_json_writer_start_object(mut w: JsonWriter) -> JsonWriter { return json_writer_start_object(w); }
+pub fn markup_mod_json_writer_end_object(mut w: JsonWriter) -> JsonWriter { return json_writer_end_object(w); }
+pub fn markup_mod_json_node_null() -> JsonNode { return json_node_null(); }
+pub fn markup_mod_json_node_bool(v: Bool) -> JsonNode { return json_node_bool(v); }
+pub fn markup_mod_json_schema_validate(schema: String, data: String) -> Bool { return json_schema_validate(schema, data); }
+
+// Public CBOR surface: markup_mod_cbor_*
+pub fn markup_mod_cbor_major_uint() -> Int { return cbor_major_uint(); }
+pub fn markup_mod_cbor_major_nint() -> Int { return cbor_major_nint(); }
+pub fn markup_mod_cbor_major_bstr() -> Int { return cbor_major_bstr(); }
+pub fn markup_mod_cbor_major_tstr() -> Int { return cbor_major_tstr(); }
+pub fn markup_mod_cbor_decoder_new(total_bytes: Int) -> CborDecoder { return cbor_decoder_new(total_bytes); }
+pub fn markup_mod_cbor_decode_header(bytes: List[Int], offset: Int) -> CborToken { return cbor_decode_header(bytes, offset); }
+
+// Public MsgPack surface: markup_mod_msgpack_*
+pub fn markup_mod_msgpack_encode_nil() -> List[Int] { return msgpack_encode_nil(); }
+pub fn markup_mod_msgpack_encode_bool(b: Bool) -> List[Int] { return msgpack_encode_bool(b); }
+pub fn markup_mod_msgpack_encode_pos_fixint(n: Int) -> List[Int] { return msgpack_encode_pos_fixint(n); }
+pub fn markup_mod_msgpack_encode_neg_fixint(n: Int) -> List[Int] { return msgpack_encode_neg_fixint(n); }
+pub fn markup_mod_msgpack_decoder_new(total_len: Int) -> MsgPackDecoder { return msgpack_decoder_new(total_len); }
+pub fn markup_mod_msgpack_decode_item(bytes: List[Int], offset: Int) -> MsgPackValue { return msgpack_decode_item(bytes, offset); }
+
+// Public XML surface: markup_mod_xml_*
+pub fn markup_mod_xml_parse(raw: String) -> Result[String, String] { return xml_parse(raw); }
+pub fn markup_mod_xml_tokenizer_new(src: String) -> XmlTokenizer { return xml_tokenizer_new(src); }
+pub fn markup_mod_xml_tokenizer_has_more(t: XmlTokenizer) -> Bool { return xml_tokenizer_has_more(t); }
+pub fn markup_mod_xml_escape(s: String) -> String { return xml_escape(s); }
+
+// Public YAML surface: markup_mod_yaml_*
+pub fn markup_mod_yaml_parse(raw: String) -> Result[String, String] { return yaml_parse(raw); }
+pub fn markup_mod_yaml_tokenizer_new(src: String) -> YamlTokenizer { return yaml_tokenizer_new(src); }
+pub fn markup_mod_yaml_is_scalar_char(ch: String) -> Bool { return yaml_is_scalar_char(ch); }
+
+// Public TOML surface: markup_mod_toml_*
+pub fn markup_mod_toml_parse(raw: String) -> Result[String, String] { return toml_parse(raw); }
+pub fn markup_mod_toml_doc_new(src: String) -> TomlDoc { return toml_doc_new(src); }
+pub fn markup_mod_toml_get_string(doc: TomlDoc, section: String, key: String) -> Result[String, String] { return toml_get_string(doc, section, key); }
+pub fn markup_mod_toml_get_int(doc: TomlDoc, section: String, key: String) -> Result[String, String] { return toml_get_int(doc, section, key); }
+pub fn markup_mod_toml_get_bool(doc: TomlDoc, section: String, key: String) -> Result[String, String] { return toml_get_bool(doc, section, key); }
+
+// Public Protobuf surface: markup_mod_pb_*
+pub fn markup_mod_pb_wire_varint() -> Int { return pb_wire_varint(); }
+pub fn markup_mod_pb_wire_fixed64() -> Int { return pb_wire_fixed64(); }
+pub fn markup_mod_pb_wire_length_delimited() -> Int { return pb_wire_length_delimited(); }
+pub fn markup_mod_pb_wire_fixed32() -> Int { return pb_wire_fixed32(); }
+pub fn markup_mod_pb_field_desc_new(number: Int, name: String, ftype: String, repeated: Bool) -> PbFieldDesc { return pb_field_desc_new(number, name, ftype, repeated); }
+pub fn markup_mod_pb_field_value_int(number: Int, val: Int) -> PbFieldValue { return pb_field_value_int(number, val); }
+pub fn markup_mod_pb_field_value_str(number: Int, s: String) -> PbFieldValue { return pb_field_value_str(number, s); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. cbor_determinism_law.oo, html_escape_law.oo, json_grammar_law.oo, markup_balance_nest_law.oo)
+//   _theory files (e.g. capn_proto_zero_copy_theory.oo, xml_well_formed_theory.oo)
+//   _principle files (e.g. flatbuffers_forward_backward_principle.oo, markdown_line_principle.oo)
+//   _invariants files (e.g. markup_invariants.oo)
+//   _kat files (e.g. markup_kat.oo)

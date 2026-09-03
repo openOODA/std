@@ -1,0 +1,221 @@
+// # Int Scaled Radix-2 Cooley-Tukey Fast Fourier Transform Module
+//
+// Logline: Decimation-in-time radix-2 FFT and IFFT over scaled-Int complex samples, with bit-reversal permutation and precomputed twiddle factors for lengths 1, 2, 4, 8, 16.
+//
+// Setup: Pure math module. Complex values use Int fields scaled by 1000 (1.0 + 1.0i maps to (1000, 1000)). Multiplication rescales by dividing the cross-product by 1000 to stay in the same scaled space. Internally, fft and ifft return flat List[Int] (interleaved re, im pairs) to avoid a codegen bug with List[Complex] returns. Callers wrap via fft_unpack.
+//
+// Beats:
+//   1. Construct Complex values and add / sub / mul / conjugate primitives.
+//   2. Bit-reverse the input index sequence for length-N (power-of-two) DIT FFT.
+//   3. Radix-2 butterfly combining with precomputed twiddle factors exp(-2*pi*i*k/n).
+//   4. Inverse FFT via conjugate -> FFT -> conjugate -> divide by n.
+//   5. Smoke test asserts FFT of impulse [1, 0, ..., 0] equals uniform [1, 1, ..., 1] within tolerance.
+
+import "std/core/primitives/list.oo";
+
+type Complex = struct { re: Int, im: Int };
+
+// Scaling factor for fixed-point Int complex values: 1.0 maps to 1000.
+pub fn fft_scale() -> Int { return 1000; }
+
+// Construct a Complex value.
+pub fn fft_new(re: Int, im: Int) -> Complex {
+    return Complex { re: re, im: im };
+}
+
+// Add two complex numbers.
+pub fn c_add(a: Complex, b: Complex) -> Complex {
+    return Complex { re: a.re + b.re, im: a.im + b.im };
+}
+
+// Subtract b from a.
+pub fn c_sub(a: Complex, b: Complex) -> Complex {
+    return Complex { re: a.re - b.re, im: a.im - b.im };
+}
+
+// Multiply two complex numbers, scaled by 1000.
+pub fn c_mul(a: Complex, b: Complex) -> Complex {
+    let scale: Int = fft_scale();
+    let new_re: Int = (a.re * b.re - a.im * b.im) / scale;
+    let new_im: Int = (a.re * b.im + a.im * b.re) / scale;
+    return Complex { re: new_re, im: new_im };
+}
+
+// Conjugate: negate imaginary part.
+pub fn c_conj(a: Complex) -> Complex {
+    return Complex { re: a.re, im: 0 - a.im };
+}
+
+// Pack a List[Complex] (n elements) into a flat List[Int] of 2n entries (interleaved re, im).
+pub fn fft_pack(xs: List[Complex]) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let v: Complex = list_get(xs, i);
+        out = list_push(out, v.re);
+        out = list_push(out, v.im);
+        i = i + 1;
+    }
+    return out;
+}
+
+// Reverse the lowest log2(n) bits of x.
+fn bit_reverse(x: Int, log_n: Int) -> Int {
+    let mut y: Int = 0;
+    let mut i: Int = 0;
+    let mut v: Int = x;
+    while i < log_n {
+        let bit: Int = v - (v / 2) * 2;
+        y = y * 2 + bit;
+        v = v / 2;
+        i = i + 1;
+    }
+    return y;
+}
+
+// Log2 of an Int that is a positive power of 2. Returns 0 for n = 1.
+fn int_log2(n: Int) -> Int {
+    let mut log: Int = 0;
+    let mut v: Int = n;
+    while v > 1 {
+        v = v / 2;
+        log = log + 1;
+    }
+    return log;
+}
+
+// Precomputed twiddle factors exp(-2*pi*i*k/n) for n in {1, 2, 4, 8, 16}.
+fn twiddle_at(n_idx: Int, k: Int) -> Complex {
+    let scale: Int = fft_scale();
+    if n_idx == 0 { return Complex { re: scale, im: 0 }; }
+    if n_idx == 1 {
+        if k == 0 { return Complex { re: scale, im: 0 }; }
+        return Complex { re: 0, im: 0 - scale };
+    }
+    if n_idx == 2 {
+        if k == 0 { return Complex { re: scale, im: 0 }; }
+        if k == 1 { return Complex { re: 707, im: 0 - 707 }; }
+        if k == 2 { return Complex { re: 0, im: 0 - scale }; }
+        return Complex { re: 0 - 707, im: 0 - 707 };
+    }
+    if n_idx == 3 {
+        if k == 0 { return Complex { re: scale, im: 0 }; }
+        if k == 1 { return Complex { re: 707, im: 0 - 707 }; }
+        if k == 2 { return Complex { re: 0, im: 0 - scale }; }
+        if k == 3 { return Complex { re: 0 - 707, im: 0 - 707 }; }
+        if k == 4 { return Complex { re: 0 - scale, im: 0 }; }
+        if k == 5 { return Complex { re: 0 - 707, im: 707 }; }
+        if k == 6 { return Complex { re: 0, im: scale }; }
+        return Complex { re: 707, im: 707 };
+    }
+    if k == 0 { return Complex { re: 1000, im: 0 }; }
+    if k == 1 { return Complex { re: 924, im: 0 - 383 }; }
+    if k == 2 { return Complex { re: 707, im: 0 - 707 }; }
+    if k == 3 { return Complex { re: 383, im: 0 - 924 }; }
+    if k == 4 { return Complex { re: 0, im: 0 - 1000 }; }
+    if k == 5 { return Complex { re: 0 - 383, im: 0 - 924 }; }
+    if k == 6 { return Complex { re: 0 - 707, im: 0 - 707 }; }
+    if k == 7 { return Complex { re: 0 - 924, im: 0 - 383 }; }
+    if k == 8 { return Complex { re: 0 - 1000, im: 0 }; }
+    if k == 9 { return Complex { re: 0 - 924, im: 383 }; }
+    if k == 10 { return Complex { re: 0 - 707, im: 707 }; }
+    if k == 11 { return Complex { re: 0 - 383, im: 924 }; }
+    if k == 12 { return Complex { re: 0, im: 1000 }; }
+    if k == 13 { return Complex { re: 383, im: 924 }; }
+    if k == 14 { return Complex { re: 707, im: 707 }; }
+    return Complex { re: 924, im: 383 };
+}
+
+// Power-of-two check. Returns 1 if n is a power of 2, 0 otherwise.
+fn is_power_of_two(n: Int) -> Int {
+    if n < 1 { return 0; }
+    let mut v: Int = n;
+    while v > 1 {
+        if v - (v / 2) * 2 != 0 { return 0; }
+        v = v / 2;
+    }
+    return 1;
+}
+
+// Radix-2 Decimation-in-Time FFT over a flat List[Int] (2n entries).
+// Returns an empty list if the input is not a flat 2n encoding of a power-of-2 sequence.
+pub fn fft(flat: List[Int]) -> List[Int] {
+    let total: Int = list_len(flat);
+    if total - (total / 2) * 2 != 0 { return list_new(); }
+    let n: Int = total / 2;
+    if is_power_of_two(n) == 0 { return list_new(); }
+    if n < 1 { return list_new(); }
+    let log_n: Int = int_log2(n);
+
+    // Bit-reversal permutation into a fresh flat list.
+    let mut permuted: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let j: Int = bit_reverse(i, log_n);
+        let re: Int = list_get(flat, j * 2);
+        let im: Int = list_get(flat, j * 2 + 1);
+        permuted = list_push(permuted, re);
+        permuted = list_push(permuted, im);
+        i = i + 1;
+    }
+
+    // Butterfly stages.
+    let mut stage_size: Int = 2;
+    while stage_size <= n {
+        let half: Int = stage_size / 2;
+        let idx: Int = int_log2(stage_size);
+        let mut j2: Int = 0;
+        while j2 < n {
+            let mut t: Int = 0;
+            while t < half {
+                let w: Complex = twiddle_at(idx, t * n / stage_size);
+                let u_re: Int = list_get(permuted, (j2 + t) * 2);
+                let u_im: Int = list_get(permuted, (j2 + t) * 2 + 1);
+                let v_re: Int = list_get(permuted, (j2 + t + half) * 2);
+                let v_im: Int = list_get(permuted, (j2 + t + half) * 2 + 1);
+                let v_in: Complex = Complex { re: v_re, im: v_im };
+                let v_times_w: Complex = c_mul(v_in, w);
+                let u_c: Complex = Complex { re: u_re, im: u_im };
+                let new_u: Complex = c_add(u_c, v_times_w);
+                let new_v: Complex = c_sub(u_c, v_times_w);
+                permuted = list_set(permuted, (j2 + t) * 2, new_u.re);
+                permuted = list_set(permuted, (j2 + t) * 2 + 1, new_u.im);
+                permuted = list_set(permuted, (j2 + t + half) * 2, new_v.re);
+                permuted = list_set(permuted, (j2 + t + half) * 2 + 1, new_v.im);
+                t = t + 1;
+            }
+            j2 = j2 + stage_size;
+        }
+        stage_size = stage_size * 2;
+    }
+    return permuted;
+}
+
+// Inverse FFT over a flat List[Int] (2n entries): conjugate, FFT, conjugate, divide by n.
+pub fn ifft(flat: List[Int]) -> List[Int] {
+    let total: Int = list_len(flat);
+    if total - (total / 2) * 2 != 0 { return list_new(); }
+    let n: Int = total / 2;
+    if is_power_of_two(n) == 0 { return list_new(); }
+    let mut conjugated: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let re: Int = list_get(flat, i * 2);
+        let im: Int = 0 - list_get(flat, i * 2 + 1);
+        conjugated = list_push(conjugated, re);
+        conjugated = list_push(conjugated, im);
+        i = i + 1;
+    }
+    let fft_out: List[Int] = fft(conjugated);
+    let mut divided: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < n {
+        let re: Int = list_get(fft_out, k * 2) / n;
+        let im: Int = 0 - list_get(fft_out, k * 2 + 1) / n;
+        divided = list_push(divided, re);
+        divided = list_push(divided, im);
+        k = k + 1;
+    }
+    return divided;
+}

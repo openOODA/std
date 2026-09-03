@@ -1,0 +1,83 @@
+// # AArch64 Bytes Buffer Runtime
+//
+// Logline: Aliases bytes_new/push/get onto list ops and emits bytes_to_str plus bytes_eq.
+//
+// Setup: List[Int] header is [len, cap, words...]. bytes_to_str copies low bytes onto the bump heap.
+//
+// Beats:
+//   1. bytes_new, bytes_push, and bytes_get BL list_new, list_push, and list_get.
+//   2. bytes_to_str writes len bytes plus NUL from 8-byte slots.
+//   3. bytes_eq is strcmp then a 0/1 equal flag; bytes_concat is __concat.
+//   4. bytes_from_str is identity so byte.oo wrappers resolve.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+
+fn a64rt_balias(r0: A64R, nm: String, tgt: String) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, nm);
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_bl(x, tgt);
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_b2s(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "bytes_to_str");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_ldr(9, 0, 0));
+    x = a64x_emit(x, arm64_word_add_imm(10, 0, 16));
+    x = a64x_emit(x, arm64_word_add_imm(11, 9, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(12, 28));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 11));
+    x = a64x_emit(x, arm64_word_movz(13, 0, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(13, 9));
+    let bd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_movz(2, 8, 0));
+    x = a64x_emit(x, arm64_word_mul(1, 13, 2));
+    x = a64x_emit(x, arm64_word_add_reg(2, 10, 1));
+    x = a64x_emit(x, arm64_word_ldr(3, 2, 0));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 12, 13));
+    x = a64x_emit(x, arm64_word_add_imm(13, 13, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bd, arm64_word_b_cond(arm64_cond_eq(), done - bd)));
+    x = a64x_emit(x, arm64_word_add_reg(1, 12, 9));
+    x = a64x_emit(x, arm64_word_strb_reg(31, 1, 31));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 12));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_beq(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "bytes_eq");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_bl(x, "__strcmp");
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 2));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_bytes(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_balias(r0, "bytes_new", "list_new");
+    r = a64rt_balias(r, "bytes_push", "list_push");
+    r = a64rt_balias(r, "bytes_get", "list_get");
+    r = a64rt_balias(r, "bytes_concat", "__concat");
+    r = a64rt_fn(r, "bytes_from_str");
+    let mut x: A64X = a64rt_prol(r.x);
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_b2s(r);
+    r = a64rt_beq(r);
+    r = a64rt_balias(r, "byte_buf_new", "bytes_new");
+    r = a64rt_balias(r, "byte_buf_push", "bytes_push");
+    r = a64rt_balias(r, "byte_buf_get", "bytes_get");
+    r = a64rt_balias(r, "byte_buf_to_str", "bytes_to_str");
+    r = a64rt_balias(r, "str_sub", "str_slice");
+    r = a64rt_balias(r, "str_eq", "bytes_eq");
+    return r;
+}

@@ -1,0 +1,253 @@
+// # AArch64 Expression Atoms
+//
+// Logline: Lowers numbers, locals, string literals, true/false, Ok/Err, and field loads to x0/x1.
+//
+// Setup: Uses xstate, xscan string eater, and encoder MOVZ/LDR. Calls and ALU live in xarith.
+//
+// Beats:
+//   1. Load immediates with MOVZ/MOVK and locals as an x0/x1 pair.
+//   2. Pool string literals and emit an ADR placeholder patched after layout.
+//   3. Map struct field names onto 8-byte slots from parsed type decls.
+//   4. Invert comparisons for the condition selector.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_regs.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+import "std/hw/silicon/aarch64_xfn.oo";
+import "std/hw/silicon/aarch64_xfloat.oo";
+import "std/hw/silicon/aarch64_xmark.oo";
+
+pub fn a64x_take_relop(x0: A64X) -> A64X {
+    return a64x_from_p(a64x_relop_p(a64x_as_p(x0)), x0);
+}
+
+fn a64x_relop_p(p0: A64P) -> A64P {
+    let p: A64P = a64_skip(p0);
+    let b: Int = a64_peek(p);
+    let mut b2: Int = -1;
+    if p.i + 1 < bytes_len(p.src) {
+        b2 = byte_at(p.src, p.i + 1);
+    }
+    if b == 61 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_ne(), p.text);
+    }
+    if b == 33 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_eq(), p.text);
+    }
+    if b == 60 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_gt(), p.text);
+    }
+    if b == 62 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_lt(), p.text);
+    }
+    if b == 60 {
+        return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, arm64_cond_ge(), p.text);
+    }
+    if b == 62 {
+        return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, arm64_cond_le(), p.text);
+    }
+    return a64_fail(p, "ERR\ta64x_relop");
+}
+
+pub fn a64x_movimm(x0: A64X, rd: Int, v: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_movz(rd, v & 65535, 0));
+    x = a64x_emit(x, arm64_word_movk(rd, (v >> 16) & 65535, 1));
+    x = a64x_emit(x, arm64_word_movk(rd, (v >> 32) & 65535, 2));
+    x = a64x_emit(x, arm64_word_movk(rd, (v >> 48) & 65535, 3));
+    return x;
+}
+
+pub fn a64x_str_ref(x0: A64X) -> A64X {
+    let idx: Int = x0.p.ival;
+    let tag: String = "#s" + idx.to_string();
+    return a64x_bl(x0, tag);
+}
+
+pub fn a64x_looks_struct(x0: A64X) -> Bool {
+    if a64_peek(a64x_as_p(x0)) != 123 {
+        return false;
+    }
+    let mut y: A64X = a64x_from_p(a64_eat(a64x_as_p(x0), 123), x0);
+    y = a64x_skip(y);
+    if !a64_is_alpha(a64_peek(a64x_as_p(y))) {
+        return false;
+    }
+    y = a64x_from_p(a64_ident(a64x_as_p(y)), y);
+    y = a64x_skip(y);
+    return a64_peek(a64x_as_p(y)) == 58;
+}
+
+
+fn a64x_expr_pfx_val(names: List[String], pfx: String) -> String {
+    let n: Int = bytes_len(pfx);
+    let mut i: Int = list_len(names) - 1;
+    while i >= 0 {
+        let s: String = list_get(names, i);
+        if bytes_len(s) > n {
+            let mut ok: Bool = true;
+            let mut k: Int = 0;
+            while k < n {
+                if byte_at(s, k) != byte_at(pfx, k) { ok = false; }
+                k = k + 1;
+            }
+            if ok { return byte_slice(s, n, bytes_len(s)); }
+        }
+        i = i - 1;
+    }
+    return "";
+}
+
+pub fn a64x_field_ty(x: A64X, obj: String, nm: String) -> String {
+    let mut ty: String = a64x_local_ty(x, obj);
+    if bytes_len(ty) == 0 { ty = obj; }
+    if bytes_len(ty) == 0 { return ""; }
+    return a64x_expr_pfx_val(x.st.fld_nm, "Y:" + ty + "." + nm + ":");
+}
+
+pub fn a64x_ret_ok_ty(x: A64X, nm: String) -> String {
+    return a64x_expr_pfx_val(x.st.fld_nm, "K->" + nm + ":");
+}
+
+pub fn a64x_ret_struct_ty(x: A64X, nm: String) -> String {
+    return a64x_expr_pfx_val(x.st.fld_nm, "R->" + nm + ":");
+}
+
+pub fn a64x_mark_call_ty(x0: A64X, nm: String) -> A64X {
+    let mut x: A64X = a64x_with_text(x0, nm);
+    let rst: String = a64x_ret_struct_ty(x, nm);
+    if bytes_len(rst) > 0 {
+        return a64x_mark_ty(x, nm, rst);
+    }
+    let inn: String = a64x_ret_ok_ty(x, nm);
+    if bytes_len(inn) > 0 {
+        return a64x_mark_ok(x, nm, inn);
+    }
+    return x;
+}
+
+pub fn a64x_field_off(x: A64X, nm: String) -> Int {
+    return a64x_lookup_field(x, nm);
+}
+
+pub fn a64x_field_off_obj(x: A64X, obj: String, nm: String) -> Int {
+    let mut ty: String = a64x_local_ty(x, obj);
+    if bytes_len(ty) == 0 {
+        ty = obj;
+    }
+    if bytes_len(ty) == 0 {
+        return -1;
+    }
+    return a64x_lookup_field(x, ty + "." + nm);
+}
+
+pub fn a64x_load_pair(x0: A64X, off: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_ldr(0, abi_fp_reg(), off));
+    return a64x_emit(x, arm64_word_ldr(1, abi_fp_reg(), off + 8));
+}
+
+pub fn a64x_store_pair(x0: A64X, off: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_str(0, abi_fp_reg(), off));
+    return a64x_emit(x, arm64_word_str(1, abi_fp_reg(), off + 8));
+}
+
+pub fn a64x_primary(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    if x.st.err != "" { return x; }
+    let b: Int = a64_peek(a64x_as_p(x));
+    if b == 34 {
+        x = a64x_eat_string(x);
+        return a64x_with_fp(a64x_str_ref(x), 2);
+    }
+    if a64_is_digit(b) {
+        x = a64x_from_p(a64_num(a64x_as_p(x)), x);
+        let ip: Int = x.p.ival;
+        if a64_peek(a64x_as_p(x)) == 46 {
+            let src: String = x.p.src;
+            let mut j: Int = x.p.i + 1;
+            if j < bytes_len(src) && a64_is_digit(byte_at(src, j)) {
+                let mut frac: Int = 0;
+                let mut scale: Int = 1;
+                let mut k: Int = 0;
+                while j < bytes_len(src) && a64_is_digit(byte_at(src, j)) {
+                    if k < 9 {
+                        frac = frac * 10 + (byte_at(src, j) - 48);
+                        scale = scale * 10;
+                    }
+                    j = j + 1;
+                    k = k + 1;
+                }
+                x = a64x_from_p(a64_at(a64x_as_p(x), j), x);
+                return a64x_emit_f64(x, ip, frac, scale);
+            }
+        }
+        return a64x_with_fp(a64x_movimm(x, 0, ip), 0);
+    }
+    if a64_is_alpha(b) {
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        let nm: String = x.p.text;
+        if nm == "true" {
+            return a64x_movimm(x, 0, 1);
+        }
+        if nm == "false" {
+            return a64x_movimm(x, 0, 0);
+        }
+        let off2: Int = 0 + a64_lookup_parse(x.p.names, x.p.offs, nm);
+        if off2 < 0 {
+            return a64x_fail(x, "ERR\ta64x_unknown");
+        }
+        return a64x_load_pair(x, off2);
+    }
+    return a64x_fail(x, "ERR\ta64x_primary");
+}
+
+pub fn a64x_left_is_str(x: A64X) -> Bool {
+    let nw: Int = list_len(x.p.words);
+    let nbl: Int = list_len(x.st.bl_at);
+    if nw == 0 || nbl == 0 {
+        return false;
+    }
+    if list_get(x.st.bl_at, nbl - 1) != nw - 1 {
+        return false;
+    }
+    let nms: List[String] = x.st.bl_nm;
+    if list_len(nms) < nbl {
+        return false;
+    }
+    let nm: String = list_get(nms, nbl - 1);
+    if nm == "__concat" || nm == "to_string" || nm == "char_at" || nm == "str_slice" || nm == "str_replace" {
+        return true;
+    }
+    if bytes_len(nm) >= 2 && byte_at(nm, 0) == 35 && byte_at(nm, 1) == 115 {
+        return true;
+    }
+    return false;
+}
+
+pub fn a64x_is_str(x: A64X) -> Bool {
+    if x.st.fp == 2 {
+        return true;
+    }
+    return a64x_left_is_str(x);
+}
+
+pub fn a64x_postfix(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    while a64_peek(a64x_as_p(x)) == 46 {
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 46), x);
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        let meth: String = x.p.text;
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 40 {
+            return x;
+        }
+        let foff: Int = 0 + a64x_field_off_obj(x, x.p.text, meth);
+        if foff < 0 { return a64x_fail(x, "ERR\ta64x_field"); }
+        x = a64x_emit(x, arm64_word_ldr(0, 0, foff));
+        x = a64x_skip(x);
+    }
+    return x;
+}

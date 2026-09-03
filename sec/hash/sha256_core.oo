@@ -1,0 +1,71 @@
+// # SHA-256 Round Functions, K Table, and Sigma
+//
+// Logline: 32-bit mask/xor/rotr primitives, Ch, Maj, Sigma0, Sigma1, sigma0, sigma1, and the 64-entry K table (FIPS 180-4 first 32 bits of cube roots of first 64 primes).
+//
+// Setup: Pure Int 32-bit. Sibling of sha256_codec.oo, called by sha256.oo.
+//
+// Beats:
+//   1. 32-bit mask/xor/rotr.
+//   2. Ch, Maj, Sigma0, Sigma1, sigma0, sigma1 primitives.
+//   3. s2_k: 64-entry K table as one hex string, parsed on demand.
+
+pub fn s2_mask(x: Int) -> Int {
+    return x & 4294967295;
+}
+
+pub fn s2_xor(a: Int, b: Int) -> Int {
+    return (a | b) - (a & b);
+}
+
+pub fn s2_rotr(x: Int, n: Int) -> Int {
+    let v: Int = s2_mask(x);
+    let right: Int = s2_mask(v << (32 - n));
+    let left: Int = v >> n;
+    return s2_mask(left | right);
+}
+
+pub fn s2_ch(x: Int, y: Int, z: Int) -> Int {
+    return s2_xor(x & y, s2_xor(x, 4294967295) & z);
+}
+
+pub fn s2_maj(x: Int, y: Int, z: Int) -> Int {
+    return s2_xor(s2_xor(x & y, x & z), y & z);
+}
+
+pub fn s2_Sigma0(x: Int) -> Int {
+    return s2_xor(s2_xor(s2_rotr(x, 2), s2_rotr(x, 13)), s2_rotr(x, 22));
+}
+
+pub fn s2_Sigma1(x: Int) -> Int {
+    return s2_xor(s2_xor(s2_rotr(x, 6), s2_rotr(x, 11)), s2_rotr(x, 25));
+}
+
+pub fn s2_sigma0(x: Int) -> Int {
+    return s2_xor(s2_xor(s2_rotr(x, 7), s2_rotr(x, 18)), s2_mask(x >> 3));
+}
+
+pub fn s2_sigma1(x: Int) -> Int {
+    return s2_xor(s2_xor(s2_rotr(x, 17), s2_rotr(x, 19)), s2_mask(x >> 10));
+}
+
+pub fn s2_nib(c: Int) -> Int {
+    if c >= 97 {
+        return c - 87;
+    }
+    return c - 48;
+}
+
+pub fn s2_ph32(s: String, off: Int) -> Int {
+    let mut v: Int = 0;
+    let mut j: Int = 0;
+    while j < 8 {
+        v = (v << 4) + s2_nib(byte_at(s, off + j));
+        j = j + 1;
+    }
+    return v;
+}
+
+pub fn s2_k(i: Int) -> Int {
+    let ks: String = "428a2f9871374491b5c0fbcfe9b5dba53956c25b59f111f1923f82a4ab1c5ed5d807aa9812835b01243185be550c7dc372be5d7480deb1fe9bdc06a7c19bf174e49b69c1efbe47860fc19dc6240ca1cc2de92c6f4a7484aa5cb0a9dc76f988da983e5152a831c66db00327c8bf597fc7c6e00bf3d5a7914706ca63511429296727b70a852e1b21384d2c6dfc53380d13650a7354766a0abb81c2c92e92722c85a2bfe8a1a81a664bc24b8b70c76c51a3d192e819d6990624f40e3585106aa07019a4c1161e376c082748774c34b0bcb5391c0cb34ed8aa4a5b9cca4f682e6ff3748f82ee78a5636f84c878148cc7020890befffaa4506cebbef9a3f7c67178f2";
+    return s2_ph32(ks, i * 8);
+}

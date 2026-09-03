@@ -1,0 +1,96 @@
+// # ACID Transaction Law
+//
+// Logline: A correct transaction satisfies Atomicity, Consistency, Isolation, and Durability.
+//
+// Setup: Pure Int bitmask. Each property is 1 if held, 0 if violated. All-zero input returns 0. Hosts data_invariants.oo stem.
+//
+// Beats:
+//   1. Atomicity: transaction is all-or-nothing.
+//   2. Consistency: integrity constraints hold before and after.
+//   3. Isolation: concurrent transactions do not interfere.
+//   4. Durability: committed changes survive crashes.
+
+import "std/app/data/data_invariants.oo";
+
+// Property bits: 1 atomic, 2 consistent, 4 isolated, 8 durable.
+pub fn acid_atomic_bit() -> Int {
+    return 1;
+}
+
+pub fn acid_consistent_bit() -> Int {
+    return 2;
+}
+
+pub fn acid_isolated_bit() -> Int {
+    return 4;
+}
+
+pub fn acid_durable_bit() -> Int {
+    return 8;
+}
+
+// ACID witness: 1 if all four property bits are set; 0 otherwise.
+pub fn acid_holds(atomic: Int, consistent: Int, isolated: Int, durable: Int) -> Int {
+    if atomic != 1 { return 0; }
+    if consistent != 1 { return 0; }
+    if isolated != 1 { return 0; }
+    if durable != 1 { return 0; }
+    return 1;
+}
+
+// Mask witness: 1 if mask has all four bits set.
+pub fn acid_mask_holds(mask: Int) -> Int {
+    if mask < 0 { return 0; }
+    let combined: Int = acid_atomic_bit() + acid_consistent_bit() + acid_isolated_bit() + acid_durable_bit();
+    let check: Int = mask & combined;
+    if check == combined { return 1; }
+    return 0;
+}
+
+// Missing-property count: number of property bits missing from mask.
+// Full mask is Ok(0). Negative mask is Err (4 is in-band: all four missing).
+fn amc_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn acid_missing_count(mask: Int) -> Result[Int, String] {
+    if mask < 0 { return Err("ERR\tamc\tdomain"); }
+    let mut count: Int = 0;
+    if (mask & acid_atomic_bit()) == 0 { count = count + 1; }
+    if (mask & acid_consistent_bit()) == 0 { count = count + 1; }
+    if (mask & acid_isolated_bit()) == 0 { count = count + 1; }
+    if (mask & acid_durable_bit()) == 0 { count = count + 1; }
+    return Ok(count);
+}
+
+// KAT and hostile cases for the ACID law.
+pub fn verify_acid_law() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    if acid_holds(1, 1, 1, 1) != 1 { return false; }
+    if acid_holds(0, 1, 1, 1) != 0 { return false; }
+    if acid_holds(1, 0, 1, 1) != 0 { return false; }
+    if acid_holds(1, 1, 0, 1) != 0 { return false; }
+    if acid_holds(1, 1, 1, 0) != 0 { return false; }
+    if acid_holds(0, 0, 0, 0) != 0 { return false; }
+    if acid_holds(2, 1, 1, 1) != 0 { return false; }
+    if acid_holds(0 - 1, 1, 1, 1) != 0 { return false; }
+    if acid_mask_holds(15) != 1 { return false; }
+    if acid_mask_holds(14) != 0 { return false; }
+    if acid_mask_holds(7) != 0 { return false; }
+    if acid_mask_holds(0) != 0 { return false; }
+    if acid_mask_holds(0 - 1) != 0 { return false; }
+    if acid_mask_holds(31) != 1 { return false; }
+    if amc_got(acid_missing_count(15)) != 0 { return false; }
+    if amc_got(acid_missing_count(14)) != 1 { return false; }
+    if amc_got(acid_missing_count(7)) != 1 { return false; }
+    let zmiss: Result[Int, String] = acid_missing_count(0);
+    if zmiss.is_ok() == false { return false; }
+    if amc_got(zmiss) != 4 { return false; }
+    if acid_missing_count(0 - 1).is_ok() { return false; }
+    if acid_atomic_bit() != 1 { return false; }
+    if acid_consistent_bit() != 2 { return false; }
+    if acid_isolated_bit() != 4 { return false; }
+    if acid_durable_bit() != 8 { return false; }
+    return true;
+}

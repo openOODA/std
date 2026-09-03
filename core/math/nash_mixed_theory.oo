@@ -1,0 +1,57 @@
+// # Mixed Nash theory (2x2)
+//
+// Logline: Matching pennies mixed (0.5,0.5) is a Nash point. Mix outside [0,1] is not.
+//
+// Setup: Imports std/math/game_theory/nash_equilibrium.oo. Holds 1 or 0.
+//
+// Beats:
+//   1. Build matching-pennies payoffs.
+//   2. is_nash_equilibrium at (0.5, 0.5) is true.
+//   3. A mix p<0 is not a Nash point.
+
+import "std/core/math/game_theory/nash_equilibrium.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn pennies() -> PayoffMatrix {
+    let mut a: List[Float] = list_new();
+    a = list_push(a, 1.0);
+    a = list_push(a, 0.0 - 1.0);
+    a = list_push(a, 0.0 - 1.0);
+    a = list_push(a, 1.0);
+    let mut b: List[Float] = list_new();
+    b = list_push(b, 0.0 - 1.0);
+    b = list_push(b, 1.0);
+    b = list_push(b, 1.0);
+    b = list_push(b, 0.0 - 1.0);
+    return payoff_new(a, b);
+}
+
+pub fn math_nash_mixed_holds() -> DomainCert {
+    let pm: PayoffMatrix = pennies();
+    let mut h: Int = 0;
+    if is_nash_equilibrium(pm, 0.5, 0.5) {
+        h = 1;
+    }
+    return domain_cert("math", "nash_mixed_pennies", h);
+}
+
+pub fn math_nash_bad_mix_rejected() -> DomainCert {
+    let pm: PayoffMatrix = pennies();
+    let mut h: Int = 0;
+    if expected_payoff_a(pm, 0, 0.0 - 1.0).is_ok() == false {
+        h = 1;
+    }
+    return domain_cert("math", "nash_bad_mix_rejected", h);
+}
+
+pub fn verify_nash_theory() -> Bool {
+    let a: DomainCert = math_nash_mixed_holds();
+    let b: DomainCert = math_nash_bad_mix_rejected();
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    return true;
+}

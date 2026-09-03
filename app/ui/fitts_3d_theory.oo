@@ -1,0 +1,252 @@
+// # Fitts 3D Theory (Fitts 1954 + Bowman 2017 3D User Interfaces 2nd ed)
+//
+// Logline: 2D Fitts MT = a + b * log2(D/W + 1); 3D extends to MT = a + b * log2(D/W_eff + 1) where W_eff = sqrt(W^2 + (k * depth)^2) projects depth into the selection plane.
+//
+// Setup: Pure Float. a, b > 0. D >= 0, W > 0. depth >= 0, k >= 0. Any non-positive coefficient, negative D, or non-positive W returns Err. D=0 is Ok(0) in ID. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. fitts_2d_mt: classic MT = a + b * log2(D/W + 1).
+//   2. fitts_3d_mt: MT = a + b * log2(D/W_eff + 1) with W_eff = sqrt(W^2 + (k*depth)^2).
+//   3. fitts_effective_width: 2D-projected target width combining W and depth.
+//   4. Coupled with steering law: same monotonic direction with increasing D; Accot-Zhai 1997 CHI.
+//   5. DomainCert: fitts_3d_theory_cert.
+
+import "std/app/ui/ui_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Fitts 1954 / Card English Burr 1978 CACM 21,21: minimum a and b.
+pub fn fitts_min_a() -> Float {
+    return 0.05;
+}
+
+pub fn fitts_min_b() -> Float {
+    return 0.05;
+}
+
+// ln(2) for log2 conversions.
+fn fitts_ln2() -> Float {
+    return 0.6931471805599453;
+}
+
+// Safe log2: tiny lower bound to avoid log(0) for D=0.
+pub fn fitts_log2_safe(x: Float) -> Result[Float, String] {
+    let tiny: Float = 0.0000001;
+    if x < tiny { return Err("ERR\tfitts3d\tlog"); }
+    return Ok(ln(x) / fitts_ln2());
+}
+
+// Index of difficulty for Fitts 2D: ID = log2(D/W + 1).
+pub fn fitts_id_2d(distance: Float, width: Float) -> Result[Float, String] {
+    if distance < 0.0 { return Err("ERR\tfitts3d\td"); }
+    if width <= 0.0 { return Err("ERR\tfitts3d\tw"); }
+    let ratio: Float = distance / width;
+    let arg: Float = 1.0 + ratio;
+    return fitts_log2_safe(arg);
+}
+
+// Effective width combining width and depth (3D projection): W_eff = sqrt(W^2 + (k*depth)^2).
+// Returns Err if W <= 0 (width must be positive even with zero depth).
+pub fn fitts_effective_width(width: Float, depth: Float, depth_weight: Float) -> Result[Float, String] {
+    if width <= 0.0 { return Err("ERR\tfitts3d\tw"); }
+    if depth < 0.0 { return Err("ERR\tfitts3d\tdepth"); }
+    if depth_weight < 0.0 { return Err("ERR\tfitts3d\tk"); }
+    let w_sq: Float = width * width;
+    let kd: Float = depth_weight * depth;
+    let kd_sq: Float = kd * kd;
+    let sum: Float = w_sq + kd_sq;
+    if sum <= 0.0 { return Err("ERR\tfitts3d\teff"); }
+    return Ok(sqrt(sum));
+}
+
+// Index of difficulty for Fitts 3D: ID = log2(D/W_eff + 1) with effective width.
+pub fn fitts_id_3d(distance: Float, width: Float, depth: Float, depth_weight: Float) -> Result[Float, String] {
+    if distance < 0.0 { return Err("ERR\tfitts3d\td"); }
+    if width <= 0.0 { return Err("ERR\tfitts3d\tw"); }
+    let w_eff_r: Result[Float, String] = fitts_effective_width(width, depth, depth_weight);
+    match w_eff_r {
+        Ok(w_eff) => {
+            let ratio: Float = distance / w_eff;
+            let arg: Float = 1.0 + ratio;
+            return fitts_log2_safe(arg);
+        },
+        Err(e)    => { return Err(e); }
+    }
+}
+
+// 2D Fitts movement time: MT = a + b * log2(D/W + 1).
+pub fn fitts_2d_mt(a: Float, b: Float, distance: Float, width: Float) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tfitts3d\ta"); }
+    if b <= 0.0 { return Err("ERR\tfitts3d\tb"); }
+    let idr: Result[Float, String] = fitts_id_2d(distance, width);
+    match idr {
+        Ok(id) => { return Ok(a + (b * id)); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+// 3D Fitts movement time: MT = a + b * log2(D/W_eff + 1) with depth-projected effective width.
+pub fn fitts_3d_mt(
+    a: Float,
+    b: Float,
+    distance: Float,
+    width: Float,
+    depth: Float,
+    depth_weight: Float
+) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tfitts3d\ta"); }
+    if b <= 0.0 { return Err("ERR\tfitts3d\tb"); }
+    let idr: Result[Float, String] = fitts_id_3d(distance, width, depth, depth_weight);
+    match idr {
+        Ok(id) => { return Ok(a + (b * id)); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+// 3D with zero depth reduces to 2D: 1 iff fitts_3d_mt(a,b,D,W,0,0) == fitts_2d_mt(a,b,D,W).
+pub fn fitts_3d_reduces_to_2d(
+    a: Float,
+    b: Float,
+    distance: Float,
+    width: Float
+) -> Int {
+    let r2: Result[Float, String] = fitts_2d_mt(a, b, distance, width);
+    let r3: Result[Float, String] = fitts_3d_mt(a, b, distance, width, 0.0, 0.0);
+    if r2.is_ok() == false { return 0; }
+    if r3.is_ok() == false { return 0; }
+    let v2: Float = fitts_3d_got(r2);
+    let v3: Float = fitts_3d_got(r3);
+    let d: Float = v2 - v3;
+    let ad: Float = fitts_3d_uabs(d);
+    let eps: Float = 0.0001;
+    if ad <= eps { return 1; }
+    return 0;
+}
+
+// Monotonic: 1 iff MT increases as distance increases (3D Fitts, like steering law).
+pub fn fitts_3d_monotonic(
+    a: Float,
+    b: Float,
+    w: Float,
+    depth: Float,
+    k: Float,
+    d1: Float,
+    d2: Float
+) -> Int {
+    if a <= 0.0 { return 0; }
+    if b <= 0.0 { return 0; }
+    if w <= 0.0 { return 0; }
+    if depth < 0.0 { return 0; }
+    if k < 0.0 { return 0; }
+    if d1 < 0.0 { return 0; }
+    if d2 <= d1 { return 0; }
+    let r1: Result[Float, String] = fitts_3d_mt(a, b, d1, w, depth, k);
+    let r2: Result[Float, String] = fitts_3d_mt(a, b, d2, w, depth, k);
+    if r1.is_ok() == false { return 0; }
+    if r2.is_ok() == false { return 0; }
+    let v1: Float = fitts_3d_got(r1);
+    let v2: Float = fitts_3d_got(r2);
+    if v2 > v1 { return 1; }
+    return 0;
+}
+
+fn fitts_3d_uabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn fitts_3d_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// DomainCert for the Fitts 3D theory.
+pub fn fitts_3d_theory_cert(
+    a: Float,
+    b: Float,
+    distance: Float,
+    width: Float,
+    depth: Float,
+    depth_weight: Float
+) -> DomainCert {
+    let mut h: Int = 0;
+    if fitts_3d_mt(a, b, distance, width, depth, depth_weight).is_ok() { h = 1; }
+    return domain_cert("ui", "fitts_3d_theory", h);
+}
+
+pub fn verify_fitts_3d_theory() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    // 2D golden: D=100, W=10, a=0.05s, b=0.15s. ID = log2(11) = 3.4594316...
+    // MT_2d = 0.05 + 0.15 * 3.4594316... = 0.05 + 0.5189147... = 0.5689147...
+    let mt2: Float = fitts_3d_got(fitts_2d_mt(0.05, 0.15, 100.0, 10.0));
+    let target2: Float = 0.5689147427;
+    let d2d: Float = fitts_3d_uabs(mt2 - target2);
+    if d2d > 0.0001 { return false; }
+    // 2D with a=50ms, b=150ms in seconds: a=0.05, b=0.15 already aligned.
+    // Verify against the same target.
+    let id2: Float = fitts_3d_got(fitts_id_2d(100.0, 10.0));
+    let id_target: Float = 3.4594316186;
+    let did: Float = fitts_3d_uabs(id2 - id_target);
+    if did > 0.0001 { return false; }
+    // 3D: D=100, W=10, depth=0, k=0 reduces to 2D.
+    let mt3_zero: Float = fitts_3d_got(fitts_3d_mt(0.05, 0.15, 100.0, 10.0, 0.0, 0.0));
+    let d_red: Float = fitts_3d_uabs(mt3_zero - mt2);
+    if d_red > 0.0001 { return false; }
+    if fitts_3d_reduces_to_2d(0.05, 0.15, 100.0, 10.0) != 1 { return false; }
+    // 3D with non-zero depth: W_eff = sqrt(W^2 + (k*depth)^2).
+    // D=100, W=10, depth=50, k=1.0 -> W_eff = sqrt(100 + 2500) = sqrt(2600) = 50.9902...
+    let we_r: Result[Float, String] = fitts_effective_width(10.0, 50.0, 1.0);
+    let we: Float = fitts_3d_got(we_r);
+    let we_target: Float = 50.99019514;
+    let dwe: Float = fitts_3d_uabs(we - we_target);
+    if dwe > 0.0001 { return false; }
+    // 3D MT: D=100, W=10, depth=50, k=1.0, a=0.05, b=0.15.
+    // ID = log2(100/50.9902 + 1) = log2(2.9612) = 1.5661...
+    // MT = 0.05 + 0.15 * 1.5661 = 0.05 + 0.23492 = 0.28492...
+    let mt3: Float = fitts_3d_got(fitts_3d_mt(0.05, 0.15, 100.0, 10.0, 50.0, 1.0));
+    let target3: Float = 0.28492;
+    let d3: Float = fitts_3d_uabs(mt3 - target3);
+    if d3 > 0.001 { return false; }
+    if mt3 <= 0.0 { return false; }
+    // Monotonicity with depth.
+    if fitts_3d_monotonic(0.05, 0.15, 10.0, 0.0, 0.0, 50.0, 100.0) != 1 { return false; }
+    // Hostile: D<0 fails closed.
+    if fitts_2d_mt(0.05, 0.15, 0.0 - 1.0, 10.0).is_ok() { return false; }
+    if fitts_3d_mt(0.05, 0.15, 0.0 - 1.0, 10.0, 0.0, 0.0).is_ok() { return false; }
+    // Hostile: W<=0 fails closed.
+    if fitts_2d_mt(0.05, 0.15, 100.0, 0.0).is_ok() { return false; }
+    if fitts_2d_mt(0.05, 0.15, 100.0, 0.0 - 1.0).is_ok() { return false; }
+    if fitts_3d_mt(0.05, 0.15, 100.0, 0.0, 0.0, 0.0).is_ok() { return false; }
+    // Hostile: a<=0 or b<=0 fails closed.
+    if fitts_2d_mt(0.0, 0.15, 100.0, 10.0).is_ok() { return false; }
+    if fitts_2d_mt(0.05, 0.0, 100.0, 10.0).is_ok() { return false; }
+    if fitts_3d_mt(0.0, 0.15, 100.0, 10.0, 0.0, 0.0).is_ok() { return false; }
+    if fitts_3d_mt(0.05, 0.0, 100.0, 10.0, 0.0, 0.0).is_ok() { return false; }
+    // Hostile: depth<0 or k<0 fails closed.
+    if fitts_3d_mt(0.05, 0.15, 100.0, 10.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    if fitts_3d_mt(0.05, 0.15, 100.0, 10.0, 0.0, 0.0 - 1.0).is_ok() { return false; }
+    if fitts_effective_width(0.0, 0.0, 0.0).is_ok() { return false; }
+    if fitts_effective_width(10.0, 0.0 - 1.0, 0.0).is_ok() { return false; }
+    if fitts_effective_width(10.0, 0.0, 0.0 - 1.0).is_ok() { return false; }
+    if fitts_id_2d(0.0 - 1.0, 10.0).is_ok() { return false; }
+    if fitts_id_2d(100.0, 0.0).is_ok() { return false; }
+    if fitts_id_3d(0.0 - 1.0, 10.0, 0.0, 0.0).is_ok() { return false; }
+    if fitts_id_3d(100.0, 0.0, 0.0, 0.0).is_ok() { return false; }
+    if fitts_3d_monotonic(0.0, 0.15, 10.0, 0.0, 0.0, 50.0, 100.0) != 0 { return false; }
+    if fitts_3d_monotonic(0.05, 0.0, 10.0, 0.0, 0.0, 50.0, 100.0) != 0 { return false; }
+    if fitts_3d_monotonic(0.05, 0.15, 0.0, 0.0, 0.0, 50.0, 100.0) != 0 { return false; }
+    if fitts_3d_monotonic(0.05, 0.15, 10.0, 0.0, 0.0, 100.0, 50.0) != 0 { return false; }
+    if fitts_3d_monotonic(0.05, 0.15, 10.0, 0.0, 0.0, 50.0, 50.0) != 0 { return false; }
+    // D=0 ID = 0.
+    let id0: Float = fitts_3d_got(fitts_id_2d(0.0, 10.0));
+    if id0 != 0.0 { return false; }
+    let mt0: Float = fitts_3d_got(fitts_2d_mt(0.05, 0.15, 0.0, 10.0));
+    if mt0 != 0.05 { return false; }
+    if fitts_min_a() <= 0.0 { return false; }
+    if fitts_min_b() <= 0.0 { return false; }
+    // DomainCert.
+    let c1: DomainCert = fitts_3d_theory_cert(0.05, 0.15, 100.0, 10.0, 0.0, 0.0);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = fitts_3d_theory_cert(0.0, 0.15, 100.0, 10.0, 0.0, 0.0);
+    if cert_holds(c0) != 0 { return false; }
+    return true;
+}

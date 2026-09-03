@@ -1,0 +1,15 @@
+// # ast_macro is residual
+//
+// Logline: A bare ast_macro call must refuse at check.
+//
+// Setup: OPEN-56. check_residual.oo default-deny.
+//
+// Beats:
+//   1. Call ast_macro.
+//   2. Declare main.
+//   3. Check refuses.
+
+pub fn verify_open_macro() -> Bool {
+    ast_macro();
+    return true;
+}

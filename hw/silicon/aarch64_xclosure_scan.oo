@@ -1,0 +1,102 @@
+// # AArch64 Lexical Closure Variable Capture Scanner
+//
+// Logline: Scans lambda expression source tokens to identify captured lexical variables.
+//
+// Setup: Token-level scanner inspecting identifiers against local parameter lists.
+//
+// Beats:
+//   1. Scan token stream within closure bounds.
+//   2. Match identifier references against outer frame environment.
+//   3. Collect list of free variable names to capture in closure environment.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+import "std/hw/silicon/aarch64_xtypes.oo";
+
+pub fn a64x_scan_caps(x: A64X, params: List[String], start_idx: Int) -> List[String] {
+    let s: String = x.p.src; let n: Int = bytes_len(s); let mut j: Int = start_idx;
+    let mut caps: List[String] = list_new(); let mut locals: List[String] = list_new();
+    let mut p_depth: Int = 0; let mut b_depth: Int = 0; let mut k_depth: Int = 0; let mut is_block: Bool = false;
+    while j < n && (byte_at(s, j) <= 32 || (byte_at(s, j) == 47 && j + 1 < n && byte_at(s, j + 1) == 47)) {
+        if byte_at(s, j) == 47 && j + 1 < n && byte_at(s, j + 1) == 47 { while j < n && byte_at(s, j) != 10 { j = j + 1; } } else { j = j + 1; }
+    }
+    if j < n && byte_at(s, j) == 123 { is_block = true; }
+    let mut prev_dot: Bool = false; let mut prev_kw: Bool = false;
+    while j < n {
+        let b: Int = byte_at(s, j);
+        let mut handled: Bool = false;
+        if b <= 32 { j = j + 1; handled = true; }
+        if !handled && b == 47 && j + 1 < n && byte_at(s, j + 1) == 47 {
+            while j < n && byte_at(s, j) != 10 { j = j + 1; }
+            handled = true;
+        }
+        if !handled && b == 34 {
+            j = j + 1;
+            while j < n && byte_at(s, j) != 34 {
+                if byte_at(s, j) == 92 && j + 1 < n { j = j + 2; } else { j = j + 1; }
+            }
+            if j < n { j = j + 1; }
+            prev_dot = false;
+            prev_kw = false;
+            handled = true;
+        }
+        if !handled && b == 40 { p_depth = p_depth + 1; j = j + 1; prev_dot = false; handled = true; }
+        if !handled && b == 41 {
+            if !is_block && p_depth == 0 && b_depth == 0 && k_depth == 0 { break; }
+            if p_depth > 0 { p_depth = p_depth - 1; }
+            j = j + 1;
+            prev_dot = false;
+            handled = true;
+        }
+        if !handled && b == 91 { k_depth = k_depth + 1; j = j + 1; prev_dot = false; handled = true; }
+        if !handled && b == 93 {
+            if k_depth > 0 { k_depth = k_depth - 1; }
+            j = j + 1;
+            prev_dot = false;
+            handled = true;
+        }
+        if !handled && b == 123 { b_depth = b_depth + 1; j = j + 1; prev_dot = false; handled = true; }
+        if !handled && b == 125 {
+            b_depth = b_depth - 1;
+            j = j + 1;
+            if is_block && b_depth == 0 { break; }
+            prev_dot = false;
+            handled = true;
+        }
+        if !handled && (b == 59 || b == 44) {
+            if !is_block && p_depth == 0 && b_depth == 0 && k_depth == 0 { break; }
+            j = j + 1;
+            prev_dot = false;
+            prev_kw = false;
+            handled = true;
+        }
+        if !handled && b == 46 { prev_dot = true; j = j + 1; handled = true; }
+        if !handled && a64_is_alpha(b) {
+            let pid: A64P = a64_ident(a64_at(a64x_as_p(x), j));
+            let id: String = pid.text;
+            j = pid.i;
+            if id == "let" || id == "for" {
+                prev_kw = true;
+            } else {
+                if id != "mut" {
+                    if prev_kw {
+                        if !a64x_name_in(locals, id) { locals = list_push(locals, id); }
+                        prev_kw = false;
+                    } else {
+                        if !prev_dot && !a64x_name_in(params, id) && !a64x_name_in(locals, id) && byte_at(id, 0) != 95 {
+                            if a64_lookup_parse(x.p.names, x.p.offs, id) >= 0 && !a64x_name_in(caps, id) {
+                                caps = list_push(caps, id);
+                            }
+                        }
+                    }
+                    prev_dot = false;
+                }
+            }
+            handled = true;
+        }
+        if !handled { j = j + 1; prev_dot = false; }
+    }
+    return caps;
+}

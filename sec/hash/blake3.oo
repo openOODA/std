@@ -1,0 +1,59 @@
+// # BLAKE3 one-shot
+//
+// Logline: Hashes input data with one-shot unkeyed BLAKE3 and returns the 32-byte digest as 64 lowercase hex chars.
+//
+// Setup: Pure Int 32-bit words. Imports blake3_core.oo and blake3_codec.oo.
+//
+// Beats:
+//   1. Compress 64-byte blocks with CHUNK_START / CHUNK_END / ROOT flags.
+//   2. Parent nodes merge chunk chaining values when the input exceeds 1024 bytes.
+//   3. Incremental hasher and keyed/XOF modes stay residual.
+
+import "./blake3_codec.oo";
+
+pub fn blake3(data: String) -> String {
+    let n: Int = data.len();
+    if n <= 1024 {
+        return b3_hex(b3_chunk(data, n, 0, 8));
+    }
+    let nchunks: Int = (n + 1023) / 1024;
+    let mut stack: String = "";
+    let mut ci: Int = 0;
+    while ci < nchunks - 1 {
+        let mut cv: B16 = b3_chunk(data, n, ci, 0);
+        let mut total: Int = ci + 1;
+        while (total & 1) == 0 {
+            let sl: Int = stack.len();
+            let left: B16 = b3_parse(stack, sl - 64);
+            stack = b3_substr(stack, 0, sl - 64);
+            cv = b3_parent(left, cv, 0);
+            total = total / 2;
+        }
+        stack = stack + b3_hex(cv);
+        ci = ci + 1;
+    }
+    let mut cv: B16 = b3_chunk(data, n, nchunks - 1, 0);
+    while stack.len() > 0 {
+        let sl: Int = stack.len();
+        let left: B16 = b3_parse(stack, sl - 64);
+        stack = b3_substr(stack, 0, sl - 64);
+        let mut extra: Int = 0;
+        if stack.len() == 0 {
+            extra = 8;
+        }
+        cv = b3_parent(left, cv, extra);
+    }
+    return b3_hex(cv);
+}
+
+pub fn blake3_init() -> Int {
+    return 0;
+}
+
+pub fn blake3_update(ctx: Int, data: String) -> Int {
+    return 0;
+}
+
+pub fn blake3_final(ctx: Int) -> String {
+    return "";
+}

@@ -1,0 +1,155 @@
+// # Huffman prefix-free principle
+//
+// Logline: A code table of integer codes and bit lengths is prefix-free when no code equals the high bits of any longer code.
+//
+// Setup: Pure Int. codes and lens are parallel List[Int] of equal length. Symbols are indexed by position.
+//
+// Beats:
+//   1. Codes with the same length are distinct.
+//   2. No shorter code equals the high bits of any longer code.
+//   3. A duplicate code at the same length fails closed to 0.
+//   4. A negative length fails closed to 0.
+
+// Check if code c with length cl is a prefix of code d with length dl (dl > cl).
+// Returns 1 if c is a prefix of d, else 0.
+pub fn compression_huff_is_prefix(c: Int, cl: Int, d: Int, dl: Int) -> Int {
+    if dl <= cl {
+        return 0;
+    }
+    let mut sh: Int = 1;
+    let mut t: Int = 0;
+    while t < (dl - cl) {
+        sh = sh * 2;
+        t = t + 1;
+    }
+    if (d / sh) == c {
+        return 1;
+    }
+    return 0;
+}
+
+// Prefix-free check: scan all pairs (i, j). A hit is (same length and equal) or
+// (shorter i, prefix of j). Returns 1 when the table is prefix-free, else 0.
+pub fn compression_huff_prefix_free(codes: List[Int], lens: List[Int]) -> Int {
+    let n: Int = list_len(codes);
+    let mut i: Int = 0;
+    while i < n {
+        let ci: Int = list_get(codes, i);
+        let li: Int = list_get(lens, i);
+        if li < 0 {
+            return 0;
+        }
+        let mut j: Int = 0;
+        while j < n {
+            if j != i {
+                let cj: Int = list_get(codes, j);
+                let lj: Int = list_get(lens, j);
+                if li == lj {
+                    if ci == cj {
+                        return 0;
+                    }
+                }
+                if li < lj {
+                    if compression_huff_is_prefix(ci, li, cj, lj) == 1 {
+                        return 0;
+                    }
+                }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+pub fn verify_huffman_prefix_free_principle() -> Bool {
+    // Golden: classic three-symbol Huffman 00, 010, 011. Prefix-free.
+    let mut g1c: List[Int] = list_new();
+    g1c = list_push(g1c, 0);
+    g1c = list_push(g1c, 2);
+    g1c = list_push(g1c, 3);
+    let mut g1l: List[Int] = list_new();
+    g1l = list_push(g1l, 2);
+    g1l = list_push(g1l, 3);
+    g1l = list_push(g1l, 3);
+    if compression_huff_prefix_free(g1c, g1l) != 1 { return false; }
+
+    // Golden: two codes of different lengths, no prefix. Code 0 (1 bit) and code 2 (2 bits = "10").
+    let mut g2c: List[Int] = list_new();
+    g2c = list_push(g2c, 0);
+    g2c = list_push(g2c, 2);
+    let mut g2l: List[Int] = list_new();
+    g2l = list_push(g2l, 1);
+    g2l = list_push(g2l, 2);
+    if compression_huff_prefix_free(g2c, g2l) != 1 { return false; }
+
+    // Golden: empty table is prefix-free.
+    let mut empty_c: List[Int] = list_new();
+    let mut empty_l: List[Int] = list_new();
+    if compression_huff_prefix_free(empty_c, empty_l) != 1 { return false; }
+
+    // Golden: single code is prefix-free.
+    let mut g3c: List[Int] = list_new();
+    g3c = list_push(g3c, 7);
+    let mut g3l: List[Int] = list_new();
+    g3l = list_push(g3l, 3);
+    if compression_huff_prefix_free(g3c, g3l) != 1 { return false; }
+
+    // Golden: 4-symbol canonical 0/10/110/111.
+    let mut g4c: List[Int] = list_new();
+    g4c = list_push(g4c, 0);
+    g4c = list_push(g4c, 2);
+    g4c = list_push(g4c, 6);
+    g4c = list_push(g4c, 7);
+    let mut g4l: List[Int] = list_new();
+    g4l = list_push(g4l, 1);
+    g4l = list_push(g4l, 2);
+    g4l = list_push(g4l, 3);
+    g4l = list_push(g4l, 3);
+    if compression_huff_prefix_free(g4c, g4l) != 1 { return false; }
+
+    // Hostile: same length duplicate codes [0, 0] with lens [2, 2] is not prefix-free.
+    let mut h1c: List[Int] = list_new();
+    h1c = list_push(h1c, 0);
+    h1c = list_push(h1c, 0);
+    let mut h1l: List[Int] = list_new();
+    h1l = list_push(h1l, 2);
+    h1l = list_push(h1l, 2);
+    if compression_huff_prefix_free(h1c, h1l) != 0 { return false; }
+
+    // Hostile: code 0 with length 1 is a prefix of code 0 with length 2.
+    let mut h2c: List[Int] = list_new();
+    h2c = list_push(h2c, 0);
+    h2c = list_push(h2c, 0);
+    let mut h2l: List[Int] = list_new();
+    h2l = list_push(h2l, 1);
+    h2l = list_push(h2l, 2);
+    if compression_huff_prefix_free(h2c, h2l) != 0 { return false; }
+
+    // Hostile: code 2 with length 2 is a prefix of code 4 with length 3 (10 prefix of 100).
+    let mut h3c: List[Int] = list_new();
+    h3c = list_push(h3c, 2);
+    h3c = list_push(h3c, 4);
+    let mut h3l: List[Int] = list_new();
+    h3l = list_push(h3l, 2);
+    h3l = list_push(h3l, 3);
+    if compression_huff_prefix_free(h3c, h3l) != 0 { return false; }
+
+    // Hostile: negative length fails closed to 0.
+    let mut h4c: List[Int] = list_new();
+    h4c = list_push(h4c, 0);
+    let mut h4l: List[Int] = list_new();
+    h4l = list_push(h4l, 0 - 1);
+    if compression_huff_prefix_free(h4c, h4l) != 0 { return false; }
+
+    // Hostile: code 1 with length 1 is a prefix of code 3 with length 2 (1 prefix of 11).
+    let mut h5c: List[Int] = list_new();
+    h5c = list_push(h5c, 1);
+    h5c = list_push(h5c, 3);
+    let mut h5l: List[Int] = list_new();
+    h5l = list_push(h5l, 1);
+    h5l = list_push(h5l, 2);
+    if compression_huff_prefix_free(h5c, h5l) != 0 { return false; }
+
+    return true;
+}

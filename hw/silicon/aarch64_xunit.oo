@@ -1,0 +1,209 @@
+// # AArch64 Multi-File Unit Loader
+//
+// Logline: Follows import paths under FsReadCap and concatenates module sources for one ELF.
+//
+// Setup: Paths are relative to cwd ooda/. Imported modules are concatenated and DCE-lowered.
+//
+// Beats:
+//   1. Fail closed on empty source or a missing import path.
+//   2. Load each import path exactly once via a work list.
+//   3. Load every import; DCE skips unreferenced bodies.
+//   4. Concatenate imported bodies before the entry source so main is the suite main.
+
+import "std/fs/os/fs.oo";
+import "std/hw/silicon/aarch64_program.oo";
+
+fn a64_seen(seen: List[String], path: String) -> Bool {
+    let n: Int = list_len(seen);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(seen, i) == path {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn a64_next_import(src: String, from_pos: Int) -> Int {
+    let n: Int = bytes_len(src);
+    let mut i: Int = from_pos;
+    while i + 8 <= n {
+        if byte_at(src, i) == 105 && byte_at(src, i + 1) == 109 && byte_at(src, i + 2) == 112 && byte_at(src, i + 3) == 111 && byte_at(src, i + 4) == 114 && byte_at(src, i + 5) == 116 {
+            let mut j: Int = i + 6;
+            while j < n && (byte_at(src, j) == 32 || byte_at(src, j) == 9) {
+                j = j + 1;
+            }
+            if j < n && byte_at(src, j) == 34 {
+                return i;
+            }
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn a64_dirname(path: String) -> String {
+    let n: Int = bytes_len(path);
+    let mut i: Int = n - 1;
+    while i >= 0 {
+        if byte_at(path, i) == 47 {
+            if i == 0 {
+                return "/";
+            }
+            return byte_slice(path, 0, i);
+        }
+        i = i - 1;
+    }
+    return "";
+}
+
+fn a64_rooted(spec: String) -> Bool {
+    let n: Int = bytes_len(spec);
+    if n >= 4 && byte_at(spec, 0) == 115 && byte_at(spec, 1) == 116 && byte_at(spec, 2) == 100 && byte_at(spec, 3) == 47 {
+        return true;
+    }
+    if n >= 8 && byte_at(spec, 0) == 115 && byte_at(spec, 1) == 99 && byte_at(spec, 2) == 114 && byte_at(spec, 3) == 105 {
+        if byte_at(spec, 4) == 112 && byte_at(spec, 5) == 116 && byte_at(spec, 6) == 115 && byte_at(spec, 7) == 47 {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn a64_resolve(from_file: String, spec: String) -> String {
+    let mut s: String = spec;
+    let n: Int = bytes_len(s);
+    if n >= 2 && byte_at(s, 0) == 46 && byte_at(s, 1) == 47 {
+        s = byte_slice(s, 2, n);
+    }
+    if a64_rooted(s) {
+        return s;
+    }
+    if bytes_len(from_file) == 0 {
+        return s;
+    }
+    let d: String = a64_dirname(from_file);
+    if bytes_len(d) == 0 {
+        return s;
+    }
+    return d + "/" + s;
+}
+
+fn a64_import_path(src: String, at: Int) -> String {
+    let n: Int = bytes_len(src);
+    let mut i: Int = at;
+    while i < n && byte_at(src, i) != 34 {
+        i = i + 1;
+    }
+    if i >= n {
+        return "";
+    }
+    i = i + 1;
+    let s0: Int = i;
+    while i < n && byte_at(src, i) != 34 {
+        i = i + 1;
+    }
+    if i > s0 {
+        return byte_slice(src, s0, i);
+    }
+    return "";
+}
+
+fn a64_join(xs0: List[String]) -> String {
+    let mut xs: List[String] = xs0;
+    while list_len(xs) > 1 {
+        let mut ys: List[String] = list_new();
+        let n: Int = list_len(xs);
+        let mut i: Int = 0;
+        while i < n {
+            if i + 1 < n {
+                ys = list_push(ys, list_get(xs, i) + "\n" + list_get(xs, i + 1));
+                i = i + 2;
+            } else {
+                ys = list_push(ys, list_get(xs, i));
+                i = i + 1;
+            }
+        }
+        xs = ys;
+    }
+    if list_len(xs) == 0 {
+        return "";
+    }
+    return list_get(xs, 0);
+}
+
+fn a64_load_all(fs: &FsReadCap, src: String) -> Result[String, String] {
+    let mut seen: List[String] = list_new();
+    let mut parts: List[String] = list_new();
+    let mut q: List[String] = list_new();
+    let mut qf: List[String] = list_new();
+    q = list_push(q, src);
+    qf = list_push(qf, "");
+    let mut qi: Int = 0;
+    while qi < list_len(q) {
+        let cur: String = list_get(q, qi);
+        let from_path: String = list_get(qf, qi);
+        let mut pos: Int = 0;
+        let mut more: Int = 1;
+        while more == 1 {
+            let at: Int = (0 + a64_next_import(cur, pos));
+            if at < 0 {
+                more = 0;
+            } else {
+                let spec: String = a64_import_path(cur, at);
+                pos = at + 8;
+                if bytes_len(spec) == 0 {
+                    return Err("ERR\ta64_load_all\tbad_import");
+                }
+                let mut path: String = a64_resolve(from_path, spec);
+                if !fs_path_exists(fs, path) {
+                    if fs_path_exists(fs, spec) {
+                        path = spec;
+                    } else {
+                        if !a64_rooted(spec) && fs_path_exists(fs, "std/" + spec) {
+                            path = "std/" + spec;
+                        }
+                    }
+                }
+                if !a64_seen(seen, path) {
+                    seen = list_push(seen, path);
+                    if !fs_path_exists(fs, path) {
+                        return Err("ERR\ta64_load_all\tmissing\t" + path);
+                    }
+                    let rr: Result[String, String] = fs_read_file(fs, path);
+                    match rr {
+                        Ok(body) => {
+                            if bytes_len(body) == 0 {
+                                return Err("ERR\ta64_load_all\tempty\t" + path);
+                            }
+                            parts = list_push(parts, body);
+                            q = list_push(q, body);
+                            qf = list_push(qf, path);
+                        }
+                        Err(e) => {
+                            return Err("ERR\ta64_load_all\tread\t" + path);
+                        }
+                    }
+                }
+            }
+        }
+        qi = qi + 1;
+    }
+    return Ok(a64_join(parts));
+}
+
+pub fn aarch64_compile_unit_elf(fs: &FsReadCap, src: String) -> List[Int] {
+    if bytes_len(src) == 0 {
+        return list_new();
+    }
+    let loaded: Result[String, String] = a64_load_all(fs, src);
+    match loaded {
+        Ok(acc) => {
+            return aarch64_compile_program_elf(acc + "\n" + src);
+        }
+        Err(e) => {
+            return list_new();
+        }
+    }
+}

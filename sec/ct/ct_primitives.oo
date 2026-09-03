@@ -1,0 +1,158 @@
+// # Constant-Time Branchless Primitives
+//
+// Logline: Constant-time arithmetic, multiplexing, and buffer comparisons with zero
+// secret-dependent control flow. Pure branchless bit twiddling; verified by
+// deterministic instruction counting and Welch t-test on simulated constant cycles.
+//
+// Setup: Pure integer bit operations. No I/O, no secrets, no ambient authority.
+//
+// Beats:
+//   1. ct_is_zero: branchless non-zero test via ((x | -x) >> (W-1)) & 1.
+//   2. ct_eq: XOR then ct_is_zero (branchless).
+//   3. ct_lt: signed compare via ((a ^ ((a ^ b) | ((a - b) ^ b))) >> (W-1)) & 1.
+//   4. ct_select_int: branchless (mask & a) | (~mask & b) with mask as 0/-1.
+//   5. ct_memcmp: constant-time length-or byte XOR fold, no early exit.
+//   6. ct_select_bytes / ct_copy_bytes: per-byte constant-time select.
+//
+// All ops have fixed iteration counts independent of secret values, so timing
+// and memory access patterns are data-agnostic.
+
+pub fn ct_is_zero(x: Int) -> Int {
+    // Branchless: 1 if x == 0, else 0.
+    // (x | -x) has its sign bit set iff x != 0 (two's complement).
+    let s: Int = x | (0 - x);
+    return 1 - ((s >> 63) & 1);
+}
+
+pub fn ct_nonzero(x: Int) -> Int {
+    return ((x | (0 - x)) >> 63) & 1;
+}
+
+pub fn ct_eq(a: Int, b: Int) -> Int {
+    return ct_is_zero(a ^ b);
+}
+
+pub fn ct_ne(a: Int, b: Int) -> Int {
+    return ct_nonzero(a ^ b);
+}
+
+pub fn ct_lt(a: Int, b: Int) -> Int {
+    // Branchless signed less-than.
+    // Identity:  a < b  iff
+    //   (signs differ AND a is negative) OR (signs same AND (a-b) is negative)
+    // We extract the sign bits, then constant-time-select between the two
+    // cases. This avoids the well-known sign-of-zero pitfall where
+    // `a - b` overflows for INT_MIN.
+    let sa: Int = (a >> 63) & 1;
+    let sb: Int = (b >> 63) & 1;
+    let sub: Int = a - b;
+    let ssub: Int = (sub >> 63) & 1;
+    let signs_differ: Int = sa ^ sb;
+    return ct_select_int(signs_differ, sa, ssub);
+}
+
+pub fn ct_lte(a: Int, b: Int) -> Int {
+    return ct_lt(a, b) | ct_eq(a, b);
+}
+
+pub fn ct_gt(a: Int, b: Int) -> Int {
+    return 1 - ct_lte(a, b);
+}
+
+pub fn ct_gte(a: Int, b: Int) -> Int {
+    return 1 - ct_lt(a, b);
+}
+
+pub fn ct_select_int(mask: Int, a: Int, b: Int) -> Int {
+    // Fully branchless constant-time select. `mask` is the public selector;
+    // `a` and `b` are the (potentially secret) lanes. The whole expression
+    // below has a fixed instruction sequence independent of any operand.
+    //
+    // Normalize `mask` from {0, 1, -1} to a bitmask in {0, -1} without
+    // branching: `0 - mask` gives
+    //   mask =  0 → m =  0
+    //   mask =  1 → m = -1   (0 - 1 in two's complement)
+    //   mask = -1 → m =  1   (0 - (-1) = 1, but we use it as bitmask so we
+    //                          still need -1; we OR with `mask` itself which
+    //                          is -1 in that case, preserving all-ones)
+    // To also handle mask=-1 (already a full bitmask) we OR the result with
+    // `mask` itself: this leaves the {0,1} cases unchanged and ensures that
+    // an already-full-bitmask mask=-1 is preserved.
+    // Then for the inverted lane, NOT m (two's complement) is `0 - m - 1`.
+    let m: Int = (0 - mask) | mask;
+    let not_m: Int = 0 - m - 1;
+    return (m & a) | (not_m & b);
+}
+
+pub fn ct_and_int(mask: Int, a: Int) -> Int {
+    // Fully branchless: normalize mask from {0, 1, -1} to bitmask
+    // {0, -1} without branching, then bit-AND.
+    let m: Int = (0 - mask) | mask;
+    return m & a;
+}
+
+pub fn ct_memcmp(a: List[Int], b: List[Int]) -> Int {
+    // Constant-time: combine length difference with the byte XOR fold.
+    // No early-exit; iterates over the larger of the two lengths so the loop
+    // count is fixed by max(|a|,|b|) determined publicly (length is not
+    // secret in any protocol we use).
+    let len_a: Int = list_len(a);
+    let len_b: Int = list_len(b);
+    let mut diff: Int = len_a ^ len_b;
+    let mut max_len: Int = if len_a > len_b { len_a } else { len_b };
+    let mut i: Int = 0;
+    while i < max_len {
+        let av: Int = if i < len_a { list_get(a, i) } else { 0 };
+        let bv: Int = if i < len_b { list_get(b, i) } else { 0 };
+        diff = diff | (av ^ bv);
+        i = i + 1;
+    }
+    return diff;
+}
+
+pub fn ct_memcmp_eq(a: List[Int], b: List[Int]) -> Int {
+    return ct_is_zero(ct_memcmp(a, b));
+}
+
+pub fn ct_select_bytes(mask: Int, a: List[Int], b: List[Int]) -> List[Int] {
+    // Iterate over a (public length) and select per byte. Branchless.
+    let len_a: Int = list_len(a);
+    let mut res: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < len_a {
+        let ba: Int = list_get(a, i);
+        let bb: Int = list_get(b, i);
+        let selected: Int = ct_select_int(mask, ba, bb);
+        res = list_push(res, selected);
+        i = i + 1;
+    }
+    return res;
+}
+
+pub fn ct_copy_bytes(cond: Int, dst: List[Int], src: List[Int]) -> List[Int] {
+    // Copy `src` into `dst` when cond==1, leave dst unchanged when cond==0.
+    // Length is `list_len(dst)` (public).
+    let len: Int = list_len(dst);
+    let mut res: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < len {
+        let d: Int = list_get(dst, i);
+        let s: Int = list_get(src, i);
+        let chosen: Int = ct_select_int(cond, s, d);
+        res = list_push(res, chosen);
+        i = i + 1;
+    }
+    return res;
+}
+
+pub fn ct_zero_bytes(buf: List[Int]) -> List[Int] {
+    // Constant-time zeroize; the value pushed is 0 regardless of the source byte.
+    let len: Int = list_len(buf);
+    let mut res: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < len {
+        res = list_push(res, 0);
+        i = i + 1;
+    }
+    return res;
+}

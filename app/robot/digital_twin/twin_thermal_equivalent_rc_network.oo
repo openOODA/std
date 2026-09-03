@@ -1,0 +1,78 @@
+// # Thermal Equivalent Cauer / Foster RC Networks
+//
+// Logline: Multi-node Cauer and Foster thermal equivalent circuit resistance-capacitance transient solver for electronics cooling.
+//
+// Setup: Predicts power semiconductor junction temperatures (IGBT/MOSFET/CPU) under variable thermal dissipation pulses.
+//
+// Beats:
+//   1. Define MultiStageThermalNetwork structures holding stage parameters.
+//   2. Step forward transient node temperatures across multi-stage RC ladders.
+//   3. Compute analytical transient thermal impedance and junction temperature margins.
+
+type MultiStageThermalNetwork = struct {
+    num_stages: Int,
+    ambient_temperature_c: Float,
+    r_stages: List[Float],
+    tau_stages: List[Float],
+    delta_t_stages: List[Float],
+    junction_temp_c: Float
+};
+
+pub fn thermal_network_new(n_stages: Int, t_ambient: Float) -> MultiStageThermalNetwork {
+    let mut r_st: List[Float] = list_new();
+    let mut tau_st: List[Float] = list_new();
+    let mut dt_st: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n_stages {
+        r_st = list_push(r_st, 0.1);
+        tau_st = list_push(tau_st, 0.5);
+        dt_st = list_push(dt_st, 0.0);
+        i = i + 1;
+    }
+
+    return MultiStageThermalNetwork {
+        num_stages: n_stages,
+        ambient_temperature_c: t_ambient,
+        r_stages: r_st,
+        tau_stages: tau_st,
+        delta_t_stages: dt_st,
+        junction_temp_c: t_ambient
+    };
+}
+
+pub fn thermal_network_step(
+    net: MultiStageThermalNetwork,
+    power_dissipated_w: Float,
+    dt: Float
+) -> MultiStageThermalNetwork {
+    let n: Int = net.num_stages;
+    let mut updated_dt: List[Float] = list_new();
+    let mut total_delta_t: Float = 0.0;
+
+    let mut i: Int = 0;
+    while i < n {
+        let r_i: Float = list_get(net.r_stages, i);
+        let tau_i: Float = list_get(net.tau_stages, i);
+        let prev_dt: Float = list_get(net.delta_t_stages, i);
+
+        let mut d_dt: Float = 0.0;
+        if tau_i > 0.0 {
+            d_dt = ((r_i * power_dissipated_w) - prev_dt) / tau_i;
+        }
+        let next_dt: Float = prev_dt + (d_dt * dt);
+        total_delta_t = total_delta_t + next_dt;
+        updated_dt = list_push(updated_dt, next_dt);
+        i = i + 1;
+    }
+
+    let t_junc: Float = net.ambient_temperature_c + total_delta_t;
+
+    return MultiStageThermalNetwork {
+        num_stages: n,
+        ambient_temperature_c: net.ambient_temperature_c,
+        r_stages: net.r_stages,
+        tau_stages: net.tau_stages,
+        delta_t_stages: updated_dt,
+        junction_temp_c: t_junc
+    };
+}

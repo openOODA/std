@@ -1,0 +1,116 @@
+// # Linear Arena Allocator
+//
+// Logline: O(1) bulk reset linear memory arena for zero-heap transient buffers with bump allocation and indexed byte access.
+//
+// Setup: Pure arena abstraction backed by a fixed List[Int] treated as raw bytes. Reset returns the cursor to zero without touching the backing buffer.
+//
+// Beats:
+//   1. Construct a linear arena with a fixed byte capacity.
+//   2. Bump-allocate contiguous slices, optionally zero-initialized.
+//   3. Reset the cursor in O(1) without releasing the backing buffer.
+//   4. Read and write individual bytes by offset.
+//   5. Slice a sub-list and query position, capacity, and remaining bytes.
+//
+// residual: 64-byte alignment beyond single-byte granularity; sub-arena sub-allocation.
+
+import "std/core/primitives/byte_out.oo";
+import "std/core/primitives/list.oo";
+
+type LinearArena = struct {
+    buffer: List[Int],
+    pos: Int,
+    cap: Int
+};
+
+pub fn la_new(cap: Int) -> LinearArena {
+    let mut c: Int = cap;
+    if c < 1 { c = 1; }
+    let mut buf: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < c { buf = list_push(buf, 0); i = i + 1; }
+    return LinearArena { buffer: buf, pos: 0, cap: c };
+}
+
+// Allocate n bytes. Returns -1 on failure, else the start offset.
+pub fn la_alloc(a: LinearArena, n: Int) -> Int {
+    if n <= 0 { return 0 - 1; }
+    let p: Int = a.pos;
+    let cap: Int = a.cap;
+    let next: Int = p + n;
+    if next > cap { return 0 - 1; }
+    return p;
+}
+
+// Bump-allocate n bytes and zero them. The returned offset starts at the previous cursor.
+pub fn la_alloc_zero(a: LinearArena, n: Int) -> LinearArena {
+    let cap: Int = a.cap;
+    let p: Int = a.pos;
+    let next: Int = p + n;
+    if next > cap { return a; }
+    let mut buf: List[Int] = a.buffer;
+    let mut i: Int = 0;
+    while i < n {
+        let idx: Int = p + i;
+        buf = list_set(buf, idx, 0);
+        i = i + 1;
+    }
+    return LinearArena { buffer: buf, pos: next, cap: cap };
+}
+
+// Bump-allocate n bytes and update the arena cursor.
+pub fn la_alloc_bump(a: LinearArena, n: Int) -> LinearArena {
+    let cap: Int = a.cap;
+    let p: Int = a.pos;
+    let next: Int = p + n;
+    if next > cap { return a; }
+    return LinearArena { buffer: a.buffer, pos: next, cap: cap };
+}
+
+// O(1) bulk reset. The backing buffer is retained for reuse.
+pub fn la_reset(a: LinearArena) -> LinearArena {
+    return LinearArena { buffer: a.buffer, pos: 0, cap: a.cap };
+}
+
+// Current cursor position in bytes.
+pub fn la_pos(a: LinearArena) -> Int { return a.pos; }
+
+// Total capacity in bytes.
+pub fn la_cap(a: LinearArena) -> Int { return a.cap; }
+
+// Bytes still available for allocation.
+pub fn la_remaining(a: LinearArena) -> Int {
+    return a.cap - a.pos;
+}
+
+// Read a single byte at offset. Returns -1 when out of bounds.
+pub fn la_byte_at(a: LinearArena, off: Int) -> Int {
+    let cap: Int = a.cap;
+    if off < 0 { return 0 - 1; }
+    if off >= cap { return 0 - 1; }
+    return list_get(a.buffer, off);
+}
+
+// Write a single byte at offset. Returns the arena unchanged when out of bounds.
+pub fn la_set_byte(a: LinearArena, off: Int, v: Int) -> LinearArena {
+    let cap: Int = a.cap;
+    if off < 0 { return a; }
+    if off >= cap { return a; }
+    let buf: List[Int] = list_set(a.buffer, off, v);
+    return LinearArena { buffer: buf, pos: a.pos, cap: cap };
+}
+
+// Copy a slice of n bytes starting at off into a ByteOut payload.
+pub fn la_slice(a: LinearArena, off: Int, n: Int) -> ByteOut {
+    let cap: Int = a.cap;
+    if n < 0 { return byte_out_err("ERR\tla_slice\tbad_size"); }
+    if off < 0 { return byte_out_err("ERR\tla_slice\tout_of_bounds"); }
+    let end: Int = off + n;
+    if end > cap { return byte_out_err("ERR\tla_slice\tout_of_bounds"); }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(a.buffer, off + i));
+        i = i + 1;
+    }
+    return byte_out_ok(out);
+}

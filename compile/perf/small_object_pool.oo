@@ -1,0 +1,70 @@
+// # Fixed-size small object slot pool
+//
+// Logline: Acquire and release reusable small object slots using a free index stack.
+//
+// Setup: In-memory slot pooling without external capability dependencies.
+//
+// Beats:
+//   1. Initialize object pool with slot size, capacity, and populated free stack.
+//   2. Acquire available slot indexes and mark slots as occupied.
+//   3. Release slot indexes back to the free stack and report pool statistics.
+
+type ObjectPool = struct {
+    pool_id: String,
+    slot_size: Int,
+    capacity: Int,
+    used: Int,
+    free_stack: List[Int],
+    alloc_count: Int,
+    recycle_count: Int
+};
+
+pub fn object_pool_create(pool_id: String, slot_size: Int, capacity: Int) -> ObjectPool {
+    let mut i: Int = 0;
+    let mut stack: List[Int] = list_new();
+    while i < capacity {
+        stack = list_push(stack, i);
+        i = i + 1;
+    }
+    return ObjectPool {
+        pool_id: pool_id,
+        slot_size: slot_size,
+        capacity: capacity,
+        used: 0,
+        free_stack: stack,
+        alloc_count: 0,
+        recycle_count: 0
+    };
+}
+
+pub fn object_pool_acquire(p: &mut ObjectPool) -> Int {
+    let cur_used: Int = p.used;
+    let cap: Int = p.capacity;
+    if cur_used >= cap {
+        return -1;
+    }
+    let slot: Int = list_get(p.free_stack, cur_used);
+    p.used = cur_used + 1;
+    p.alloc_count = p.alloc_count + 1;
+    return slot;
+}
+
+pub fn object_pool_release(p: &mut ObjectPool, slot: Int) {
+    let cur_used: Int = p.used;
+    if cur_used > 0 {
+        p.used = cur_used - 1;
+        p.recycle_count = p.recycle_count + 1;
+    }
+}
+
+pub fn object_pool_available(p: &ObjectPool) -> Int {
+    let used_v: Int = p.used;
+    let cap: Int = p.capacity;
+    return cap - used_v;
+}
+
+pub fn object_pool_stats(p: &ObjectPool) -> Int {
+    let a: Int = p.alloc_count;
+    let r: Int = p.recycle_count;
+    return a + r;
+}

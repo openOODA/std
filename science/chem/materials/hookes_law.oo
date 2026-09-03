@@ -1,0 +1,163 @@
+// # 3D Generalized Hooke's Law and Isotropic Elasticity
+//
+// Logline: Computes 3D isotropic constitutive stress-strain tensors, Lamé parameters, bulk modulus, and strain energy density.
+//
+// Setup: Pure floating-point continuum elasticity equations assuming small strains and linear isotropic Hookean behavior.
+//
+// Beats:
+//   1. Conversion of Young's modulus E and Poisson's ratio nu into shear modulus G, bulk modulus K, and Lamé lambda.
+//   2. Forward Hooke's Law mapping 3D strain tensor to 3D stress tensor.
+//   3. Inverse Hooke's Law mapping 3D stress tensor to 3D strain tensor.
+//   4. Volumetric dilatation and strain energy density u = 0.5 * sigma_ij * epsilon_ij.
+
+import "std/science/phys/classical/cauchy_stress.oo";
+
+pub type ElasticModuli = struct {
+    youngs_modulus_e: Float,
+    poissons_ratio_nu: Float,
+    shear_modulus_g: Float,
+    bulk_modulus_k: Float,
+    lame_lambda: Float,
+    p_wave_modulus_m: Float
+};
+
+type StrainTensor3x3 = struct {
+    xx: Float,
+    xy: Float,
+    xz: Float,
+    yx: Float,
+    yy: Float,
+    yz: Float,
+    zx: Float,
+    zy: Float,
+    zz: Float
+};
+
+// Construct symmetric 3x3 strain tensor.
+pub fn strain_tensor_new(
+    xx: Float,
+    xy: Float,
+    xz: Float,
+    yy: Float,
+    yz: Float,
+    zz: Float
+) -> StrainTensor3x3 {
+    return StrainTensor3x3 {
+        xx: xx,
+        xy: xy,
+        xz: xz,
+        yx: xy,
+        yy: yy,
+        yz: yz,
+        zx: xz,
+        zy: yz,
+        zz: zz
+    };
+}
+
+// Zero-initialized strain tensor.
+pub fn strain_tensor_zero() -> StrainTensor3x3 {
+    return StrainTensor3x3 {
+        xx: 0.0,
+        xy: 0.0,
+        xz: 0.0,
+        yx: 0.0,
+        yy: 0.0,
+        yz: 0.0,
+        zx: 0.0,
+        zy: 0.0,
+        zz: 0.0
+    };
+}
+
+fn em_got(r: Result[ElasticModuli, String]) -> ElasticModuli {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return ElasticModuli { youngs_modulus_e: 0.0 - 1.0, poissons_ratio_nu: 0.0, shear_modulus_g: 0.0, bulk_modulus_k: 0.0, lame_lambda: 0.0, p_wave_modulus_m: 0.0 }; }
+    }
+}
+
+fn stn_got(r: Result[StrainTensor3x3, String]) -> StrainTensor3x3 {
+    match r { Ok(v) => { return v; }, Err(_) => { return strain_tensor_zero(); } }
+}
+
+// Calculate complete isotropic ElasticModuli from Young's modulus E and Poisson's ratio nu.
+// nu=0 is Ok (cork). E<=0 or nu out of (-1, 0.5) is Err.
+pub fn elastic_moduli_new(youngs_modulus_pa: Float, poissons_ratio_nu: Float) -> Result[ElasticModuli, String] {
+    if youngs_modulus_pa <= 0.000001 { return Err("ERR\tem\tdomain"); }
+    if poissons_ratio_nu <= -0.9999 { return Err("ERR\tem\tdomain"); }
+    if poissons_ratio_nu >= 0.4999 { return Err("ERR\tem\tdomain"); }
+    let e: Float = youngs_modulus_pa;
+    let nu: Float = poissons_ratio_nu;
+
+    // G = E / (2 * (1 + nu))
+    let g: Float = e / (2.0 * (1.0 + nu));
+
+    // K = E / (3 * (1 - 2*nu))
+    let k: Float = e / (3.0 * (1.0 - (2.0 * nu)));
+
+    // lambda = E * nu / ((1 + nu) * (1 - 2*nu))
+    let lambda: Float = (e * nu) / ((1.0 + nu) * (1.0 - (2.0 * nu)));
+
+    // M = lambda + 2*G
+    let m: Float = lambda + (2.0 * g);
+
+    return Ok(ElasticModuli {
+        youngs_modulus_e: e,
+        poissons_ratio_nu: nu,
+        shear_modulus_g: g,
+        bulk_modulus_k: k,
+        lame_lambda: lambda,
+        p_wave_modulus_m: m
+    });
+}
+
+// Forward Hooke's Law: Compute 3D stress tensor sigma_ij = lambda * delta_ij * eps_kk + 2 * G * eps_ij.
+pub fn hooke_stress_from_strain(strain: StrainTensor3x3, moduli: ElasticModuli) -> StressTensor3x3 {
+    let trace_eps: Float = strain.xx + strain.yy + strain.zz;
+    let lam_tr: Float = moduli.lame_lambda * trace_eps;
+    let two_g: Float = 2.0 * moduli.shear_modulus_g;
+
+    let s_xx: Float = lam_tr + (two_g * strain.xx);
+    let s_yy: Float = lam_tr + (two_g * strain.yy);
+    let s_zz: Float = lam_tr + (two_g * strain.zz);
+
+    let s_xy: Float = two_g * strain.xy;
+    let s_yz: Float = two_g * strain.yz;
+    let s_xz: Float = two_g * strain.xz;
+
+    return stress_tensor_new(s_xx, s_xy, s_xz, s_yy, s_yz, s_zz);
+}
+
+// Inverse Hooke's Law: Compute 3D strain tensor eps_ij = (1 + nu)/E * sigma_ij - nu/E * delta_ij * sigma_kk.
+pub fn hooke_strain_from_stress(stress: StressTensor3x3, moduli: ElasticModuli) -> Result[StrainTensor3x3, String] {
+    if moduli.youngs_modulus_e <= 0.000001 { return Err("ERR\tem\tdomain"); }
+    let e: Float = moduli.youngs_modulus_e;
+    let nu: Float = moduli.poissons_ratio_nu;
+
+    let trace_sig: Float = stress.xx + stress.yy + stress.zz;
+    let nu_tr: Float = (nu * trace_sig) / e;
+    let factor_shear: Float = (1.0 + nu) / e;
+
+    let e_xx: Float = (stress.xx / e) - ((nu * (stress.yy + stress.zz)) / e);
+    let e_yy: Float = (stress.yy / e) - ((nu * (stress.xx + stress.zz)) / e);
+    let e_zz: Float = (stress.zz / e) - ((nu * (stress.xx + stress.yy)) / e);
+
+    let e_xy: Float = factor_shear * stress.xy;
+    let e_yz: Float = factor_shear * stress.yz;
+    let e_xz: Float = factor_shear * stress.xz;
+
+    return Ok(strain_tensor_new(e_xx, e_xy, e_xz, e_yy, e_yz, e_zz));
+}
+
+// Strain energy density u = 0.5 * sigma_ij * epsilon_ij (J / m^3 or Pascals).
+pub fn hooke_strain_energy_density(stress: StressTensor3x3, strain: StrainTensor3x3) -> Float {
+    let normal_work: Float = (stress.xx * strain.xx) + (stress.yy * strain.yy) + (stress.zz * strain.zz);
+    let shear_work: Float = 2.0 * ((stress.xy * strain.xy) + (stress.yz * strain.yz) + (stress.xz * strain.xz));
+    return 0.5 * (normal_work + shear_work);
+}
+
+// Volumetric dilatation theta = eps_xx + eps_yy + eps_zz (unitless volume strain).
+pub fn hooke_volumetric_strain(strain: StrainTensor3x3) -> Float {
+    return strain.xx + strain.yy + strain.zz;
+}

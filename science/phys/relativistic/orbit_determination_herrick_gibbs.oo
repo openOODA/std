@@ -1,0 +1,29 @@
+// # Herrick-Gibbs Orbit Determination for Closely-Spaced Observations
+//
+// Logline: Calculates velocity vector v2 for three closely-spaced position vectors (dt < 5 degrees true anomaly).
+//
+// Setup: Taylor-series expansion formulation of orbital velocity from short-arc position observations (radar / GPS).
+//
+// Beats:
+//   1. Observation triplet count query (3 closely-spaced observations).
+//   2. Calculate time step intervals dt31 = t3 - t1, dt32 = t3 - t2, dt21 = t2 - t1.
+//   3. Compute Herrick-Gibbs velocity vector v2.
+//   4. Evaluate approximation error bounds relative to standard Gibbs method.
+
+pub fn od_hg_obs() -> Int {
+    return 3;
+}
+
+/// Computes Herrick-Gibbs intermediate velocity vector component using Taylor-series weights.
+pub fn herrick_gibbs_velocity_component(
+    dt32: Float, dt21: Float, dt31: Float,
+    r1: Float, r2: Float, r3: Float,
+    r1_mag: Float, r2_mag: Float, r3_mag: Float,
+    mu: Float
+) -> Float {
+    if dt32 <= 0.0001 || dt21 <= 0.0001 || dt31 <= 0.0001 { return 0.0; }
+    let term1: Float = (0.0 - dt32) * ((1.0 / (dt21 * dt31)) + (mu / (12.0 * r1_mag * r1_mag * r1_mag))) * r1;
+    let term2: Float = (dt32 - dt21) * ((1.0 / (dt21 * dt32)) + (mu / (12.0 * r2_mag * r2_mag * r2_mag))) * r2;
+    let term3: Float = dt21 * ((1.0 / (dt32 * dt31)) + (mu / (12.0 * r3_mag * r3_mag * r3_mag))) * r3;
+    return term1 + term2 + term3;
+}

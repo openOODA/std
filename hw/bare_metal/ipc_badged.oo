@@ -1,0 +1,55 @@
+// # Badged Capability Endpoints & Client Identification
+//
+// Logline: Unforgeable badge identifiers for server request demultiplexing without ambient authority.
+//
+// Setup: Declared capability: None. Pure mathematical badge encoding and client identification validation.
+//
+// Beats:
+//   1. Declare BadgedEndpoint algebraic structure and authentication flags.
+//   2. Implement badge minting with explicit client identity injection.
+//   3. Implement server badge verification and caller authentication.
+//   4. Track badge invocation telemetry.
+
+type BadgedEndpoint = struct {
+    endpoint_id: Int,
+    badge_value: Int,
+    client_id: Int,
+    call_count: Int,
+    is_authenticated: Bool
+};
+
+pub fn badged_endpoint_mint(ep: Int, badge: Int, client: Int) -> BadgedEndpoint {
+    let safe_ep: Int = if ep < 0 { 0 } else { ep };
+    let safe_b: Int = if badge < 0 { 0 } else { badge };
+    let safe_c: Int = if client < 0 { 0 } else { client };
+    return BadgedEndpoint {
+        endpoint_id: safe_ep,
+        badge_value: safe_b,
+        client_id: safe_c,
+        call_count: 0,
+        is_authenticated: true
+    };
+}
+
+pub fn badged_endpoint_verify(b: BadgedEndpoint, expected_client: Int) -> Bool {
+    if b.is_authenticated == false {
+        return false;
+    }
+    let cid: Int = b.client_id;
+    return cid == expected_client;
+}
+
+pub fn badged_endpoint_record_call(b: BadgedEndpoint) -> BadgedEndpoint {
+    return BadgedEndpoint {
+        endpoint_id: b.endpoint_id,
+        badge_value: b.badge_value,
+        client_id: b.client_id,
+        call_count: b.call_count + 1,
+        is_authenticated: b.is_authenticated
+    };
+}
+
+pub fn badged_endpoint_get_badge(b: BadgedEndpoint) -> Int {
+    let val: Int = b.badge_value;
+    return val;
+}

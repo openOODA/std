@@ -1,0 +1,86 @@
+// # Regenerative & Hydraulic Friction Brake Blending Manager
+//
+// Logline: Directly blends electric motor regeneration and hydraulic foundation brakes to optimize energy recapture and stopping distance.
+//
+// Setup: Cooperative brake management supervisor implementing Electronic Brakeforce Distribution (EBD) and regen fade management.
+//
+// Beats:
+//   1. Determine driver or autonomous decelerative demand force F_brake_req.
+//   2. Calculate maximum available electric motor regenerative braking force vs speed.
+//   3. Allocate remaining braking force to hydraulic foundation calipers.
+//   4. Distribute hydraulic braking pressure between front and rear axles to preserve directional stability.
+
+type BrakeBlendParams = struct {
+    max_regen_force_n: Float,
+    regen_fade_speed_ms: Float,
+    front_brake_bias: Float
+};
+
+type BlendedBrakeForces = struct {
+    regen_force_n: Float,
+    hydraulic_front_n: Float,
+    hydraulic_rear_n: Float,
+    total_braking_n: Float
+};
+
+pub fn brake_blend_params_default() -> BrakeBlendParams {
+    return BrakeBlendParams {
+        max_regen_force_n: 4500.0,
+        regen_fade_speed_ms: 2.0,
+        front_brake_bias: 0.65
+    };
+}
+
+pub fn compute_brake_blend(
+    req_brake_force_n: Float,
+    current_speed_ms: Float,
+    battery_soc: Float,
+    p: BrakeBlendParams
+) -> BlendedBrakeForces {
+    let mut speed_factor: Float = 1.0;
+
+    if current_speed_ms < p.regen_fade_speed_ms {
+
+        speed_factor = current_speed_ms / p.regen_fade_speed_ms;
+
+    }
+
+    let mut soc_factor: Float = 1.0;
+
+
+    if battery_soc > 0.95 {
+
+
+        soc_factor = (1.0 - battery_soc) / 0.05;
+
+
+    }
+
+    let available_regen: Float = p.max_regen_force_n * speed_factor * soc_factor;
+    let mut regen_used: Float = available_regen;
+
+    if req_brake_force_n < available_regen {
+
+        regen_used = req_brake_force_n;
+
+    }
+
+    let remaining_force: Float = req_brake_force_n - regen_used;
+    let mut safe_rem: Float = remaining_force;
+
+    if remaining_force < 0.0 {
+
+        safe_rem = 0.0;
+
+    }
+
+    let hyd_front: Float = safe_rem * p.front_brake_bias;
+    let hyd_rear: Float = safe_rem * (1.0 - p.front_brake_bias);
+
+    return BlendedBrakeForces {
+        regen_force_n: regen_used,
+        hydraulic_front_n: hyd_front,
+        hydraulic_rear_n: hyd_rear,
+        total_braking_n: regen_used + hyd_front + hyd_rear
+    };
+}

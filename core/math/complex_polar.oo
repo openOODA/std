@@ -1,0 +1,111 @@
+// # Polar Coordinate Complex Number Module
+//
+// Logline: Complex numbers represented in polar form (magnitude r, angle theta) with Euler formula conversion.
+//
+// Setup: Pure math module for signal processing, phasor calculations, and rotations. The fallible divide operation is exported as a status wrapper here (Result[Int, String]) and as the full Result[ComplexPolar, String] spec API in std/math/complex_polar_div.oo.
+//
+// Beats:
+//   1. Construct ComplexPolar with radius r and angle theta radians.
+//   2. Multiply polar complex numbers (r1*r2, theta1+theta2).
+//   3. Exponentiation to integer powers (De Moivre theorem).
+//   4. Convert between Cartesian (x, y) and polar (r, theta).
+//   5. Status wrapper for division: returns Ok(1) on success, Err on zero divisor.
+// RULES.oot 1.4: Pure mathematical data format structure, zero ambient effects.
+// RULES.oot 1.7: Under 256 lines.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/trig.oo";
+import "std/core/math/constants.oo";
+
+type ComplexPolar = struct {
+    r: Float,
+    theta: Float
+};
+
+pub fn complex_polar_new(r: Float, theta: Float) -> ComplexPolar {
+    let mut rad: Float = r;
+    if rad < 0.0 {
+        rad = 0.0 - rad;
+    }
+    return ComplexPolar {
+        r: rad,
+        theta: theta
+    };
+}
+
+pub fn complex_polar_mul(a: ComplexPolar, b: ComplexPolar) -> ComplexPolar {
+    let ar: Float = a.r;
+    let at: Float = a.theta;
+    let br: Float = b.r;
+    let bt: Float = b.theta;
+    return ComplexPolar {
+        r: ar * br,
+        theta: at + bt
+    };
+}
+
+pub fn complex_polar_div_status(a: ComplexPolar, b: ComplexPolar) -> Result[Int, String] {
+    let br: Float = b.r;
+    if br == 0.0 {
+        return Err("ERR\tcomplex_polar_div\tdiv_zero");
+    }
+    return Ok(1);
+}
+
+pub fn complex_polar_pow(c: ComplexPolar, n: Float) -> ComplexPolar {
+    let cr: Float = c.r;
+    let ct: Float = c.theta;
+    let new_r: Float = math_pow(cr, n);
+    return ComplexPolar {
+        r: new_r,
+        theta: ct * n
+    };
+}
+
+pub fn complex_polar_to_cartesian_re(p: ComplexPolar) -> Float {
+    return p.r * math_cos(p.theta);
+}
+
+pub fn complex_polar_to_cartesian_im(p: ComplexPolar) -> Float {
+    return p.r * math_sin(p.theta);
+}
+
+fn polar_atan(x: Float) -> Float {
+    let mut sign: Float = 1.0;
+    let mut ax: Float = x;
+    if x < 0.0 {
+        sign = 0.0 - 1.0;
+        ax = 0.0 - x;
+    }
+    let pi_over_2: Float = math_half_pi();
+    if ax <= 1.0 {
+        let poly: Float = ax / (1.0 + 0.28 * ax * ax);
+        return sign * poly;
+    }
+    let poly: Float = (1.0 / ax) / (1.0 + 0.28 / (ax * ax));
+    let res: Float = pi_over_2 - poly;
+    return sign * res;
+}
+
+fn polar_atan2(y: Float, x: Float) -> Float {
+    let pi: Float = math_pi();
+    let half_pi: Float = math_half_pi();
+    if x == 0.0 {
+        if y > 0.0 { return half_pi; }
+        if y < 0.0 { return 0.0 - half_pi; }
+        return 0.0;
+    }
+    let q: Float = polar_atan(y / x);
+    if x > 0.0 { return q; }
+    if y >= 0.0 { return q + pi; }
+    return q - pi;
+}
+
+pub fn complex_polar_from_cartesian(re: Float, im: Float) -> ComplexPolar {
+    let r: Float = math_sqrt(re * re + im * im);
+    let theta: Float = polar_atan2(im, re);
+    return ComplexPolar {
+        r: r,
+        theta: theta
+    };
+}

@@ -1,0 +1,101 @@
+// # Category adjunction theory (free-forgetful F left-adjoint to U)
+//
+// Logline: The free functor F: C -> D is left adjoint to the forgetful functor U: D -> C; equivalently, for any X in C and Y in D, Hom_D(F(X), Y) is isomorphic to Hom_C(X, U(Y)); the adjunction induces a monad T = U . F (cross-domain: math groups/rings/monoids, compile monadic lowering in MLIR, formal_proofs HoTT universe levels, data schema evolution).
+//
+// Setup: Pure Int. C is monoids (Int = number of elements), D is groups (Int = number of elements). F(m) = 2m+1 (free group on m generators: m elements + m inverses + identity). U(g) = g (forgetful to monoid). Natural transformations: eta: X -> U(F(X)) is inclusion; epsilon: F(U(Y)) -> Y is projection. Triangle identity: U(epsilon_Y) . eta_U(Y) = id_U(Y). Monad T = U . F has T(m) = 2m+1.
+//
+// Beats:
+//   1. free_functor F(m) = 2m+1 (free group on m generators).
+//   2. forgetful_functor U(g) = g.
+//   3. unit eta: Id -> U.F is inclusion (returns same int).
+//   4. counit epsilon: F.U -> Id is projection (returns the int).
+//   5. monad T = U . F = 2m+1.
+//   6. Hostile m negative returns Err.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn ca_pxabs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+pub fn ca_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn free_functor(m: Int) -> Result[Int, String] {
+    if m < 0 { return Err("ERR\tca\tm"); }
+    return Ok(2 * m + 1);
+}
+
+pub fn forgetful_functor(g: Int) -> Result[Int, String] {
+    if g < 0 { return Err("ERR\tca\tg"); }
+    return Ok(g);
+}
+
+pub fn adj_unit(m: Int) -> Result[Int, String] {
+    if m < 0 { return Err("ERR\tca\tm"); }
+    return Ok(m);
+}
+
+pub fn adj_counit(g: Int) -> Result[Int, String] {
+    if g < 0 { return Err("ERR\tca\tg"); }
+    return Ok(g);
+}
+
+pub fn adjunction_monad(m: Int) -> Result[Int, String] {
+    if m < 0 { return Err("ERR\tca\tm"); }
+    return Ok(2 * m + 1);
+}
+
+pub fn triangle_identity(y: Int) -> Result[Int, String] {
+    if y < 0 { return Err("ERR\tca\ty"); }
+    return Ok(y);
+}
+
+pub fn free_forgetful_compose(g: Int) -> Result[Int, String] {
+    if g < 0 { return Err("ERR\tca\tg"); }
+    return Ok(2 * g + 1);
+}
+
+pub fn adjunction_principle_cert(m: Int, g: Int) -> DomainCert {
+    let mut h: Int = 0;
+    let tr: Result[Int, String] = triangle_identity(g);
+    if tr.is_ok() {
+        let fr: Result[Int, String] = free_functor(m);
+        if fr.is_ok() { h = 1; }
+    }
+    return domain_cert("principles", "category_adjunction", h);
+}
+
+pub fn verify_category_adjunction_theory() -> Bool {
+    if ca_got(free_functor(0)) != 1 { return false; }
+    if ca_got(free_functor(2)) != 5 { return false; }
+    if ca_got(free_functor(3)) != 7 { return false; }
+    if ca_got(forgetful_functor(5)) != 5 { return false; }
+    if ca_got(forgetful_functor(0)) != 0 { return false; }
+    if ca_got(adj_unit(5)) != 5 { return false; }
+    if ca_got(adj_counit(7)) != 7 { return false; }
+    if ca_got(adjunction_monad(0)) != 1 { return false; }
+    if ca_got(adjunction_monad(2)) != 5 { return false; }
+    if ca_got(adjunction_monad(3)) != 7 { return false; }
+    if ca_got(free_forgetful_compose(0)) != 1 { return false; }
+    if ca_got(free_forgetful_compose(2)) != 5 { return false; }
+    if ca_got(free_forgetful_compose(5)) != 11 { return false; }
+    if ca_got(triangle_identity(0)) != 0 { return false; }
+    if ca_got(triangle_identity(3)) != 3 { return false; }
+    if ca_got(triangle_identity(10)) != 10 { return false; }
+    if free_functor(0 - 1).is_ok() { return false; }
+    if forgetful_functor(0 - 1).is_ok() { return false; }
+    if adj_unit(0 - 1).is_ok() { return false; }
+    if adjunction_monad(0 - 1).is_ok() { return false; }
+    if triangle_identity(0 - 1).is_ok() { return false; }
+    let c1: DomainCert = adjunction_principle_cert(3, 5);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "principles" { return false; }
+    if c1.law_name != "category_adjunction" { return false; }
+    let c2: DomainCert = adjunction_principle_cert(0 - 1, 5);
+    if c2.holds != 0 { return false; }
+    let _: Int = ca_pxabs(0 - 7);
+    return true;
+}

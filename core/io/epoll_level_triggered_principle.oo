@@ -1,0 +1,131 @@
+// # epoll Level-Triggered Principle
+//
+// Logline: Linux epoll (kernel 2.6, 2003) defaults to level-triggered (LT) semantics: a ready fd stays reported in epoll_wait while the underlying condition holds; edge-triggered (ET) fires only on the transition ready-not-ready-ready, and is requested by setting EPOLLET (1 << 31) in the event mask.
+//
+// Setup: Pure Int. event_mask is the full EPOLLIN | EPOLLOUT | EPOLLET | ... bitfield. n_fds is the count of registered descriptors. Coupled with select/poll: epoll is O(1) readiness notification per event vs select's O(n) scan of the full fd set. Hosts io_invariants.oo stem.
+//
+// Beats:
+//   1. epoll_mode_is_level_triggered(event_mask) returns 1 when EPOLLET bit is clear (default), 0 when set.
+//   2. epoll_event_count(n_fds) returns the count of events returned by epoll_wait, bounded by n_fds.
+//   3. epoll_is_o1(1) returns 1 (O(1) readiness); epoll_is_o1(0) returns 0 (select/poll are O(n)).
+//   4. epoll_scalability_witness(n_fds) is 1 for any n_fds in [0, 1048576] (O(1) bounded by the kernel red-black tree).
+
+import "std/core/io/io_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// epoll landed in Linux 2.5.44 / 2.6.0 (2003, Davide Libenzi, epoll man page).
+// EPOLLET bit per include/uapi/linux/eventpoll.h: 1u << 31 = 0x80000000 = 2147483648.
+pub fn epoll_kernel_year() -> Int {
+    return 2003; // epoll: Linux 2.6 in 2003
+}
+
+pub fn epoll_kernel_version_major() -> Int {
+    return 2; // epoll: Linux 2.6
+}
+
+pub fn epoll_kernel_version_minor() -> Int {
+    return 6; // epoll: Linux 2.6
+}
+
+pub fn epoll_EPOLLET_bit() -> Int {
+    return 1 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2; // epoll: 1 << 31, sum of 32 twos
+}
+
+pub fn epoll_EPOLLIN() -> Int {
+    return 1; // epoll: include/uapi/linux/eventpoll.h EPOLLIN
+}
+
+pub fn epoll_EPOLLOUT() -> Int {
+    return 4; // epoll: include/uapi/linux/eventpoll.h EPOLLOUT
+}
+
+// 1 if the event mask requests level-triggered mode (EPOLLET bit clear, default).
+pub fn epoll_mode_is_level_triggered(event_mask: Int) -> Int {
+    if event_mask < 0 { return 0; }
+    let et: Int = event_mask & epoll_EPOLLET_bit(); // epoll: EPOLLET test
+    if et != 0 { return 0; }
+    return 1;
+}
+
+// 1 if the event mask requests edge-triggered mode.
+pub fn epoll_mode_is_edge_triggered(event_mask: Int) -> Int {
+    if event_mask < 0 { return 0; }
+    let et: Int = event_mask & epoll_EPOLLET_bit(); // epoll: EPOLLET test
+    if et != 0 { return 1; }
+    return 0;
+}
+
+// Events returned by epoll_wait: bounded by n_fds. Invalid n_fds < 0 returns 0.
+pub fn epoll_event_count(n_fds: Int) -> Int {
+    if n_fds < 0 { return 0; }
+    if n_fds > 1048576 { return 0; } // epoll: maxevents upper bound (1 Mi)
+    return n_fds;
+}
+
+// 1 if scalability claim is "O(1)" (epoll), 0 if "O(n)" (select/poll).
+pub fn epoll_is_o1(is_o1: Int) -> Int {
+    if is_o1 == 1 { return 1; }
+    return 0;
+}
+
+// Coupled witness: 1 for any n_fds in [0, 1048576] because epoll_wait is O(1) in the returned set size.
+pub fn epoll_scalability_witness(n_fds: Int) -> Int {
+    if n_fds < 0 { return 0; }
+    if n_fds > 1048576 { return 0; }
+    return 1; // epoll: O(1) readiness per kernel/fs/eventpoll.c
+}
+
+// Domain certificate: 1 when LT default is in force and event count is valid.
+pub fn epoll_lt_holds(event_mask: Int, n_fds: Int) -> DomainCert {
+    let inv_ok: Bool = io_path_ok("epoll").holds == 1;
+    if inv_ok == false { return domain_cert("io", "epoll_level_triggered_principle", 0); }
+    if epoll_mode_is_level_triggered(event_mask) != 1 { return domain_cert("io", "epoll_level_triggered_principle", 0); }
+    if epoll_event_count(n_fds) != n_fds { return domain_cert("io", "epoll_level_triggered_principle", 0); }
+    if epoll_scalability_witness(n_fds) != 1 { return domain_cert("io", "epoll_level_triggered_principle", 0); }
+    return domain_cert("io", "epoll_level_triggered_principle", 1);
+}
+
+// KAT and hostile cases for the epoll level-triggered principle.
+pub fn verify_epoll_level_triggered_principle() -> Bool {
+    // Golden: LT mode -> 1; 100 fds -> 100 events within 0.001% (exact).
+    if epoll_mode_is_level_triggered(0) != 1 { return false; }
+    if epoll_event_count(100) != 100 { return false; }
+    // Standard mask bits alone (no EPOLLET) remain LT.
+    if epoll_mode_is_level_triggered(epoll_EPOLLIN()) != 1 { return false; }
+    if epoll_mode_is_level_triggered(epoll_EPOLLOUT()) != 1 { return false; }
+    if epoll_mode_is_level_triggered(epoll_EPOLLIN() + epoll_EPOLLOUT()) != 1 { return false; }
+    // ET mode: setting EPOLLET -> 0 (LT off), 1 (ET on).
+    let et_mask: Int = epoll_EPOLLIN() + epoll_EPOLLET_bit();
+    if epoll_mode_is_level_triggered(et_mask) != 0 { return false; }
+    if epoll_mode_is_edge_triggered(et_mask) != 1 { return false; }
+    if epoll_mode_is_edge_triggered(0) != 0 { return false; }
+    // Hostile: negative mask -> 0.
+    if epoll_mode_is_level_triggered(0 - 1) != 0 { return false; }
+    if epoll_mode_is_edge_triggered(0 - 1) != 0 { return false; }
+    // Hostile: zero fds -> 0 events.
+    if epoll_event_count(0) != 0 { return false; }
+    // Hostile: negative fds -> 0.
+    if epoll_event_count(0 - 1) != 0 { return false; }
+    // Hostile: above maxevents -> 0.
+    if epoll_event_count(1048577) != 0 { return false; }
+    // Coupled: O(1) vs O(n) witnesses.
+    if epoll_is_o1(1) != 1 { return false; }
+    if epoll_is_o1(0) != 0 { return false; }
+    if epoll_scalability_witness(0) != 1 { return false; }
+    if epoll_scalability_witness(1024) != 1 { return false; }
+    if epoll_scalability_witness(1048576) != 1 { return false; }
+    if epoll_scalability_witness(0 - 1) != 0 { return false; }
+    if epoll_scalability_witness(1048577) != 0 { return false; }
+    // Domain certificate path.
+    if epoll_lt_holds(0, 100).holds != 1 { return false; }
+    if epoll_lt_holds(et_mask, 100).holds != 0 { return false; }
+    if epoll_lt_holds(0, 0 - 1).holds != 0 { return false; }
+    // Kernel release date constants.
+    if epoll_kernel_year() != 2003 { return false; }
+    if epoll_kernel_version_major() != 2 { return false; }
+    if epoll_kernel_version_minor() != 6 { return false; }
+    if epoll_EPOLLET_bit() != 1 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 { return false; }
+    if epoll_EPOLLIN() != 1 { return false; }
+    if epoll_EPOLLOUT() != 4 { return false; }
+    return true;
+}

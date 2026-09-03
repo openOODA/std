@@ -1,0 +1,91 @@
+// # Cellular Metabolic Burden & Ribosome Allocation
+//
+// Logline: Quantifies synthetic gene expression burden, translational resource competition, and host cell growth defect.
+//
+// Setup: Whole-cell proteome allocation model (Scott-Hwa framework) partitioning cellular ribosomes between native and heterologous proteins.
+//
+// Beats:
+//   1. Define RibosomePartitionParams, ProteomeAllocationState, and BurdenImpactResult data structures.
+//   2. Compute fraction of active ribosomes sequestered by synthetic construct mRNA.
+//   3. Predict reduction in cellular specific growth rate mu and host circuit retroactivity.
+
+type RibosomePartitionParams = struct {
+    total_ribosome_pool: Float,
+    native_growth_rate_max_per_h: Float,
+    ribosome_elongation_rate_aa_per_s: Float,
+    proteome_housekeeping_fraction: Float
+};
+
+type ProteomeAllocationState = struct {
+    synthetic_mrna_conc_nm: Float,
+    synthetic_protein_length_aa: Int,
+    plasmid_copy_number: Int
+};
+
+type BurdenImpactResult = struct {
+    ribosome_burden_fraction: Float,
+    adjusted_growth_rate_per_h: Float,
+    growth_defect_percent: Float,
+    is_growth_arrest_risk: Bool
+};
+
+pub fn burden_estimate_impact(
+    p: RibosomePartitionParams,
+    st: ProteomeAllocationState,
+) -> BurdenImpactResult {
+    let synth_mrna: Int = st.synthetic_mrna_conc_nm * metabolic_burden_estimator_to_f(st.plasmid_copy_number);    let len_f: Float = metabolic_burden_estimator_to_f(st.synthetic_protein_length_aa);
+    // Translation demand = mRNA * length
+    let demand: Float = synth_mrna * (len_f / 300.0);    let k_ribo: Float = 1500.0; // Saturation constant
+    let burden_frac: Float = demand / (k_ribo + demand);    let native_capacity: Float = 1.0 - p.proteome_housekeeping_fraction;    let mut available_frac: Int = native_capacity - burden_frac;
+
+    if (native_capacity - burden_frac) < 0.05 {
+
+        available_frac = 0.05;
+
+    }
+
+    let growth_adj: Float = p.native_growth_rate_max_per_h * (available_frac / native_capacity);    let defect: Float = (p.native_growth_rate_max_per_h - growth_adj) / p.native_growth_rate_max_per_h * 100.0;    let arrest_risk: Bool = burden_frac > 0.45;
+    return BurdenImpactResult {
+        ribosome_burden_fraction: burden_frac,
+        adjusted_growth_rate_per_h: growth_adj,
+        growth_defect_percent: defect,
+        is_growth_arrest_risk: arrest_risk
+    };
+}
+
+pub fn metabolic_burden_estimator_probe() -> Int {
+    return 0;
+}
+
+
+fn metabolic_burden_estimator_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

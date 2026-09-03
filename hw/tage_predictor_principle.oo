@@ -1,0 +1,119 @@
+// # TAGE branch predictor principle
+//
+// Logline: Seznec's TAGE (MICRO 2006) indexes N tagged tables by a Global History Register of geometric length L_i = L_base * alpha^i; with L_base = 4 and alpha = 2 the canonical 5-table TAGE produces L = [4, 8, 16, 32, 64]; the ratio <= 1 collapse (all tables equal length) is rejected as fail-closed because the geometric benefit vanishes; the TAGE-SC extension (Seznec MICRO 2007) appends a statistical corrector to the TAGE prediction.
+//
+// Setup: Pure Int. tage_table_count() returns 5 (base + 4 tagged components). tage_history_length(table_idx, base, ratio) computes base * ratio^table_idx by repeated multiplication; base < 1, ratio <= 1, or table_idx < 0 returns Err. tage_sc_present() returns 1 to witness the TAGE-SC extension. Hostile inputs (ratio <= 1) fail closed. Uses domain_cert("hw", ...).
+//
+// Beats:
+//   1. tage_table_count = 5; tage_history_length(0..4, 4, 2) = [4, 8, 16, 32, 64].
+//   2. ratio <= 1 or base < 1 or table_idx < 0 -> Err (fail closed).
+//   3. tage_sc_present = 1 (TAGE-SC coupled).
+
+import "std/core/primitives/domain_cert.oo";
+
+fn tage_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// TAGE canonical table count: 1 base + 4 tagged components.
+// Source: Seznec, MICRO 2006, "TAGE: A Case for (Partially) TAgged GEometric History Length Branch Prediction".
+pub fn tage_table_count() -> Int {
+    return 5;
+}
+
+// TAGE history length for table index i: L_i = base * ratio^i.
+// base < 1, ratio <= 1, or table_idx < 0 fails closed.
+// Source: Seznec, MICRO 2006, TAGE paper, geometric history formula.
+pub fn tage_history_length(table_idx: Int, base: Int, ratio: Int) -> Result[Int, String] {
+    if base < 1 { return Err("ERR\ttage\tbase"); }
+    if ratio <= 1 { return Err("ERR\ttage\tratio"); }
+    if table_idx < 0 { return Err("ERR\ttage\tidx"); }
+    let mut result: Int = base;
+    let mut i: Int = 0;
+    while i < table_idx {
+        result = result * ratio;
+        i = i + 1;
+    }
+    return Ok(result);
+}
+
+// TAGE-SC extension witness: statistical corrector present.
+// Source: Seznec, MICRO 2007, "TAGE-SC: A Case for (Partially) TAgged GEometric History Length Branch Prediction with a Statistical Corrector".
+pub fn tage_sc_present() -> Int {
+    return 1;
+}
+
+pub fn tage_golden_cert() -> DomainCert {
+    let l0: Int = tage_got(tage_history_length(0, 4, 2));
+    let l1: Int = tage_got(tage_history_length(1, 4, 2));
+    let l2: Int = tage_got(tage_history_length(2, 4, 2));
+    let l3: Int = tage_got(tage_history_length(3, 4, 2));
+    let l4: Int = tage_got(tage_history_length(4, 4, 2));
+    let mut holds: Int = 0;
+    if l0 == 4 {
+        if l1 == 8 {
+            if l2 == 16 {
+                if l3 == 32 {
+                    if l4 == 64 {
+                        holds = 1;
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("hw", "tage_golden", holds);
+}
+
+pub fn tage_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if tage_history_length(0, 4, 1).is_ok() == false {
+        if tage_history_length(0, 4, 0).is_ok() == false {
+            if tage_history_length(0, 4, 0 - 1).is_ok() == false {
+                if tage_history_length(0, 0, 2).is_ok() == false {
+                    if tage_history_length(0, 0 - 1, 2).is_ok() == false {
+                        if tage_history_length(0 - 1, 4, 2).is_ok() == false {
+                            holds = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("hw", "tage_hostile", holds);
+}
+
+pub fn tage_coupled_cert() -> DomainCert {
+    let sc: Int = tage_sc_present();
+    let mut holds: Int = 0;
+    if sc == 1 { holds = 1; }
+    return domain_cert("hw", "tage_coupled", holds);
+}
+
+pub fn verify_tage_predictor_principle() -> Bool {
+    if tage_table_count() != 5 { return false; }
+    if tage_got(tage_history_length(0, 4, 2)) != 4 { return false; }
+    if tage_got(tage_history_length(1, 4, 2)) != 8 { return false; }
+    if tage_got(tage_history_length(2, 4, 2)) != 16 { return false; }
+    if tage_got(tage_history_length(3, 4, 2)) != 32 { return false; }
+    if tage_got(tage_history_length(4, 4, 2)) != 64 { return false; }
+    if tage_got(tage_history_length(0, 4, 3)) != 4 { return false; }
+    if tage_got(tage_history_length(1, 4, 3)) != 12 { return false; }
+    if tage_got(tage_history_length(2, 4, 3)) != 36 { return false; }
+    if tage_got(tage_history_length(3, 4, 3)) != 108 { return false; }
+    if tage_got(tage_history_length(3, 8, 2)) != 64 { return false; }
+    if tage_history_length(0, 4, 1).is_ok() { return false; }
+    if tage_history_length(0, 4, 0).is_ok() { return false; }
+    if tage_history_length(0, 4, 0 - 1).is_ok() { return false; }
+    if tage_history_length(0, 0, 2).is_ok() { return false; }
+    if tage_history_length(0, 0 - 1, 2).is_ok() { return false; }
+    if tage_history_length(0 - 1, 4, 2).is_ok() { return false; }
+    if tage_history_length(0 - 100, 4, 2).is_ok() { return false; }
+    if tage_sc_present() != 1 { return false; }
+    let g: DomainCert = tage_golden_cert();
+    let h: DomainCert = tage_hostile_cert();
+    let cu: DomainCert = tage_coupled_cert();
+    if g.holds != 1 { return false; }
+    if h.holds != 1 { return false; }
+    if cu.holds != 1 { return false; }
+    return true;
+}

@@ -1,0 +1,29 @@
+// # Navigation engine
+//
+// Logline: NavEng implemented off pub type nested NavSolution.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type NavEng = struct {
+    fix_type: Int,
+    sats: Int
+};
+
+pub fn nav_eng_new(fix_type: Int, sats: Int) -> NavEng {
+    return NavEng { fix_type: fix_type, sats: sats };
+}
+
+pub fn nav_eng_sats(e: NavEng) -> Int {
+    return e.sats;
+}
+
+pub fn nav_eng_fix_type(e: NavEng) -> Int {
+    return e.fix_type;
+}

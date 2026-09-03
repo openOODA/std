@@ -1,0 +1,169 @@
+// # Markowitz Mean-Variance Portfolio Theory
+//
+// Logline: Portfolio variance sigma_p^2 = w^T * Sigma * w, with closed form for two assets:
+//   sigma_p^2 = w1^2*sigma1^2 + w2^2*sigma2^2 + 2*w1*w2*rho*sigma1*sigma2.
+//
+// Setup: Pure Float. Weights w1, w2 in [0, 1] with w1 + w2 = 1. Volatilities sigma1, sigma2 > 0.
+//   Correlation rho in [-1, 1]. Illegal weights, vols, or |rho| > 1 return Err.
+//   Min-variance weight w1* = sigma2^2 / (sigma1^2 + sigma2^2).
+//
+// Beats:
+//   1. portfolio_variance_2asset(w1, w2, sigma1, sigma2, rho).
+//   2. portfolio_volatility_2asset same but with sqrt.
+//   3. min_variance_weight_2asset = sigma2^2 / (sigma1^2 + sigma2^2).
+//   4. min_variance_volatility_2asset: volatility at the minimum-variance weight.
+//   5. Domain certificate domain_cert("econ", "markowitz_variance", holds).
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/trig.oo";
+
+fn mv_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn mv_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn mv_weights_valid(w1: Float, w2: Float) -> Int {
+    if w1 < 0.0 { return 0; }
+    if w2 < 0.0 { return 0; }
+    if mv_eabs((w1 + w2) - 1.0) > 0.0001 { return 0; }
+    return 1;
+}
+
+fn mv_vols_valid(sigma1: Float, sigma2: Float) -> Int {
+    if sigma1 <= 0.0 { return 0; }
+    if sigma2 <= 0.0 { return 0; }
+    return 1;
+}
+
+fn mv_rho_valid(rho: Float) -> Int {
+    if rho < (0.0 - 1.0) { return 0; }
+    if rho > 1.0 { return 0; }
+    return 1;
+}
+
+fn mv_inputs_valid(w1: Float, w2: Float, sigma1: Float, sigma2: Float, rho: Float) -> Int {
+    if mv_weights_valid(w1, w2) != 1 { return 0; }
+    if mv_vols_valid(sigma1, sigma2) != 1 { return 0; }
+    if mv_rho_valid(rho) != 1 { return 0; }
+    return 1;
+}
+
+pub fn portfolio_variance_2asset(
+    w1: Float, w2: Float, sigma1: Float, sigma2: Float, rho: Float
+) -> Result[Float, String] {
+    if mv_inputs_valid(w1, w2, sigma1, sigma2, rho) != 1 { return Err("ERR\tmv\tdomain"); }
+    let term1: Float = w1 * w1 * sigma1 * sigma1;
+    let term2: Float = w2 * w2 * sigma2 * sigma2;
+    let term3: Float = 2.0 * w1 * w2 * rho * sigma1 * sigma2;
+    return Ok(term1 + term2 + term3);
+}
+
+pub fn portfolio_volatility_2asset(
+    w1: Float, w2: Float, sigma1: Float, sigma2: Float, rho: Float
+) -> Result[Float, String] {
+    let vr: Result[Float, String] = portfolio_variance_2asset(w1, w2, sigma1, sigma2, rho);
+    match vr {
+        Ok(v)  => {
+            if v < 0.0 { return Err("ERR\tmv\tvar"); }
+            return Ok(math_sqrt(v));
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn min_variance_weight_2asset(sigma1: Float, sigma2: Float) -> Result[Float, String] {
+    if sigma1 <= 0.0 { return Err("ERR\tmv\tdomain"); }
+    if sigma2 <= 0.0 { return Err("ERR\tmv\tdomain"); }
+    let s1sq: Float = sigma1 * sigma1;
+    let s2sq: Float = sigma2 * sigma2;
+    let sum: Float = s1sq + s2sq;
+    if sum <= 0.0 { return Err("ERR\tmv\tdomain"); }
+    return Ok(s2sq / sum);
+}
+
+pub fn min_variance_volatility_2asset(sigma1: Float, sigma2: Float) -> Result[Float, String] {
+    if sigma1 <= 0.0 { return Err("ERR\tmv\tdomain"); }
+    if sigma2 <= 0.0 { return Err("ERR\tmv\tdomain"); }
+    let s1sq: Float = sigma1 * sigma1;
+    let s2sq: Float = sigma2 * sigma2;
+    let sum: Float = s1sq + s2sq;
+    if sum <= 0.0 { return Err("ERR\tmv\tdomain"); }
+    return Ok(math_sqrt((s1sq * s2sq) / sum));
+}
+
+pub fn mv_min_variance_2asset(
+    w1: Float, w2: Float, sigma1: Float, sigma2: Float, rho: Float, tol: Float
+) -> Int {
+    if mv_inputs_valid(w1, w2, sigma1, sigma2, rho) != 1 { return 0; }
+    let wr: Result[Float, String] = min_variance_weight_2asset(sigma1, sigma2);
+    if wr.is_ok() == false { return 0; }
+    if mv_eabs(w1 - mv_got(wr)) > tol { return 0; }
+    return 1;
+}
+
+pub fn markowitz_variance_cert(
+    w1: Float, w2: Float, sigma1: Float, sigma2: Float, rho: Float
+) -> DomainCert {
+    let mut h: Int = 0;
+    if mv_inputs_valid(w1, w2, sigma1, sigma2, rho) == 1 {
+        let vr: Result[Float, String] = portfolio_variance_2asset(w1, w2, sigma1, sigma2, rho);
+        if vr.is_ok() {
+            let v: Float = mv_got(vr);
+            let t1: Float = w1 * w1 * sigma1 * sigma1;
+            let t2: Float = w2 * w2 * sigma2 * sigma2;
+            let t3: Float = 2.0 * w1 * w2 * rho * sigma1 * sigma2;
+            if mv_eabs(v - (t1 + t2 + t3)) <= 0.000001 { h = 1; }
+        }
+    }
+    return domain_cert("econ", "markowitz_variance", h);
+}
+
+pub fn verify_markowitz_variance_theory() -> Bool {
+    // Golden: 0.6^2*0.1^2 + 0.4^2*0.15^2 + 2*0.6*0.4*0.1*0.15*0.3 = 0.00936.
+    let v: Float = mv_got(portfolio_variance_2asset(0.6, 0.4, 0.1, 0.15, 0.3));
+    if mv_eabs(v - 0.00936) > 0.0001 { return false; }
+    let sigma_p: Float = mv_got(portfolio_volatility_2asset(0.6, 0.4, 0.1, 0.15, 0.3));
+    if mv_eabs(sigma_p - 0.09675) > 0.001 { return false; }
+    let v_uncorr: Float = mv_got(portfolio_variance_2asset(0.6, 0.4, 0.1, 0.15, 0.0));
+    if mv_eabs(v_uncorr - 0.0072) > 0.0001 { return false; }
+    let v_perf: Float = mv_got(portfolio_variance_2asset(0.6, 0.4, 0.1, 0.15, 1.0));
+    if mv_eabs(v_perf - 0.0144) > 0.0001 { return false; }
+    let v_anti: Float = mv_got(portfolio_variance_2asset(0.6, 0.4, 0.1, 0.15, 0.0 - 1.0));
+    if mv_eabs(v_anti - 0.0) > 0.0001 { return false; }
+    if mv_eabs(mv_got(portfolio_variance_2asset(1.0, 0.0, 0.1, 0.15, 0.3)) - 0.01) > 0.0001 { return false; }
+    if mv_eabs(mv_got(portfolio_variance_2asset(0.0, 1.0, 0.1, 0.15, 0.3)) - 0.0225) > 0.0001 { return false; }
+    let w1_min: Float = mv_got(min_variance_weight_2asset(0.1, 0.15));
+    if mv_eabs(w1_min - 0.6923) > 0.001 { return false; }
+    let v_min: Float = mv_got(portfolio_variance_2asset(w1_min, 1.0 - w1_min, 0.1, 0.15, 0.0));
+    if mv_got(portfolio_variance_2asset(0.5, 0.5, 0.1, 0.15, 0.0)) <= v_min { return false; }
+    if mv_got(portfolio_variance_2asset(0.9, 0.1, 0.1, 0.15, 0.0)) <= v_min { return false; }
+    if mv_got(portfolio_variance_2asset(0.3, 0.7, 0.1, 0.15, 0.0)) <= v_min { return false; }
+    if mv_eabs(mv_got(min_variance_volatility_2asset(0.1, 0.15)) - 0.0832) > 0.001 { return false; }
+    if mv_min_variance_2asset(0.6923, 0.3077, 0.1, 0.15, 0.0, 0.0001) != 1 { return false; }
+    let v_swap: Float = mv_got(portfolio_variance_2asset(0.4, 0.6, 0.15, 0.1, 0.3));
+    if mv_eabs(v_swap - v) > 0.0001 { return false; }
+    let cert: DomainCert = markowitz_variance_cert(0.6, 0.4, 0.1, 0.15, 0.3);
+    if cert.holds != 1 { return false; }
+    if cert.domain != "econ" { return false; }
+    if cert.law_name != "markowitz_variance" { return false; }
+    if markowitz_variance_cert(1.0, 0.0, 0.5, 0.2, 0.0).holds != 1 { return false; }
+    if markowitz_variance_cert(0.6, 0.4, 0.0, 0.15, 0.3).holds != 0 { return false; }
+    if portfolio_variance_2asset(0.5, 0.4, 0.1, 0.15, 0.3).is_ok() { return false; }
+    if portfolio_variance_2asset(0.7, 0.4, 0.1, 0.15, 0.3).is_ok() { return false; }
+    if portfolio_variance_2asset(0.0 - 0.1, 1.1, 0.1, 0.15, 0.3).is_ok() { return false; }
+    if portfolio_variance_2asset(0.6, 0.4, 0.0, 0.15, 0.3).is_ok() { return false; }
+    if portfolio_variance_2asset(0.6, 0.4, 0.1, 0.0, 0.3).is_ok() { return false; }
+    if portfolio_variance_2asset(0.6, 0.4, 0.1, 0.15, 0.0 - 2.0).is_ok() { return false; }
+    if portfolio_variance_2asset(0.6, 0.4, 0.1, 0.15, 1.5).is_ok() { return false; }
+    if portfolio_variance_2asset(0.6, 0.4, 0.1, 0.15, 0.0 - 1.5).is_ok() { return false; }
+    if min_variance_weight_2asset(0.0, 0.15).is_ok() { return false; }
+    if min_variance_weight_2asset(0.1, 0.0).is_ok() { return false; }
+    if min_variance_weight_2asset(0.0 - 0.1, 0.15).is_ok() { return false; }
+    if min_variance_volatility_2asset(0.0, 0.15).is_ok() { return false; }
+    if portfolio_volatility_2asset(0.5, 0.4, 0.1, 0.15, 0.3).is_ok() { return false; }
+    return true;
+}

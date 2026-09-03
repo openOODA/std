@@ -1,0 +1,183 @@
+// # FIPS 204 ML-DSA Number Theoretic Transform (NTT)
+//
+// Logline: Implements 256-point Cooley-Tukey forward NTT and Gentleman-Sande inverse NTT over Z_8380417.
+//
+// Setup: Primitive 256-th root of unity zeta = 1753 and scaling factor 256^{-1} mod 8380417.
+//
+// Beats:
+//   1. 256-point forward NTT converting polynomial to evaluation domain.
+//   2. 256-point inverse NTT with Montgomery normalization.
+//   3. Point-wise polynomial multiplication in NTT domain.
+//   4. Matrix-vector multiplication over R_q^{k x l} in NTT domain.
+
+import "./ml_dsa_poly.oo";
+
+pub fn ml_dsa_montgomery_reduce(a: Int) -> Int {
+    let q: Int = 8380417;
+    let mut r: Int = a % q;
+    if r < 0 {
+        r = r + q;
+    }
+    return r;
+}
+
+pub fn ml_dsa_ntt_fwd(p: MlDsaPoly) -> MlDsaPoly {
+    let mut a: List[Int] = p.coeffs;
+    let mut k: Int = 0;
+    let mut len: Int = 128;
+    while len >= 1 {
+        let mut start: Int = 0;
+        while start < 256 {
+            let zeta: Int = 1753;
+            let mut j: Int = start;
+            while j < (start + len) {
+                let t: Int = ml_dsa_montgomery_reduce(list_get(a, j + len) * zeta);
+                let u: Int = list_get(a, j);
+                a = list_set(a, j + len, ml_dsa_montgomery_reduce(u - t));
+                a = list_set(a, j, ml_dsa_montgomery_reduce(u + t));
+                j = j + 1;
+            }
+            start = start + 2 * len;
+            k = k + 1;
+        }
+        len = len / 2;
+    }
+    return MlDsaPoly {
+        coeffs: a,
+        degree: 256,
+        modulus: 8380417
+    };
+}
+
+pub fn ml_dsa_ntt_inv(p: MlDsaPoly) -> MlDsaPoly {
+    let mut a: List[Int] = p.coeffs;
+    let mut len: Int = 1;
+    while len <= 128 {
+        let mut start: Int = 0;
+        while start < 256 {
+            let zeta: Int = 8380417 - 1753;
+            let mut j: Int = start;
+            while j < (start + len) {
+                let t: Int = list_get(a, j);
+                let u: Int = list_get(a, j + len);
+                a = list_set(a, j, ml_dsa_montgomery_reduce(t + u));
+                a = list_set(a, j + len, ml_dsa_montgomery_reduce((u - t) * zeta));
+                j = j + 1;
+            }
+            start = start + 2 * len;
+        }
+        len = len * 2;
+    }
+    let f: Int = 8347681;
+    let mut i: Int = 0;
+    while i < 256 {
+        a = list_set(a, i, ml_dsa_montgomery_reduce(list_get(a, i) * f));
+        i = i + 1;
+    }
+    return MlDsaPoly {
+        coeffs: a,
+        degree: 256,
+        modulus: 8380417
+    };
+}
+
+pub fn ml_dsa_poly_pointwise_mul(a: MlDsaPoly, b: MlDsaPoly) -> MlDsaPoly {
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let prod: Int = ml_dsa_montgomery_reduce(list_get(a.coeffs, i) * list_get(b.coeffs, i));
+        c = list_push(c, prod);
+        i = i + 1;
+    }
+    return MlDsaPoly {
+        coeffs: c,
+        degree: 256,
+        modulus: 8380417
+    };
+}
+
+pub fn ml_dsa_polyvec_ntt_fwd(v: MlDsaPolyVec) -> MlDsaPolyVec {
+    let dim: Int = v.dim;
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < dim {
+        let mut chunk: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 {
+            chunk = list_push(chunk, list_get(v.coeffs, i * 256 + j));
+            j = j + 1;
+        }
+        let p: MlDsaPoly = MlDsaPoly { coeffs: chunk, degree: 256, modulus: 8380417 };
+        let ntt_p: MlDsaPoly = ml_dsa_ntt_fwd(p);
+        j = 0;
+        while j < 256 {
+            out_c = list_push(out_c, list_get(ntt_p.coeffs, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: out_c,
+        dim: dim
+    };
+}
+
+pub fn ml_dsa_polyvec_ntt_inv(v: MlDsaPolyVec) -> MlDsaPolyVec {
+    let dim: Int = v.dim;
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < dim {
+        let mut chunk: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 {
+            chunk = list_push(chunk, list_get(v.coeffs, i * 256 + j));
+            j = j + 1;
+        }
+        let p: MlDsaPoly = MlDsaPoly { coeffs: chunk, degree: 256, modulus: 8380417 };
+        let inv_p: MlDsaPoly = ml_dsa_ntt_inv(p);
+        j = 0;
+        while j < 256 {
+            out_c = list_push(out_c, list_get(inv_p.coeffs, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: out_c,
+        dim: dim
+    };
+}
+
+pub fn ml_dsa_matvec_mul_ntt(matrix_coeffs: List[Int], s_hat: MlDsaPolyVec, k: Int, l: Int) -> MlDsaPolyVec {
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut acc: MlDsaPoly = ml_dsa_poly_zero();
+        let mut j: Int = 0;
+        while j < l {
+            let mut chunk_a: List[Int] = list_new();
+            let mut chunk_s: List[Int] = list_new();
+            let mut idx: Int = 0;
+            while idx < 256 {
+                chunk_a = list_push(chunk_a, list_get(matrix_coeffs, (i * l + j) * 256 + idx));
+                chunk_s = list_push(chunk_s, list_get(s_hat.coeffs, j * 256 + idx));
+                idx = idx + 1;
+            }
+            let p_a: MlDsaPoly = MlDsaPoly { coeffs: chunk_a, degree: 256, modulus: 8380417 };
+            let p_s: MlDsaPoly = MlDsaPoly { coeffs: chunk_s, degree: 256, modulus: 8380417 };
+            let prod: MlDsaPoly = ml_dsa_poly_pointwise_mul(p_a, p_s);
+            acc = ml_dsa_poly_add(acc, prod);
+            j = j + 1;
+        }
+        let mut idx: Int = 0;
+        while idx < 256 {
+            out_c = list_push(out_c, list_get(acc.coeffs, idx));
+            idx = idx + 1;
+        }
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: out_c,
+        dim: k
+    };
+}

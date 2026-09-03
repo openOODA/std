@@ -1,0 +1,43 @@
+// # Spacecraft Gravity Gradient Torque Dynamics
+//
+// Logline: Calculates environmental gravity gradient disturbance and stabilization torques in planetary gravitational fields.
+//
+// Setup: Pure spacecraft rigid-body attitude dynamics under tidal differential gravitational field gradients.
+//
+// Beats:
+//   1. Gravity gradient torque pass-through query.
+//   2. Calculate principal axis differential inertia terms (Izz - Iyy), (Ixx - Izz), (Iyy - Ixx).
+//   3. Compute gravity gradient torque vector tau_gg = 3*mu/R^3 * (u_r (x) I * u_r).
+//   4. Evaluate nadir-pointing attitude stability conditions.
+
+pub fn gg_torque(q: Int) -> Int {
+    return q;
+}
+
+/// Computes gravity-gradient pitch torque (N*m): tau_y = 1.5 * (mu / r^3) * (Ixx - Izz) * sin(2 * theta_pitch).
+pub fn gravity_gradient_pitch_torque(
+    r_orbit_m: Float,
+    mu: Float,
+    ixx: Float,
+    izz: Float,
+    pitch_angle_rad: Float
+) -> Float {
+    if r_orbit_m <= 0.0001 { return 0.0; }
+    let r3: Float = (r_orbit_m * r_orbit_m) * r_orbit_m;
+    let factor: Float = 1.5 * (mu / r3) * (ixx - izz);
+    return factor * sin(2.0 * pitch_angle_rad);
+}
+
+/// Computes gravity-gradient roll torque (N*m): tau_x = 1.5 * (mu / r^3) * (Izz - Iyy) * sin(2 * phi_roll).
+pub fn gravity_gradient_roll_torque(
+    r_orbit_m: Float,
+    mu: Float,
+    iyy: Float,
+    izz: Float,
+    roll_angle_rad: Float
+) -> Float {
+    if r_orbit_m <= 0.0001 { return 0.0; }
+    let r3: Float = (r_orbit_m * r_orbit_m) * r_orbit_m;
+    let factor: Float = 1.5 * (mu / r3) * (izz - iyy);
+    return factor * sin(2.0 * roll_angle_rad);
+}

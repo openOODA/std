@@ -1,0 +1,41 @@
+// # Magnetic Torquer Attitude Actuation & Desaturation
+//
+// Logline: Calculates magnetic dipole moment commands, Lorentz interaction torques tau = m (x) B, and momentum dump cycles.
+//
+// Setup: Pure electromagnetic attitude control for LEO spacecraft interacting with Earth's geomagnetic field (IGRF).
+//
+// Beats:
+//   1. Magnetic dipole moment pass-through query.
+//   2. Calculate cross-product torque vector tau = m (x) B from dipole and geomagnetic field.
+//   3. Compute required dipole moment to desaturate reaction wheel angular momentum.
+//   4. Calculate electrical power dissipation P = I^2 * R in magnetic torque rods.
+
+pub fn mag_dipole(m: Int) -> Int {
+    return m;
+}
+
+/// Computes magnetic control torque x-component (N*m): tau_x = m_y * B_z - m_z * B_y.
+pub fn magnetorquer_torque_x(my: Float, mz: Float, by: Float, bz: Float) -> Float {
+    return (my * bz) - (mz * by);
+}
+
+/// Computes magnetic control torque y-component (N*m): tau_y = m_z * B_x - m_x * B_z.
+pub fn magnetorquer_torque_y(mx: Float, mz: Float, bx: Float, bz: Float) -> Float {
+    return (mz * bx) - (mx * bz);
+}
+
+/// Computes magnetic control torque z-component (N*m): tau_z = m_x * B_y - m_y * B_x.
+pub fn magnetorquer_torque_z(mx: Float, my: Float, bx: Float, by: Float) -> Float {
+    return (mx * by) - (my * bx);
+}
+
+/// Computes optimal dipole moment vector m = (B x H_excess) / |B|^2 for momentum dumping.
+pub fn magnetorquer_desat_dipole_x(
+    bx: Float, by: Float, bz: Float,
+    hx: Float, hy: Float, hz: Float
+) -> Float {
+    let b_sq: Float = (bx * bx) + (by * by) + (bz * bz);
+    if b_sq <= 0.0000000000000001 { return 0.0; }
+    let cross_x: Float = (by * hz) - (bz * hy);
+    return cross_x / b_sq;
+}

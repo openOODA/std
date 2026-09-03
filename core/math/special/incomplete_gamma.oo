@@ -1,0 +1,48 @@
+// # Lower Incomplete Gamma Regularized
+//
+// Logline: Evaluates the regularized lower incomplete gamma P(s, x) for positive integer s.
+//
+// Setup: Pure math. P(s, x) = gamma(s, x) / Gamma(s). Integer s avoids a second Gamma engine.
+//
+// Beats:
+//   1. Reject s < 1 or x < 0.
+//   2. Use P(s, x) = 1 - e^{-x} sum_{k=0}^{s-1} x^k / k!.
+//   3. Accumulate the Poisson partial sum by recurrence.
+//   4. Return the regularized value in (0, 1].
+
+import "std/core/primitives/result.oo";
+
+pub fn gamma_p(s: Int, x: Float) -> Result[Float, String] {
+    if s < 1 { return Err("ERR\tgamma_p\ts"); }
+    if x < 0.0 { return Err("ERR\tgamma_p\tx"); }
+    if x == 0.0 { return Ok(0.0); }
+    let mut term: Float = 1.0;
+    let mut sum: Float = 1.0;
+    let mut k: Int = 1;
+    let mut kf: Float = 1.0;
+    while k < s {
+        term = term * x / kf;
+        sum = sum + term;
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    let p: Float = 1.0 - exp(0.0 - x) * sum;
+    return Ok(p);
+}
+
+pub fn gamma_lower(s: Int, x: Float) -> Result[Float, String] {
+    let pr: Result[Float, String] = gamma_p(s, x);
+    let p: Float = match pr {
+        Ok(v)  => v,
+        Err(e) => { return Err(e); }
+    };
+    let mut g: Float = 1.0;
+    let mut k: Int = 1;
+    let mut kf: Float = 1.0;
+    while k < s {
+        g = g * kf;
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    return Ok(p * g);
+}

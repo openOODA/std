@@ -1,0 +1,186 @@
+// # Fmt Printer ◈ ZERO-DRAG
+// Logline: Emits canonical 2-space, => radar, and 80-col.
+// Setup: Pure printer over parse tree.
+// Beats:
+//   1. Normalize tabs to 2-space and trim trailing.
+//   2. Enforce 1 blank line between blocks.
+//   3. Join via StringBuilder chunk-defer.
+import "std/core/text/string_builder.oo";
+import "std/core/format/fmt_parser.oo";
+import "std/core/format/fmt_config.oo";
+pub fn fmt_normalize_line(line: String) -> String {
+  let n: Int = chars_len(line);
+  let mut i: Int = 0; let mut lead: Int = 0;
+  while i < n {
+    let c: String = char_at(line, i);
+    if c == " " { lead = lead + 1; }
+    else if c == "\t" { lead = lead + 2; }
+    else { break; }
+    i = i + 1;
+  }
+  let mut norm: Int = 0; let mut rem: Int = lead;
+  while rem >= 4 { norm = norm + 2; rem = rem - 4; }
+  if rem >= 2 { norm = norm + 2; rem = rem - 2; }
+  let body: String = str_slice(line, i, n);
+  let trimmed: String = fmt_trim_right(body);
+  if chars_len(trimmed) == 0 { return ""; }
+  let mut pad: String = ""; let mut p: Int = 0;
+  while p < norm { pad = pad + " "; p = p + 1; }
+  return pad + trimmed;
+}
+pub fn fmt_radar_align(lines: List[String]) -> List[String] {
+  let n: Int = list_len(lines);
+  let mut out: List[String] = list_new(); let mut i: Int = 0;
+  let cfg: FmtConfig = fmt_config_default();
+  let radar: Bool = fmt_config_is_radar(cfg);
+  while i < n {
+    let line: String = list_get(lines, i);
+    if str_contains(line, "match") && radar {
+      let mut max_pat: Int = 0; let mut j: Int = i + 1;
+      let base: Int = fmt_indent_of(line) + 2;
+      while j < n {
+        let cur: String = list_get(lines, j);
+        if fmt_is_blank(cur) { j = j + 1; continue; }
+        if fmt_indent_of(cur) < base { break; }
+        let ln: Int = chars_len(cur);
+        let mut p: Int = 0; let mut arrow: Int = -1;
+        while p + 1 < ln {
+          if char_at(cur, p) == "=" && char_at(cur, p+1) == ">" {
+            arrow = p; break;
+          }
+          p = p + 1;
+        }
+        if arrow >= 0 && arrow > max_pat { max_pat = arrow; }
+        if chars_len(cur) > 0 && char_at(cur, 0) == "}" { break; }
+        j = j + 1;
+      }
+      out = list_push(out, line); let mut k: Int = i + 1;
+      while k < j {
+        let cur2: String = list_get(lines, k);
+        if fmt_is_blank(cur2) { out=list_push(out,cur2); k=k+1; continue; }
+        let ln2: Int = chars_len(cur2);
+        let mut a2: Int = -1; let mut p2: Int = 0;
+        while p2 + 1 < ln2 {
+          if char_at(cur2,p2)=="=" && char_at(cur2,p2+1)==">" {a2=p2; break;}
+          p2 = p2 + 1;
+        }
+        if a2 >= 0 {
+          let left: String = str_slice(cur2,0,a2);
+          let right: String = str_slice(cur2,a2+2,ln2);
+          let ltrim: String = fmt_trim_right(left);
+          let mut need: Int = max_pat - chars_len(ltrim) - 1;
+          if need < 0 { need = 0; }
+          let mut pad: String = ""; let mut q: Int = 0;
+          while q < need { pad = pad + " "; q = q+1; }
+          out = list_push(out, ltrim + pad + " =>" + right);
+        } else { out = list_push(out, cur2); }
+        k = k + 1;
+      }
+      i = j;
+    } else { out = list_push(out, line); i = i + 1; }
+  }
+  return out;
+}
+pub fn fmt_wrap_line(line: String, width: Int) -> List[String] {
+  let n: Int = chars_len(line);
+  if n <= width { let mut s: List[String]=list_new(); s=list_push(s,line); return s; }
+  let base: Int = fmt_indent_of(line); let cont: Int = base + 2;
+  let mut psb: StringBuilder = sb_new();
+  psb = sb_append_repeat(psb, " ", cont);
+  let pad: String = sb_to_string(psb);
+  let mut res: List[String] = list_new(); let mut rest: String = line;
+  while chars_len(rest) > width {
+    let rn: Int = chars_len(rest); let lead: Int = fmt_indent_of(rest);
+    let mut in_dq: Bool = false; let mut in_sq: Bool = false;
+    let mut esc: Bool = false; let mut last: Int = -1; let mut i: Int = 0;
+    while i < width && i < rn {
+      let c: String = char_at(rest, i);
+      if esc { esc = false; }
+      else if c=="\\" && (in_dq||in_sq) {esc=true;}
+      else if c=="\"" && !in_sq {in_dq=!in_dq;}
+      else if c=="'" && !in_dq {in_sq=!in_sq;}
+      else if !in_dq && !in_sq && i>=lead && (c==","||c==" ") {last=i+1;}
+      i=i+1;
+    }
+    let mut arrow: Int = -1; let mut ap: Int = 0;
+    while ap+1 < rn {
+      if char_at(rest,ap)=="=" && char_at(rest,ap+1)==">" {arrow=ap; break;}
+      ap=ap+1;
+    }
+    if arrow>=0 && last>=0 && last<=arrow+2 { last=-1; }
+    if last==-1 {
+      if in_dq || in_sq {
+        let mut j: Int = width; let mut jd: Bool=in_dq;
+        let mut js: Bool=in_sq; let mut je: Bool=esc;
+        while j < rn {
+          let c: String = char_at(rest,j);
+          if je {je=false;}
+          else if c=="\\" && (jd||js) {je=true;}
+          else if c=="\"" && !js {jd=!jd;}
+          else if c=="'" && !jd {js=!js;}
+          else if !jd && !js && (c==","||c==" ") {last=j+1; break;}
+          j=j+1;
+        }
+        if last==-1 { res=list_push(res,rest); return res; }
+      } else { last=width; }
+    }
+    let raw: String = str_slice(rest,0,last);
+    let chunk: String = fmt_trim_right(raw);
+    res=list_push(res,chunk);
+    let mut nxt: Int = last;
+    while nxt<rn && char_at(rest,nxt)==" " {nxt=nxt+1;}
+    if nxt>=rn {return res;}
+    let tail: String = str_slice(rest,nxt,rn);
+    let mut sb: StringBuilder = sb_new();
+    sb=sb_append(sb,pad); sb=sb_append(sb,tail);
+    rest=sb_to_string(sb);
+  }
+  res=list_push(res,rest); return res;
+}
+pub fn fmt_pipeline_desugar(src: String) -> String {
+  let n: Int = chars_len(src); let mut sb: StringBuilder=sb_new();
+  let mut i: Int = 0;
+  while i < n {
+    if char_at(src,i)=="|" && i+1<n && char_at(src,i+1)==">" {
+      sb=sb_append(sb," |> "); i=i+2;
+      while i<n && char_at(src,i)==" " {i=i+1;}
+      continue;
+    }
+    sb=sb_append(sb,char_at(src,i)); i=i+1;
+  }
+  return sb_to_string(sb);
+}
+pub fn fmt_print(src: String) -> String {
+  let cfg: FmtConfig = fmt_config_default();
+  let width: Int = fmt_config_width(cfg);
+  let lines: List[String] = fmt_parse(src);
+  let mut normed: List[String]=list_new(); let mut i:Int=0;
+  while i<list_len(lines) {
+    normed=list_push(normed, fmt_normalize_line(list_get(lines,i)));
+    i=i+1;
+  }
+  let mut dedup: List[String]=list_new(); let mut blank:Int=0; i=0;
+  while i<list_len(normed) {
+    let line: String = list_get(normed,i);
+    if fmt_is_blank(line) {blank=blank+1; if blank<=1{dedup=list_push(dedup,"");}}
+    else {blank=0; dedup=list_push(dedup,line);}
+    i=i+1;
+  }
+  let aligned: List[String]=fmt_radar_align(dedup);
+  let mut sb: StringBuilder=sb_new(); let mut idx:Int=0;
+  let alen:Int=list_len(aligned);
+  while idx<alen {
+    let mut cur: String=list_get(aligned,idx);
+    if str_contains(cur,"|>") {cur=fmt_pipeline_desugar(cur);}
+    let wrapped: List[String]=fmt_wrap_line(cur,width);
+    let mut w:Int=0;
+    while w<list_len(wrapped) {
+      sb=sb_append(sb,list_get(wrapped,w));
+      if w+1<list_len(wrapped) || idx+1<alen {sb=sb_append(sb,"\n");}
+      w=w+1;
+    }
+    idx=idx+1;
+  }
+  let out:String=sb_to_string(sb);
+  return fmt_trim_right(out) + "\n";
+}

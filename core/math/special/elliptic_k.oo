@@ -1,0 +1,30 @@
+// # Complete Elliptic Integral of the First Kind
+//
+// Logline: Evaluates K(k) by the arithmetic-geometric mean on the complementary modulus.
+//
+// Setup: Pure math. |k| < 1. K(0) = pi/2 is the identity check.
+//
+// Beats:
+//   1. Reject |k| >= 1.
+//   2. Seed a = 1 and b = sqrt(1 - k^2).
+//   3. Iterate a = (a+b)/2 and b = sqrt(a b) until they meet.
+//   4. Return pi / (2 a).
+
+import "std/core/primitives/result.oo";
+
+pub fn elliptic_k(k: Float) -> Result[Float, String] {
+    let mut ak: Float = k;
+    if ak < 0.0 { ak = 0.0 - ak; }
+    if ak >= 1.0 { return Err("ERR\telliptic_k\tk"); }
+    let mut a: Float = 1.0;
+    let mut b: Float = sqrt(1.0 - ak * ak);
+    let mut i: Int = 0;
+    while i < 24 {
+        let an: Float = 0.5 * (a + b);
+        let bn: Float = sqrt(a * b);
+        a = an;
+        b = bn;
+        i = i + 1;
+    }
+    return Ok(math_pi() / (2.0 * a));
+}

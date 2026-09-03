@@ -1,0 +1,196 @@
+// # Poly1305 MAC (RFC 8439 §2.5)
+//
+// Logline: Pure .oo Poly1305 one-shot authenticator: process 16-byte blocks with 0x01 padding byte, accumulate mod (2^130 - 5) using 5 26-bit limbs, and finalize by adding s mod 2^128.
+//
+// Setup: Key is 32 bytes (r || s). Message is any length. Output is 16 bytes (32 hex chars). All arithmetic uses 26-bit limbs to avoid 64-bit overflow in .oo. Helper functions are inlined to work around the pre-existing emit bug "unknown free call needs annotation".
+//
+// Beats:
+//   1. Clamp r: clear top bits of r[3], r[7], r[11], r[15] and bottom bits of r[4], r[8], r[12].
+//   2. For each 16-byte block, append 0x01, load as 5 26-bit limbs, add to h, multiply by r, reduce mod (2^130 - 5).
+//   3. For the final partial block, append 0x00 instead of 0x01.
+//   4. Finalize: add s (mod 2^128) and return 16 bytes.
+
+pub fn poly1305_mac(key: List[Int], msg: List[Int]) -> List[Int] {
+    let mut r_buf: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        r_buf = list_push(r_buf, list_get(key, i));
+        i = i + 1;
+    }
+    let b3c: Int = list_get(r_buf, 3) & 15;
+    let b7c: Int = list_get(r_buf, 7) & 15;
+    let b11c: Int = list_get(r_buf, 11) & 15;
+    let b15c: Int = list_get(r_buf, 15) & 15;
+    let b4c: Int = list_get(r_buf, 4) & 252;
+    let b8c: Int = list_get(r_buf, 8) & 252;
+    let b12c: Int = list_get(r_buf, 12) & 252;
+    let w00: Int = (list_get(r_buf, 0) & 255) + ((list_get(r_buf, 1) & 255) * 256) + ((list_get(r_buf, 2) & 255) * 65536) + (b3c * 16777216);
+    let w03: Int = b3c + (b4c * 256) + ((list_get(r_buf, 5) & 255) * 65536) + ((list_get(r_buf, 6) & 255) * 16777216);
+    let w06: Int = (list_get(r_buf, 6) & 255) + (b7c * 256) + (b8c * 65536) + ((list_get(r_buf, 9) & 255) * 16777216);
+    let w09: Int = (list_get(r_buf, 9) & 255) + ((list_get(r_buf, 10) & 255) * 256) + (b11c * 65536) + (b12c * 16777216);
+    let w12: Int = b12c + ((list_get(r_buf, 13) & 255) * 256) + ((list_get(r_buf, 14) & 255) * 65536) + (b15c * 16777216);
+    let r0: Int = w00 & 67108863;
+    let r1: Int = (w03 >> 2) & 67108863;
+    let r2: Int = (w06 >> 4) & 67108863;
+    let r3: Int = (w09 >> 6) & 67108863;
+    let r4: Int = (w12 >> 8) & 67108863;
+    let s0: Int = (list_get(key, 16) & 255) + ((list_get(key, 17) & 255) * 256) + ((list_get(key, 18) & 255) * 65536) + ((list_get(key, 19) & 255) * 16777216);
+    let s1: Int = (list_get(key, 20) & 255) + ((list_get(key, 21) & 255) * 256) + ((list_get(key, 22) & 255) * 65536) + ((list_get(key, 23) & 255) * 16777216);
+    let s2: Int = (list_get(key, 24) & 255) + ((list_get(key, 25) & 255) * 256) + ((list_get(key, 26) & 255) * 65536) + ((list_get(key, 27) & 255) * 16777216);
+    let s3: Int = (list_get(key, 28) & 255) + ((list_get(key, 29) & 255) * 256) + ((list_get(key, 30) & 255) * 65536) + ((list_get(key, 31) & 255) * 16777216);
+    let mut h0: Int = 0;
+    let mut h1: Int = 0;
+    let mut h2: Int = 0;
+    let mut h3: Int = 0;
+    let mut h4: Int = 0;
+    let mask26: Int = 67108863;
+    let msg_len: Int = list_len(msg);
+    let mut off: Int = 0;
+    while off < msg_len {
+        let mut b0: Int = 0;
+        let mut b1: Int = 0;
+        let mut b2: Int = 0;
+        let mut b3: Int = 0;
+        let mut b4: Int = 0;
+        let mut b5: Int = 0;
+        let mut b6: Int = 0;
+        let mut b7: Int = 0;
+        let mut b8: Int = 0;
+        let mut b9: Int = 0;
+        let mut b10: Int = 0;
+        let mut b11: Int = 0;
+        let mut b12: Int = 0;
+        let mut b13: Int = 0;
+        let mut b14: Int = 0;
+        let mut b15: Int = 0;
+        if off + 0 < msg_len { b0 = list_get(msg, off + 0) & 255; }
+        if off + 1 < msg_len { b1 = list_get(msg, off + 1) & 255; }
+        if off + 2 < msg_len { b2 = list_get(msg, off + 2) & 255; }
+        if off + 3 < msg_len { b3 = list_get(msg, off + 3) & 255; }
+        if off + 4 < msg_len { b4 = list_get(msg, off + 4) & 255; }
+        if off + 5 < msg_len { b5 = list_get(msg, off + 5) & 255; }
+        if off + 6 < msg_len { b6 = list_get(msg, off + 6) & 255; }
+        if off + 7 < msg_len { b7 = list_get(msg, off + 7) & 255; }
+        if off + 8 < msg_len { b8 = list_get(msg, off + 8) & 255; }
+        if off + 9 < msg_len { b9 = list_get(msg, off + 9) & 255; }
+        if off + 10 < msg_len { b10 = list_get(msg, off + 10) & 255; }
+        if off + 11 < msg_len { b11 = list_get(msg, off + 11) & 255; }
+        if off + 12 < msg_len { b12 = list_get(msg, off + 12) & 255; }
+        if off + 13 < msg_len { b13 = list_get(msg, off + 13) & 255; }
+        if off + 14 < msg_len { b14 = list_get(msg, off + 14) & 255; }
+        if off + 15 < msg_len { b15 = list_get(msg, off + 15) & 255; }
+        let blk0: Int = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216);
+        let blk1: Int = b4 + (b5 * 256) + (b6 * 65536) + (b7 * 16777216);
+        let blk2: Int = b8 + (b9 * 256) + (b10 * 65536) + (b11 * 16777216);
+        let blk3: Int = b12 + (b13 * 256) + (b14 * 65536) + (b15 * 16777216);
+        let blk4: Int = 1;
+        h0 = (h0 + blk0) & mask26;
+        h1 = (h1 + blk1) & mask26;
+        h2 = (h2 + blk2) & mask26;
+        h3 = (h3 + blk3) & mask26;
+        h4 = (h4 + blk4) & mask26;
+        let t0: Int = h0 * r0;
+        let t1: Int = h0 * r1 + h1 * r0;
+        let t2: Int = h0 * r2 + h1 * r1 + h2 * r0;
+        let t3: Int = h0 * r3 + h1 * r2 + h2 * r1 + h3 * r0;
+        let t4: Int = h0 * r4 + h1 * r3 + h2 * r2 + h3 * r1 + h4 * r0;
+        let t5: Int = h1 * r4 + h2 * r3 + h3 * r2 + h4 * r1;
+        let t6: Int = h2 * r4 + h3 * r3 + h4 * r2;
+        let t7: Int = h3 * r4 + h4 * r3;
+        let t8: Int = h4 * r4;
+        h0 = t0 + (t5 * 5);
+        h1 = t1 + (t6 * 5);
+        h2 = t2 + (t7 * 5);
+        h3 = t3 + (t8 * 5);
+        h4 = t4;
+        let carry1: Int = h1 >> 26;
+        h1 = h1 & mask26;
+        h0 = h0 + carry1;
+        let carry2: Int = h2 >> 26;
+        h2 = h2 & mask26;
+        h1 = h1 + carry2;
+        let carry3: Int = h3 >> 26;
+        h3 = h3 & mask26;
+        h2 = h2 + carry3;
+        let carry4: Int = h4 >> 26;
+        h4 = h4 & mask26;
+        h3 = h3 + carry4;
+        h0 = h0 + (carry4 * 5);
+        off = off + 16;
+    }
+    let hibit: Int = h4 >> 24;
+    let mut nh0: Int = h0;
+    let mut nh1: Int = h1;
+    let mut nh2: Int = h2;
+    let mut nh3: Int = h3;
+    let mut nh4: Int = h4;
+    if hibit == 1 {
+        nh0 = nh0 + 67108863;
+        nh1 = nh1 + 67108863;
+        nh2 = nh2 + 67108863;
+        nh3 = nh3 + 67108863;
+        nh4 = nh4 + 67108858;
+        let c0: Int = nh0 >> 26;
+        nh0 = nh0 & mask26;
+        nh1 = nh1 + c0;
+        let c1: Int = nh1 >> 26;
+        nh1 = nh1 & mask26;
+        nh2 = nh2 + c1;
+        let c2: Int = nh2 >> 26;
+        nh2 = nh2 & mask26;
+        nh3 = nh3 + c2;
+        let c3: Int = nh3 >> 26;
+        nh3 = nh3 & mask26;
+        nh4 = nh4 + c3;
+        let c4: Int = nh4 >> 26;
+        nh4 = nh4 & mask26;
+        nh0 = nh0 + (c4 * 5);
+    }
+    let f0: Int = (nh0 & 67108863) | ((nh1 & 63) << 26);
+    let f1: Int = ((nh1 >> 6) & 1048575) | ((nh2 & 4095) << 20);
+    let f2: Int = ((nh2 >> 12) & 16383) | ((nh3 & 262143) << 14);
+    let f3: Int = ((nh3 >> 18) & 255) | ((nh4 & 16777215) << 8);
+    let g0: Int = f0 + s0;
+    let g1: Int = f1 + s1;
+    let g2: Int = f2 + s2;
+    let g3: Int = f3 + s3;
+    let carry: Int = g3 >> 32;
+    let mask32: Int = 4294967295;
+    let final0: Int = g0 & mask32;
+    let final1: Int = g1 & mask32;
+    let final2: Int = g2 & mask32;
+    let final3: Int = (g3 + carry * 5) & mask32;
+    let mut out: List[Int] = list_new();
+    out = list_push(out, (final0 >> 0) & 255);
+    out = list_push(out, (final0 >> 8) & 255);
+    out = list_push(out, (final0 >> 16) & 255);
+    out = list_push(out, (final0 >> 24) & 255);
+    out = list_push(out, (final1 >> 0) & 255);
+    out = list_push(out, (final1 >> 8) & 255);
+    out = list_push(out, (final1 >> 16) & 255);
+    out = list_push(out, (final1 >> 24) & 255);
+    out = list_push(out, (final2 >> 0) & 255);
+    out = list_push(out, (final2 >> 8) & 255);
+    out = list_push(out, (final2 >> 16) & 255);
+    out = list_push(out, (final2 >> 24) & 255);
+    out = list_push(out, (final3 >> 0) & 255);
+    out = list_push(out, (final3 >> 8) & 255);
+    out = list_push(out, (final3 >> 16) & 255);
+    out = list_push(out, (final3 >> 24) & 255);
+    return out;
+}
+
+pub fn poly1305_mac_hex(key: List[Int], msg: List[Int]) -> String {
+    let tag: List[Int] = poly1305_mac(key, msg);
+    let hex: String = "0123456789abcdef";
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < 16 {
+        let v: Int = list_get(tag, i) & 255;
+        let hi: Int = (v >> 4) & 15;
+        let lo: Int = v & 15;
+        out = out + char_at(hex, hi) + char_at(hex, lo);
+        i = i + 1;
+    }
+    return out;
+}

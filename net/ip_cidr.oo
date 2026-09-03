@@ -1,0 +1,245 @@
+// # IPv4/IPv6 Parsing and CIDR Subnet Matching
+//
+// Logline: Pure string-only IPv4 and IPv6 address parsing plus CIDR prefix subnet containment for both families. The fallible parse ops are exposed here as Result[Int, String] status wrappers and as the full Result[Struct, String] spec API in std/net/ip_cidr_parse.oo.
+//
+// Setup: Pure module. Octets and groups ride Int lists. IPv6 supports the "::" shorthand. The canonical "to_string" form expands all eight groups as 0..ffff hex.
+//
+// Beats:
+//   1. Define Ipv4, Ipv6, Cidr4, Cidr6 struct types and shared parsing helpers.
+//   2. Provide non-fallible to_string and cidr_contains operations.
+//   3. Status wrappers ipv4_parse_status, ipv6_parse_status, cidr4_parse_status, cidr6_parse_status re-run the validation pipeline and return Result[Int, String].
+
+type Ipv4 = struct { octets: List[Int] };
+type Ipv6 = struct { groups: List[Int] };
+type Cidr4 = struct { addr: Ipv4, prefix: Int };
+type Cidr6 = struct { addr: Ipv6, prefix: Int };
+
+fn cidr_digit(b: Int) -> Bool {
+    if b < 48 { return false; }
+    if b > 57 { return false; }
+    return true;
+}
+
+fn cidr_hex(b: Int) -> Bool {
+    if cidr_digit(b) { return true; }
+    if b >= 65 && b <= 70 { return true; }
+    if b >= 97 && b <= 102 { return true; }
+    return false;
+}
+
+fn cidr_hex_v(b: Int) -> Int {
+    if cidr_digit(b) { return b - 48; }
+    if b >= 65 && b <= 70 { return (b - 65) + 10; }
+    if b >= 97 && b <= 102 { return (b - 97) + 10; }
+    return 0 - 1;
+}
+
+fn cidr_uint(s: String) -> Int {
+    let n: Int = chars_len(s);
+    if n == 0 { return 0 - 1; }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if !cidr_digit(b) { return 0 - 1; }
+        acc = (acc * 10) + (b - 48);
+        i = i + 1;
+    }
+    return acc;
+}
+
+fn cidr_hgroup(s: String) -> Int {
+    let n: Int = chars_len(s);
+    if n == 0 || n > 4 { return 0 - 1; }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if !cidr_hex(b) { return 0 - 1; }
+        acc = (acc * 16) + cidr_hex_v(b);
+        i = i + 1;
+    }
+    if acc < 0 || acc > 65535 { return 0 - 1; }
+    return acc;
+}
+
+fn cidr_split4(s: String) -> List[Int] {
+    let n: Int = chars_len(s);
+    let d1: Int = str_index_of(s, ".");
+    if d1 <= 0 { return list_new(); }
+    let rem1: String = str_slice(s, d1 + 1, n);
+    let d2: Int = str_index_of(rem1, ".");
+    if d2 <= 0 { return list_new(); }
+    let rem2: String = str_slice(rem1, d2 + 1, chars_len(rem1));
+    let d3: Int = str_index_of(rem2, ".");
+    if d3 <= 0 { return list_new(); }
+    let a: Int = cidr_uint(str_slice(s, 0, d1));
+    let b: Int = cidr_uint(str_slice(rem1, 0, d2));
+    let c: Int = cidr_uint(str_slice(rem2, 0, d3));
+    let d: Int = cidr_uint(str_slice(rem2, d3 + 1, chars_len(rem2)));
+    if a < 0 || b < 0 || c < 0 || d < 0 { return list_new(); }
+    if a > 255 || b > 255 || c > 255 || d > 255 { return list_new(); }
+    let mut oct: List[Int] = list_new();
+    oct = list_push(oct, a);
+    oct = list_push(oct, b);
+    oct = list_push(oct, c);
+    oct = list_push(oct, d);
+    return oct;
+}
+
+pub fn ipv4_parse_status(s: String) -> Result[Int, String] {
+    if chars_len(s) == 0 { return Err("ERR\tipv4_parse\tempty"); }
+    if list_len(cidr_split4(s)) != 4 { return Err("ERR\tipv4_parse\tmalformed"); }
+    return Ok(1);
+}
+
+pub fn ipv4_to_string(ip: Ipv4) -> String {
+    let o: List[Int] = ip.octets;
+    return list_get(o, 0).to_string() + "." + list_get(o, 1).to_string() + "." + list_get(o, 2).to_string() + "." + list_get(o, 3).to_string();
+}
+
+fn cidr_v6collect(s: String) -> List[Int] {
+    let n: Int = chars_len(s);
+    let mut groups: List[Int] = list_new();
+    let mut pos: Int = 0;
+    while pos < n {
+        let rem: String = str_slice(s, pos, n);
+        let colon: Int = str_index_of(rem, ":");
+        let mut tok: String = "";
+        if colon < 0 { tok = rem; pos = n; } else { tok = str_slice(rem, 0, colon); pos = pos + colon + 1; }
+        if chars_len(tok) > 0 {
+            let g: Int = cidr_hgroup(tok);
+            if g < 0 { return list_new(); }
+            groups = list_push(groups, g);
+        }
+    }
+    return groups;
+}
+
+fn cidr_v6count(s: String) -> Int {
+    let n: Int = chars_len(s);
+    if n == 0 { return 0; }
+    let mut count: Int = 0;
+    let mut pos: Int = 0;
+    while pos < n {
+        let rem: String = str_slice(s, pos, n);
+        let colon: Int = str_index_of(rem, ":");
+        if colon < 0 { if chars_len(rem) > 0 { count = count + 1; } return count; }
+        count = count + 1;
+        pos = pos + colon + 1;
+    }
+    return count;
+}
+
+fn cidr_v6expand(s: String) -> List[Int] {
+    let dbl: Int = str_index_of(s, "::");
+    if dbl < 0 { return cidr_v6collect(s); }
+    let left: String = str_slice(s, 0, dbl);
+    let right: String = str_slice(s, dbl + 2, chars_len(s));
+    let lc: Int = cidr_v6count(left);
+    let rc: Int = cidr_v6count(right);
+    if lc + rc >= 8 { return list_new(); }
+    let lg: List[Int] = cidr_v6collect(left);
+    let rg: List[Int] = cidr_v6collect(right);
+    let mut groups: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < list_len(lg) { groups = list_push(groups, list_get(lg, i)); i = i + 1; }
+    let mut pad: Int = 8 - lc - rc;
+    while pad > 0 { groups = list_push(groups, 0); pad = pad - 1; }
+    let mut j: Int = 0;
+    while j < list_len(rg) { groups = list_push(groups, list_get(rg, j)); j = j + 1; }
+    return groups;
+}
+
+pub fn ipv6_parse_status(s: String) -> Result[Int, String] {
+    if chars_len(s) == 0 { return Err("ERR\tipv6_parse\tempty"); }
+    if list_len(cidr_v6expand(s)) != 8 { return Err("ERR\tipv6_parse\tbad"); }
+    return Ok(1);
+}
+
+fn cidr_to_hex(v: Int) -> String {
+    let d: String = "0123456789abcdef";
+    if v == 0 { return "0"; }
+    let mut n: Int = v;
+    let mut stack: List[Int] = list_new();
+    while n > 0 { stack = list_push(stack, n - ((n / 16) * 16)); n = n / 16; }
+    let mut out: String = "";
+    let mut k: Int = list_len(stack) - 1;
+    while k >= 0 { out = out + char_at(d, list_get(stack, k)); k = k - 1; }
+    return out;
+}
+
+pub fn ipv6_to_string(ip: Ipv6) -> String {
+    let gs: List[Int] = ip.groups;
+    let mut out: String = cidr_to_hex(list_get(gs, 0));
+    let mut i: Int = 1;
+    while i < 8 { out = out + ":" + cidr_to_hex(list_get(gs, i)); i = i + 1; }
+    return out;
+}
+
+pub fn cidr4_parse_status(s: String) -> Result[Int, String] {
+    let n: Int = chars_len(s);
+    if n == 0 { return Err("ERR\tcidr4_parse\tempty"); }
+    let slash: Int = str_index_of(s, "/");
+    if slash <= 0 { return Err("ERR\tcidr4_parse\tno_slash"); }
+    let prefix: Int = cidr_uint(str_slice(s, slash + 1, n));
+    if prefix < 0 { return Err("ERR\tcidr4_parse\tbad_prefix"); }
+    if prefix > 32 { return Err("ERR\tcidr4_parse\tprefix_range"); }
+    if list_len(cidr_split4(str_slice(s, 0, slash))) != 4 { return Err("ERR\tcidr4_parse\tbad_ip"); }
+    return Ok(1);
+}
+
+fn cidr4_val(oct: List[Int]) -> Int {
+    let v0: Int = list_get(oct, 0);
+    let v1: Int = list_get(oct, 1);
+    let v2: Int = list_get(oct, 2);
+    let v3: Int = list_get(oct, 3);
+    let ab: Int = (v0 * 256) + v1;
+    let cd: Int = (v2 * 256) + v3;
+    return (ab * 65536) + cd;
+}
+
+pub fn cidr4_contains(cidr: Cidr4, ip: Ipv4) -> Bool {
+    let net: List[Int] = (cidr.addr).octets;
+    let host: List[Int] = ip.octets;
+    let prefix: Int = cidr.prefix;
+    if prefix == 0 { return true; }
+    let nv: Int = cidr4_val(net);
+    let iv: Int = cidr4_val(host);
+    if prefix == 32 { return nv == iv; }
+    let mask: Int = ((0 - 1) << (32 - prefix));
+    return ((nv & mask)) == ((iv & mask));
+}
+
+pub fn cidr6_parse_status(s: String) -> Result[Int, String] {
+    let n: Int = chars_len(s);
+    if n == 0 { return Err("ERR\tcidr6_parse\tempty"); }
+    let slash: Int = str_index_of(s, "/");
+    if slash <= 0 { return Err("ERR\tcidr6_parse\tno_slash"); }
+    let prefix: Int = cidr_uint(str_slice(s, slash + 1, n));
+    if prefix < 0 { return Err("ERR\tcidr6_parse\tbad_prefix"); }
+    if prefix > 128 { return Err("ERR\tcidr6_parse\tprefix_range"); }
+    if list_len(cidr_v6expand(str_slice(s, 0, slash))) != 8 { return Err("ERR\tcidr6_parse\tbad_ipv6"); }
+    return Ok(1);
+}
+
+pub fn cidr6_contains(cidr: Cidr6, ip: Ipv6) -> Bool {
+    let net: List[Int] = (cidr.addr).groups;
+    let host: List[Int] = ip.groups;
+    let prefix: Int = cidr.prefix;
+    if prefix == 0 { return true; }
+    let full: Int = prefix / 16;
+    let mut eq: Bool = true;
+    let mut k: Int = 0;
+    while k < full { if list_get(net, k) != list_get(host, k) { eq = false; break; } k = k + 1; }
+    if !eq { return false; }
+    if prefix == 128 { return true; }
+    let rem: Int = prefix - (full * 16);
+    if rem == 0 { return true; }
+    let shift: Int = 16 - rem;
+    let net_part: Int = list_get(net, full);
+    let host_part: Int = list_get(host, full);
+    let net_msk: Int = ((net_part >> shift) << shift);
+    let host_msk: Int = ((host_part >> shift) << shift);
+    return net_msk == host_msk;
+}

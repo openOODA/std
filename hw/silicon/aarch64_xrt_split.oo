@@ -1,0 +1,71 @@
+// # AArch64 str_split Runtime
+//
+// Logline: Splits a C string on the first byte of the separator into a List[String].
+//
+// Setup: Uses str_slice and list_push. Empty segments from leading or doubled separators are included.
+//
+// Beats:
+//   1. Walk the haystack until NUL.
+//   2. On each separator byte push the slice [start, i).
+//   3. Push the final tail after the last separator.
+//   4. Return the list pointer in x0.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+
+pub fn a64rt_split(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "str_split");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 48));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(1, 1, 31));
+    x = a64x_emit(x, arm64_word_str(1, 31, 8));
+    x = a64x_bl(x, "list_new");
+    x = a64x_emit(x, arm64_word_str(0, 31, 16));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_str(0, 31, 24));
+    x = a64x_emit(x, arm64_word_str(0, 31, 32));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_ldr(9, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(10, 31, 32));
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 9, 10));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 31));
+    let bdn: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_ldr(3, 31, 8));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 3));
+    let bne: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 24));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 32));
+    x = a64x_bl(x, "str_slice");
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 16));
+    x = a64x_bl(x, "list_push");
+    x = a64x_emit(x, arm64_word_str(0, 31, 16));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 32));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 1));
+    x = a64x_emit(x, arm64_word_str(0, 31, 24));
+    let nxi: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bne, arm64_word_b_cond(arm64_cond_ne(), nxi - bne)));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 32));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 1));
+    x = a64x_emit(x, arm64_word_str(0, 31, 32));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bdn, arm64_word_b_cond(arm64_cond_eq(), done - bdn)));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 24));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 32));
+    x = a64x_bl(x, "str_slice");
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 16));
+    x = a64x_bl(x, "list_push");
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 48));
+    return a64rt_setx(r, a64rt_epi(x));
+}

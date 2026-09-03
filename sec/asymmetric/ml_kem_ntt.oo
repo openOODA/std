@@ -1,0 +1,156 @@
+// # FIPS 203 ML-KEM Number Theoretic Transform & BaseMul
+//
+// Logline: Implements 128-butterfly Cooley-Tukey NTT, INTT, and BaseMul ring multiplication mod 3329.
+//
+// Setup: Kyber ring Z_3329[X]/(X^256+1) with root zeta=17 and bit-reversed power tables.
+//
+// Beats:
+//   1. Build 128 bit-reversed zeta table for 7-layer butterflies.
+//   2. Compute forward Cooley-Tukey NTT transformation into 128 degree-2 subrings.
+//   3. Compute inverse Gentleman-Sande INTT transformation scaled by 3303.
+//   4. Compute BaseMul subring point-wise multiplication over (X^2 - zeta^{2r+1}).
+
+import "./ml_kem_poly.oo";
+
+fn ml_kem_br7(x: Int) -> Int {
+    let mut r: Int = 0;
+    let mut i: Int = 0;
+    while i < 7 {
+        if (x & (1 << i)) != 0 {
+            r = r + (1 << (6 - i));
+        }
+        i = i + 1;
+    }
+    return r;
+}
+
+fn ml_kem_pow_mod(base: Int, exp: Int) -> Int {
+    let mut r: Int = 1;
+    let mut b: Int = ml_kem_poly_mod(base);
+    let mut e: Int = exp;
+    while e > 0 {
+        if (e & 1) == 1 {
+            r = ml_kem_poly_mod(r * b);
+        }
+        b = ml_kem_poly_mod(b * b);
+        e = e / 2;
+    }
+    return r;
+}
+
+pub fn ml_kem_zetas() -> List[Int] {
+    let mut z: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 128 {
+        z = list_push(z, ml_kem_pow_mod(17, ml_kem_br7(i)));
+        i = i + 1;
+    }
+    return z;
+}
+
+pub fn ml_kem_gammas() -> List[Int] {
+    let mut g: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 128 {
+        let exp: Int = 2 * ml_kem_br7(i) + 1;
+        g = list_push(g, ml_kem_pow_mod(17, exp));
+        i = i + 1;
+    }
+    return g;
+}
+
+pub fn ml_kem_ntt_fwd(p: MlKemPoly) -> MlKemPoly {
+    let zetas: List[Int] = ml_kem_zetas();
+    let mut a: List[Int] = p.coeffs;
+    let mut len: Int = 128;
+    let mut k: Int = 1;
+    while len >= 2 {
+        let mut start: Int = 0;
+        while start < 256 {
+            let zeta: Int = list_get(zetas, k);
+            k = k + 1;
+            let mut j: Int = 0;
+            while j < len {
+                let u: Int = list_get(a, start + j);
+                let v: Int = list_get(a, start + j + len);
+                let t: Int = ml_kem_poly_mod(zeta * v);
+                a = list_set(a, start + j, ml_kem_poly_mod(u + t));
+                a = list_set(a, start + j + len, ml_kem_poly_mod(u - t));
+                j = j + 1;
+            }
+            start = start + 2 * len;
+        }
+        len = len / 2;
+    }
+    return MlKemPoly {
+        coeffs: a,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_ntt_inv(p: MlKemPoly) -> MlKemPoly {
+    let zetas: List[Int] = ml_kem_zetas();
+    let mut a: List[Int] = p.coeffs;
+    let mut len: Int = 2;
+    let mut k: Int = 127;
+    while len <= 128 {
+        let mut start: Int = 0;
+        while start < 256 {
+            let zeta: Int = list_get(zetas, k);
+            k = k - 1;
+            let mut j: Int = 0;
+            while j < len {
+                let u: Int = list_get(a, start + j);
+                let v: Int = list_get(a, start + j + len);
+                a = list_set(a, start + j, ml_kem_poly_mod(u + v));
+                a = list_set(a, start + j + len, ml_kem_poly_mod(zeta * (v - u)));
+                j = j + 1;
+            }
+            start = start + 2 * len;
+        }
+        len = len * 2;
+    }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        out = list_push(out, ml_kem_poly_mod(list_get(a, i) * 3303));
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: out,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_basemul(a: MlKemPoly, b: MlKemPoly) -> MlKemPoly {
+    let gammas: List[Int] = ml_kem_gammas();
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 128 {
+        let a0: Int = list_get(a.coeffs, 2 * i);
+        let a1: Int = list_get(a.coeffs, 2 * i + 1);
+        let b0: Int = list_get(b.coeffs, 2 * i);
+        let b1: Int = list_get(b.coeffs, 2 * i + 1);
+        let gamma: Int = list_get(gammas, i);
+
+        let c0: Int = ml_kem_poly_mod(a0 * b0 + ml_kem_poly_mod(a1 * b1) * gamma);
+        let c1: Int = ml_kem_poly_mod(a0 * b1 + a1 * b0);
+        out = list_push(out, c0);
+        out = list_push(out, c1);
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: out,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_ntt_multiply(a: MlKemPoly, b: MlKemPoly) -> MlKemPoly {
+    let fa: MlKemPoly = ml_kem_ntt_fwd(a);
+    let fb: MlKemPoly = ml_kem_ntt_fwd(b);
+    let fc: MlKemPoly = ml_kem_basemul(fa, fb);
+    return ml_kem_ntt_inv(fc);
+}

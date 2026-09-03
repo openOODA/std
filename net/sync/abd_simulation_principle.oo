@@ -1,0 +1,136 @@
+// # ABD simulation principle
+//
+// Logline: Attiya-Bar-Noy-Dolev (1995) simulate a single-writer multi-reader (SWMR) atomic register on top of an asynchronous message-passing system using n/2+1-majority quorums: read and write each contact a quorum of n/2+1 servers, and the intersection property guarantees the most recent timestamp is observed.
+// Logline (coupled): ABD requires the failure detector class S (eventual strong, Chandra-Toueg 1996); the perpetual detector F is not sufficient. ABD sidesteps the FLP impossibility (Fischer-Lynch-Paterson 1985 JACM 32, 374) because quorums overlap and the algorithm is wait-free only under S.
+//
+// Setup: Pure Int arithmetic on an AbdState record. No FS, net, env, or thread. The state machine is a closed transition system.
+//
+// Beats:
+//   1. abd_read_quorum(n) = n/2 + 1 (Attiya-Bar-Noy-Dolev 1995 JACM 42, 1, Sec. 3).
+//   2. abd_write_quorum(n) = n/2 + 1 (Attiya-Bar-Noy-Dolev 1995 JACM 42, 1, Sec. 3).
+//   3. abd_quorum_intersects: |R| + |W| > n iff any read quorum intersects any write quorum (the n/2+1 + n/2+1 > n identity).
+//   4. abd_read_returns_max_ts: read returns the value-tagged pair with the highest timestamp across the read quorum.
+//   5. Coupled: ABD requires failure detector S; FLP impossibility is circumvented because quorums overlap and the read-write register, not consensus, is the target.
+
+import "std/core/primitives/domain_cert.oo";
+
+// n/2 + 1 is the ABD read quorum for a cluster of size n (Attiya-Bar-Noy-Dolev 1995 JACM 42, 1 Sec. 3).
+pub fn abd_read_quorum(n: Int) -> Int {
+    if n < 1 { return 0; }
+    let half: Int = n / 2;
+    return half + 1;
+}
+
+// n/2 + 1 is the ABD write quorum for a cluster of size n (Attiya-Bar-Noy-Dolev 1995 JACM 42, 1 Sec. 3).
+pub fn abd_write_quorum(n: Int) -> Int {
+    if n < 1 { return 0; }
+    let half: Int = n / 2;
+    return half + 1;
+}
+
+// 1 iff |R| + |W| > n. For n/2+1 + n/2+1, when n is even this is n+1 > n (true), when n is odd (e.g. 5) this is 3+3 = 6 > 5 (true). This is the quorum intersection property (Attiya-Bar-Noy-Dolev 1995 Lemma 3.1).
+pub fn abd_quorum_intersects(r_size: Int, w_size: Int, n: Int) -> Int {
+    let s: Int = r_size + w_size;
+    if s > n { return 1; }
+    return 0;
+}
+
+// abd_read_returns_max_ts: returns 1 if max_ts is the maximum timestamp among the read quorum's responses; else 0.
+pub fn abd_read_returns_max_ts(quorum_ts: List[Int], max_ts: Int) -> Int {
+    let n: Int = list_len(quorum_ts);
+    if n <= 0 { return 0; }
+    let mut cur_max: Int = list_get(quorum_ts, 0);
+    let mut i: Int = 1;
+    while i < n {
+        let v: Int = list_get(quorum_ts, i);
+        if v > cur_max { cur_max = v; }
+        i = i + 1;
+    }
+    if cur_max == max_ts { return 1; }
+    return 0;
+}
+
+// abd_liveness: 1 iff both quorums meet the n/2+1 threshold; 0 if either falls short (liveness requires contacting a full majority).
+pub fn abd_liveness_holds(n: Int, r_contacted: Int, w_contacted: Int) -> DomainCert {
+    let rq: Int = abd_read_quorum(n);
+    let wq: Int = abd_write_quorum(n);
+    if r_contacted >= rq {
+        if w_contacted >= wq {
+            return domain_cert("sync", "abd_liveness", 1);
+        }
+    }
+    return domain_cert("sync", "abd_liveness", 0);
+}
+
+// Coupled: ABD needs failure detector S. detect_class_is_S returns 1 when both quorums reach majority and the eventual-strong detector S is in use; 0 when the perpetual detector F is in use (F is not sufficient for ABD wait-freedom).
+// detect_class: 0 = S, 1 = F.
+pub fn abd_detect_class_required(n: Int, detect_class: Int) -> Int {
+    if detect_class == 0 {
+        if abd_quorum_intersects(abd_read_quorum(n), abd_write_quorum(n), n) == 1 {
+            return 1;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+// Golden: 5 nodes, read quorum = 3, write quorum = 3, intersection holds.
+pub fn abd_5node_intersect_holds() -> DomainCert {
+    let n: Int = 5;
+    if abd_read_quorum(n) != 3 { return domain_cert("sync", "abd_5node_intersect", 0); }
+    if abd_write_quorum(n) != 3 { return domain_cert("sync", "abd_5node_intersect", 0); }
+    if abd_quorum_intersects(3, 3, 5) != 1 { return domain_cert("sync", "abd_5node_intersect", 0); }
+    return domain_cert("sync", "abd_5node_intersect", 1);
+}
+
+// Hostile: quorum < n/2+1 fails liveness.
+pub fn abd_quorum_shortage_holds() -> DomainCert {
+    let s: DomainCert = abd_liveness_holds(5, 2, 3);
+    if s.holds != 0 { return domain_cert("sync", "abd_quorum_shortage", 0); }
+    let t: DomainCert = abd_liveness_holds(5, 3, 2);
+    if t.holds != 0 { return domain_cert("sync", "abd_quorum_shortage", 0); }
+    let u: DomainCert = abd_liveness_holds(5, 5, 5);
+    if u.holds != 1 { return domain_cert("sync", "abd_quorum_shortage", 0); }
+    return domain_cert("sync", "abd_quorum_shortage", 1);
+}
+
+pub fn verify_abd_simulation_principle() -> Bool {
+    // Golden: 5 nodes, read quorum = 3.
+    if abd_read_quorum(5) != 3 { return false; }
+    if abd_read_quorum(3) != 2 { return false; }
+    if abd_read_quorum(1) != 1 { return false; }
+    if abd_read_quorum(7) != 4 { return false; }
+    if abd_read_quorum(0) != 0 { return false; }
+    // Golden: 5 nodes, write quorum = 3.
+    if abd_write_quorum(5) != 3 { return false; }
+    if abd_write_quorum(3) != 2 { return false; }
+    if abd_write_quorum(7) != 4 { return false; }
+    // Golden: intersection property holds (3+3 > 5).
+    if abd_quorum_intersects(3, 3, 5) != 1 { return false; }
+    if abd_quorum_intersects(2, 2, 5) != 0 { return false; }
+    if abd_quorum_intersects(2, 4, 5) != 1 { return false; }
+    if abd_quorum_intersects(4, 4, 5) != 1 { return false; }
+    // Golden: read returns max timestamp from quorum.
+    let mut ts: List[Int] = list_new();
+    ts = list_push(ts, 5);
+    ts = list_push(ts, 12);
+    ts = list_push(ts, 3);
+    if abd_read_returns_max_ts(ts, 12) != 1 { return false; }
+    if abd_read_returns_max_ts(ts, 5) != 0 { return false; }
+    if abd_read_returns_max_ts(ts, 13) != 0 { return false; }
+    // Hostile: liveness fails when quorum is short.
+    if abd_liveness_holds(5, 2, 3).holds != 0 { return false; }
+    if abd_liveness_holds(5, 3, 2).holds != 0 { return false; }
+    if abd_liveness_holds(5, 5, 5).holds != 1 { return false; }
+    if abd_liveness_holds(7, 4, 4).holds != 1 { return false; }
+    if abd_liveness_holds(7, 3, 4).holds != 0 { return false; }
+    // Coupled: ABD needs detector S (0). Detector F (1) is insufficient.
+    if abd_detect_class_required(5, 0) != 1 { return false; }
+    if abd_detect_class_required(5, 1) != 0 { return false; }
+    if abd_detect_class_required(3, 0) != 1 { return false; }
+    if abd_detect_class_required(3, 1) != 0 { return false; }
+    // Domain certs hold.
+    if abd_5node_intersect_holds().holds != 1 { return false; }
+    if abd_quorum_shortage_holds().holds != 1 { return false; }
+    return true;
+}

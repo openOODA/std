@@ -1,0 +1,88 @@
+// # Data Locality Principle
+//
+// Logline: A data access pattern is local when most reads serve the most-recently-written or nearby keys.
+//
+// Setup: Pure Int. locality_score is in [0, 100]. Out-of-range fails closed. Hosts data_invariants.oo stem.
+//
+// Beats:
+//   1. Locality score normalization: 0..100.
+//   2. Local access decision: 1 if score >= threshold.
+//   3. Hot-region decision: 1 if score >= hot_threshold.
+//   4. Hosts data_invariants.oo stem for cross-law correlation.
+
+import "std/app/data/data_invariants.oo";
+
+// Default locality threshold for "local" classification (in 0..100).
+pub fn locality_threshold() -> Int {
+    return 60;
+}
+
+// Default hot-region threshold (in 0..100).
+pub fn locality_hot_threshold() -> Int {
+    return 80;
+}
+
+// True if score is in [0, 100].
+pub fn locality_valid(score: Int) -> Bool {
+    if score < 0 { return false; }
+    if score > 100 { return false; }
+    return true;
+}
+
+// Local access: 1 if score >= threshold and score is valid.
+pub fn locality_is_local(score: Int, threshold: Int) -> Int {
+    if locality_valid(score) == false { return 0; }
+    if threshold < 0 { return 0; }
+    if threshold > 100 { return 0; }
+    if score >= threshold { return 1; }
+    return 0;
+}
+
+// Hot region: 1 if score >= hot_threshold and score is valid.
+pub fn locality_is_hot(score: Int, hot_threshold: Int) -> Int {
+    if locality_valid(score) == false { return 0; }
+    if hot_threshold < 0 { return 0; }
+    if hot_threshold > 100 { return 0; }
+    if score >= hot_threshold { return 1; }
+    return 0;
+}
+
+// Clamp score to 0..100; out-of-range inputs return 0.
+pub fn locality_clamp(score: Int) -> Int {
+    if score < 0 { return 0; }
+    if score > 100 { return 100; }
+    return score;
+}
+
+// KAT and hostile cases for the data locality principle.
+pub fn verify_locality_principle() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    if locality_valid(0) == false { return false; }
+    if locality_valid(100) == false { return false; }
+    if locality_valid(60) == false { return false; }
+    if locality_valid(101) == true { return false; }
+    if locality_valid(0 - 1) == true { return false; }
+    if locality_threshold() != 60 { return false; }
+    if locality_hot_threshold() != 80 { return false; }
+    if locality_is_local(60, 60) != 1 { return false; }
+    if locality_is_local(80, 60) != 1 { return false; }
+    if locality_is_local(59, 60) != 0 { return false; }
+    if locality_is_local(0, 60) != 0 { return false; }
+    if locality_is_local(101, 60) != 0 { return false; }
+    if locality_is_local(0 - 1, 60) != 0 { return false; }
+    if locality_is_local(60, 0 - 1) != 0 { return false; }
+    if locality_is_local(60, 101) != 0 { return false; }
+    if locality_is_hot(80, 80) != 1 { return false; }
+    if locality_is_hot(100, 80) != 1 { return false; }
+    if locality_is_hot(79, 80) != 0 { return false; }
+    if locality_is_hot(101, 80) != 0 { return false; }
+    if locality_is_hot(0 - 1, 80) != 0 { return false; }
+    if locality_is_hot(80, 0 - 1) != 0 { return false; }
+    if locality_clamp(50) != 50 { return false; }
+    if locality_clamp(0) != 0 { return false; }
+    if locality_clamp(100) != 100 { return false; }
+    if locality_clamp(101) != 100 { return false; }
+    if locality_clamp(0 - 1) != 0 { return false; }
+    return true;
+}

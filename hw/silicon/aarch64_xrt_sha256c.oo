@@ -1,0 +1,133 @@
+// # AArch64 SHA-256 Pad Unhex And Hex
+//
+// Logline: Decodes the K table, pads a message to 64-byte blocks, and hex-encodes 32 digest bytes.
+//
+// Setup: Called from a64rt_sha256. Heap bump for padded copy and output string.
+//
+// Beats:
+//   1. __sha_unhex_k writes 256 K bytes from 512 lowercase hex digits.
+//   2. __sha_pad copies msg, 0x80, zeros, and big-endian bit length.
+//   3. __sha_hex32 writes 64 hex digits plus NUL.
+//   4. Continue into compress via a64rt_sha256d.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_sha256d.oo";
+
+fn a64rt_unhexk(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_unhex_k");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 28));
+    x = a64x_emit(x, arm64_word_movz(0, 256, 0));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 0));
+    x = a64x_emit(x, arm64_word_movz(11, 0, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 256, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(11, 0));
+    let bd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_add_reg(2, 11, 11));
+    x = a64x_emit(x, arm64_word_ldrb_reg(3, 9, 2));
+    x = a64x_emit(x, arm64_word_add_imm(2, 2, 1));
+    x = a64x_emit(x, arm64_word_ldrb_reg(4, 9, 2));
+    x = a64x_emit(x, arm64_word_movz(5, 97, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(3, 5));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 3));
+    x = a64x_emit(x, arm64_word_sub_imm(3, 3, 48));
+    x = a64x_emit(x, arm64_word_b(2));
+    x = a64x_emit(x, arm64_word_sub_imm(3, 3, 87));
+    x = a64x_emit(x, arm64_word_cmp_reg(4, 5));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 3));
+    x = a64x_emit(x, arm64_word_sub_imm(4, 4, 48));
+    x = a64x_emit(x, arm64_word_b(2));
+    x = a64x_emit(x, arm64_word_sub_imm(4, 4, 87));
+    x = a64x_emit(x, arm64_word_movz(5, 16, 0));
+    x = a64x_emit(x, arm64_word_mul(3, 3, 5));
+    x = a64x_emit(x, arm64_word_add_reg(3, 3, 4));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 10, 11));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bd, arm64_word_b_cond(arm64_cond_eq(), done - bd)));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 10));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_shapad(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_pad");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    x = a64x_emit(x, arm64_word_add_imm(11, 10, 1));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(2, 63, 0));
+    x = a64x_emit(x, arm64_word_and_reg(2, 11, 2));
+    x = a64x_emit(x, arm64_word_movz(3, 56, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 3));
+    let bok: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let got: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bok, arm64_word_b_cond(arm64_cond_eq(), got - bok)));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 8));
+    x = a64x_emit(x, arm64_word_mov_reg(12, 28));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 11));
+    x = a64x_emit(x, arm64_word_movz(13, 0, 0));
+    let cpy: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(13, 10));
+    let bcd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 9, 13));
+    x = a64x_emit(x, arm64_word_strb_reg(2, 12, 13));
+    x = a64x_emit(x, arm64_word_add_imm(13, 13, 1));
+    let bcb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(cpy - bcb));
+    let cdn: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bcd, arm64_word_b_cond(arm64_cond_eq(), cdn - bcd)));
+    x = a64x_emit(x, arm64_word_movz(2, 128, 0));
+    x = a64x_emit(x, arm64_word_strb_reg(2, 12, 10));
+    x = a64x_emit(x, arm64_word_add_imm(13, 10, 1));
+    let zlp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_sub_imm(2, 11, 8));
+    x = a64x_emit(x, arm64_word_cmp_reg(13, 2));
+    let bzd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_strb_reg(31, 12, 13));
+    x = a64x_emit(x, arm64_word_add_imm(13, 13, 1));
+    let bzb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(zlp - bzb));
+    let zdn: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bzd, arm64_word_b_cond(arm64_cond_eq(), zdn - bzd)));
+    x = a64x_emit(x, arm64_word_movz(4, 3, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(2, 10, 4));
+    x = a64x_emit(x, arm64_word_sub_imm(13, 11, 1));
+    x = a64x_emit(x, arm64_word_strb_reg(2, 12, 13));
+    x = a64x_emit(x, arm64_word_movz(4, 8, 0));
+    x = a64x_emit(x, arm64_word_lsr_reg(3, 2, 4));
+    x = a64x_emit(x, arm64_word_sub_imm(13, 13, 1));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 12, 13));
+    x = a64x_emit(x, arm64_word_movz(4, 16, 0));
+    x = a64x_emit(x, arm64_word_lsr_reg(3, 2, 4));
+    x = a64x_emit(x, arm64_word_sub_imm(13, 13, 1));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 12, 13));
+    x = a64x_emit(x, arm64_word_movz(4, 24, 0));
+    x = a64x_emit(x, arm64_word_lsr_reg(3, 2, 4));
+    x = a64x_emit(x, arm64_word_sub_imm(13, 13, 1));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 12, 13));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 12));
+    x = a64x_emit(x, arm64_word_mov_reg(1, 11));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_sha256c(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_unhexk(r0);
+    r = a64rt_shapad(r);
+    return a64rt_sha256d(r);
+}

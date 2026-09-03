@@ -1,0 +1,51 @@
+// # Stream Pairwise Zip Combinator Module
+//
+// Logline: Stream pairwise combiner zipping elements from two Int streams.
+//
+// Setup: Pure stream pairwise zipper with List[Int] sequences.
+//
+// Beats:
+//   1. Construct StreamZip from two input stream lists.
+//   2. Pair corresponding elements until the shorter stream ends.
+//   3. Query length and pair components.
+// Technical Note: Stream pairwise combiner. This module pairs corresponding integer elements from two streams until the shorter stream terminates.
+
+type StreamZip = struct {
+    left: List[Int],
+    right: List[Int],
+    count: Int
+};
+
+pub fn stream_zip_combine(a: List[Int], b: List[Int]) -> StreamZip {
+    let len_a: Int = list_len(a);
+    let len_b: Int = list_len(b);
+    let mut min_len: Int = len_a;
+    if len_b < min_len {
+        min_len = len_b;
+    }
+    return StreamZip {
+        left: a,
+        right: b,
+        count: min_len
+    };
+}
+
+pub fn stream_zip_len(sz: StreamZip) -> Int {
+    return sz.count;
+}
+
+pub fn stream_zip_left_at(sz: StreamZip, i: Int) -> Int {
+    let n: Int = sz.count;
+    if i < 0 || i >= n {
+        return 0;
+    }
+    return list_get(sz.left, i);
+}
+
+pub fn stream_zip_right_at(sz: StreamZip, i: Int) -> Int {
+    let n: Int = sz.count;
+    if i < 0 || i >= n {
+        return 0;
+    }
+    return list_get(sz.right, i);
+}

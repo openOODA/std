@@ -1,0 +1,161 @@
+// # AAPCS64 Procedure Call Standard Helpers
+//
+// Logline: Names AAPCS64 argument, return, callee-saved, and stack-alignment rules for both the integer (X0-X31) and the NEON/FP (V0-V31) register files of the AArch64 backend.
+//
+// Setup: Pure constants. Integer argument registers are x0 through x7. NEON argument registers are v0 through v7. Stack pointer stays 16-byte aligned.
+//
+// Beats:
+//   1. Map integer argument indices 0..7 onto registers x0..x7.
+//   2. Name scalar integer return x0 and 128-bit high return x1.
+//   3. Mark integer callee-saved registers x19..x28 plus frame pointer x29 and link register x30.
+//   4. Map NEON/FP argument indices 0..7 onto registers v0..v7.
+//   5. Mark NEON callee-saved registers v8..v15 (lower) and v16..v31 (upper) per AAPCS64.
+//   6. Round a frame size up to a 16-byte stack alignment.
+
+pub fn abi_arg_count() -> Int {
+    return 8;
+}
+
+pub fn abi_arg_reg(i: Int) -> Int {
+    if i < 0 {
+        return 0;
+    }
+    if i > 7 {
+        return 7;
+    }
+    return i;
+}
+
+pub fn abi_ret_reg() -> Int {
+    return 0;
+}
+
+pub fn abi_ret_hi_reg() -> Int {
+    return 1;
+}
+
+pub fn abi_fp_reg() -> Int {
+    return 29;
+}
+
+pub fn abi_lr_reg() -> Int {
+    return 30;
+}
+
+pub fn abi_sp_reg() -> Int {
+    return 31;
+}
+
+pub fn abi_sys_reg() -> Int {
+    return 8;
+}
+
+pub fn abi_is_callee_saved(reg: Int) -> Bool {
+    if reg >= 19 {
+        if reg <= 30 {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn abi_align_up(value: Int, align: Int) -> Int {
+    if align <= 0 {
+        return value;
+    }
+    let r: Int = value % align;
+    if r == 0 {
+        return value;
+    }
+    return value + (align - r);
+}
+
+pub fn abi_stack_aligned(size: Int) -> Int {
+    return abi_align_up(size, 16);
+}
+
+pub fn abi_is_arg_reg(reg: Int) -> Bool {
+    if reg < 0 {
+        return false;
+    }
+    if reg > 7 {
+        return false;
+    }
+    return true;
+}
+
+pub fn abi_scratch_reg() -> Int {
+    return 9;
+}
+
+pub fn abi_valid_reg(reg: Int) -> Bool {
+    if reg < 0 {
+        return false;
+    }
+    if reg > 31 {
+        return false;
+    }
+    return true;
+}
+
+// AAPCS64 NEON/FP register conventions.
+// V0-V7: argument and scratch (caller-saved).
+// V8-V15: lower 64-bits callee-saved (d8-d15).
+// V16-V31: caller-saved scratch.
+
+pub fn abi_fp_arg_count() -> Int {
+    return 8;
+}
+
+pub fn abi_fp_arg_reg(i: Int) -> Int {
+    if i < 0 {
+        return 0;
+    }
+    if i > 7 {
+        return 7;
+    }
+    return i;
+}
+
+pub fn abi_fp_ret_reg() -> Int {
+    return 0;
+}
+
+pub fn abi_fp_ret_hi_reg() -> Int {
+    return 1;
+}
+
+pub fn abi_is_fp_arg_reg(reg: Int) -> Bool {
+    if reg < 0 {
+        return false;
+    }
+    if reg > 7 {
+        return false;
+    }
+    return true;
+}
+
+// AAPCS64: V8-V15 are callee-saved (lower 64 bits: d8-d15).
+// V0-V7 and V16-V31 are caller-saved scratch.
+pub fn abi_is_fp_callee_saved(reg: Int) -> Bool {
+    if reg >= 8 {
+        if reg <= 15 {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn abi_valid_fp_reg(reg: Int) -> Bool {
+    if reg < 0 {
+        return false;
+    }
+    if reg > 31 {
+        return false;
+    }
+    return true;
+}
+
+pub fn abi_fp_indirect_result_reg() -> Int {
+    return 8;
+}

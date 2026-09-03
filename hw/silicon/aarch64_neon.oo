@@ -1,0 +1,230 @@
+// # AArch64 AdvSIMD Neon 128-bit & Paired 256-bit Vector Encoder
+//
+// Logline: Encodes 128-bit Neon vector arithmetic, paired 256-bit Q-register operations, and Q-register pair load/store.
+//
+// Setup: Vector registers v0–v31 and q0–q31 share indices 0..31. Paired registers (vN, vN+1) represent 256-bit vectors under RFC 0026.
+//
+// Beats:
+//   1. Encode ADD.2D, SUB.2D, and FMUL.2D three-same vector arithmetic.
+//   2. Encode AND.16B, EOR.16B, FMLA.4S, and FMLA.2D.
+//   3. Encode paired 256-bit vector operations (fmla.4s, fmla.2d, add.2d, sub.2d, fmul.2d).
+//   4. Encode unsigned-offset LDP/STP of two Q registers (128-bit pairs and 256-bit vector frames).
+
+import "std/hw/silicon/aarch64_encoder.oo";
+
+pub fn neon_rd(word: Int) -> Int {
+    return word & 31;
+}
+
+pub fn neon_rn(word: Int) -> Int {
+    return (word >> 5) & 31;
+}
+
+pub fn neon_rm(word: Int) -> Int {
+    return (word >> 16) & 31;
+}
+
+pub fn neon_rt(word: Int) -> Int {
+    return word & 31;
+}
+
+pub fn neon_rt2(word: Int) -> Int {
+    return (word >> 10) & 31;
+}
+
+pub fn neon_is_vreg(r: Int) -> Bool {
+    if r < 0 { return false; }
+    if r > 31 { return false; }
+    return true;
+}
+
+pub fn neon_word_add_2d(vd: Int, vn: Int, vm: Int) -> Int {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return 0 - 1; }
+    return (78 << 24) | (224 << 16) | ((vm & 31) << 16) | (33 << 10) | ((vn & 31) << 5) | (vd & 31);
+}
+
+pub fn neon_encode_add_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return list_new(); }
+    let w: Int = neon_word_add_2d(vd, vn, vm);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_word_sub_2d(vd: Int, vn: Int, vm: Int) -> Int {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return 0 - 1; }
+    return (110 << 24) | (224 << 16) | ((vm & 31) << 16) | (33 << 10) | ((vn & 31) << 5) | (vd & 31);
+}
+
+pub fn neon_encode_sub_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return list_new(); }
+    let w: Int = neon_word_sub_2d(vd, vn, vm);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_word_mul_2d(vd: Int, vn: Int, vm: Int) -> Int {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return 0 - 1; }
+    return (110 << 24) | (96 << 16) | ((vm & 31) << 16) | (55 << 10) | ((vn & 31) << 5) | (vd & 31);
+}
+
+pub fn neon_encode_mul_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return list_new(); }
+    let w: Int = neon_word_mul_2d(vd, vn, vm);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_word_and_16b(vd: Int, vn: Int, vm: Int) -> Int {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return 0 - 1; }
+    return (78 << 24) | (32 << 16) | ((vm & 31) << 16) | (7 << 10) | ((vn & 31) << 5) | (vd & 31);
+}
+
+pub fn neon_encode_and_16b(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return list_new(); }
+    let w: Int = neon_word_and_16b(vd, vn, vm);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_word_eor_16b(vd: Int, vn: Int, vm: Int) -> Int {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return 0 - 1; }
+    return (110 << 24) | (32 << 16) | ((vm & 31) << 16) | (7 << 10) | ((vn & 31) << 5) | (vd & 31);
+}
+
+pub fn neon_encode_eor_16b(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return list_new(); }
+    let w: Int = neon_word_eor_16b(vd, vn, vm);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_word_fmla_4s(vd: Int, vn: Int, vm: Int) -> Int {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return 0 - 1; }
+    return (78 << 24) | (32 << 16) | ((vm & 31) << 16) | (51 << 10) | ((vn & 31) << 5) | (vd & 31);
+}
+
+pub fn neon_encode_fmla_4s(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return list_new(); }
+    let w: Int = neon_word_fmla_4s(vd, vn, vm);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_word_fmla_2d(vd: Int, vn: Int, vm: Int) -> Int {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return 0 - 1; }
+    return (78 << 24) | (192 << 16) | ((vm & 31) << 16) | (51 << 10) | ((vn & 31) << 5) | (vd & 31);
+}
+
+pub fn neon_encode_fmla_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd > 31 || vn < 0 || vn > 31 || vm < 0 || vm > 31 { return list_new(); }
+    let w: Int = neon_word_fmla_2d(vd, vn, vm);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+fn neon_imm7_q(byte_off: Int) -> Int {
+    if byte_off % 16 != 0 { return 0 - 1; }
+    let q: Int = byte_off / 16;
+    if q < -64 || q > 63 { return 0 - 1; }
+    if q < 0 { return (q + 128) & 127; }
+    return q & 127;
+}
+
+pub fn neon_word_ldp_q(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> Int {
+    if rt < 0 || rt > 31 || rt2 < 0 || rt2 > 31 || rn < 0 || rn > 31 { return 0 - 1; }
+    if rt == rt2 { return 0 - 1; }
+    let imm7: Int = neon_imm7_q(byte_off);
+    if imm7 == 0 - 1 { return 0 - 1; }
+    return (173 << 24) | (64 << 16) | (imm7 << 15) | ((rt2 & 31) << 10) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn neon_encode_ldp_q(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> List[Int] {
+    if rt < 0 || rt > 31 || rt2 < 0 || rt2 > 31 || rn < 0 || rn > 31 { return list_new(); }
+    if rt == rt2 { return list_new(); }
+    let w: Int = neon_word_ldp_q(rt, rt2, rn, byte_off);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_word_stp_q(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> Int {
+    if rt < 0 || rt > 31 || rt2 < 0 || rt2 > 31 || rn < 0 || rn > 31 { return 0 - 1; }
+    if rt == rt2 { return 0 - 1; }
+    let imm7: Int = neon_imm7_q(byte_off);
+    if imm7 == 0 - 1 { return 0 - 1; }
+    return (173 << 24) | (imm7 << 15) | ((rt2 & 31) << 10) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn neon_encode_stp_q(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> List[Int] {
+    if rt < 0 || rt > 31 || rt2 < 0 || rt2 > 31 || rn < 0 || rn > 31 { return list_new(); }
+    if rt == rt2 { return list_new(); }
+    let w: Int = neon_word_stp_q(rt, rt2, rn, byte_off);
+    if w == 0 - 1 { return list_new(); }
+    return arm64_u32_to_le(w);
+}
+
+pub fn neon_paired_reg_str(q_lo: Int, is_double: Bool) -> String {
+    if q_lo < 0 || q_lo + 1 > 31 { return ""; }
+    if is_double {
+        return "(v" + q_lo.to_string() + ".2d, v" + (q_lo + 1).to_string() + ".2d)";
+    }
+    return "(v" + q_lo.to_string() + ".4s, v" + (q_lo + 1).to_string() + ".4s)";
+}
+
+fn neon_concat_bytes(a: List[Int], b: List[Int]) -> List[Int] {
+    if list_len(a) == 0 || list_len(b) == 0 {
+        if list_len(a) == 0 && list_len(b) == 0 { return list_new(); }
+    }
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn neon_encode_paired_fmla_4s(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd + 1 > 31 || vn < 0 || vn + 1 > 31 || vm < 0 || vm + 1 > 31 { return list_new(); }
+    let lo: List[Int] = neon_encode_fmla_4s(vd, vn, vm);
+    if list_len(lo) == 0 { return list_new(); }
+    let hi: List[Int] = neon_encode_fmla_4s(vd + 1, vn + 1, vm + 1);
+    if list_len(hi) == 0 { return list_new(); }
+    return neon_concat_bytes(lo, hi);
+}
+
+pub fn neon_encode_paired_fmla_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd + 1 > 31 || vn < 0 || vn + 1 > 31 || vm < 0 || vm + 1 > 31 { return list_new(); }
+    let lo: List[Int] = neon_encode_fmla_2d(vd, vn, vm);
+    if list_len(lo) == 0 { return list_new(); }
+    let hi: List[Int] = neon_encode_fmla_2d(vd + 1, vn + 1, vm + 1);
+    if list_len(hi) == 0 { return list_new(); }
+    return neon_concat_bytes(lo, hi);
+}
+
+pub fn neon_encode_paired_add_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd + 1 > 31 || vn < 0 || vn + 1 > 31 || vm < 0 || vm + 1 > 31 { return list_new(); }
+    let lo: List[Int] = neon_encode_add_2d(vd, vn, vm);
+    if list_len(lo) == 0 { return list_new(); }
+    let hi: List[Int] = neon_encode_add_2d(vd + 1, vn + 1, vm + 1);
+    if list_len(hi) == 0 { return list_new(); }
+    return neon_concat_bytes(lo, hi);
+}
+
+pub fn neon_encode_paired_sub_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd + 1 > 31 || vn < 0 || vn + 1 > 31 || vm < 0 || vm + 1 > 31 { return list_new(); }
+    let lo: List[Int] = neon_encode_sub_2d(vd, vn, vm);
+    if list_len(lo) == 0 { return list_new(); }
+    let hi: List[Int] = neon_encode_sub_2d(vd + 1, vn + 1, vm + 1);
+    if list_len(hi) == 0 { return list_new(); }
+    return neon_concat_bytes(lo, hi);
+}
+
+pub fn neon_encode_paired_mul_2d(vd: Int, vn: Int, vm: Int) -> List[Int] {
+    if vd < 0 || vd + 1 > 31 || vn < 0 || vn + 1 > 31 || vm < 0 || vm + 1 > 31 { return list_new(); }
+    let lo: List[Int] = neon_encode_mul_2d(vd, vn, vm);
+    if list_len(lo) == 0 { return list_new(); }
+    let hi: List[Int] = neon_encode_mul_2d(vd + 1, vn + 1, vm + 1);
+    if list_len(hi) == 0 { return list_new(); }
+    return neon_concat_bytes(lo, hi);
+}

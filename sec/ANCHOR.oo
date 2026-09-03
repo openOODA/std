@@ -1,0 +1,121 @@
+// # Sec Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard sec (security) domain library. Re-exports a stable sec_mod_* surface for the most-used public API (capability rights, host scope, path scope, fuel budget, tamper shield, watermark, redteam vectors, attestation, safety matrix, fuzz runner, mutation engine, rlimit). Private siblings (Bell-LaPadula, Biba, Clark-Wilson, Dolev-Yao, capability unforgeability, fail-secure, Kerckhoffs, least privilege, non-interference, provable security, sel4 isolation, TLS 1.3 handshake, zero trust, AC theory) remain non-public in sec/laws/.
+//
+// Setup: Imports private sec siblings; most operations take SysCap / FsReadCap / FsWriteCap / EnvCap at the call site. Pure security math (capability rights, host scope, path scope, tamper shield, watermark) takes no caps.
+//
+// Beats:
+//   1. Re-export the capability-rights and host/path scope surface as sec_mod_cap_*, sec_mod_host_*, sec_mod_path_*.
+//   2. Re-export the tamper shield, watermark, and fuel budget surface as sec_mod_tamper_*, sec_mod_watermark_*, sec_mod_fuel_*.
+//   3. Re-export the agent send, redteam vectors, and policy path surface as sec_mod_msg_*, sec_mod_redteam_*, sec_mod_policy_*.
+//   4. Re-export the safety matrix, fuzz runner, mutation engine, attestation, TEE quote, and rlimit surface as sec_mod_safety_*, sec_mod_fuzz_*, sec_mod_mutation_*, sec_mod_attest_*, sec_mod_tee_*, sec_mod_rlimit_*.
+//   5. Re-export the new subdirs: sec/hash/, sec/simd/, sec/symmetric/, sec/asymmetric/, sec/mac/, sec/zk/, sec/enclave/, sec/laws/.
+//   6. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _stubs files.
+
+import "sec.oo";
+import "host_scope.oo";
+import "path_scope.oo";
+import "tamper_shield.oo";
+import "watermark.oo";
+import "watermark_embed.oo";
+import "fuel_budget.oo";
+import "agent_send.oo";
+import "redteam_types.oo";
+import "redteam_engine.oo";
+import "redteam_campaign.oo";
+import "policy_path.oo";
+import "safety_matrix.oo";
+import "fuzz_runner.oo";
+import "mutation_engine.oo";
+import "attestation_shim.oo";
+import "attestation_engine.oo";
+import "attestation_quote.oo";
+import "attestation_types.oo";
+import "tee_quote.oo";
+import "tee_types.oo";
+import "rlimit_enforce.oo";
+import "mcdc_coverage.oo";
+import "airgap.oo";
+import "untrusted.oo";
+
+// New subdir re-exports (Phase 2.1)
+import "hash/ANCHOR.oo";
+import "simd/ANCHOR.oo";
+import "symmetric/ANCHOR.oo";
+import "asymmetric/ANCHOR.oo";
+import "mac/ANCHOR.oo";
+import "zk/ANCHOR.oo";
+import "enclave/ANCHOR.oo";
+import "laws/ANCHOR.oo";
+import "control/ANCHOR.oo";
+import "exploit/ANCHOR.oo";
+import "ct/ANCHOR.oo";
+import "ai/ANCHOR.oo";
+import "net/ANCHOR.oo";
+import "cps/ANCHOR.oo";
+import "defense/ANCHOR.oo";
+import "rasp/ANCHOR.oo";
+import "string_encrypt/ANCHOR.oo";
+import "sys/ANCHOR.oo";
+import "capability/ANCHOR.oo";
+
+// Public sec version: sec_mod_defense_*
+pub fn sec_mod_defense_version() -> String { return sec_defense_version(); }
+
+// Public capability rights surface: sec_mod_cap_*
+pub fn sec_mod_cap_rights_from_mask(mask_val: Int) -> CapabilityRights { return cap_mod_rights_from_mask(mask_val); }
+pub fn sec_mod_cap_rights_to_mask(rights: CapabilityRights) -> Int { return cap_mod_rights_to_mask(rights); }
+pub fn sec_mod_cap_rights_diminish(parent_rights: Int, requested_rights: Int) -> Int { return cap_mod_rights_diminish(parent_rights, requested_rights); }
+pub fn sec_mod_cap_hmac_seal(key: String, payload: String) -> String { return cap_mod_hmac_seal(key, payload); }
+pub fn sec_mod_cap_create(cap_id: String, resource_uri: String, owner_id: String, rights_bitmask: Int, timestamp: Int, ttl_seconds: Int) -> ObjectCapability { return cap_mod_create(cap_id, resource_uri, owner_id, rights_bitmask, timestamp, ttl_seconds); }
+pub fn sec_mod_cap_validate(cap: &ObjectCapability, current_time: Int) -> Bool { return cap_mod_validate(cap, current_time); }
+
+// Public host scope surface: sec_mod_host_*
+pub fn sec_mod_host_scope_allows(allowed: String, host: String) -> Bool { return host_scope_allows(allowed, host); }
+pub fn sec_mod_host_scope_ok_url(allowed: String, url: String) -> Bool { return host_scope_ok_url(allowed, url); }
+
+// Public path scope surface: sec_mod_path_scope_*
+pub fn sec_mod_path_scope_allows(prefix: String, path: String) -> Bool { return path_scope_allows(prefix, path); }
+pub fn sec_mod_path_scope_read(prefix: String, path: String) -> Result[String, String] { return path_scope_read(prefix, path); }
+
+// Public tamper shield surface: sec_mod_tamper_*
+pub fn sec_mod_tamper_canary_new(slot: Int, cookie: Int) -> MemoryCanary { return tamper_shield_canary_new(slot, cookie); }
+pub fn sec_mod_tamper_verify_canary(canary: MemoryCanary, expected_cookie: Int) -> Result[Bool, String] { return tamper_shield_verify_canary(canary, expected_cookie); }
+pub fn sec_mod_tamper_validate_token(raw_token: Int, authorized_mask: Int) -> Bool { return tamper_shield_validate_token(raw_token, authorized_mask); }
+
+// Public watermark surface: sec_mod_watermark_*
+pub fn sec_mod_watermark_encode(payload: String, secret_key: String) -> String { return watermark_encode_payload(payload, secret_key); }
+
+// Public fuel budget surface: sec_mod_fuel_*
+pub fn sec_mod_fuel_new(n: Int) -> FuelBudget { return fuel_new(n); }
+pub fn sec_mod_fuel_left(b: FuelBudget) -> Int { return fuel_left(b); }
+pub fn sec_mod_fuel_can(b: FuelBudget, cost: Int) -> Bool { return fuel_can(b, cost); }
+
+// Public agent send surface: sec_mod_msg_*
+pub fn sec_mod_msg_carries_token(body: String) -> Bool { return msg_carries_token(body); }
+pub fn sec_mod_msg_hop_allowed(hop: String) -> Bool { return msg_hop_allowed(hop); }
+
+// Public redteam surface: sec_mod_redteam_*
+pub fn sec_mod_redteam_vector_create() -> AttackVector { return attack_vector_create(1, "sqli", "INJECTION", 3, "payload", "db"); }
+
+// Public policy surface: sec_mod_policy_*
+pub fn sec_mod_policy_path_is_locked(path: String) -> Bool { return policy_path_is_locked(path); }
+pub fn sec_mod_policy_pin_line(name: String, ver: String, sha: String, cap: String) -> String { return policy_pin_line(name, ver, sha, cap); }
+
+// Public safety / coverage surface: sec_mod_safety_*, sec_mod_coverage_*
+pub fn sec_mod_safety_req_new(id: String, asil: String, test_path: String) -> SafetyRequirement { return safety_matrix_req_new(id, asil, test_path); }
+pub fn sec_mod_coverage_evaluate(total_conditions: Int, proven_pairs: Int) -> McdcReport { return mcdc_coverage_evaluate(total_conditions, proven_pairs); }
+
+// Public attestation / TEE / airgap surface: sec_mod_attest_*, sec_mod_tee_*, sec_mod_airgap_*
+pub fn sec_mod_attest_measurement_create(domain: String, label: String, hash_hex: String, pcr_index: Int) -> AttestationMeasurement { return attestation_measurement_create(domain, label, hash_hex, pcr_index); }
+pub fn sec_mod_tee_vendor_sev_snp() -> Int { return tee_vendor_sev_snp(); }
+pub fn sec_mod_airgap_verify_elf64_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Bool { return airgap_verify_elf64_magic(b0, b1, b2, b3); }
+pub fn sec_mod_untrusted_blob_in(hay: String, blob: String) -> Bool { return untrusted_blob_in(hay, blob); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files in sec/laws/ (e.g. bell_lapadula_law.oo, biba_law.oo, capability_unforgeability_law.oo, clark_wilson_law.oo, least_privilege_law.oo, provable_security_law.oo)
+//   _theory files in sec/laws/ (e.g. access_control_theory.oo, dolev_yao_theory.oo, non_interference_theory.oo, tls13_handshake_theory.oo)
+//   _principle files in sec/laws/ (e.g. fail_secure_principle.oo, kerckhoffs_principle.oo, least_privilege_principle.oo, sel4_isolation_principle.oo, zero_trust_principle.oo)
+//   _invariants files (e.g. sec_invariants.oo, hash_invariants.oo)
+//   _kat files (e.g. sec_kat.oo, hash_kat.oo)
+//   _stubs files (e.g. attestation_stubs.oo, redteam_stubs.oo, watermark_stubs.oo, sha3_stubs.oo)

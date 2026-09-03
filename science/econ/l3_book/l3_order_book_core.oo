@@ -1,0 +1,130 @@
+// # Level 3 Order Book Core
+//
+// Logline: Types, constructors, accessors, cancellation, and best-bid/ask for an L3 order book.
+//
+// Setup: Pure L3 order book. Requires &AllocCap token for list allocation.
+//
+// Beats:
+//   1. Define L3Order, L3MatchEvent, and L3OrderBook product types.
+//   2. Provide safe List[L3Order] accessors so other modules never call generic list ops on structs.
+//   3. Create an empty book and track bid/ask level counts and total volume.
+//   4. Cancel an active order by id and update book totals.
+//   5. Return best bid and ask as a List[Int] snapshot.
+// residual: Price-level depth ladders, tick-size scaling, and pro-rata allocation are residual.
+
+pub type L3Order = struct {
+    order_id: Int,
+    price_ticks: Int,
+    qty: Int,
+    is_buy: Bool,
+    timestamp_ns: Int
+};
+
+pub type L3MatchEvent = struct {
+    maker_id: Int,
+    taker_id: Int,
+    exec_price: Int,
+    exec_qty: Int,
+    is_full_fill: Bool
+};
+
+pub type L3OrderBook = struct {
+    bid_levels: Int,
+    ask_levels: Int,
+    total_volume: Int,
+    orders: List[L3Order]
+};
+
+pub fn l3_order_new(id: Int, price_ticks: Int, qty: Int, is_buy: Bool, timestamp_ns: Int) -> L3Order {
+    return L3Order {
+        order_id: id,
+        price_ticks: price_ticks,
+        qty: qty,
+        is_buy: is_buy,
+        timestamp_ns: timestamp_ns
+    };
+}
+
+pub fn l3_match_event_new(
+    maker_id: Int,
+    taker_id: Int,
+    exec_price: Int,
+    exec_qty: Int,
+    is_full_fill: Bool
+) -> L3MatchEvent {
+    return L3MatchEvent {
+        maker_id: maker_id,
+        taker_id: taker_id,
+        exec_price: exec_price,
+        exec_qty: exec_qty,
+        is_full_fill: is_full_fill
+    };
+}
+
+pub fn l3_order_book_new(alloc: &AllocCap) -> L3OrderBook {
+    let orders: List[L3Order] = list_new();
+    return L3OrderBook {
+        bid_levels: 0,
+        ask_levels: 0,
+        total_volume: 0,
+        orders: orders
+    };
+}
+
+pub fn l3_book_order_count(orders: List[L3Order]) -> Int { return list_len(orders); }
+
+pub fn l3_book_get_order(orders: List[L3Order], i: Int) -> L3Order { return list_get(orders, i); }
+
+pub fn l3_book_set_order(orders: List[L3Order], i: Int, o: L3Order) -> List[L3Order] { return list_set(orders, i, o); }
+
+pub fn l3_book_push_order(orders: List[L3Order], o: L3Order) -> List[L3Order] { return list_push(orders, o); }
+
+pub fn l3_cancel_order(
+    alloc: &AllocCap,
+    book: &mut L3OrderBook,
+    order_id: Int
+) -> Result[Bool, String] {
+    let mut i: Int = 0;
+    let n: Int = l3_book_order_count(book.orders);
+    while i < n {
+        let o: L3Order = l3_book_get_order(book.orders, i);
+        if o.order_id == order_id && o.qty > 0 {
+            if o.is_buy {
+                book.bid_levels = book.bid_levels - 1;
+            } else {
+                book.ask_levels = book.ask_levels - 1;
+            }
+            book.total_volume = book.total_volume - o.qty;
+            let mut o2: L3Order = o;
+            o2.qty = 0;
+            book.orders = l3_book_set_order(book.orders, i, o2);
+            return Ok(true);
+        }
+        i = i + 1;
+    }
+    return Ok(false);
+}
+
+pub fn l3_best_bid_ask(
+    alloc: &AllocCap,
+    book: &L3OrderBook
+) -> Result[List[Int], String] {
+    let mut best_bid: Int = 0;
+    let mut best_ask: Int = 0;
+    let mut i: Int = 0;
+    let n: Int = l3_book_order_count(book.orders);
+    while i < n {
+        let o: L3Order = l3_book_get_order(book.orders, i);
+        if o.qty <= 0 { i = i + 1; continue; }
+        if o.is_buy {
+            if o.price_ticks > best_bid { best_bid = o.price_ticks; }
+        } else {
+            if best_ask == 0 || o.price_ticks < best_ask { best_ask = o.price_ticks; }
+        }
+        i = i + 1;
+    }
+    let mut out: List[Int] = list_new();
+    out = list_push(out, best_bid);
+    out = list_push(out, best_ask);
+    return Ok(out);
+}

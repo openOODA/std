@@ -1,0 +1,28 @@
+// # Watermark types
+//
+// Logline: WatermarkMeta standardized off nested policy lists.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] standardized.
+
+type WatermarkMeta = struct {
+    algo_id: Int,
+    strength: Int
+};
+
+pub fn watermark_meta_new(algo_id: Int, strength: Int) -> WatermarkMeta {
+    return WatermarkMeta {
+        algo_id: algo_id,
+        strength: strength
+    };
+}
+
+pub fn watermark_meta_algo(m: WatermarkMeta) -> Int {
+    return m.algo_id;
+}

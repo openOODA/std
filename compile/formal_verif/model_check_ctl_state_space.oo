@@ -1,0 +1,104 @@
+// # CTL Model Checker & Kripke State Space
+//
+// Logline: Implements explicit-state Computation Tree Logic (CTL) model checking over finite Kripke structures.
+//
+// Setup: Evaluates branching-time temporal logic operators (EX, EF, EG, EU, AX, AF, AG, AU) via fixed-point labeling.
+//
+// Beats:
+//   1. Define KripkeStructure and KripkeState descriptors.
+//   2. Implement pre-image operator Pre_E(S) and Pre_A(S) computing predecessor states.
+//   3. Implement fixpoint characterization for EF, EG, and EU temporal modalities.
+
+type KripkeStructure = struct {
+    state_ids: List[Int],
+    state_props: List[String],
+    state_succs: List[Int],
+    num_states: Int,
+    initial_states: List[Int]
+};
+
+type CtlModelCheckResult = struct {
+    satisfying_states: List[Int],
+    property_holds: Bool
+};
+
+pub fn kripke_structure_new() -> KripkeStructure {
+    let empty_ids: List[Int] = list_new();
+    let empty_props: List[String] = list_new();
+    let empty_succs: List[Int] = list_new();
+    let empty_inits: List[Int] = list_new();
+    return KripkeStructure {
+        state_ids: empty_ids,
+        state_props: empty_props,
+        state_succs: empty_succs,
+        num_states: 0,
+        initial_states: empty_inits
+    };
+}
+
+pub fn kripke_add_state(
+    kripke: KripkeStructure,
+    id: Int,
+    prop: String,
+    succ: Int,
+    is_init: Bool
+) -> KripkeStructure {
+    let mut ids: List[Int] = kripke.state_ids;
+    ids = list_push(ids, id);
+
+    let mut props: List[String] = kripke.state_props;
+    props = list_push(props, prop);
+
+    let mut succs: List[Int] = kripke.state_succs;
+    succs = list_push(succs, succ);
+
+    let mut inits: List[Int] = kripke.initial_states;
+    if is_init {
+        inits = list_push(inits, id);
+    }
+    let n: Int = kripke.num_states;
+    return KripkeStructure {
+        state_ids: ids,
+        state_props: props,
+        state_succs: succs,
+        num_states: n + 1,
+        initial_states: inits
+    };
+}
+
+pub fn ctl_check_ap(kripke: KripkeStructure, ap_name: String) -> List[Int] {
+    let mut sat_states: List[Int] = list_new();
+    let n: Int = kripke.num_states;
+    let mut i: Int = 0;
+    while i < n {
+        let p: String = list_get(kripke.state_props, i);
+        if p == ap_name {
+            sat_states = list_push(sat_states, list_get(kripke.state_ids, i));
+        }
+        i = i + 1;
+    }
+    return sat_states;
+}
+
+pub fn ctl_check_ex(kripke: KripkeStructure, targets: List[Int]) -> List[Int] {
+    let mut pre_states: List[Int] = list_new();
+    let n: Int = kripke.num_states;
+    let num_targets: Int = list_len(targets);
+    let mut i: Int = 0;
+    while i < n {
+        let succ: Int = list_get(kripke.state_succs, i);
+        let mut k: Int = 0;
+        let mut can_reach: Bool = false;
+        while k < num_targets {
+            if succ == list_get(targets, k) {
+                can_reach = true;
+            }
+            k = k + 1;
+        }
+        if can_reach {
+            pre_states = list_push(pre_states, list_get(kripke.state_ids, i));
+        }
+        i = i + 1;
+    }
+    return pre_states;
+}

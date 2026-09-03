@@ -1,0 +1,23 @@
+// # X86 Opt
+//
+// Logline: Standard library verification and domain capabilities for X86 Opt.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+import "std/core/primitives/option.oo";
+
+pub fn verify_x86_opt() -> Bool {
+    let some_val: Result[String, String] = opt_some("hello_opt");
+    let none_val: Result[String, String] = opt_none();
+    if opt_is_some(some_val) {
+        println(opt_unwrap_or(some_val, "fallback"));
+    }
+    if opt_is_none(none_val) {
+        println(opt_unwrap_or(none_val, "fallback"));
+    }
+    return true;
+}

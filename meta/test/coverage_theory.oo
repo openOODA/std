@@ -1,0 +1,144 @@
+// # Coverage theory
+//
+// Logline: Line coverage equals covered lines divided by total lines; branch coverage is a coupled metric that also stays in [0, 1].
+//
+// Setup: Pure Int arithmetic on a Coverage record. No FS, net, env. Per-mille representation (0..1000) avoids Float.
+//
+// Beats:
+//   1. line_coverage_per_mille(8, 10) == 800 (0.8 exact).
+//   2. coverage_theory fails closed when total <= 0.
+//   3. coverage_theory fails closed when covered < 0 or covered > total.
+//   4. branch_coverage_per_mille always in [0, 1] when its total > 0 (coupled with line coverage).
+//   5. Full coverage and zero coverage both sit inside the unit interval.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn cov_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+type Coverage = struct {
+    covered: Int,
+    total: Int
+};
+
+pub fn coverage_new(covered: Int, total: Int) -> Coverage {
+    return Coverage {
+        covered: covered,
+        total: total
+    };
+}
+
+pub fn line_coverage_per_mille(covered: Int, total: Int) -> Result[Int, String] {
+    if total <= 0 { return Err("ERR\tcov\tdomain"); }
+    if covered < 0 { return Err("ERR\tcov\tdomain"); }
+    if covered > total { return Err("ERR\tcov\tdomain"); }
+    return Ok((covered * 1000) / total);
+}
+
+pub fn branch_coverage_per_mille(covered: Int, total: Int) -> Result[Int, String] {
+    if total <= 0 { return Err("ERR\tcov\tdomain"); }
+    if covered < 0 { return Err("ERR\tcov\tdomain"); }
+    if covered > total { return Err("ERR\tcov\tdomain"); }
+    return Ok((covered * 1000) / total);
+}
+
+pub fn coverage_in_unit(per_mille: Int) -> Int {
+    if per_mille < 0 {
+        return 0;
+    }
+    if per_mille > 1000 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn coverage_theory(covered: Int, total: Int, branch_covered: Int, branch_total: Int) -> DomainCert {
+    if total <= 0 {
+        return domain_cert("test", "coverage_theory", 0);
+    }
+    if branch_total <= 0 {
+        return domain_cert("test", "coverage_theory", 0);
+    }
+    if covered < 0 {
+        return domain_cert("test", "coverage_theory", 0);
+    }
+    if covered > total {
+        return domain_cert("test", "coverage_theory", 0);
+    }
+    if branch_covered < 0 {
+        return domain_cert("test", "coverage_theory", 0);
+    }
+    if branch_covered > branch_total {
+        return domain_cert("test", "coverage_theory", 0);
+    }
+    return domain_cert("test", "coverage_theory", 1);
+}
+
+pub fn verify_coverage_theory() -> Bool {
+    // Golden: 8/10 = 0.8 within 0.001% (exact per-mille = 800).
+    let line_p: Int = cov_got(line_coverage_per_mille(8, 10));
+    if line_p != 800 {
+        return false;
+    }
+    let zcov: Result[Int, String] = line_coverage_per_mille(0, 10);
+    if zcov.is_ok() == false { return false; }
+    if cov_got(zcov) != 0 {
+        return false;
+    }
+    let full_p: Int = cov_got(line_coverage_per_mille(10, 10));
+    if full_p != 1000 {
+        return false;
+    }
+    if line_coverage_per_mille(0, 0).is_ok() { return false; }
+    if line_coverage_per_mille(5, 0 - 1).is_ok() { return false; }
+    if line_coverage_per_mille(11, 10).is_ok() { return false; }
+    if line_coverage_per_mille(0 - 1, 10).is_ok() { return false; }
+    // coverage_theory domain cert gates inputs.
+    let ok: DomainCert = coverage_theory(8, 10, 16, 20);
+    if ok.holds != 1 {
+        return false;
+    }
+    let bad_total: DomainCert = coverage_theory(8, 0, 0, 0);
+    if bad_total.holds != 0 {
+        return false;
+    }
+    let bad_branch_total: DomainCert = coverage_theory(8, 10, 1, 0);
+    if bad_branch_total.holds != 0 {
+        return false;
+    }
+    let bad_covered: DomainCert = coverage_theory(0 - 1, 10, 0, 0);
+    if bad_covered.holds != 0 {
+        return false;
+    }
+    let over_covered: DomainCert = coverage_theory(11, 10, 1, 1);
+    if over_covered.holds != 0 {
+        return false;
+    }
+    let over_branch: DomainCert = coverage_theory(8, 10, 3, 2);
+    if over_branch.holds != 0 {
+        return false;
+    }
+    // Coupled: branch coverage is in [0, 1] whenever its total > 0.
+    let br_partial: Int = coverage_in_unit(cov_got(branch_coverage_per_mille(5, 10)));
+    if br_partial != 1 {
+        return false;
+    }
+    let br_full: Int = coverage_in_unit(cov_got(branch_coverage_per_mille(10, 10)));
+    if br_full != 1 {
+        return false;
+    }
+    let br_zero: Int = coverage_in_unit(cov_got(branch_coverage_per_mille(0, 10)));
+    if br_zero != 1 {
+        return false;
+    }
+    let br_oob_low: Int = coverage_in_unit(0 - 1);
+    if br_oob_low != 0 {
+        return false;
+    }
+    let br_oob_high: Int = coverage_in_unit(1001);
+    if br_oob_high != 0 {
+        return false;
+    }
+    return true;
+}

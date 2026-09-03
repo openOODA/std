@@ -1,0 +1,80 @@
+// # FFT Parseval law
+//
+// Logline: Unnormalized radix-2 FFT: sum|X|^2 = n * sum|x|^2. Bad n is Err.
+//
+// Setup: Imports std/math/fft/fft_radix2_float.oo. Interleaved re,im. n in {2,4,8}.
+//
+// Beats:
+//   1. Energy in frequency is n times energy in time.
+//   2. fft_forward on a bad length is Err.
+//   3. domain_cert boxes both claims.
+
+import "std/core/math/fft/fft_radix2_float.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn reim_energy(reim: List[Float]) -> Float {
+    let n: Int = list_len(reim);
+    let mut e: Float = 0.0;
+    let mut i: Int = 0;
+    while i + 1 < n {
+        let re: Float = list_get(reim, i);
+        let im: Float = list_get(reim, i + 1);
+        e = e + re * re + im * im;
+        i = i + 2;
+    }
+    return e;
+}
+
+pub fn math_fft_parseval_law() -> DomainCert {
+    let mut x: List[Float] = list_new();
+    x = list_push(x, 1.0);
+    x = list_push(x, 0.0);
+    x = list_push(x, 0.0);
+    x = list_push(x, 0.0);
+    x = list_push(x, 0.0);
+    x = list_push(x, 0.0);
+    x = list_push(x, 0.0);
+    x = list_push(x, 0.0);
+    let r: Result[List[Float], String] = fft_forward(x, 4);
+    let mut h: Int = 0;
+    match r {
+        Ok(xf) => {
+            let et: Float = reim_energy(x);
+            let ef: Float = reim_energy(xf);
+            let n_f: Float = 4.0;
+            if abs_f(ef - n_f * et) <= 0.0001 {
+                h = 1;
+            }
+        }
+        Err(_e) => {
+            h = 0;
+        }
+    }
+    return domain_cert("math", "fft_parseval", h);
+}
+
+pub fn math_fft_bad_n_rejected() -> DomainCert {
+    let mut x: List[Float] = list_new();
+    x = list_push(x, 1.0);
+    x = list_push(x, 0.0);
+    let r: Result[List[Float], String] = fft_forward(x, 3);
+    let mut h: Int = 0;
+    match r {
+        Ok(_y) => {
+            h = 0;
+        }
+        Err(_e) => {
+            h = 1;
+        }
+    }
+    return domain_cert("math", "fft_bad_n_rejected", h);
+}
+
+

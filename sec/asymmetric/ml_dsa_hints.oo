@@ -1,0 +1,80 @@
+// # FIPS 204 ML-DSA Hint Bit Generation & Usage
+//
+// Logline: Implements MakeHint, UseHint, and hint weight tallying over flat polynomial coefficient arrays.
+//
+// Setup: FIPS 204 Algorithms 36 and 37 for signature hint boundary bit recovery.
+//
+// Beats:
+//   1. MakeHint detecting high-bit transitions between z and z + r.
+//   2. UseHint recovering high-bits of r given z and hint bit.
+//   3. Polynomial and vector hint generation.
+//   4. Hint weight tallying enforcing omega = 75 bound.
+
+import "./ml_dsa_poly.oo";
+import "./ml_dsa_decompose.oo";
+
+pub fn ml_dsa_make_hint(z: Int, r: Int, gamma2: Int) -> Int {
+    let r1: Int = ml_dsa_high_bits(r, gamma2);
+    let v1: Int = ml_dsa_high_bits(r + z, gamma2);
+    if r1 != v1 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn ml_dsa_use_hint(h: Int, r: Int, gamma2: Int) -> Int {
+    let m: Int = (8380417 - 1) / (2 * gamma2);
+    let pair: MlDsaDecompPair = ml_dsa_decompose(r, gamma2);
+    let r1: Int = pair.r1;
+    let r0: Int = pair.r0;
+
+    if h == 1 {
+        if r0 > 0 {
+            return (r1 + 1) % m;
+        }
+        return (r1 - 1 + m) % m;
+    }
+    return r1;
+}
+
+pub fn ml_dsa_make_hint_vec(z: MlDsaPolyVec, r: MlDsaPolyVec, gamma2: Int) -> List[Int] {
+    let total: Int = 256 * z.dim;
+    let mut hints: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        let vz: Int = list_get(z.coeffs, i);
+        let vr: Int = list_get(r.coeffs, i);
+        hints = list_push(hints, ml_dsa_make_hint(vz, vr, gamma2));
+        i = i + 1;
+    }
+    return hints;
+}
+
+pub fn ml_dsa_use_hint_vec(h: List[Int], r: MlDsaPolyVec, gamma2: Int) -> MlDsaPolyVec {
+    let total: Int = 256 * r.dim;
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        let hint_bit: Int = list_get(h, i);
+        let vr: Int = list_get(r.coeffs, i);
+        out_c = list_push(out_c, ml_dsa_use_hint(hint_bit, vr, gamma2));
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: out_c,
+        dim: r.dim
+    };
+}
+
+pub fn ml_dsa_count_hints(hints: List[Int]) -> Int {
+    let total: Int = list_len(hints);
+    let mut count: Int = 0;
+    let mut i: Int = 0;
+    while i < total {
+        if list_get(hints, i) == 1 {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}

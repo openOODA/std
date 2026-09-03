@@ -1,0 +1,191 @@
+// # Watson-Crick complementary base pairing principle
+//
+// Logline: A pairs with T and G pairs with C in double-stranded DNA; A pairs with U in RNA-DNA hybrids. Invalid bases fail closed to empty strings or 0.
+//
+// Setup: Pure String. Bases are 'A','T','G','C','U'; the principle is unit-agnostic.
+//
+// Beats:
+//   1. Return the complementary base for a single DNA base.
+//   2. Build the reverse complement of a DNA sequence.
+//   3. Verify a candidate sequence is a valid reverse complement of a given template.
+//   4. Hostile empty or invalid bases return "" or 0.
+
+pub fn watson_crick_complement_base_dna(base: String) -> String {
+    if base == "A" { return "T"; }
+    if base == "T" { return "A"; }
+    if base == "G" { return "C"; }
+    if base == "C" { return "G"; }
+    return "";
+}
+
+pub fn watson_crick_complement_base_rna_hybrid(base: String) -> String {
+    if base == "A" { return "U"; }
+    if base == "U" { return "A"; }
+    if base == "G" { return "C"; }
+    if base == "C" { return "G"; }
+    return "";
+}
+
+pub fn watson_crick_reverse_complement(seq: String) -> String {
+    let n: Int = seq.len();
+    if n == 0 {
+        return "";
+    }
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(seq, i);
+        if ch != "A" && ch != "T" && ch != "G" && ch != "C" {
+            return "";
+        }
+        i = i + 1;
+    }
+    let mut out: String = "";
+    let mut j: Int = n - 1;
+    while j >= 0 {
+        let ch: String = char_at(seq, j);
+        let comp: String = watson_crick_complement_base_dna(ch);
+        if comp == "" {
+            return "";
+        }
+        out = out + comp;
+        j = j - 1;
+    }
+    return out;
+}
+
+pub fn watson_crick_complement(seq: String) -> String {
+    let n: Int = seq.len();
+    if n == 0 {
+        return "";
+    }
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(seq, i);
+        let comp: String = watson_crick_complement_base_dna(ch);
+        if comp == "" {
+            return "";
+        }
+        out = out + comp;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn watson_crick_is_valid_pair(b1: String, b2: String) -> Int {
+    if b1 == "A" && b2 == "T" { return 1; }
+    if b1 == "T" && b2 == "A" { return 1; }
+    if b1 == "G" && b2 == "C" { return 1; }
+    if b1 == "C" && b2 == "G" { return 1; }
+    return 0;
+}
+
+pub fn watson_crick_is_valid_rna_pair(b1: String, b2: String) -> Int {
+    if b1 == "A" && b2 == "U" { return 1; }
+    if b1 == "U" && b2 == "A" { return 1; }
+    if b1 == "G" && b2 == "C" { return 1; }
+    if b1 == "C" && b2 == "G" { return 1; }
+    return 0;
+}
+
+pub fn verify_watson_crick_principle() -> Bool {
+    // Single-base complement.
+    if watson_crick_complement_base_dna("A") != "T" {
+        return false;
+    }
+    if watson_crick_complement_base_dna("T") != "A" {
+        return false;
+    }
+    if watson_crick_complement_base_dna("G") != "C" {
+        return false;
+    }
+    if watson_crick_complement_base_dna("C") != "G" {
+        return false;
+    }
+
+    // RNA hybrid: A pairs with U.
+    if watson_crick_complement_base_rna_hybrid("A") != "U" {
+        return false;
+    }
+
+    // Reverse complement: ATGC -> GCAT.
+    if watson_crick_reverse_complement("ATGC") != "GCAT" {
+        return false;
+    }
+    // ATGCATGC -> GCATGCAT.
+    if watson_crick_reverse_complement("ATGCATGC") != "GCATGCAT" {
+        return false;
+    }
+    // Palindrome: GAATTC -> GAATTC (complement of GAATTC is CTTAAG, reversed = GAATTC).
+    if watson_crick_reverse_complement("GAATTC") != "GAATTC" {
+        return false;
+    }
+
+    // Forward complement (no reverse): ATGC -> TACG.
+    if watson_crick_complement("ATGC") != "TACG" {
+        return false;
+    }
+
+    // Self-complement: a sequence equals its reverse complement.
+    let rev: String = watson_crick_reverse_complement("GCATGC");
+    if rev != "GCATGC" {
+        return false;
+    }
+
+    // Pair validity: A-T, T-A, G-C, C-G are valid; A-G, A-C, T-G, T-C are not.
+    if watson_crick_is_valid_pair("A", "T") != 1 {
+        return false;
+    }
+    if watson_crick_is_valid_pair("T", "A") != 1 {
+        return false;
+    }
+    if watson_crick_is_valid_pair("G", "C") != 1 {
+        return false;
+    }
+    if watson_crick_is_valid_pair("C", "G") != 1 {
+        return false;
+    }
+    if watson_crick_is_valid_pair("A", "G") != 0 {
+        return false;
+    }
+    if watson_crick_is_valid_pair("T", "C") != 0 {
+        return false;
+    }
+
+    // RNA-DNA hybrid pair.
+    if watson_crick_is_valid_rna_pair("A", "U") != 1 {
+        return false;
+    }
+    if watson_crick_is_valid_rna_pair("G", "C") != 1 {
+        return false;
+    }
+    if watson_crick_is_valid_rna_pair("A", "T") != 0 {
+        return false;
+    }
+
+    // Double application is identity: rc(rc(s)) = s.
+    let s: String = "ATGCATGC";
+    let rc1: String = watson_crick_reverse_complement(s);
+    let rc2: String = watson_crick_reverse_complement(rc1);
+    if rc2 != s {
+        return false;
+    }
+
+    // Hostile inputs fail closed.
+    if watson_crick_complement_base_dna("N") != "" {
+        return false;
+    }
+    if watson_crick_complement_base_dna("") != "" {
+        return false;
+    }
+    if watson_crick_reverse_complement("") != "" {
+        return false;
+    }
+    if watson_crick_reverse_complement("ATBN") != "" {
+        return false;
+    }
+    if watson_crick_complement("ATBN") != "" {
+        return false;
+    }
+    return true;
+}

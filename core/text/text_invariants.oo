@@ -1,0 +1,32 @@
+// # Text empty-string length law
+//
+// Logline: The length of "" is 0. A claim that len("") is 1 does not hold.
+//
+// Setup: Pure. Imports domain_cert.oo. Uses chars_len on the empty string.
+//
+// Beats:
+//   1. text_len("") is 0.
+//   2. text_empty_len_zero holds 1.
+//   3. text_claim_empty_len_one holds 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn text_len(s: String) -> Int {
+    return chars_len(s);
+}
+
+pub fn text_empty_len_zero() -> DomainCert {
+    let n: Int = text_len("");
+    if n == 0 {
+        return domain_cert("text", "empty_len_zero", 1);
+    }
+    return domain_cert("text", "empty_len_zero", 0);
+}
+
+pub fn text_claim_empty_len_one() -> DomainCert {
+    let n: Int = text_len("");
+    if n == 1 {
+        return domain_cert("text", "empty_len_one", 1);
+    }
+    return domain_cert("text", "empty_len_one", 0);
+}

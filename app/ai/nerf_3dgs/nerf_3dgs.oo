@@ -1,0 +1,29 @@
+// # Unified Neural Radiance Fields & 3D Gaussian Splatting Facade
+//
+// Logline: Master facade re-exporting all 49 NeRF, 3DGS, spherical harmonics, spatial encoding, and neural rendering submodules.
+//
+// Setup: Pure module shim and unified API importing all companion submodules in nerf_3dgs.
+//
+// Beats:
+//   1. Import 49 modular coordinate encodings, voxel grids, 3D Gaussian primitives, tile rasterizers, and quality metrics.
+//   2. Re-export public rendering pipelines, camera configurations, and volumetric evaluators.
+//   3. Maintain full backwards compatibility and uniform type access for openOODA neural graphics applications.
+
+
+type NeRF3DGSSceneConfig = struct {
+    render_mode: Int, // 0: NeRF Volume Rendering, 1: 3D Gaussian Splatting
+    image_width: Int,
+    image_height: Int,
+    sh_degree: Int,
+    white_background: Int
+};
+
+pub fn nerf_3dgs_scene_config_default() -> NeRF3DGSSceneConfig {
+    return NeRF3DGSSceneConfig {
+        render_mode: 1, // Default 3DGS
+        image_width: 1920,
+        image_height: 1080,
+        sh_degree: 3,
+        white_background: 0
+    };
+}

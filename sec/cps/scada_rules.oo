@@ -1,0 +1,124 @@
+// # SCADA / ICS Firewall Match, Engine Inspection, and Decision Operations
+//
+// Logline: Match SCADA rules against ScadaFlow by protocol, address, and port; inspect flows through the ScadaEngine and tally anomalies.
+//
+// Setup: Imports scada_fw.oo for ScadaRule, ScadaFlow, ScadaEngine, and ScadaAnomaly types.
+//
+// Beats:
+//   1. scada_match_protocol / scada_match_addr / scada_match_port / scada_rule_matches.
+//   2. scada_engine_add_rule, scada_engine_inspect, scada_engine_record_anomaly, scada_engine_do_work.
+// RULES.oot 1.4: Default-deny security invariants.
+// RULES.oot 1.7: Strictly under 256 lines.
+
+import "std/sec/cps/scada_fw.oo";
+
+pub fn scada_match_protocol(rule: ScadaRule, proto: Int) -> Bool {
+    let rule_proto: Int = rule.protocol;
+    if rule_proto == 0 { return true; }
+    return rule_proto == proto;
+}
+
+pub fn scada_match_addr(rule: ScadaRule, src: String, dst: String) -> Bool {
+    let rule_src: String = rule.src_addr_pattern;
+    let rule_dst: String = rule.dst_addr_pattern;
+    if rule_src == "*" {
+        if rule_dst == "*" { return true; }
+        return rule_dst == dst;
+    }
+    if rule_dst == "*" { return rule_src == src; }
+    if rule_src == src {
+        if rule_dst == dst { return true; }
+    }
+    return false;
+}
+
+pub fn scada_match_port(rule: ScadaRule, src_port_v: Int, dst_port_v: Int) -> Bool {
+    let rule_src: Int = rule.src_port;
+    let rule_dst: Int = rule.dst_port;
+    if rule_src == 0 {
+        if rule_dst == 0 { return true; }
+        return rule_dst == dst_port_v;
+    }
+    if rule_dst == 0 { return rule_src == src_port_v; }
+    if rule_src == src_port_v {
+        if rule_dst == dst_port_v { return true; }
+    }
+    return false;
+}
+
+pub fn scada_rule_matches(rule: ScadaRule, flow: ScadaFlow) -> Bool {
+    let enabled: Bool = rule.is_enabled;
+    if enabled == false { return false; }
+    let flow_proto: Int = flow.protocol;
+    if !scada_match_protocol(rule, flow_proto) {
+        return false;
+    }
+    let flow_src: String = flow.src_addr;
+    let flow_dst: String = flow.dst_addr;
+    if !scada_match_addr(rule, flow_src, flow_dst) {
+        return false;
+    }
+    let flow_sp: Int = flow.src_port;
+    let flow_dp: Int = flow.dst_port;
+    if !scada_match_port(rule, flow_sp, flow_dp) {
+        return false;
+    }
+    return true;
+}
+
+pub fn scada_engine_add_rule(engine: ScadaEngine) -> ScadaEngine {
+    let mut eng: ScadaEngine = engine;
+    let old_c: Int = eng.rules_count;
+    eng.rules_count = old_c + 1;
+    return eng;
+}
+
+pub fn scada_engine_inspect(engine: ScadaEngine, rule: ScadaRule, flow: ScadaFlow) -> ScadaDecision {
+    let halted: Bool = engine.is_halted;
+    if halted == true {
+        return ScadaDecision {
+            decision_id: 0,
+            flow_id: flow.flow_id,
+            matched_rule_id: 0,
+            action: 2,
+            is_anomaly: true,
+            anomaly_code: scada_anom_excessive_drops(),
+            reason: "Engine halted"
+        };
+    }
+    let matches: Bool = scada_rule_matches(rule, flow);
+    if matches {
+        return ScadaDecision {
+            decision_id: 1,
+            flow_id: flow.flow_id,
+            matched_rule_id: rule.rule_id,
+            action: rule.action,
+            is_anomaly: false,
+            anomaly_code: 0,
+            reason: rule.name
+        };
+    }
+    return ScadaDecision {
+        decision_id: 1,
+        flow_id: flow.flow_id,
+        matched_rule_id: 0,
+        action: 0,
+        is_anomaly: true,
+        anomaly_code: scada_anom_unknown_protocol(),
+        reason: "Default drop"
+    };
+}
+
+pub fn scada_engine_record_anomaly(engine: ScadaEngine) -> ScadaEngine {
+    let mut eng: ScadaEngine = engine;
+    let cur_t: Int = eng.total_anomalies;
+    eng.total_anomalies = cur_t + 1;
+    return eng;
+}
+
+pub fn scada_engine_do_work(engine: ScadaEngine) -> Int {
+    let r_n: Int = engine.rules_count;
+    let d_n: Int = engine.decisions_count;
+    let a_n: Int = engine.anomalies_count;
+    return r_n + d_n + a_n;
+}

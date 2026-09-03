@@ -1,0 +1,84 @@
+// # Transition/Transversion (Ti/Tv) Ratio & Mutation Spectrum
+//
+// Logline: Calculates Transition/Transversion (Ti/Tv) ratios across whole-genome (~2.0-2.1) and whole-exome (~2.8-3.2) variant callsets.
+//
+// Setup: NGS variant quality control module evaluating single nucleotide mutation spectra and 6-class substitution profiles.
+//
+// Beats:
+//   1. Define MutationSpectrum and TsTvRatioResult data structures.
+//   2. Classify transitions (A<->G, C<->T) versus transversions (A<->C, A<->T, C<->G, G<->T).
+//   3. Compute Ti/Tv ratio and flag potential sequencing artifact contamination if Ti/Tv deviates significantly.
+
+type MutationSpectrum = struct {
+    count_a_to_g: Int,
+    count_c_to_t: Int,
+    count_a_to_c: Int,
+    count_a_to_t: Int,
+    count_c_to_g: Int,
+    count_g_to_t: Int,
+    total_transitions: Int,
+    total_transversions: Int
+};
+
+type TsTvRatioResult = struct {
+    ti_tv_ratio: Float,
+    total_snvs: Int,
+    is_expected_wgs_range: Bool,
+    is_expected_wes_range: Bool
+};
+
+pub fn tstv_is_transition(ref_b: String, alt_b: String) -> Bool {
+    let is_ag: Bool = (ref_b == "A" && alt_b == "G") || (ref_b == "G" && alt_b == "A");    let is_ct: Bool = (ref_b == "C" && alt_b == "T") || (ref_b == "T" && alt_b == "C");    return is_ag || is_ct;
+}
+
+pub fn tstv_calc_ratio(ti_count: Int, tv_count: Int) -> TsTvRatioResult {
+    let tot: Int = ti_count + tv_count;    let mut ratio: Float = 0.0;
+
+    if tv_count > 0 {
+
+        ratio = variant_tstv_ratio_to_f(ti_count) / variant_tstv_ratio_to_f(tv_count);
+
+    }
+
+    // Expected WGS: 2.0 - 2.2; Expected WES: 2.6 - 3.3
+    let wgs_ok: Bool = ratio >= 1.90 && ratio <= 2.30;    let wes_ok: Bool = ratio >= 2.50 && ratio <= 3.50;
+    return TsTvRatioResult {
+        ti_tv_ratio: ratio,
+        total_snvs: tot,
+        is_expected_wgs_range: wgs_ok,
+        is_expected_wes_range: wes_ok
+    };
+}
+
+
+fn variant_tstv_ratio_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

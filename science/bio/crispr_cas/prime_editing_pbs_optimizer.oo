@@ -1,0 +1,96 @@
+// # Prime Editing Primer Binding Site (PBS) Optimizer
+//
+// Logline: Optimizes pegRNA PBS length (10-16 nt) and melting temperature (Tm 30°C - 34°C) for efficient reverse transcriptase priming.
+//
+// Setup: Thermodynamic annealing model for PBS hybridization to the nicked non-target DNA strand.
+//
+// Beats:
+//   1. Define PbsCandidate and PbsOptimizationResult structures.
+//   2. Calculate PBS GC content and nearest-neighbor melting temperature approximation.
+//   3. Score PBS length variants for optimal PE2/PEmax prime editing efficiency.
+
+type PbsCandidate = struct {
+    pbs_seq: String,
+    length: Int,
+    gc_percent: Float,
+    melting_temp_c: Float,
+    is_optimal_tm: Bool
+};
+
+type PbsOptimizationResult = struct {
+    recommended_length: Int,
+    recommended_seq: String,
+    predicted_priming_score: Float
+};
+
+pub fn pbs_calc_tm(seq: String) -> Float {
+    let n: Int = chars_len(seq);    if n == 0 { return 0.0; }
+    let mut gc: Int = 0;    let mut at: Int = 0;    let mut i: Int = 0;    while i < n {
+        let c: String = char_at(seq, i);        if c == "G" || c == "g" || c == "C" || c == "c" {
+            gc = gc + 1;
+        } else {
+            at = at + 1;
+        }
+        i = i + 1;
+    }
+    // Marmur-Doty formula approximation for short oligos: 2*(A+T) + 4*(G+C)
+    let tm: Float = prime_editing_pbs_optimizer_to_f((at) * 2.0) + prime_editing_pbs_optimizer_to_f((gc) * 4.0);    return tm;
+}
+
+pub fn pbs_evaluate(pbs_seq: String) -> PbsCandidate {
+    let n: Int = chars_len(pbs_seq);    let tm = pbs_calc_tm(pbs_seq);
+    let mut gc: Int = 0;    let mut i: Int = 0;    while i < n {
+        let c: String = char_at(pbs_seq, i);        if c == "G" || c == "g" || c == "C" || c == "c" {
+            gc = gc + 1;
+        }
+        i = i + 1;
+    }
+    let mut gc_pct: Float = 0.0;
+
+    if n > 0 {
+
+        gc_pct = prime_editing_pbs_optimizer_to_f((gc) / prime_editing_pbs_optimizer_to_f(n)) * 100.0;
+
+    }
+    let opt: Bool = (tm >= 30.0 && tm <= 35.0);
+    return PbsCandidate {
+        pbs_seq: pbs_seq,
+        length: n,
+        gc_percent: gc_pct,
+        melting_temp_c: tm,
+        is_optimal_tm: opt
+    };
+}
+
+
+fn prime_editing_pbs_optimizer_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

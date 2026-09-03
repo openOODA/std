@@ -1,0 +1,72 @@
+// # I/O buffer read cap and EOF law
+//
+// Logline: A buffered read cannot consume more than the buffer length and a clean end of stream is signalled only by a zero byte count.
+//
+// Setup: Pure Int. No FS, no fd, no I/O capability. Both laws are cap-zero friendly.
+//
+// Beats:
+//   1. io_buffer_read_cap clamps requested bytes into [0, buf_len].
+//   2. io_eof_reached holds 1 only when read_count equals 0.
+//   3. Negative buffer or read values fail closed to 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn iob_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn io_buffer_read_cap(buf_len: Int, requested: Int) -> Result[Int, String] {
+    if buf_len <= 0 { return Err("ERR\tiob\tdomain"); }
+    if requested < 0 { return Err("ERR\tiob\tdomain"); }
+    if requested == 0 { return Ok(0); }
+    if requested > buf_len { return Ok(buf_len); }
+    return Ok(requested);
+}
+
+pub fn io_eof_reached(read_count: Int) -> Int {
+    if read_count == 0 {
+        return 1;
+    }
+    if read_count < 0 {
+        return 0;
+    }
+    return 0;
+}
+
+pub fn verify_io_buffer_eof_law() -> Bool {
+    if iob_got(io_buffer_read_cap(1024, 512)) != 512 {
+        return false;
+    }
+    if iob_got(io_buffer_read_cap(1024, 2048)) != 1024 {
+        return false;
+    }
+    let zreq: Result[Int, String] = io_buffer_read_cap(1024, 0);
+    if zreq.is_ok() == false { return false; }
+    if iob_got(zreq) != 0 {
+        return false;
+    }
+    if io_buffer_read_cap(0, 100).is_ok() { return false; }
+    if io_buffer_read_cap(0 - 1, 100).is_ok() { return false; }
+    if io_buffer_read_cap(1024, 0 - 1).is_ok() { return false; }
+    if io_eof_reached(0) != 1 {
+        return false;
+    }
+    if io_eof_reached(1) != 0 {
+        return false;
+    }
+    if io_eof_reached(4096) != 0 {
+        return false;
+    }
+    if io_eof_reached(-1) != 0 {
+        return false;
+    }
+    return true;
+}
+
+// Domain certificate: 1 if the I/O buffer/EOF law holds across all golden and hostile cases.
+pub fn io_buffer_eof_law_holds() -> DomainCert {
+    if verify_io_buffer_eof_law() {
+        return domain_cert("io", "io_buffer_eof_law", 1);
+    }
+    return domain_cert("io", "io_buffer_eof_law", 0);
+}

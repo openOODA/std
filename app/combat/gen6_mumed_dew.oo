@@ -1,0 +1,253 @@
+// # Gen 6 Directed Energy Weapon CIWS and Dual-Axis MUM-T CCA Wingmen
+//
+// Logline: Simulates directed energy laser CIWS interception and autonomous MUM-T collaborative combat aircraft wingman formation physics.
+//
+// Setup: Pure aero tactical simulation with laser optics, thermal ablation, and potential-field leash kinematics.
+//
+// Beats:
+//   1. Calculate DEW laser tracking, atmospheric attenuation, thermal dissipation, and destructive structural ablation.
+//   2. Step dual-axis MUM-T CCA wingman pincer positions with velocity matching and collision avoidance potential fields.
+//   3. Manage capacitor charge cycles, overheating trip thresholds, and optical target lock state transitions.
+
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_aero_gen6_mumed_dew() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type DewLaserState = struct {
+    capacitor_energy_kj: Float,
+    thermal_heat_kj: Float,
+    is_firing: Bool,
+    target_locked: Bool,
+    beam_power_kw: Float,
+    target_dist_m: Float,
+    target_ablation_kj: Float,
+    target_destroyed: Bool
+};
+
+type CcaWingmanState = struct {
+    id: Int,
+    is_starboard: Bool,
+    pos_x: Float,
+    pos_y: Float,
+    vel_fps: Float,
+    heading_rad: Float,
+    target_offset_deg: Float,
+    tether_dist_px: Float,
+    in_leash_bounds: Bool,
+    pincer_lock: Bool
+};
+
+type Gen6FormationState = struct {
+    host_x: Float,
+    host_y: Float,
+    host_heading_rad: Float,
+    cca_a: CcaWingmanState,
+    cca_b: CcaWingmanState,
+    dew: DewLaserState,
+    triangulation_confidence: Float
+};
+
+pub fn gen6_pi() -> Float {
+    return circ_pi_std_phys_aero_gen6_mumed_dew();
+}
+
+pub fn gen6_clamp(val: Float, min_v: Float, max_v: Float) -> Float {
+    if val < min_v {
+        return min_v;
+    }
+    if val > max_v {
+        return max_v;
+    }
+    return val;
+}
+
+pub fn gen6_abs(val: Float) -> Float {
+    if val < 0.0 {
+        return 0.0 - val;
+    }
+    return val;
+}
+
+pub fn gen6_atan(x: Float) -> Float {
+    let mut sign: Float = 1.0;
+    let mut ax: Float = x;
+    if x < 0.0 {
+        sign = 0.0 - 1.0;
+        ax = 0.0 - x;
+    }
+    let pi_over_2: Float = 1.5707963267948966;
+    if ax <= 1.0 {
+        let poly: Float = ax / (1.0 + (0.28 * ax * ax));
+        return sign * poly;
+    }
+    let poly: Float = (1.0 / ax) / (1.0 + (0.28 / (ax * ax)));
+    let res: Float = pi_over_2 - poly;
+    return sign * res;
+}
+
+pub fn gen6_atan2(y: Float, x: Float) -> Float {
+    let pi_val: Float = gen6_pi();
+    let half_pi: Float = 1.5707963267948966;
+    if x == 0.0 {
+        if y > 0.0 {
+            return half_pi;
+        }
+        if y < 0.0 {
+            return 0.0 - half_pi;
+        }
+        return 0.0;
+    }
+    let q: Float = gen6_atan(y / x);
+    if x > 0.0 {
+        return q;
+    }
+    if y >= 0.0 {
+        return q + pi_val;
+    }
+    return q - pi_val;
+}
+
+pub fn gen6_normalize_angle(rad: Float) -> Float {
+    let pi_val: Float = gen6_pi();
+    let two_pi: Float = 2.0 * pi_val;
+    let mut a: Float = rad;
+    while a > pi_val {
+        a = a - two_pi;
+    }
+    while a < (0.0 - pi_val) {
+        a = a + two_pi;
+    }
+    return a;
+}
+
+pub fn gen6_dew_update(energy_kj: Float, heat_kj: Float, is_firing: Bool, dist_m: Float, target_ablation_kj: Float, dt: Float) -> DewLaserState {
+    let max_energy_kj: Float = 3000.0;
+    let max_heat_kj: Float = 1000.0;
+    let recharge_rate_kw: Float = 200.0;
+    let cooling_rate_kw: Float = 150.0;
+    let laser_optical_kw: Float = 150.0;
+    let laser_elec_efficiency: Float = 0.35;
+    let elec_draw_kw: Float = laser_optical_kw / laser_elec_efficiency;
+    let waste_heat_kw: Float = elec_draw_kw - laser_optical_kw;
+    let mut cur_energy: Float = energy_kj;
+    let mut cur_heat: Float = heat_kj;
+    let mut firing_active: Bool = false;
+    let mut new_ablation: Float = target_ablation_kj;
+    let in_range: Bool = (dist_m > 5.0) && (dist_m <= 3500.0);
+    let thermally_safe: Bool = cur_heat < (max_heat_kj * 0.95);
+    if is_firing && in_range && (cur_energy > 50.0) && thermally_safe {
+        firing_active = true;
+        cur_energy = gen6_clamp(cur_energy - (elec_draw_kw * dt), 0.0, max_energy_kj);
+        cur_heat = gen6_clamp(cur_heat + (waste_heat_kw * dt), 0.0, max_heat_kj);
+        let dist_km: Float = dist_m / 1000.0;
+        let atmo_extinction: Float = exp(0.0 - (0.05 * dist_km));
+        let spot_area_cm2: Float = 3.14159 * (1.0 + (0.5 * dist_km));
+        let flux_kw_cm2: Float = (laser_optical_kw * atmo_extinction) / spot_area_cm2;
+        new_ablation = new_ablation + (flux_kw_cm2 * dt);
+    } else {
+        cur_energy = gen6_clamp(cur_energy + (recharge_rate_kw * dt), 0.0, max_energy_kj);
+        cur_heat = gen6_clamp(cur_heat - (cooling_rate_kw * dt), 0.0, max_heat_kj);
+    }
+    let target_destroyed: Bool = new_ablation >= 75.0;
+    let mut beam_pwr: Float = 0.0;
+    if firing_active {
+        beam_pwr = laser_optical_kw;
+    }
+    return DewLaserState {
+        capacitor_energy_kj: cur_energy,
+        thermal_heat_kj: cur_heat,
+        is_firing: firing_active,
+        target_locked: in_range,
+        beam_power_kw: beam_pwr,
+        target_dist_m: dist_m,
+        target_ablation_kj: new_ablation,
+        target_destroyed: target_destroyed
+    };
+}
+
+pub fn gen6_cca_tether_force(r_dist_px: Float) -> Float {
+    let r_min: Float = 40.0;
+    let r_nom: Float = 200.0;
+    let r_max: Float = 450.0;
+    if r_dist_px < r_min {
+        let penetration: Float = (r_min - r_dist_px) / r_min;
+        return 0.0 - (500.0 * penetration * penetration);
+    }
+    if r_dist_px <= r_nom {
+        return 0.0;
+    }
+    if r_dist_px <= r_max {
+        let stretch: Float = (r_dist_px - r_nom) / (r_max - r_nom);
+        return 120.0 * stretch;
+    }
+    let over_leash: Float = r_dist_px - r_max;
+    return 120.0 + (10.0 * over_leash);
+}
+
+pub fn gen6_cca_compute_slot(host_x: Float, host_y: Float, host_heading_rad: Float, is_starboard: Bool, slot_dist_px: Float) -> Float {
+    let mut offset_deg: Float = 0.0 - 50.0;
+    if is_starboard {
+        offset_deg = 50.0;
+    }
+    let offset_rad: Float = (offset_deg * gen6_pi()) / 180.0;
+    let slot_bearing: Float = gen6_normalize_angle(host_heading_rad + offset_rad);
+    return slot_bearing;
+}
+
+pub fn gen6_cca_update_kinematics(id: Int, is_starboard: Bool, pos_x: Float, pos_y: Float, vel_fps: Float, heading_rad: Float, host_x: Float, host_y: Float, host_heading_rad: Float, host_vel_fps: Float, dt: Float) -> CcaWingmanState {
+    let mut offset_deg: Float = 0.0 - 50.0;
+    if is_starboard {
+        offset_deg = 50.0;
+    }
+    let slot_bearing: Float = gen6_cca_compute_slot(host_x, host_y, host_heading_rad, is_starboard, 200.0);
+    let target_slot_x: Float = host_x + (200.0 * cos(slot_bearing));
+    let target_slot_y: Float = host_y + (200.0 * sin(slot_bearing));
+    let dx_host: Float = pos_x - host_x;
+    let dy_host: Float = pos_y - host_y;
+    let hx2: Float = dx_host * dx_host;
+    let hy2: Float = dy_host * dy_host;
+    let r_sq: Float = hx2 + hy2;
+    let r_host_px: Float = sqrt(r_sq);
+    let in_bounds: Bool = (r_host_px >= 40.0) && (r_host_px <= 450.0);
+    let tether_accel: Float = gen6_cca_tether_force(r_host_px);
+    let dx_slot: Float = target_slot_x - pos_x;
+    let dy_slot: Float = target_slot_y - pos_y;
+    let sx2: Float = dx_slot * dx_slot;
+    let sy2: Float = dy_slot * dy_slot;
+    let slot_dist_sq: Float = sx2 + sy2;
+    let dist_slot: Float = sqrt(slot_dist_sq);
+    let slot_dir_rad: Float = gen6_atan2(dy_slot, dx_slot);
+    let heading_err: Float = gen6_normalize_angle(slot_dir_rad - heading_rad);
+    let turn_rate: Float = gen6_clamp(heading_err / 0.5, 0.0 - 1.5, 1.5);
+    let new_heading: Float = gen6_normalize_angle(heading_rad + (turn_rate * dt));
+    let speed_adj: Float = gen6_clamp((dist_slot - 10.0) * 2.0, 0.0 - 100.0, 100.0);
+    let new_vel: Float = gen6_clamp(host_vel_fps + speed_adj, 200.0, 1800.0);
+    let new_x: Float = pos_x + (new_vel * cos(new_heading) * dt * 0.1);
+    let new_y: Float = pos_y + (new_vel * sin(new_heading) * dt * 0.1);
+    let is_locked: Bool = in_bounds && (dist_slot < 30.0);
+    return CcaWingmanState {
+        id: id,
+        is_starboard: is_starboard,
+        pos_x: new_x,
+        pos_y: new_y,
+        vel_fps: new_vel,
+        heading_rad: new_heading,
+        target_offset_deg: offset_deg,
+        tether_dist_px: r_host_px,
+        in_leash_bounds: in_bounds,
+        pincer_lock: is_locked
+    };
+}
+
+pub fn gen6_compute_triangulation_confidence(cca_a_lock: Bool, cca_b_lock: Bool, cca_a_dist_px: Float, cca_b_dist_px: Float) -> Float {
+    if cca_a_lock && cca_b_lock {
+        let baseline_spread: Float = cca_a_dist_px + cca_b_dist_px;
+        if baseline_spread > 200.0 {
+            return 0.99;
+        }
+        return 0.90;
+    }
+    if cca_a_lock || cca_b_lock {
+        return 0.65;
+    }
+    return 0.20;
+}

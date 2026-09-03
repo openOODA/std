@@ -1,0 +1,68 @@
+// # AArch64 str_starts_with And str_ends_with
+//
+// Logline: Emits prefix and suffix C-string tests used by fs and io leaves.
+//
+// Setup: Byte compare after strlen. Empty needle is true.
+//
+// Beats:
+//   1. str_starts_with is true when needle is a prefix of hay.
+//   2. str_ends_with is true when needle is a suffix of hay.
+//   3. Empty needle matches.
+//   4. Longer needle than hay is false.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+
+fn a64rt_affix(r0: A64R, nm: String, kind: Int) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, nm);
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 10));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_mov_reg(12, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 9));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_mov_reg(11, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(12, 11));
+    let bgt: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 0));
+    if kind == 1 {
+        x = a64x_emit(x, arm64_word_sub_reg(9, 9, 12));
+        x = a64x_emit(x, arm64_word_add_reg(9, 9, 11));
+    }
+    x = a64x_emit(x, arm64_word_movz(13, 0, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(13, 12));
+    let bhit: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 9, 13));
+    x = a64x_emit(x, arm64_word_ldrb_reg(3, 10, 13));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 3));
+    let bne: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0));
+    x = a64x_emit(x, arm64_word_add_imm(13, 13, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let yes: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    let jy: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let no: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    let endp: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bgt, arm64_word_b_cond(arm64_cond_gt(), no - bgt)));
+    x = a64x_set_words(x, a64_wset(x.p.words, bhit, arm64_word_b_cond(arm64_cond_eq(), yes - bhit)));
+    x = a64x_set_words(x, a64_wset(x.p.words, bne, arm64_word_b_cond(arm64_cond_ne(), no - bne)));
+    x = a64x_set_words(x, a64_wset(x.p.words, jy, arm64_word_b(endp - jy)));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_affixes(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_affix(r0, "str_starts_with", 0);
+    r = a64rt_affix(r, "str_ends_with", 1);
+    return r;
+}

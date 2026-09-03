@@ -1,0 +1,240 @@
+// # Galois Field F_p and Binary Extension F_2m
+//
+// Logline: Provide exact prime field F_p arithmetic and binary extension field F_2m arithmetic suitable for zero-knowledge proof circuits.
+//
+// Setup: Pure field arithmetic. The prime p must be > 1; the irreducible polynomial is represented as an Int coefficient list.
+//
+// Beats:
+//   1. fp_new(p) returns a prime field descriptor; p < 2 falls closed to p = 2.
+//   2. fp_add, fp_sub, fp_mul, fp_inv, fp_div, fp_pow implement F_p arithmetic.
+//   3. fp_legendre(a, p) returns the Legendre symbol in {-1, 0, 1}.
+//   4. f2m_new(degree, poly) sets up a binary extension field F_2m with a given irreducible polynomial.
+//   5. f2m_mul, f2m_inv implement polynomial multiplication and inversion via Fermat's little theorem analog.
+//
+// residual: f2m operations use a fixed irreducible polynomial; the user supplies the poly once at construction.
+
+type PrimeField = struct {
+    p: Int
+};
+
+pub fn fp_new(p: Int) -> PrimeField {
+    let mut prime: Int = p;
+    if prime < 2 {
+        prime = 2;
+    }
+    return PrimeField { p: prime };
+}
+
+pub fn fp_modulus(f: PrimeField) -> Int {
+    return f.p;
+}
+
+pub fn fp_reduce(f: PrimeField, v: Int) -> Int {
+    let p: Int = f.p;
+    let mut r: Int = v % p;
+    if r < 0 {
+        r = r + p;
+    }
+    return r;
+}
+
+pub fn fp_add(f: PrimeField, a: Int, b: Int) -> Int {
+    return fp_reduce(f, a + b);
+}
+
+pub fn fp_sub(f: PrimeField, a: Int, b: Int) -> Int {
+    return fp_reduce(f, a - b);
+}
+
+pub fn fp_mul(f: PrimeField, a: Int, b: Int) -> Int {
+    return fp_reduce(f, a * b);
+}
+
+pub fn fp_pow(f: PrimeField, a: Int, exp: Int) -> Int {
+    let p: Int = f.p;
+    if exp < 0 {
+        return 0;
+    }
+    if exp == 0 {
+        return 1;
+    }
+    let mut res: Int = 1;
+    let mut base: Int = fp_reduce(f, a);
+    let mut e: Int = exp;
+    while e > 0 {
+        if (e & 1) == 1 {
+            res = (res * base) % p;
+        }
+        base = (base * base) % p;
+        e = e >> 1;
+    }
+    return res;
+}
+
+pub fn fp_inv(f: PrimeField, a: Int) -> Int {
+    let p: Int = f.p;
+    if fp_reduce(f, a) == 0 {
+        return 0;
+    }
+    return fp_pow(f, a, p - 2);
+}
+
+pub fn fp_div(f: PrimeField, a: Int, b: Int) -> Int {
+    let inv_b: Int = fp_inv(f, b);
+    if inv_b == 0 {
+        return 0;
+    }
+    return fp_mul(f, a, inv_b);
+}
+
+// Legendre symbol (a/p) in {-1, 0, 1}: a^((p-1)/2) mod p.
+pub fn fp_legendre(f: PrimeField, a: Int) -> Int {
+    let p: Int = f.p;
+    if p < 3 {
+        return 0;
+    }
+    let r: Int = fp_pow(f, a, (p - 1) / 2);
+    if r == 0 {
+        return 0;
+    }
+    if r == 1 {
+        return 1;
+    }
+    let p_minus_one: Int = p - 1;
+    if r == p_minus_one {
+        return 0 - 1;
+    }
+    return 0;
+}
+
+type ExtField = struct {
+    degree: Int,
+    poly: List[Int]
+};
+
+pub fn f2m_new(degree: Int, poly: List[Int]) -> ExtField {
+    return ExtField { degree: degree, poly: poly };
+}
+
+pub fn f2m_degree(f: ExtField) -> Int {
+    return f.degree;
+}
+
+// Polynomial multiplication modulo the irreducible polynomial over F_2.
+pub fn f2m_mul(f: ExtField, a: List[Int], b: List[Int]) -> List[Int] {
+    let n_a: Int = list_len(a);
+    let n_b: Int = list_len(b);
+    let mut prod: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n_a + n_b {
+        prod = list_push(prod, 0);
+        i = i + 1;
+    }
+    i = 0;
+    while i < n_a {
+        let ai: Int = list_get(a, i) % 2;
+        if ai == 1 {
+            let mut j: Int = 0;
+            while j < n_b {
+                let bj: Int = list_get(b, j) % 2;
+                let cur: Int = list_get(prod, i + j);
+                let sum: Int = (cur + bj) % 2;
+                let mut updated: List[Int] = list_new();
+                let mut k: Int = 0;
+                while k < list_len(prod) {
+                    if k == i + j {
+                        updated = list_push(updated, sum);
+                    } else {
+                        updated = list_push(updated, list_get(prod, k));
+                    }
+                    k = k + 1;
+                }
+                prod = updated;
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
+    let m: Int = f.degree;
+    let poly: List[Int] = f.poly;
+    let poly_len: Int = list_len(poly);
+    let mut reduction_count: Int = 0;
+    while reduction_count < 256 {
+        let mut highest: Int = 0 - 1;
+        let p_len: Int = list_len(prod);
+        let mut k: Int = 0;
+        while k < p_len {
+            if list_get(prod, k) == 1 {
+                highest = k;
+            }
+            k = k + 1;
+        }
+        if highest < m {
+            return prod;
+        }
+        let shift: Int = highest - m;
+        let mut j: Int = 0;
+        while j < poly_len {
+            let pj: Int = list_get(poly, j);
+            if pj == 1 {
+                let idx: Int = shift + j;
+                if idx < p_len {
+                    let cur: Int = list_get(prod, idx);
+                    let sum: Int = (cur + 1) % 2;
+                    let mut updated: List[Int] = list_new();
+                    let mut k2: Int = 0;
+                    while k2 < p_len {
+                        if k2 == idx {
+                            updated = list_push(updated, sum);
+                        } else {
+                            updated = list_push(updated, list_get(prod, k2));
+                        }
+                        k2 = k2 + 1;
+                    }
+                    prod = updated;
+                }
+            }
+            j = j + 1;
+        }
+        reduction_count = reduction_count + 1;
+    }
+    return prod;
+}
+
+// Fermat inversion in F_2m: a^((2^m - 2)) over the multiplicative group of order 2^m - 1.
+pub fn f2m_inv(f: ExtField, a: List[Int]) -> List[Int] {
+    let m: Int = f.degree;
+    if m < 1 {
+        return a;
+    }
+    let mut pow: Int = 1;
+    let mut count: Int = 0;
+    while count < m {
+        pow = pow * 2;
+        count = count + 1;
+    }
+    let exponent: Int = pow - 2;
+    return f2m_pow(f, a, exponent);
+}
+
+pub fn f2m_pow(f: ExtField, a: List[Int], exp: Int) -> List[Int] {
+    let one: List[Int] = list_new();
+    let one_init: List[Int] = list_push(one, 1);
+    if exp < 0 {
+        return one_init;
+    }
+    if exp == 0 {
+        return one_init;
+    }
+    let mut res: List[Int] = one_init;
+    let mut base: List[Int] = a;
+    let mut e: Int = exp;
+    while e > 0 {
+        if (e & 1) == 1 {
+            res = f2m_mul(f, res, base);
+        }
+        base = f2m_mul(f, base, base);
+        e = e >> 1;
+    }
+    return res;
+}

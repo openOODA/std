@@ -1,0 +1,88 @@
+// # SHA-256 block size law
+//
+// Logline: SHA-256 processes messages in 64-byte (512-bit) blocks; padded length is the smallest multiple of 64 that fits the 1-byte 0x80 marker, message body, and 8-byte length field.
+//
+// Setup: Pure Int. FIPS 180-4 SHA-256 block size is 64 bytes. The padded length includes 1 byte of 0x80 and 8 bytes of length encoding.
+//
+// Beats:
+//   1. sha256_block_size is the constant 64 bytes (512 bits).
+//   2. sha256_word_size is 32 bits.
+//   3. sha256_pad_len(msg_len) returns the FIPS-correct padded length, a non-negative multiple of 64.
+//   4. A hostile negative msg_len or non-multiple padded length fails closed to 0.
+
+// SHA-256 block size in bytes. FIPS 180-4 section 6.2.
+pub fn crypto_sha256_block_size() -> Int {
+    return 64;
+}
+
+// SHA-256 word size in bits. FIPS 180-4 section 6.2.
+pub fn crypto_sha256_word_size() -> Int {
+    return 32;
+}
+
+// Padded length per FIPS 180-4: smallest multiple of 64 that fits msg_len plus the
+// 1-byte 0x80 marker and the 8-byte big-endian length. Hostile negative msg_len fails closed to 0.
+pub fn crypto_sha256_pad_len(msg_len: Int) -> Int {
+    if msg_len < 0 {
+        return 0;
+    }
+    let tail: Int = msg_len + 9;
+    let r: Int = tail % 64;
+    if r == 0 {
+        return tail;
+    }
+    return tail + (64 - r);
+}
+
+// Padded length must be a non-negative multiple of 64.
+pub fn crypto_sha256_is_padded(padded: Int) -> Int {
+    if padded < 0 {
+        return 0;
+    }
+    if padded % 64 == 0 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_sha256_block_size_law() -> Bool {
+    // Golden: block size and word size are 64 and 32.
+    if crypto_sha256_block_size() != 64 { return false; }
+    if crypto_sha256_word_size() != 32 { return false; }
+
+    // Golden: FIPS-correct pad length. Empty message needs 9 bytes, padded to 64.
+    if crypto_sha256_pad_len(0) != 64 { return false; }
+    if crypto_sha256_pad_len(55) != 64 { return false; }
+    // msg_len=56 cannot fit marker + length in one block, so padded to 128.
+    if crypto_sha256_pad_len(56) != 128 { return false; }
+    if crypto_sha256_pad_len(57) != 128 { return false; }
+    if crypto_sha256_pad_len(63) != 128 { return false; }
+    if crypto_sha256_pad_len(64) != 128 { return false; }
+    if crypto_sha256_pad_len(119) != 128 { return false; }
+    if crypto_sha256_pad_len(120) != 192 { return false; }
+    if crypto_sha256_pad_len(128) != 192 { return false; }
+    if crypto_sha256_pad_len(247) != 256 { return false; }
+    if crypto_sha256_pad_len(248) != 320 { return false; }
+
+    // Golden: padded length is a non-negative multiple of 64.
+    if crypto_sha256_is_padded(64) != 1 { return false; }
+    if crypto_sha256_is_padded(128) != 1 { return false; }
+    if crypto_sha256_is_padded(192) != 1 { return false; }
+    if crypto_sha256_is_padded(256) != 1 { return false; }
+    if crypto_sha256_is_padded(320) != 1 { return false; }
+
+    // Hostile: negative padded length fails closed to 0.
+    if crypto_sha256_is_padded(0 - 1) != 0 { return false; }
+
+    // Hostile: non-multiple of 64 padded length fails closed to 0.
+    if crypto_sha256_is_padded(1) != 0 { return false; }
+    if crypto_sha256_is_padded(63) != 0 { return false; }
+    if crypto_sha256_is_padded(65) != 0 { return false; }
+    if crypto_sha256_is_padded(100) != 0 { return false; }
+
+    // Hostile: negative msg_len fails closed to 0.
+    if crypto_sha256_pad_len(0 - 1) != 0 { return false; }
+    if crypto_sha256_pad_len(0 - 100) != 0 { return false; }
+
+    return true;
+}

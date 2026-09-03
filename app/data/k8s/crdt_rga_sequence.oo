@@ -1,0 +1,44 @@
+// # Replicated Growable Array Sequence CRDT (2-slot Int floor)
+//
+// Logline: RGA 2-slot sequence data type and empty constructor.
+//
+// Setup: Two flattened nodes (ts, replica, parent, value, deleted). n_nodes is occupancy.
+//
+// Beats:
+//   1. Define the 2-slot sequence type.
+//   2. Construct an empty sequence.
+//   3. Delegate id comparison and mutating operations to the sibling module.
+
+type RgaSequence = struct {
+    ts0: Int,
+    rp0: Int,
+    pts0: Int,
+    prp0: Int,
+    val0: Int,
+    del0: Int,
+    ts1: Int,
+    rp1: Int,
+    pts1: Int,
+    prp1: Int,
+    val1: Int,
+    del1: Int,
+    n_nodes: Int
+};
+
+pub fn rga_sequence_new() -> RgaSequence {
+    return RgaSequence {
+        ts0: 0,
+        rp0: 0,
+        pts0: 0,
+        prp0: 0,
+        val0: 0,
+        del0: 0,
+        ts1: 0,
+        rp1: 0,
+        pts1: 0,
+        prp1: 0,
+        val1: 0,
+        del1: 0,
+        n_nodes: 0
+    };
+}

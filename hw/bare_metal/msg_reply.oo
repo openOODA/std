@@ -1,0 +1,57 @@
+// # One-Shot Ephemeral Reply Capabilities
+//
+// Logline: Single-use unforgeable reply capability tokens for secure zero-copy client responses without static reverse channels.
+//
+// Setup: Declared capability: None. Pure mathematical state transitions enforcing single-use reply semantics.
+//
+// Beats:
+//   1. Declare MsgReplyCap algebraic structure.
+//   2. Implement transient reply capability minting.
+//   3. Implement atomic reply consumption and payload delivery.
+//   4. Enforce fail-closed rejection on secondary invocation attempts.
+
+type MsgReplyCap = struct {
+    reply_cap_id: Int,
+    target_thread: Int,
+    is_consumed: Bool,
+    payload_code: Int,
+    return_value: Int
+};
+
+pub fn msg_reply_cap_create(cid: Int, tid: Int) -> MsgReplyCap {
+    let safe_cid: Int = if cid < 0 { 0 } else { cid };
+    let safe_tid: Int = if tid < 0 { 0 } else { tid };
+    return MsgReplyCap {
+        reply_cap_id: safe_cid,
+        target_thread: safe_tid,
+        is_consumed: false,
+        payload_code: 0,
+        return_value: 0
+    };
+}
+
+pub fn msg_reply_send(rep: MsgReplyCap, code: Int, ret_val: Int) -> MsgReplyCap {
+    if rep.is_consumed == true {
+        return rep;
+    }
+    return MsgReplyCap {
+        reply_cap_id: rep.reply_cap_id,
+        target_thread: rep.target_thread,
+        is_consumed: true,
+        payload_code: code,
+        return_value: ret_val
+    };
+}
+
+pub fn msg_reply_is_valid(rep: MsgReplyCap) -> Bool {
+    let c: Bool = rep.is_consumed;
+    return c == false;
+}
+
+pub fn msg_reply_can_consume(rep: MsgReplyCap) -> Bool {
+    if rep.is_consumed == true {
+        return false;
+    }
+    let tid: Int = rep.target_thread;
+    return tid > 0;
+}

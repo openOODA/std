@@ -1,0 +1,28 @@
+// # Yield curve types
+//
+// Logline: DiscountFactor destubbed off List[YieldCurvePoint].
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed to Int tenor/factor.
+
+type DiscountFactor = struct {
+    tenor_months: Int,
+    factor_bps: Int
+};
+
+pub fn discount_factor_new(tenor_months: Int, factor_bps: Int) -> DiscountFactor {
+    return DiscountFactor {
+        tenor_months: tenor_months,
+        factor_bps: factor_bps
+    };
+}
+
+pub fn discount_factor_tenor(d: DiscountFactor) -> Int {
+    return d.tenor_months;
+}

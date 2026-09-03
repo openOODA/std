@@ -1,0 +1,144 @@
+// # Net Transport
+//
+// Logline: Telecom + DSP + PHY-layer transport codecs. Phase 3.3 reorg: merged
+// the prior std/net/telecom/, std/net/telecom_5g/, std/net/telecom_6g/ into a
+// single std/net/transport/ tree. The 3G/4G/5G/6G distinctions are preserved
+// at the file naming layer (telecom_5g_*, telecom_6g_*, thz_*, ris_*, isac_*,
+// nr5g_*, lte_*, holographic_*, otfs_*, ofdm_*, sdr_*, sync_*) but the
+// directory split is gone -- they were distinctions without a difference.
+//
+// Setup: Domain module under std/net/transport. Pure compute, no caps.
+//   * Legacy telecom/ surface: beamforming, channel, CRC, DSP filters, FFT/IFFT, LTE, NR5G frame/slot/subcarrier, OFDM, modulators, SDR, SNR, turbo/viterbi, spectrum.
+//   * 5G surface: 3GPP channels, advanced DSP, MIMO, mod constellations, NR5G LDPC/polar/rate-match, OFDM cyclic prefix/papr/pilot, SDR, sync.
+//   * 6G surface: holographic MIMO, OAM, OTFS, RIS, semantic comms, terahertz, ISAC, RSMA, GFDM, FBMC, lens antenna, near-field, mMIMO, NOMA.
+//
+// Beats:
+//   1. Legacy telecom (25 files): the original std/net/telecom/ public surface.
+//   2. 5G NR + advanced DSP + MIMO + OFDM + sync (50 files): the std/net/telecom_5g/ surface.
+//   3. 6G + terahertz + RIS + ISAC + near-field (50 files): the std/net/telecom_6g/ surface.
+
+import "beamforming_weights.oo";
+import "beam_squint_wideband_compensator.oo";
+import "channel_3gpp_tapped_delay.oo";
+import "channel_awgn_generator.oo";
+import "channel_doppler_jakes.oo";
+import "channel_equalizer.oo";
+import "channel_pathloss_3gpp.oo";
+import "channel_rayleigh_fading.oo";
+import "channel_rician_k_factor.oo";
+import "constellation_diagram.oo";
+import "crc_radio.oo";
+import "dft_3d_codebook_generator.oo";
+import "doppler_shift.oo";
+import "dsp_filter_fir.oo";
+import "dsp_filter_iir.oo";
+import "dsp_fir_equiripple.oo";
+import "dsp_goertzel_tone.oo";
+import "dsp_hilbert_transform.oo";
+import "dsp_iir_butterworth.oo";
+import "dsp_iir_chebyshev.oo";
+import "dsp_iq_imbalance_corrector.oo";
+import "dsp_window_functions.oo";
+import "fbmc_filter_bank_multicarrier.oo";
+import "fec_short_block_finite_blocklength.oo";
+import "fft_telecom.oo";
+import "gfdm_generalized_frequency_div.oo";
+import "holographic_mimo_beamforming.oo";
+import "hybrid_precoding_subconnected.oo";
+import "ifft_radix2.oo";
+import "isac_clutter_cancellation_filter.oo";
+import "isac_constant_modulus_waveform.oo";
+import "isac_cramer_rao_lower_bound.oo";
+import "isac_esprit_direction_finding.oo";
+import "isac_music_doa_estimator.oo";
+import "isac_radar_cross_section_model.oo";
+import "isac_radar_ofdm_ambiguity.oo";
+import "isac_target_detection_cfar.oo";
+import "lens_antenna_array_beam_space.oo";
+import "lte_pdcp.oo";
+import "lte_rrc.oo";
+import "massive_mimo_pilot_contamination.oo";
+import "mimo_channel_capacity.oo";
+import "mimo_codebook_precoding.oo";
+import "mimo_mmse_equalizer.oo";
+import "mimo_svd_beamforming.oo";
+import "mimo_waterfilling_power.oo";
+import "mimo_zero_forcing_precoder.oo";
+import "mod_apsk_constellation.oo";
+import "mod_fsk_gfsk.oo";
+import "mod_qam16_constellation.oo";
+import "mod_qam256_constellation.oo";
+import "mod_qam64_constellation.oo";
+import "mod_qpsk_demapper.oo";
+import "near_field_beamfocusing.oo";
+import "noma_successive_interference_cancel.oo";
+import "nr5g_frame.oo";
+import "nr5g_ldpc_base_graph.oo";
+import "nr5g_ldpc_belief_propagation.oo";
+import "nr5g_ldpc_encoder.oo";
+import "nr5g_polar_encoder.oo";
+import "nr5g_polar_sc_decoder.oo";
+import "nr5g_rate_matching.oo";
+import "nr5g_scrambler.oo";
+import "nr5g_slot.oo";
+import "nr5g_subcarrier.oo";
+import "oam_circular_array_generator.oo";
+import "oam_orbital_angular_momentum.oo";
+import "ofdm_cyclic_prefix.oo";
+import "ofdm_demod.oo";
+import "ofdm_mimo_channel_matrix.oo";
+import "ofdm_papr_reduction.oo";
+import "ofdm_pilot_estimator.oo";
+import "ofdm_resource_grid.oo";
+import "ofdm_subcarrier_mapper.oo";
+import "ofdm_sync_correlation.oo";
+import "optical_wireless_vlc_channel.oo";
+import "otfs_delay_doppler_grid.oo";
+import "otfs_mp_equalizer.oo";
+import "polar_crc_aided_scl_decoder.oo";
+import "psk_modulator.oo";
+import "qam_modulator.oo";
+import "radio_stripe_cell_free_mimo.oo";
+import "rate_splitting_multiple_access.oo";
+import "ris_active_amplifier_model.oo";
+import "ris_anomalous_reflection_law.oo";
+import "ris_cascaded_channel_estimation.oo";
+import "ris_mac_scheduler.oo";
+import "ris_near_field_spherical_model.oo";
+import "ris_phase_shift_optimizer.oo";
+import "ris_polarization_conversion.oo";
+import "ris_simultaneous_trans_reflect.oo";
+import "sdr_agc_controller.oo";
+import "sdr_buffer.oo";
+import "sdr_iq_dma_ring_buffer.oo";
+import "sdr_rf_front_end_model.oo";
+import "sdr_stream.oo";
+import "semantic_communication_channel_rate.oo";
+import "snr_estimator.oo";
+import "spectrum_analyzer.oo";
+import "sync_costas_loop.oo";
+import "sync_fractional_resampler.oo";
+import "sync_gardner_timing_recovery.oo";
+import "sync_matched_filter_rrc.oo";
+import "sync_mueller_muller_ted.oo";
+import "sync_schmidl_cox_ofdm.oo";
+import "telecom.oo";
+import "telecom_5g.oo";
+import "telecom_5g_stubs.oo";
+import "telecom_6g.oo";
+import "telecom_6g_stubs.oo";
+import "telecom_stubs.oo";
+import "thz_atmospheric_attenuation.oo";
+import "thz_molecular_absorption_loss.oo";
+import "thz_nonlinear_power_amp_model.oo";
+import "thz_path_loss_sub_thz.oo";
+import "thz_phase_noise_wiener_model.oo";
+import "thz_photonic_generation.oo";
+import "thz_plasma_frequency_model.oo";
+import "thz_rain_fog_attenuation.oo";
+import "thz_rough_surface_scattering.oo";
+import "thz_schottky_diode_detector.oo";
+import "turbo_decoder.oo";
+import "viterbi_decoder.oo";
+import "xl_mimo_spatial_non_stationarity.oo";
+import "zero_energy_ambient_backscatter.oo";

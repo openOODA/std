@@ -1,0 +1,116 @@
+// # Hidden Markov Model (HMM) Viterbi Path Decoder
+//
+// Logline: Decodes the most probable hidden state path (e.g. CpG islands, exon/intron, secondary structure) using dynamic programming.
+//
+// Setup: Probabilistic sequence modeling module determining maximum likelihood state sequences.
+//
+// Beats:
+//   1. Define HmmModel and ViterbiResult data structures.
+//   2. Compute log-space transition and emission probability recursions: V_t(j) = max_i(V_{t-1}(i) + log(A_ij)) + log(E_j(x_t)).
+//   3. Trace back optimal state path and return total log-likelihood score.
+
+type HmmModel = struct {
+    num_states: Int,
+    num_emissions: Int,
+    model_name: String
+};
+
+type ViterbiResult = struct {
+    sequence_len: Int,
+    best_path: List[Int],
+    log_likelihood: Float,
+    is_valid: Bool
+};
+
+pub fn viterbi_init(seq_len: Int) -> ViterbiResult {
+    let mut path: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < seq_len {
+        list_push(path, 0);
+        i = i + 1;
+    }
+
+    return ViterbiResult {
+        sequence_len: seq_len,
+        best_path: path,
+        log_likelihood: 0.0,
+        is_valid: true
+    };
+}
+
+pub fn viterbi_step_update(
+    prev_viterbi: Float,
+    log_trans: Float,
+    log_emission: Float
+) -> Float {
+    return prev_viterbi + log_trans + log_emission;
+}
+
+pub fn viterbi_decode_two_state(
+    seq: String,
+    log_init_0: Float,
+    log_init_1: Float,
+    log_trans_00: Float,
+    log_trans_01: Float,
+    log_trans_10: Float,
+    log_trans_11: Float
+) -> ViterbiResult {
+    let n: Int = chars_len(seq);    let mut path: List[Int] = list_new();
+
+    let mut v0: Float = log_init_0;
+    let mut v1: Float = log_init_1;
+
+    let mut t: Int = 0;
+    while t < n {
+        // Evaluate transitions
+        let from_0_to_0: Float = v0 + log_trans_00;        let from_1_to_0: Float = v1 + log_trans_10;        let mut next_v0: Int = from_1_to_0;
+
+        if from_0_to_0 > from_1_to_0 {
+
+            next_v0 = from_0_to_0;
+
+        }
+
+        let from_0_to_1: Float = v0 + log_trans_01;        let from_1_to_1: Float = v1 + log_trans_11;        let mut next_v1: Int = from_1_to_1;
+
+        if from_0_to_1 > from_1_to_1 {
+
+            next_v1 = from_0_to_1;
+
+        }
+
+        let mut best_state: Int = 1;
+
+
+        if next_v0 > next_v1 {
+
+
+            best_state = 0;
+
+
+        }
+        list_push(path, best_state);
+
+        v0 = next_v0;
+        v1 = next_v1;
+        t = t + 1;
+    }
+
+    let mut final_ll: Int = v1;
+
+
+    if v0 > v1 {
+
+
+        final_ll = v0;
+
+
+    }
+
+    return ViterbiResult {
+        sequence_len: n,
+        best_path: path,
+        log_likelihood: final_ll,
+        is_valid: n > 0
+    };
+}

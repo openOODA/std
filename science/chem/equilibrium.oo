@@ -1,0 +1,156 @@
+// # Chemical Equilibrium and Van 't Hoff Thermodynamics
+//
+// Logline: Computes equilibrium constants, reaction quotients, Gibbs free energy relations, and temperature shifts via Van 't Hoff.
+//
+// Setup: Pure stoichiometric thermodynamics module governing chemical reversibility and reaction progress.
+//
+// Beats:
+//   1. Define EquilibriumState struct encapsulating K_eq, Q, Delta G, and driving direction.
+//   2. Solve chemical equilibrium state and dynamic driving direction from forward/reverse rates.
+//   3. Compute Van 't Hoff temperature dependency of equilibrium constants.
+//   4. Calculate standard Gibbs free energy equilibrium constant and reaction quotients.
+
+import "std/core/math/trig.oo";
+
+type EquilibriumState = struct {
+    k_eq: Float,
+    reaction_quotient_q: Float,
+    delta_g_standard: Float,
+    direction: Int
+};
+
+// Gas constant R in J / (mol * K).
+pub fn chem_gas_constant() -> Float {
+    return 8.314462618;
+}
+
+// Construct an equilibrium state from forward and reverse rate constants and reaction quotient Q.
+// direction: 1 = drives forward (Q < K_eq), -1 = drives reverse (Q > K_eq), 0 = equilibrium (Q == K_eq).
+pub fn chemical_equilibrium_solve(
+    k_fwd: Float,
+    k_rev: Float,
+    q_quotient: Float,
+    temp_k: Float
+) -> EquilibriumState {
+    if k_rev <= 0.000000001 || k_fwd <= 0.0 || temp_k <= 0.000001 {
+        return EquilibriumState {
+            k_eq: 0.0,
+            reaction_quotient_q: q_quotient,
+            delta_g_standard: 0.0,
+            direction: 0
+        };
+    }
+
+    let keq: Float = k_fwd / k_rev;
+    let r: Float = chem_gas_constant();
+    let ln_keq: Float = math_ln(keq);
+    let dg_std: Float = 0.0 - (r * temp_k * ln_keq);
+
+    let mut dir: Int = 0;
+    let tol: Float = keq * 0.00001;
+    if q_quotient < (keq - tol) {
+        dir = 1;
+    } else {
+        if q_quotient > (keq + tol) {
+            dir = 0 - 1;
+        } else {
+            dir = 0;
+        }
+    }
+
+    return EquilibriumState {
+        k_eq: keq,
+        reaction_quotient_q: q_quotient,
+        delta_g_standard: dg_std,
+        direction: dir
+    };
+}
+
+// Compute equilibrium constant K2 at temperature T2 using Van 't Hoff isochore:
+// ln(K2 / K1) = (Delta H_std / R) * (1/T1 - 1/T2)
+// K2 = K1 * exp( (Delta H_std / R) * (1/T1 - 1/T2) ).
+pub fn vant_hoff_k2(
+    k1: Float,
+    delta_h_standard: Float,
+    t1_k: Float,
+    t2_k: Float
+) -> Float {
+    if k1 <= 0.0 || t1_k <= 0.000001 || t2_k <= 0.000001 {
+        return 0.0;
+    }
+
+    let r: Float = chem_gas_constant();
+    let inv_t1: Float = 1.0 / t1_k;
+    let inv_t2: Float = 1.0 / t2_k;
+    let diff: Float = inv_t1 - inv_t2;
+    let mut exp_arg: Float = (delta_h_standard / r) * diff;
+
+    if exp_arg < (0.0 - 700.0) {
+        return 0.0;
+    }
+    if exp_arg > 700.0 {
+        exp_arg = 700.0;
+    }
+
+    return k1 * math_exp(exp_arg);
+}
+
+// Calculate equilibrium constant K_eq from standard Gibbs free energy Delta G_std (J/mol) at temperature T (K):
+// K_eq = exp( - Delta G_std / (R * T) ).
+pub fn equilibrium_constant_from_gibbs(delta_g_std: Float, temp_k: Float) -> Float {
+    if temp_k <= 0.000001 {
+        return 0.0;
+    }
+
+    let r: Float = chem_gas_constant();
+    let mut exp_arg: Float = (0.0 - delta_g_std) / (r * temp_k);
+
+    if exp_arg < (0.0 - 700.0) {
+        return 0.0;
+    }
+    if exp_arg > 700.0 {
+        exp_arg = 700.0;
+    }
+
+    return math_exp(exp_arg);
+}
+
+// Calculate standard reaction quotient Q for a 2-reactant 2-product reaction:
+// a A + b B <=> c C + d D
+// Q = ([C]^c * [D]^d) / ([A]^a * [B]^b).
+pub fn reaction_quotient_binary(
+    conc_c: Float,
+    coeff_c: Float,
+    conc_d: Float,
+    coeff_d: Float,
+    conc_a: Float,
+    coeff_a: Float,
+    conc_b: Float,
+    coeff_b: Float
+) -> Float {
+    if conc_a <= 0.0 || conc_b <= 0.0 || conc_c < 0.0 || conc_d < 0.0 {
+        return 0.0;
+    }
+
+    let num_c: Float = if coeff_c == 1.0 { conc_c } else { math_pow(conc_c, coeff_c) };
+    let num_d: Float = if coeff_d == 1.0 { conc_d } else { math_pow(conc_d, coeff_d) };
+    let den_a: Float = if coeff_a == 1.0 { conc_a } else { math_pow(conc_a, coeff_a) };
+    let den_b: Float = if coeff_b == 1.0 { conc_b } else { math_pow(conc_b, coeff_b) };
+
+    let numerator: Float = num_c * num_d;
+    let denominator: Float = den_a * den_b;
+
+    if denominator <= 0.0000000001 {
+        return 0.0;
+    }
+
+    return numerator / denominator;
+}
+
+// Calculate equilibrium conversion fraction x_eq = K_eq / (1.0 + K_eq) for A <=> B.
+pub fn equilibrium_conversion_fraction(k_eq: Float) -> Float {
+    if k_eq <= 0.0 {
+        return 0.0;
+    }
+    return k_eq / (1.0 + k_eq);
+}

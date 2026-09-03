@@ -1,0 +1,256 @@
+// # .oo Source Compiler for slice1: Expression Lowering
+//
+// Logline: Lower atoms, calls, Pratt binary ops, and struct literals to WASM.
+// Setup: Pratt expression parser and byte-emitter for slice1 .oo expressions.
+// Beats:
+//   1. Atoms, calls, field access. 2. Pratt folds and struct literals.
+
+import "std/compile/wasm_interpreter/wasm_oo_slice1_compile.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_types.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_structs.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_intern.oo";
+
+pub fn s1_lower_atom(s: S1CC, total_user_count: Int) -> S1CC {
+    if s1cc_match(s, 1, "") {
+        let r_v: Result[Int, String] = parse_int(s1cc_t(s));
+        let vx: Int = r_v.val;
+        let s2: S1CC = s1cc_emit_i32(s, vx);
+        let s3: S1CC = s1cc_adv(s2);
+        return s1cc_setret(s3, s1_rt_int());
+    }
+    if s1cc_match(s, 100, "") {
+        let s2: S1CC = s1_emit_intern(s, s1cc_t(s));
+        let s3: S1CC = s1cc_adv(s2);
+        return s1cc_setret(s3, s1_rt_string());
+    }
+    if s1cc_match(s, 29, "") { return s1cc_setret(s1cc_adv(s1cc_emit_i32(s, 1)), s1_rt_bool()); }
+    if s1cc_match(s, 30, "") { return s1cc_setret(s1cc_adv(s1cc_emit_i32(s, 0)), s1_rt_bool()); }
+    if s1cc_match(s, 5, "") {
+        let name: String = s1cc_t(s);
+        let s2: S1CC = s1cc_adv(s);
+        let local_idx: Int = s1_local_idx(s, name);
+        if s1cc_t(s2) == "(" { return s1_lower_call(s, name, total_user_count); }
+        if s1cc_t(s2) == "{" && local_idx < 0 {
+            if s1cc_lookup_struct(s, name) >= 0 {
+                return s1_lower_struct_literal(s2, name, total_user_count);
+            }
+            let err_msg: String = "ERR\tcompile\tunsupported_struct_literal\t" + name;
+            return s1cc_err(s2, err_msg);
+        }
+        if s1cc_t(s2) == "." {
+            let recv_idx: Int = s1_local_idx(s, name);
+            let s_recv: S1CC = if recv_idx >= 0 { s1cc_emit_get(s, recv_idx) } else { s };
+            let s_dot: S1CC = s1cc_adv(s_recv);
+            let s_after_dot: S1CC = s1cc_adv(s_dot);
+            let mname: String = s1cc_t(s_after_dot);
+            let s4: S1CC = s1cc_adv(s_after_dot);
+            if s1cc_t(s4) == "(" {
+                if mname == "to_string" {
+                    if recv_idx >= 0 && s1_local_type(s, recv_idx) != 0 && s1_local_type(s, recv_idx) != s1_rt_int() {
+                        return s1cc_err(s4, "ERR\tcompile\tmethod_on_non_receiver\tto_string\t" + name);
+                    }
+                    let s6: S1CC = s1cc_adv(s1cc_adv(s4));
+                    return s1cc_setret(s1cc_emit_call(s6, total_user_count + 7), s1_rt_string());
+                }
+                if mname == "contains" {
+                    if recv_idx >= 0 && s1_local_type(s, recv_idx) != 0 && s1_local_type(s, recv_idx) != s1_rt_string() {
+                        return s1cc_err(s4, "ERR\tcompile\tmethod_on_non_receiver\tcontains\t" + name);
+                    }
+                    let s5: S1CC = s1cc_adv(s4);
+                    let s6: S1CC = s1_lower_expr(s5, 0, total_user_count);
+                    let s7: S1CC = if s1cc_t(s6) == ")" { s1cc_adv(s6) } else { s6 };
+                    return s1cc_setret(s1cc_emit_call(s7, total_user_count + 9), s1_rt_bool());
+                }
+            }
+            if recv_idx >= 0 { return s1_lower_field_access(s, recv_idx, total_user_count); }
+            return s_recv;
+        }
+        let idx: Int = s1_local_idx(s, name);
+        if idx >= 0 {
+            let t: Int = s1_local_type(s, idx);
+            let s3: S1CC = s1cc_emit_get(s2, idx);
+            return s1cc_setret(s3, t);
+        }
+        let sug: String = s1_suggest_name(s, name);
+        let err_msg: String = if sug == "" { "ERR\tcompile\tundefined_variable\t" + name } else { "ERR\tcompile\tundefined_variable\t" + name + "\tdid_you_mean\t" + sug };
+        return s1cc_err(s2, err_msg);
+    }
+    if s1cc_t(s) == "(" {
+        let s2: S1CC = s1cc_adv(s);
+        let s3: S1CC = s1_lower_expr(s2, 0, total_user_count);
+        let s4: S1CC = if s1cc_t(s3) == ")" { s1cc_adv(s3) } else { s3 };
+        return s4;
+    }
+    if !s1cc_end(s) { return s1cc_adv(s); }
+    return s;
+}
+
+pub fn s1_lower_call_arg(s: S1CC, total_user_count: Int) -> S1CC {
+    let k: Int = s1cc_k(s);
+    if k == 1 {
+        let r_v: Result[Int, String] = parse_int(s1cc_t(s));
+        let vx: Int = r_v.val;
+        let s2: S1CC = s1cc_emit_i32(s, vx);
+        let s3: S1CC = s1cc_adv(s2);
+        return s1_call_arg_after(s3, 1, total_user_count);
+    }
+    if k == 100 {
+        let s2: S1CC = s1_emit_intern(s, s1cc_t(s));
+        let s3: S1CC = s1cc_adv(s2);
+        return s1_call_arg_after(s3, 100, total_user_count);
+    }
+    if k == 29 { return s1cc_adv(s1cc_emit_i32(s, 1)); }
+    if k == 30 { return s1cc_adv(s1cc_emit_i32(s, 0)); }
+    if k == 5 {
+        let s2_check: S1CC = s1cc_adv(s);
+        if s1cc_t(s2_check) == "." { return s1_lower_atom(s, total_user_count); }
+        let name: String = s1cc_t(s);
+        let idx: Int = s1_local_idx(s, name);
+        let s2: S1CC = if idx >= 0 { s1cc_emit_get(s, idx); } else { s; };
+        return s1_call_arg_after(s1cc_adv(s2), 1, total_user_count);
+    }
+    return s1cc_adv(s);
+}
+
+pub fn s1_call_arg_after(s: S1CC, lhs_kind: Int, total_user_count: Int) -> S1CC {
+    let mut cur: S1CC = s;
+    let mut running: Bool = true;
+    while running {
+        let k: Int = s1cc_k(cur);
+        let prec: Int = s1_binop_prec_int(k);
+        if prec == 0 { running = false; }
+        else {
+            let s2: S1CC = s1cc_adv(cur);
+            let s3: S1CC = s1_lower_call_arg(s2, total_user_count);
+            if (k == 2) && (lhs_kind == 100) {
+                cur = s1cc_emit_call(s3, total_user_count + 8);
+            } else {
+                cur = s1cc_emit_op(s3, s1_binop_op_int(k));
+            }
+            lhs_kind = 1;
+        }
+    }
+    return cur;
+}
+
+pub fn s1_lower_call(s: S1CC, name: String, total_user_count: Int) -> S1CC {
+    let mut cur: S1CC = s1cc_adv(s);
+    let mut done: Bool = false;
+    let mut arg_count: Int = 0;
+    let mut saw_arg: Bool = false;
+    while !done {
+        if s1cc_end(cur) { done = true; }
+        else if s1cc_t(cur) == ")" { done = true; }
+        else if s1cc_t(cur) == "(" { cur = s1cc_adv(cur); }
+        else {
+            let before_pos: Int = cur.pos;
+            let expected: Int = s1_call_arg_kind(name, arg_count);
+            if expected >= 0 {
+                let actual: Int = s1_peek_arg_kind(cur);
+                if actual >= 0 && actual != expected {
+                    let err_msg: String = "ERR\tcompile\targ_kind_mismatch\t" + name + "\t" + arg_count.to_string() + "\t" + expected.to_string() + "\t" + actual.to_string();
+                    return s1cc_err(cur, err_msg);
+                }
+            }
+            cur = s1_lower_call_arg(cur, total_user_count);
+            if cur.pos <= before_pos { cur = s1cc_adv(cur); }
+            else { arg_count = arg_count + 1; saw_arg = true; }
+            if s1cc_t(cur) == "," { cur = s1cc_adv(cur); }
+        }
+    }
+    if !saw_arg { arg_count = 0; }
+    let s2: S1CC = if s1cc_t(cur) == ")" { s1cc_adv(cur) } else { cur };
+    let expected: Int = s1_call_arity(name);
+    if expected >= 0 && arg_count != expected {
+        let err_msg: String = "ERR\tcompile\tarity_mismatch\t" + name + "\t" + arg_count.to_string() + "\t" + expected.to_string();
+        return s1cc_err(s2, err_msg);
+    }
+    let hid: Int = s1_find_host(name);
+    if hid >= 0 {
+        let t: Int = s1_host_return_type(name);
+        let s3: S1CC = s1cc_emit_call(s2, total_user_count + hid);
+        return s1cc_setret(s3, t);
+    }
+    let uid: Int = s1_user_fn(name, s.fns, s.fns_count);
+    if uid >= 0 { return s1cc_setret(s1cc_emit_call(s2, uid), s1_rt_unit()); }
+    let err_msg: String = "ERR\tcompile\tundefined_function\t" + name;
+    return s1cc_err(s2, err_msg);
+}
+
+pub fn s1_lower_expr(s: S1CC, min_prec: Int, total_user_count: Int) -> S1CC {
+    let mut cur: S1CC = s;
+    if s1cc_match(cur, 208, "") {
+        let s2: S1CC = s1cc_adv(cur);
+        let s3: S1CC = s1_lower_expr(s2, 8, total_user_count);
+        return s1cc_emit_eqz(s3);
+    }
+    let mut lhs_kind: Int = s1cc_k(cur);
+    cur = s1_lower_atom(cur, total_user_count);
+    let mut running: Bool = true;
+    while running {
+        let k: Int = s1cc_k(cur);
+        let prec: Int = s1_binop_prec_int(k);
+        if prec == 0 || prec < min_prec { running = false; }
+        else {
+            let s2: S1CC = s1cc_adv(cur);
+            let rhs_kind: Int = s1cc_k(s2);
+            if (k == 2) && (lhs_kind == 1) && (rhs_kind == 100) {
+                let err_msg: String = "ERR\tcompile\ttype_mismatch\tplus_int_string";
+                return s1cc_err(s2, err_msg);
+            }
+            if (k == 2) && (lhs_kind == 100) && (rhs_kind != 100) && (rhs_kind != 5) {
+                let err_msg: String = "ERR\tcompile\ttype_mismatch\tplus_string_non_string";
+                return s1cc_err(s2, err_msg);
+            }
+            let s3: S1CC = s1_lower_expr(s2, prec + 1, total_user_count);
+            if (k == 2) && (lhs_kind == 100) {
+                cur = s1cc_emit_call(s3, total_user_count + 8);
+            } else {
+                let op: Int = s1_binop_op_int(k);
+                cur = s1cc_emit_op(s3, op);
+            }
+            lhs_kind = 1;
+        }
+    }
+    return cur;
+}
+
+pub fn s1_lower_struct_literal(s: S1CC, name: String, total_user_count: Int) -> S1CC {
+    let struct_idx: Int = s1cc_lookup_struct(s, name);
+    if struct_idx < 0 {
+        let err_msg: String = "ERR\tcompile\tunknown_struct\t" + name;
+        return s1cc_err(s, err_msg);
+    }
+    let fc: Int = s1cc_struct_field_count(s, struct_idx);
+    let s_a: S1CC = if s1cc_t(s) == "{" { s1cc_adv(s) } else { s };
+    let s_b: S1CC = s1cc_emit_i32(s_a, fc);
+    let s_c: S1CC = s1cc_emit_call(s_b, total_user_count + 15);
+    let mut cur: S1CC = s_c;
+    while s1cc_t(cur) != "}" {
+        if s1cc_t(cur) == "," { cur = s1cc_adv(cur); }
+        if s1cc_t(cur) == "}" { break; }
+        let fname: String = s1cc_t(cur);
+        cur = s1cc_adv(cur);
+        if s1cc_t(cur) != ":" {
+            return s1cc_err(cur, "ERR\tcompile\tsyntax_error\tstruct_field_expected_colon_in_literal");
+        }
+        cur = s1cc_adv(cur);
+        let fidx: Int = s1cc_struct_field_idx(s, struct_idx, fname);
+        if fidx < 0 {
+            let err_msg2: String = "ERR\tcompile\tunknown_field\t" + name + "\t" + fname;
+            return s1cc_err(cur, err_msg2);
+        }
+        let ftype: Int = s1cc_struct_field_type(s, struct_idx, fidx);
+        let s_pre: S1CC = s1cc_emit_i32(cur, fidx);
+        let s_v: S1CC = s1_lower_expr(s_pre, 0, total_user_count);
+        if ftype != 0 && ftype != s_v.last_ret {
+            let err_msg3: String = "ERR\tcompile\tfield_type_mismatch\t" + name + "\t" + fname + "\t" + ftype.to_string() + "\t" + s_v.last_ret.to_string();
+            return s1cc_err(s_v, err_msg3);
+        }
+        let s_g: S1CC = s1cc_emit_call(s_v, total_user_count + 16);
+        cur = s_g;
+    }
+    let s_close: S1CC = s1cc_adv(cur);
+    let s_with_ret: S1CC = s1cc_setret(s_close, s1_rt_int());
+    return s1cc_set_struct_id(s_with_ret, struct_idx);
+}

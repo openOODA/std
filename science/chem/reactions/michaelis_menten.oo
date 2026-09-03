@@ -1,0 +1,184 @@
+// # Michaelis-Menten Enzyme Kinetics and Inhibition
+//
+// Logline: Computes enzyme reaction velocities, catalytic efficiencies, competitive/noncompetitive/uncompetitive inhibition, and Lineweaver-Burk parameters.
+//
+// Setup: Pure biochemistry module modeling saturable catalytic reaction kinetics under steady-state approximations.
+//
+// Beats:
+//   1. Define EnzymeKinetics and LineweaverBurk structures.
+//   2. Compute uninhibited Michaelis-Menten velocity, turnover number, and catalytic efficiency.
+//   3. Compute competitive, non-competitive, and uncompetitive enzyme inhibition kinetics.
+//   4. Calculate double-reciprocal Lineweaver-Burk linearization parameters.
+
+type EnzymeKinetics = struct {
+    v_max: Float,
+    k_m: Float,
+    k_cat: Float,
+    catalytic_efficiency: Float
+};
+
+type LineweaverBurk = struct {
+    slope: Float,
+    y_intercept: Float,
+    x_intercept: Float
+};
+
+// Construct an enzyme kinetic model with V_max, K_m, and k_cat.
+// Computes catalytic efficiency eta = k_cat / K_m.
+pub fn enzyme_kinetics_new(v_max: Float, k_m: Float, k_cat: Float) -> EnzymeKinetics {
+    if v_max <= 0.0 || k_m <= 0.000000001 || k_cat < 0.0 {
+        return EnzymeKinetics {
+            v_max: 0.0,
+            k_m: 0.0,
+            k_cat: 0.0,
+            catalytic_efficiency: 0.0
+        };
+    }
+
+    let eff: Float = k_cat / k_m;
+
+    return EnzymeKinetics {
+        v_max: v_max,
+        k_m: k_m,
+        k_cat: k_cat,
+        catalytic_efficiency: eff
+    };
+}
+
+// Compute uninhibited Michaelis-Menten reaction velocity:
+// v = (V_max * [S]) / (K_m + [S]).
+pub fn enzyme_velocity(kin: EnzymeKinetics, substrate_conc: Float) -> Float {
+    let vm: Float = kin.v_max;
+    let km: Float = kin.k_m;
+
+    if substrate_conc <= 0.0 || vm <= 0.0 || km <= 0.0 {
+        return 0.0;
+    }
+
+    let denom: Float = km + substrate_conc;
+    if denom <= 0.000000001 {
+        return 0.0;
+    }
+
+    return (vm * substrate_conc) / denom;
+}
+
+// Compute enzyme reaction velocity under competitive inhibition:
+// v = (V_max * [S]) / ( K_m * (1 + [I] / K_i) + [S] ).
+pub fn enzyme_velocity_competitive(
+    kin: EnzymeKinetics,
+    s_conc: Float,
+    i_conc: Float,
+    k_i: Float
+) -> Float {
+    let vm: Float = kin.v_max;
+    let km: Float = kin.k_m;
+
+    if s_conc <= 0.0 || vm <= 0.0 || km <= 0.0 {
+        return 0.0;
+    }
+
+    let mut alpha: Float = 1.0;
+    if i_conc > 0.0 && k_i > 0.000000001 {
+        alpha = 1.0 + (i_conc / k_i);
+    }
+
+    let app_km: Float = km * alpha;
+    let denom: Float = app_km + s_conc;
+    if denom <= 0.000000001 {
+        return 0.0;
+    }
+
+    return (vm * s_conc) / denom;
+}
+
+// Compute enzyme reaction velocity under non-competitive inhibition:
+// v = (V_max * [S]) / ( (1 + [I] / K_i) * (K_m + [S]) ).
+pub fn enzyme_velocity_noncompetitive(
+    kin: EnzymeKinetics,
+    s_conc: Float,
+    i_conc: Float,
+    k_i: Float
+) -> Float {
+    let vm: Float = kin.v_max;
+    let km: Float = kin.k_m;
+
+    if s_conc <= 0.0 || vm <= 0.0 || km <= 0.0 {
+        return 0.0;
+    }
+
+    let mut alpha: Float = 1.0;
+    if i_conc > 0.0 && k_i > 0.000000001 {
+        alpha = 1.0 + (i_conc / k_i);
+    }
+
+    let app_vm: Float = vm / alpha;
+    let denom: Float = km + s_conc;
+    if denom <= 0.000000001 {
+        return 0.0;
+    }
+
+    return (app_vm * s_conc) / denom;
+}
+
+// Compute enzyme reaction velocity under uncompetitive inhibition:
+// v = (V_max * [S]) / ( K_m + [S] * (1 + [I] / K_i) ).
+pub fn enzyme_velocity_uncompetitive(
+    kin: EnzymeKinetics,
+    s_conc: Float,
+    i_conc: Float,
+    k_i: Float
+) -> Float {
+    let vm: Float = kin.v_max;
+    let km: Float = kin.k_m;
+
+    if s_conc <= 0.0 || vm <= 0.0 || km <= 0.0 {
+        return 0.0;
+    }
+
+    let mut alpha_prime: Float = 1.0;
+    if i_conc > 0.0 && k_i > 0.000000001 {
+        alpha_prime = 1.0 + (i_conc / k_i);
+    }
+
+    let denom: Float = km + (s_conc * alpha_prime);
+    if denom <= 0.000000001 {
+        return 0.0;
+    }
+
+    return (vm * s_conc) / denom;
+}
+
+// Compute turnover number k_cat = V_max / [E]_total.
+pub fn enzyme_turnover_number(v_max: Float, total_enzyme_conc: Float) -> Float {
+    if total_enzyme_conc <= 0.000000001 || v_max <= 0.0 {
+        return 0.0;
+    }
+    return v_max / total_enzyme_conc;
+}
+
+// Calculate Lineweaver-Burk linear parameters:
+// 1/v = (K_m / V_max) * (1/[S]) + (1 / V_max)
+// slope = K_m / V_max, y_intercept = 1 / V_max, x_intercept = -1 / K_m.
+pub fn enzyme_lineweaver_burk(kin: EnzymeKinetics) -> LineweaverBurk {
+    let vm: Float = kin.v_max;
+    let km: Float = kin.k_m;
+
+    if vm <= 0.0 || km <= 0.000000001 {
+        return LineweaverBurk {
+            slope: 0.0,
+            y_intercept: 0.0,
+            x_intercept: 0.0
+        };
+    }
+
+    let sl: Float = km / vm;
+    let y_int: Float = 1.0 / vm;
+    let x_int: Float = 0.0 - (1.0 / km);
+
+    return LineweaverBurk {
+        slope: sl,
+        y_intercept: y_int,
+        x_intercept: x_int
+    };
+}

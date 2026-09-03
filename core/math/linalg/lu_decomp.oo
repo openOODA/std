@@ -1,0 +1,213 @@
+// # LU Decomposition with Partial Row Pivoting
+//
+// Logline: Factors PA = LU with partial pivoting, then solves Ax = b and evaluates det(A).
+//
+// Setup: Pure math. A is row-major List[Float], n by n, n at most 8.
+//
+// Beats:
+//   1. Pivot each column to the largest absolute diagonal candidate.
+//   2. Eliminate below the pivot to form U and store multipliers in L.
+//   3. Forward-solve Ly = Pb then back-solve Ux = y.
+//   4. Multiply U diagonals and pivot signs for det, and reconstruct A from LU.
+
+import "std/core/primitives/result.oo";
+
+fn lu_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn lu_get(a: List[Float], n: Int, i: Int, j: Int) -> Float {
+    return list_get(a, i * n + j);
+}
+
+fn lu_set(a: List[Float], n: Int, i: Int, j: Int, v: Float) -> List[Float] {
+    return list_set(a, i * n + j, v);
+}
+
+fn lu_if(k: Int) -> Float {
+    if k == 0 { return 0.0; }
+    if k == 1 { return 1.0; }
+    if k == 2 { return 2.0; }
+    if k == 3 { return 3.0; }
+    if k == 4 { return 4.0; }
+    if k == 5 { return 5.0; }
+    if k == 6 { return 6.0; }
+    if k == 7 { return 7.0; }
+    return 8.0;
+}
+
+fn lu_fi(x: Float) -> Int {
+    if x < 0.5 { return 0; }
+    if x < 1.5 { return 1; }
+    if x < 2.5 { return 2; }
+    if x < 3.5 { return 3; }
+    if x < 4.5 { return 4; }
+    if x < 5.5 { return 5; }
+    if x < 6.5 { return 6; }
+    if x < 7.5 { return 7; }
+    return 8;
+}
+
+pub fn lu_decomp_factor(a: List[Float], n: Int) -> Result[List[Float], String] {
+    if n < 1 { return Err("ERR\tlu_decomp\tn"); }
+    if list_len(a) != n * n { return Err("ERR\tlu_decomp\tsize"); }
+    let mut m: List[Float] = a;
+    let mut piv: List[Float] = list_new();
+    let mut k: Int = 0;
+    while k < n {
+        piv = list_push(piv, lu_if(k));
+        k = k + 1;
+    }
+    k = 0;
+    while k < n {
+        let mut pivrow: Int = k;
+        let mut best: Float = lu_abs(lu_get(m, n, k, k));
+        let mut i: Int = k + 1;
+        while i < n {
+            let cand: Float = lu_abs(lu_get(m, n, i, k));
+            if cand > best {
+                best = cand;
+                pivrow = i;
+            }
+            i = i + 1;
+        }
+        if best == 0.0 { return Err("ERR\tlu_decomp\tsingular"); }
+        piv = list_set(piv, k, lu_if(pivrow));
+        if pivrow != k {
+            let mut j: Int = 0;
+            while j < n {
+                let t2: Float = lu_get(m, n, k, j);
+                m = lu_set(m, n, k, j, lu_get(m, n, pivrow, j));
+                m = lu_set(m, n, pivrow, j, t2);
+                j = j + 1;
+            }
+        }
+        i = k + 1;
+        while i < n {
+            let lik: Float = lu_get(m, n, i, k) / lu_get(m, n, k, k);
+            m = lu_set(m, n, i, k, lik);
+            let mut j2: Int = k + 1;
+            while j2 < n {
+                let v: Float = lu_get(m, n, i, j2) - lik * lu_get(m, n, k, j2);
+                m = lu_set(m, n, i, j2, v);
+                j2 = j2 + 1;
+            }
+            i = i + 1;
+        }
+        k = k + 1;
+    }
+    let mut pack: List[Float] = m;
+    let mut p: Int = 0;
+    while p < n {
+        pack = list_push(pack, list_get(piv, p));
+        p = p + 1;
+    }
+    return Ok(pack);
+}
+
+pub fn lu_decomp_solve(pack: List[Float], n: Int, b: List[Float]) -> Result[List[Float], String] {
+    if list_len(b) != n { return Err("ERR\tlu_decomp\tb"); }
+    if list_len(pack) != n * n + n { return Err("ERR\tlu_decomp\tpack"); }
+    let mut pb: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        pb = list_push(pb, list_get(b, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < n {
+        let ip: Int = lu_fi(list_get(pack, n * n + i));
+        if ip != i {
+            let tmp: Float = list_get(pb, i);
+            pb = list_set(pb, i, list_get(pb, ip));
+            pb = list_set(pb, ip, tmp);
+        }
+        i = i + 1;
+    }
+    let mut y: List[Float] = list_new();
+    i = 0;
+    while i < n {
+        let mut s: Float = list_get(pb, i);
+        let mut j: Int = 0;
+        while j < i {
+            s = s - lu_get(pack, n, i, j) * list_get(y, j);
+            j = j + 1;
+        }
+        y = list_push(y, s);
+        i = i + 1;
+    }
+    let mut x: List[Float] = list_new();
+    i = 0;
+    while i < n {
+        x = list_push(x, 0.0);
+        i = i + 1;
+    }
+    i = n - 1;
+    while i >= 0 {
+        let ukk: Float = lu_get(pack, n, i, i);
+        if ukk == 0.0 { return Err("ERR\tlu_decomp\tzero_pivot"); }
+        let mut s2: Float = list_get(y, i);
+        let mut j2: Int = i + 1;
+        while j2 < n {
+            s2 = s2 - lu_get(pack, n, i, j2) * list_get(x, j2);
+            j2 = j2 + 1;
+        }
+        x = list_set(x, i, s2 / ukk);
+        i = i - 1;
+    }
+    return Ok(x);
+}
+
+pub fn lu_decomp_det(pack: List[Float], n: Int) -> Result[Float, String] {
+    if list_len(pack) != n * n + n { return Err("ERR\tlu_decomp\tpack"); }
+    let mut d: Float = 1.0;
+    let mut i: Int = 0;
+    while i < n {
+        d = d * lu_get(pack, n, i, i);
+        let prow: Int = lu_fi(list_get(pack, n * n + i));
+        if prow != i { d = 0.0 - d; }
+        i = i + 1;
+    }
+    return Ok(d);
+}
+
+pub fn lu_decomp_reconstruct(pack: List[Float], n: Int) -> Result[List[Float], String] {
+    if list_len(pack) != n * n + n { return Err("ERR\tlu_decomp\tpack"); }
+    let mut a: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut s: Float = 0.0;
+            let mut k: Int = 0;
+            while k < n {
+                let mut l: Float = 0.0;
+                if i == k { l = 1.0; }
+                if i > k { l = lu_get(pack, n, i, k); }
+                let mut u: Float = 0.0;
+                if k <= j { u = lu_get(pack, n, k, j); }
+                s = s + l * u;
+                k = k + 1;
+            }
+            a = list_push(a, s);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let mut k2: Int = n - 1;
+    while k2 >= 0 {
+        let ip: Int = lu_fi(list_get(pack, n * n + k2));
+        if ip != k2 {
+            let mut j3: Int = 0;
+            while j3 < n {
+                let t3: Float = lu_get(a, n, k2, j3);
+                a = lu_set(a, n, k2, j3, lu_get(a, n, ip, j3));
+                a = lu_set(a, n, ip, j3, t3);
+                j3 = j3 + 1;
+            }
+        }
+        k2 = k2 - 1;
+    }
+    return Ok(a);
+}

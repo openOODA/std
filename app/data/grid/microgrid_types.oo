@@ -1,0 +1,28 @@
+// # Microgrid types
+//
+// Logline: MicrogridState destubbed off nested islanding lists.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed.
+
+type MicrogridState = struct {
+    islanded: Int,
+    load_kw: Int
+};
+
+pub fn microgrid_state_new(islanded: Int, load_kw: Int) -> MicrogridState {
+    return MicrogridState {
+        islanded: islanded,
+        load_kw: load_kw
+    };
+}
+
+pub fn microgrid_state_load(s: MicrogridState) -> Int {
+    return s.load_kw;
+}

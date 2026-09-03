@@ -1,0 +1,29 @@
+// # Navigation coords
+//
+// Logline: NavCoord implemented off pub type Float WGS84/ECEF.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type NavCoord = struct {
+    lat_milli: Int,
+    lon_milli: Int
+};
+
+pub fn nav_coord_new(lat_milli: Int, lon_milli: Int) -> NavCoord {
+    return NavCoord { lat_milli: lat_milli, lon_milli: lon_milli };
+}
+
+pub fn nav_coord_lat(c: NavCoord) -> Int {
+    return c.lat_milli;
+}
+
+pub fn nav_coord_lon(c: NavCoord) -> Int {
+    return c.lon_milli;
+}

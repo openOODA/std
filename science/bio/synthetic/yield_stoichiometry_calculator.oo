@@ -1,0 +1,102 @@
+// # Theoretical Maximum Product Yield & Stoichiometry Balances
+//
+// Logline: Calculates theoretical maximum bioproduction yields, carbon recovery, and degree of reduction balances.
+//
+// Setup: Macroscopic biochemical balance calculator based on elemental composition (C_c H_h O_o N_n) and electron conservation.
+//
+// Beats:
+//   1. Define ChemicalFormula, SubstrateProductPair, and TheoreticalYieldResult data structures.
+//   2. Compute degree of reduction gamma = (4c + h - 2o - 3n) / c for substrates, products, and biomass.
+//   3. Calculate theoretical maximum yield (g/g and mol/mol) under aerobic and anaerobic redox constraints.
+
+type ChemicalFormula = struct {
+    name: String,
+    carbon_atoms: Int,
+    hydrogen_atoms: Int,
+    oxygen_atoms: Int,
+    nitrogen_atoms: Int,
+    molecular_weight_g_mol: Float
+};
+
+type SubstrateProductPair = struct {
+    substrate: ChemicalFormula,
+    product: ChemicalFormula,
+    pathway_atp_cost: Float,
+    is_aerobic: Bool
+};
+
+type TheoreticalYieldResult = struct {
+    substrate_degree_of_reduction: Float,
+    product_degree_of_reduction: Float,
+    max_yield_mol_per_mol: Float,
+    max_yield_g_per_g: Float,
+    carbon_conservation_fraction: Float
+};
+
+pub fn yield_calc_degree_of_reduction(f: ChemicalFormula) -> Float {
+    let c: Float = yield_stoichiometry_calculator_to_f(f.carbon_atoms);    if c <= 0.0 { return 0.0; }
+    let h: Float = yield_stoichiometry_calculator_to_f(f.hydrogen_atoms);    let o: Float = yield_stoichiometry_calculator_to_f(f.oxygen_atoms);    let n: Float = yield_stoichiometry_calculator_to_f(f.nitrogen_atoms);
+    // gamma = (4*C + H - 2*O - 3*N) / C
+    return (4.0 * c + h - 2.0 * o - 3.0 * n) / c;
+}
+
+pub fn yield_evaluate_maximum(pair: SubstrateProductPair) -> TheoreticalYieldResult {
+    let gamma_s: Float = yield_calc_degree_of_reduction(&pair.substrate);    let gamma_p: Float = yield_calc_degree_of_reduction(&pair.product);
+    let c_s: Float = yield_stoichiometry_calculator_to_f((pair.substrate).carbon_atoms);    let c_p: Float = yield_stoichiometry_calculator_to_f((pair.product).carbon_atoms);
+    // Electron balance: n_p * c_p * gamma_p <= n_s * c_s * gamma_s (for 1 mol substrate)
+    let yield_mol_mol: Int = if pair.is_aerobic {        // Under aerobic conditions, carbon balance is the upper bound: c_s / c_p
+        c_s / c_p
+    } else {
+        // Under anaerobic conditions, electron balance strictly limits yield
+        if gamma_p > 0.001 { (c_s * gamma_s) / (c_p * gamma_p) } else { c_s / c_p }
+    };
+
+    let mw_s: Int = (pair.substrate).molecular_weight_g_mol;    let mw_p: Int = (pair.product).molecular_weight_g_mol;    let mut yield_gg: Float = 0.0;
+
+    if mw_s > 0.001 {
+
+        yield_gg = (yield_mol_mol * mw_p) / mw_s;
+
+    }
+    let c_conserv: Int = (yield_mol_mol * c_p) / c_s;
+    return TheoreticalYieldResult {
+        substrate_degree_of_reduction: gamma_s,
+        product_degree_of_reduction: gamma_p,
+        max_yield_mol_per_mol: yield_mol_mol,
+        max_yield_g_per_g: yield_gg,
+        carbon_conservation_fraction: if c_conserv > 1.0 { 1.0 } else { c_conserv }
+    };
+}
+
+
+fn yield_stoichiometry_calculator_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

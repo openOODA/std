@@ -1,0 +1,54 @@
+// # Fmt Config ◈ ZERO-DRAG
+//
+// Logline: Holds canonical format knobs.
+//
+// Setup: Pure config record.
+//
+// Beats:
+//   1. Define indent, width, blank.
+//   2. Expose config builder.
+//   3. Provide defaults per RFC 0028.
+
+pub type FmtConfig = struct {
+  indent: Int,
+  width: Int,
+  blank: Int,
+  pipeline_depth: Int,
+  radar: Bool
+};
+
+pub fn fmt_config_default() -> FmtConfig {
+  return FmtConfig {
+    indent: 2,
+    width: 80,
+    blank: 1,
+    pipeline_depth: 2,
+    radar: true
+  };
+}
+
+pub fn fmt_config_new(
+  indent: Int,
+  width: Int,
+  blank: Int
+) -> FmtConfig {
+  return FmtConfig {
+    indent: indent,
+    width: width,
+    blank: blank,
+    pipeline_depth: 2,
+    radar: true
+  };
+}
+
+pub fn fmt_config_width(c: FmtConfig) -> Int {
+  return c.width;
+}
+
+pub fn fmt_config_indent(c: FmtConfig) -> Int {
+  return c.indent;
+}
+
+pub fn fmt_config_is_radar(c: FmtConfig) -> Bool {
+  return c.radar;
+}

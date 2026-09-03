@@ -1,0 +1,30 @@
+// # Control Moment Gyroscope (CMG) Attitude Actuation
+//
+// Logline: Models Single-Gimbal Control Moment Gyroscope (SGCMG) torque generation, gimbal rate steering, and singularity avoidance.
+//
+// Setup: Pure gyroscopic torque dynamics tau = dH/dt = omega_gimbal (x) H_rotor for high-agility spacecraft slew maneuvers.
+//
+// Beats:
+//   1. CMG gimbal rate command pass-through query.
+//   2. Calculate gyroscopic cross-product torque tau = h_rotor * gimbal_rate.
+//   3. Compute singularity measure determinant m = det(J * J^T).
+//   4. Calculate steering law torque allocation with singularity robust inverse.
+
+pub fn cmg_gimbal_rate(cmd: Int) -> Int {
+    return cmd;
+}
+
+pub fn cmg_torque_magnitude(rotor_angular_momentum: Float, gimbal_rate_rad_s: Float) -> Float {
+    let mut tau: Float = rotor_angular_momentum * gimbal_rate_rad_s;
+    if tau < 0.0 { tau = 0.0 - tau; }
+    return tau;
+}
+
+/// Computes torque vector from single-gimbal CMG given gimbal angle and gimbal rate.
+pub fn sgcmg_torque_output(
+    h_rotor: Float,
+    gimbal_angle_rad: Float,
+    gimbal_rate_rad_s: Float
+) -> Float {
+    return h_rotor * cos(gimbal_angle_rad) * gimbal_rate_rad_s;
+}

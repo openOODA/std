@@ -1,0 +1,108 @@
+// # Jukes-Cantor phylogenetic distance law
+//
+// Logline: Substitution-corrected distance d = -3/4 * ln(1 - 4/3 * p) for proportion p of observed substitutions. Drift time T = d / (2*mu). Hostile or saturating inputs return Err.
+//
+// Setup: Pure Float. p is proportion in [0, 0.75). mu is substitution rate per site per time unit. The law is unit-agnostic.
+//
+// Beats:
+//   1. Closed form: d = -3/4 * ln(1 - 4/3 * p).
+//   2. Drift time: T = d / (2 * mu) given substitution rate mu.
+//   3. Domain certificate via domain_cert("bio", "phylogenetic_distance", holds).
+//   4. Hostile p < 0, p >= 0.75, or mu <= 0 return Err. p=0 and d=0 are Ok(0).
+
+import "std/core/primitives/domain_cert.oo";
+
+fn babs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn phylo_inputs_valid(p: Float) -> Int {
+    if p < 0.0 { return 0; }
+    if p >= 0.75 { return 0; }
+    return 1;
+}
+
+pub fn jukes_cantor_distance(p: Float) -> Result[Float, String] {
+    if phylo_inputs_valid(p) != 1 {
+        return Err("ERR\tpd\tdomain");
+    }
+    let four_thirds_p: Float = (4.0 / 3.0) * p;
+    let one_minus: Float = 1.0 - four_thirds_p;
+    if one_minus <= 0.0 {
+        return Err("ERR\tpd\tdomain");
+    }
+    return Ok((0.0 - 0.75) * ln(one_minus));
+}
+
+pub fn genetic_drift_time(d: Float, mu: Float) -> Result[Float, String] {
+    if d < 0.0 { return Err("ERR\tpd\tdomain"); }
+    if mu <= 0.0 { return Err("ERR\tpd\tdomain"); }
+    let denom: Float = 2.0 * mu;
+    if denom <= 0.0 { return Err("ERR\tpd\tden"); }
+    return Ok(d / denom);
+}
+
+fn pd_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn jukes_cantor_cert(p: Float) -> DomainCert {
+    let d: Float = pd_got(jukes_cantor_distance(p));
+    let mut h: Int = 0;
+    if phylo_inputs_valid(p) == 1 {
+        let four_thirds_p: Float = (4.0 / 3.0) * p;
+        let one_minus: Float = 1.0 - four_thirds_p;
+        let want: Float = (0.0 - 0.75) * ln(one_minus);
+        if babs(d - want) <= 0.0000001 {
+            h = 1;
+        }
+    }
+    return domain_cert("bio", "phylogenetic_distance", h);
+}
+
+pub fn verify_phylogenetic_distance_law() -> Bool {
+    let d_g: Float = pd_got(jukes_cantor_distance(0.1));
+    if babs(d_g - 0.10733) > 0.001 {
+        return false;
+    }
+    let cert_g: DomainCert = jukes_cantor_cert(0.1);
+    if cert_g.holds != 1 {
+        return false;
+    }
+
+    if pd_got(jukes_cantor_distance(0.0)) != 0.0 {
+        return false;
+    }
+    if jukes_cantor_cert(0.0).holds != 1 {
+        return false;
+    }
+
+    let d_tiny: Float = pd_got(jukes_cantor_distance(0.01));
+    if babs(d_tiny - 0.01) > 0.0005 {
+        return false;
+    }
+
+    if jukes_cantor_distance(0.75).is_ok() {
+        return false;
+    }
+    if jukes_cantor_distance(0.8).is_ok() {
+        return false;
+    }
+
+    let t_drift: Float = pd_got(genetic_drift_time(0.1, 0.001));
+    if babs(t_drift - 50.0) > 0.0000001 {
+        return false;
+    }
+    if pd_got(genetic_drift_time(0.0, 0.001)) != 0.0 {
+        return false;
+    }
+
+    if jukes_cantor_distance(0.0 - 0.1).is_ok() { return false; }
+    if genetic_drift_time(0.0 - 0.1, 0.001).is_ok() { return false; }
+    if genetic_drift_time(0.1, 0.0).is_ok() { return false; }
+    if genetic_drift_time(0.1, 0.0 - 0.001).is_ok() { return false; }
+    return true;
+}

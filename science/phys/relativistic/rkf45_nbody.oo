@@ -1,0 +1,248 @@
+// # Adaptive RKF45 N-Body Gravitational Integrator
+//
+// Logline: Integrate N-body gravitational systems with adaptive Runge-Kutta-Fehlberg stepping and energy conservation tracking.
+//
+// Setup: Pure astrodynamics N-body numerical engine. Computes mutual gravitational forces and advances state vectors.
+//
+// Beats:
+//   1. Calculate mutual Newtonian gravitational acceleration vectors with singularity avoidance.
+//   2. Compute total kinetic energy, potential energy, and angular momentum invariants.
+//   3. Execute 6-stage RKF45 embedded Runge-Kutta evaluation yielding 4th and 5th order states.
+//   4. Calculate error norm and optimal adaptive time step size with step acceptance or rejection.
+//   5. Expose list-based and struct-based public propagation interfaces.
+
+type BodyState = struct {
+    x: Float,
+    y: Float,
+    z: Float,
+    vx: Float,
+    vy: Float,
+    vz: Float,
+    mass: Float
+};
+
+type AdaptiveRkf45Result = struct {
+    bodies: List[BodyState],
+    time_current: Float,
+    step_size_next: Float,
+    step_accepted: Bool,
+    error_norm: Float,
+    energy_relative_error: Float
+};
+
+pub fn body_state_new(x: Float, y: Float, z: Float, vx: Float, vy: Float, vz: Float, mass: Float) -> BodyState {
+    return BodyState { x: x, y: y, z: z, vx: vx, vy: vy, vz: vz, mass: mass };
+}
+
+pub fn rkf_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn rkf45_compute_energy(bodies: List[BodyState], g_const: Float) -> Float {
+    let n: Int = list_len(bodies);
+    let mut e_kin: Float = 0.0;
+    let mut e_pot: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let bi: BodyState = list_get(bodies, i);
+        let v2: Float = bi.vx * bi.vx + bi.vy * bi.vy + bi.vz * bi.vz;
+        e_kin = e_kin + 0.5 * bi.mass * v2;
+        let mut j: Int = i + 1;
+        while j < n {
+            let bj: BodyState = list_get(bodies, j);
+            let dx: Float = bj.x - bi.x;
+            let dy: Float = bj.y - bi.y;
+            let dz: Float = bj.z - bi.z;
+            let dist: Float = sqrt(dx * dx + dy * dy + dz * dz);
+            if dist > 0.0000001 {
+                e_pot = e_pot - (g_const * bi.mass * bj.mass) / dist;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return e_kin + e_pot;
+}
+
+pub fn rkf45_compute_momentum_mag(bodies: List[BodyState]) -> Float {
+    let n: Int = list_len(bodies);
+    let mut px: Float = 0.0;
+    let mut py: Float = 0.0;
+    let mut pz: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: BodyState = list_get(bodies, i);
+        px = px + b.mass * b.vx;
+        py = py + b.mass * b.vy;
+        pz = pz + b.mass * b.vz;
+        i = i + 1;
+    }
+    return sqrt(px * px + py * py + pz * pz);
+}
+
+pub fn rkf45_accelerations(bodies: List[BodyState], g_const: Float) -> List[BodyState] {
+    let n: Int = list_len(bodies);
+    let mut accs: List[BodyState] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let bi: BodyState = list_get(bodies, i);
+        let mut ax: Float = 0.0;
+        let mut ay: Float = 0.0;
+        let mut az: Float = 0.0;
+        let mut j: Int = 0;
+        while j < n {
+            if i != j {
+                let bj: BodyState = list_get(bodies, j);
+                let dx: Float = bj.x - bi.x;
+                let dy: Float = bj.y - bi.y;
+                let dz: Float = bj.z - bi.z;
+                let r2: Float = dx * dx + dy * dy + dz * dz + 0.000000000001;
+                let r: Float = sqrt(r2);
+                let r3: Float = r2 * r;
+                let f_factor: Float = (g_const * bj.mass) / r3;
+                ax = ax + dx * f_factor;
+                ay = ay + dy * f_factor;
+                az = az + dz * f_factor;
+            }
+            j = j + 1;
+        }
+        let item: BodyState = BodyState { x: bi.vx, y: bi.vy, z: bi.vz, vx: ax, vy: ay, vz: az, mass: bi.mass };
+        accs = list_push(accs, item);
+        i = i + 1;
+    }
+    return accs;
+}
+
+pub fn rkf45_linear_comb(b: List[BodyState], k1: List[BodyState], w1: Float, k2: List[BodyState], w2: Float, k3: List[BodyState], w3: Float, k4: List[BodyState], w4: Float, k5: List[BodyState], w5: Float, h: Float) -> List[BodyState] {
+    let n: Int = list_len(b);
+    let mut out: List[BodyState] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let orig: BodyState = list_get(b, i);
+        let d1: BodyState = list_get(k1, i);
+        let d2: BodyState = list_get(k2, i);
+        let d3: BodyState = list_get(k3, i);
+        let d4: BodyState = list_get(k4, i);
+        let d5: BodyState = list_get(k5, i);
+        let dx: Float = h * (w1 * d1.x + w2 * d2.x + w3 * d3.x + w4 * d4.x + w5 * d5.x);
+        let dy: Float = h * (w1 * d1.y + w2 * d2.y + w3 * d3.y + w4 * d4.y + w5 * d5.y);
+        let dz: Float = h * (w1 * d1.z + w2 * d2.z + w3 * d3.z + w4 * d4.z + w5 * d5.z);
+        let dvx: Float = h * (w1 * d1.vx + w2 * d2.vx + w3 * d3.vx + w4 * d4.vx + w5 * d5.vx);
+        let dvy: Float = h * (w1 * d1.vy + w2 * d2.vy + w3 * d3.vy + w4 * d4.vy + w5 * d5.vy);
+        let dvz: Float = h * (w1 * d1.vz + w2 * d2.vz + w3 * d3.vz + w4 * d4.vz + w5 * d5.vz);
+        let comb_item: BodyState = BodyState { x: orig.x + dx, y: orig.y + dy, z: orig.z + dz, vx: orig.vx + dvx, vy: orig.vy + dvy, vz: orig.vz + dvz, mass: orig.mass };
+        out = list_push(out, comb_item);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn rkf45_step_adaptive(bodies: List[BodyState], t: Float, dt: Float, tol_abs: Float, tol_rel: Float) -> AdaptiveRkf45Result {
+    let g: Float = 1.0;
+    let n: Int = list_len(bodies);
+    let k1: List[BodyState] = rkf45_accelerations(bodies, g);
+    let s2: List[BodyState] = rkf45_linear_comb(bodies, k1, 0.25, k1, 0.0, k1, 0.0, k1, 0.0, k1, 0.0, dt);
+    let k2: List[BodyState] = rkf45_accelerations(s2, g);
+    let s3: List[BodyState] = rkf45_linear_comb(bodies, k1, 3.0 / 32.0, k2, 9.0 / 32.0, k1, 0.0, k1, 0.0, k1, 0.0, dt);
+    let k3: List[BodyState] = rkf45_accelerations(s3, g);
+    let s4: List[BodyState] = rkf45_linear_comb(bodies, k1, 1932.0 / 2197.0, k2, 0.0 - 7200.0 / 2197.0, k3, 7296.0 / 2197.0, k1, 0.0, k1, 0.0, dt);
+    let k4: List[BodyState] = rkf45_accelerations(s4, g);
+    let s5: List[BodyState] = rkf45_linear_comb(bodies, k1, 439.0 / 216.0, k2, -8.0, k3, 3680.0 / 513.0, k4, 0.0 - 845.0 / 4104.0, k1, 0.0, dt);
+    let k5: List[BodyState] = rkf45_accelerations(s5, g);
+    let s6: List[BodyState] = rkf45_linear_comb(bodies, k1, 0.0 - 8.0 / 27.0, k2, 2.0, k3, 0.0 - 3544.0 / 2565.0, k4, 1859.0 / 4104.0, k5, 0.0 - 11.0 / 40.0, dt);
+    let k6: List[BodyState] = rkf45_accelerations(s6, g);
+
+    let b1_w: Float = 16.0 / 135.0;
+    let b3_w: Float = 6656.0 / 12825.0;
+    let b4_w: Float = 28561.0 / 56430.0;
+    let b5_w: Float = 0.0 - 9.0 / 50.0;
+    let b6_w: Float = 2.0 / 55.0;
+
+    let e1_w: Float = 1.0 / 360.0;
+    let e3_w: Float = 0.0 - 128.0 / 4275.0;
+    let e4_w: Float = 0.0 - 2197.0 / 75240.0;
+    let e5_w: Float = 1.0 / 50.0;
+    let e6_w: Float = 2.0 / 55.0;
+
+    let mut bodies_5th: List[BodyState] = list_new();
+    let mut err_sum_sq: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: BodyState = list_get(bodies, i);
+        let d1: BodyState = list_get(k1, i);
+        let d3: BodyState = list_get(k3, i);
+        let d4: BodyState = list_get(k4, i);
+        let d5: BodyState = list_get(k5, i);
+        let d6: BodyState = list_get(k6, i);
+        let x5: Float = b.x + dt * (b1_w * d1.x + b3_w * d3.x + b4_w * d4.x + b5_w * d5.x + b6_w * d6.x);
+        let y5: Float = b.y + dt * (b1_w * d1.y + b3_w * d3.y + b4_w * d4.y + b5_w * d5.y + b6_w * d6.y);
+        let z5: Float = b.z + dt * (b1_w * d1.z + b3_w * d3.z + b4_w * d4.z + b5_w * d5.z + b6_w * d6.z);
+        let vx5: Float = b.vx + dt * (b1_w * d1.vx + b3_w * d3.vx + b4_w * d4.vx + b5_w * d5.vx + b6_w * d6.vx);
+        let vy5: Float = b.vy + dt * (b1_w * d1.vy + b3_w * d3.vy + b4_w * d4.vy + b5_w * d5.vy + b6_w * d6.vy);
+        let vz5: Float = b.vz + dt * (b1_w * d1.vz + b3_w * d3.vz + b4_w * d4.vz + b5_w * d5.vz + b6_w * d6.vz);
+        let b5_item: BodyState = BodyState { x: x5, y: y5, z: z5, vx: vx5, vy: vy5, vz: vz5, mass: b.mass };
+        bodies_5th = list_push(bodies_5th, b5_item);
+
+        let ex: Float = dt * (e1_w * d1.x + e3_w * d3.x + e4_w * d4.x + e5_w * d5.x + e6_w * d6.x);
+        let ey: Float = dt * (e1_w * d1.y + e3_w * d3.y + e4_w * d4.y + e5_w * d5.y + e6_w * d6.y);
+        let ez: Float = dt * (e1_w * d1.z + e3_w * d3.z + e4_w * d4.z + e5_w * d5.z + e6_w * d6.z);
+        let sc_x: Float = tol_abs + tol_rel * rkf_abs(x5);
+        let sc_y: Float = tol_abs + tol_rel * rkf_abs(y5);
+        let sc_z: Float = tol_abs + tol_rel * rkf_abs(z5);
+        err_sum_sq = err_sum_sq + (ex * ex) / (sc_x * sc_x) + (ey * ey) / (sc_y * sc_y) + (ez * ez) / (sc_z * sc_z);
+        i = i + 1;
+    }
+
+    let err_norm: Float = sqrt(err_sum_sq / (rkf_abs(3.0 * if n > 0 { 1.0 * if n == 1 { 1.0 } else { if n == 2 { 2.0 } else { 3.0 } } } else { 1.0 })));
+    let accepted: Bool = err_norm <= 1.0;
+    let mut factor: Float = 1.0;
+    if err_norm > 0.000001 {
+        let inv_e: Float = 1.0 / err_norm;
+        factor = 0.9 * sqrt(sqrt(inv_e));
+    }
+    if factor < 0.2 { factor = 0.2; }
+    if factor > 5.0 { factor = 5.0; }
+    let next_dt: Float = dt * factor;
+
+    let e_init: Float = rkf45_compute_energy(bodies, g);
+    let e_final: Float = rkf45_compute_energy(bodies_5th, g);
+    let d_e: Float = if rkf_abs(e_init) > 0.00000001 { rkf_abs((e_final - e_init) / e_init) } else { 0.0 };
+
+    if accepted {
+        return AdaptiveRkf45Result { bodies: bodies_5th, time_current: t + dt, step_size_next: next_dt, step_accepted: true, error_norm: err_norm, energy_relative_error: d_e };
+    }
+    return AdaptiveRkf45Result { bodies: bodies, time_current: t, step_size_next: next_dt, step_accepted: false, error_norm: err_norm, energy_relative_error: d_e };
+}
+
+pub fn rkf45_nbody_step(masses: List[Float], positions: List[Float], velocities: List[Float], dt: Float) -> List[Float] {
+    let nm: Int = list_len(masses);
+    let mut b_in: List[BodyState] = list_new();
+    let mut i: Int = 0;
+    while i < nm {
+        let m: Float = list_get(masses, i);
+        let px: Float = list_get(positions, i * 3);
+        let py: Float = list_get(positions, i * 3 + 1);
+        let pz: Float = list_get(positions, i * 3 + 2);
+        let vx: Float = list_get(velocities, i * 3);
+        let vy: Float = list_get(velocities, i * 3 + 1);
+        let vz: Float = list_get(velocities, i * 3 + 2);
+        let b_init: BodyState = BodyState { x: px, y: py, z: pz, vx: vx, vy: vy, vz: vz, mass: m };
+        b_in = list_push(b_in, b_init);
+        i = i + 1;
+    }
+    let res: AdaptiveRkf45Result = rkf45_step_adaptive(b_in, 0.0, dt, 0.00001, 0.00001);
+    let mut out: List[Float] = list_new();
+    i = 0;
+    while i < nm {
+        let b: BodyState = list_get(res.bodies, i);
+        out = list_push(out, b.x);
+        out = list_push(out, b.y);
+        out = list_push(out, b.z);
+        out = list_push(out, b.vx);
+        out = list_push(out, b.vy);
+        out = list_push(out, b.vz);
+        i = i + 1;
+    }
+    return out;
+}

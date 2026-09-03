@@ -1,0 +1,189 @@
+// # Lennard-Jones 12-6 Interatomic Potential and Pair Forces
+//
+// Logline: Computes Lennard-Jones potential energies, interatomic force vectors, equilibrium separations, and virial contributions.
+//
+// Setup: Pure molecular physics module modeling non-bonded van der Waals pair interactions without ambient authority.
+//
+// Beats:
+//   1. Define LjParameters and 3D spatial coordinate data structures.
+//   2. Compute standard and shifted Lennard-Jones 12-6 potential energies.
+//   3. Compute scalar force magnitudes and 3D pairwise vector forces.
+//   4. Calculate virial pressure components and equilibrium separation distances.
+
+import "std/core/math/trig.oo";
+
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type LjParameters = struct {
+    epsilon_well_depth: Float,
+    sigma_zero_distance: Float,
+    r_min_equilibrium: Float,
+    cutoff_radius: Float
+};
+
+pub fn vec3_create(x: Float, y: Float, z: Float) -> Vec3 {
+    return Vec3 { x: x, y: y, z: z };
+}
+
+// Construct Lennard-Jones parameter set with well depth epsilon, zero-crossing distance sigma, and cutoff radius.
+// r_min = 2^(1/6) * sigma ~= 1.122462048309373 * sigma.
+pub fn lj_parameters_new(epsilon: Float, sigma: Float, r_cut: Float) -> LjParameters {
+    if epsilon <= 0.0 || sigma <= 0.000000001 || r_cut <= 0.0 {
+        return LjParameters {
+            epsilon_well_depth: 0.0,
+            sigma_zero_distance: 0.0,
+            r_min_equilibrium: 0.0,
+            cutoff_radius: 0.0
+        };
+    }
+
+    let r_min: Float = 1.122462048309373 * sigma;
+
+    return LjParameters {
+        epsilon_well_depth: epsilon,
+        sigma_zero_distance: sigma,
+        r_min_equilibrium: r_min,
+        cutoff_radius: r_cut
+    };
+}
+
+// Compute standard unshifted Lennard-Jones 12-6 potential:
+// V_LJ(r) = 4 * epsilon * [ (sigma/r)^12 - (sigma/r)^6 ].
+pub fn lj_potential_energy(lj: LjParameters, distance_r: Float) -> Float {
+    let eps: Float = lj.epsilon_well_depth;
+    let sig: Float = lj.sigma_zero_distance;
+    let r_cut: Float = lj.cutoff_radius;
+
+    if distance_r <= 0.000000001 || distance_r > r_cut || eps <= 0.0 || sig <= 0.0 {
+        return 0.0;
+    }
+
+    let mut r: Float = distance_r;
+    let r_min_clamp: Float = 0.000001 * sig;
+    if r < r_min_clamp {
+        r = r_min_clamp;
+    }
+
+    let s: Float = sig / r;
+    let s2: Float = s * s;
+    let s4: Float = s2 * s2;
+    let s6: Float = s4 * s2;
+    let s12: Float = s6 * s6;
+
+    return 4.0 * eps * (s12 - s6);
+}
+
+// Compute shifted Lennard-Jones potential: V_shift(r) = V_LJ(r) - V_LJ(r_cut) for r <= r_cut.
+pub fn lj_potential_shifted(lj: LjParameters, distance_r: Float) -> Float {
+    let r_cut: Float = lj.cutoff_radius;
+    if distance_r <= 0.000000001 || distance_r > r_cut {
+        return 0.0;
+    }
+
+    let v_r: Float = lj_potential_energy(lj, distance_r);
+    let v_cut: Float = lj_potential_energy(lj, r_cut);
+    return v_r - v_cut;
+}
+
+// Compute scalar force magnitude F_LJ(r) = - dV/dr = (24 * epsilon / r) * [ 2*(sigma/r)^12 - (sigma/r)^6 ].
+// Positive F is repulsive (r < r_min); Negative F is attractive (r > r_min).
+pub fn lj_force_magnitude(lj: LjParameters, distance_r: Float) -> Float {
+    let eps: Float = lj.epsilon_well_depth;
+    let sig: Float = lj.sigma_zero_distance;
+    let r_cut: Float = lj.cutoff_radius;
+
+    if distance_r <= 0.000000001 || distance_r > r_cut || eps <= 0.0 || sig <= 0.0 {
+        return 0.0;
+    }
+
+    let mut r: Float = distance_r;
+    let r_min_clamp: Float = 0.000001 * sig;
+    if r < r_min_clamp {
+        r = r_min_clamp;
+    }
+
+    let s: Float = sig / r;
+    let s2: Float = s * s;
+    let s4: Float = s2 * s2;
+    let s6: Float = s4 * s2;
+    let s12: Float = s6 * s6;
+
+    let term: Float = (2.0 * s12) - s6;
+    return (24.0 * eps / r) * term;
+}
+
+// Compute 3D interatomic pair force vector F_12 acting on particle 1 due to particle 2:
+// F_12 = F_LJ(r) * (r1 - r2) / r.
+pub fn lj_pair_force(lj: LjParameters, r1: Vec3, r2: Vec3) -> Vec3 {
+    let r1x: Float = r1.x; let r1y: Float = r1.y; let r1z: Float = r1.z;
+    let r2x: Float = r2.x; let r2y: Float = r2.y; let r2z: Float = r2.z;
+
+    let dx: Float = r1x - r2x;
+    let dy: Float = r1y - r2y;
+    let dz: Float = r1z - r2z;
+
+    let r_sq: Float = (dx * dx) + (dy * dy) + (dz * dz);
+    if r_sq <= 0.000000000001 {
+        return Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+    }
+
+    let r: Float = math_sqrt(r_sq);
+    let r_cut: Float = lj.cutoff_radius;
+    if r > r_cut {
+        return Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+    }
+
+    let eps: Float = lj.epsilon_well_depth;
+    let sig: Float = lj.sigma_zero_distance;
+
+    let mut r_eff: Float = r;
+    let r_min_clamp: Float = 0.000001 * sig;
+    if r_eff < r_min_clamp {
+        r_eff = r_min_clamp;
+    }
+
+    let s: Float = sig / r_eff;
+    let s2: Float = s * s;
+    let s4: Float = s2 * s2;
+    let s6: Float = s4 * s2;
+    let s12: Float = s6 * s6;
+
+    let term: Float = (2.0 * s12) - s6;
+    // factor = F_LJ(r) / r = 24 * eps * (2*s^12 - s^6) / r^2
+    let factor: Float = (24.0 * eps / (r_eff * r_eff)) * term;
+
+    return Vec3 {
+        x: factor * dx,
+        y: factor * dy,
+        z: factor * dz
+    };
+}
+
+// Compute pairwise virial contribution W = r * F_LJ(r) = 24 * epsilon * [ 2*(sigma/r)^12 - (sigma/r)^6 ].
+pub fn lj_virial_scalar(lj: LjParameters, distance_r: Float) -> Float {
+    let eps: Float = lj.epsilon_well_depth;
+    let sig: Float = lj.sigma_zero_distance;
+    let r_cut: Float = lj.cutoff_radius;
+
+    if distance_r <= 0.000000001 || distance_r > r_cut || eps <= 0.0 || sig <= 0.0 {
+        return 0.0;
+    }
+
+    let mut r: Float = distance_r;
+    let r_min_clamp: Float = 0.000001 * sig;
+    if r < r_min_clamp {
+        r = r_min_clamp;
+    }
+
+    let s: Float = sig / r;
+    let s2: Float = s * s;
+    let s4: Float = s2 * s2;
+    let s6: Float = s4 * s2;
+    let s12: Float = s6 * s6;
+
+    return 24.0 * eps * ((2.0 * s12) - s6);
+}

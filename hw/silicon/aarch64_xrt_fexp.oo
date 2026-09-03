@@ -1,0 +1,110 @@
+// # AArch64 Software Exp
+//
+// Logline: Emits exp and math_exp as range-reduced Taylor series on IEEE doubles in GPRs.
+//
+// Setup: No libm. ln2 range reduction then 16-term series. 2^n via exponent bits.
+//
+// Beats:
+//   1. Reduce x by subtracting signed n*ln2 into |r| <= ln2.
+//   2. Taylor-expand exp(r) with term *= r / i.
+//   3. Scale by adding n << 52 to the IEEE bits.
+//   4. Alias math_exp onto the same body.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_encode_fp.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_regs.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+
+pub fn a64rt_bits(x0: A64X, rd: Int, bits: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_movz(rd, bits & 65535, 0));
+    x = a64x_emit(x, arm64_word_movk(rd, (bits >> 16) & 65535, 1));
+    x = a64x_emit(x, arm64_word_movk(rd, (bits >> 32) & 65535, 2));
+    return a64x_emit(x, arm64_word_movk(rd, (bits >> 48) & 65535, 3));
+}
+
+pub fn a64rt_tod(x0: A64X, dd: Int, xn: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_sub_imm(31, 31, 16));
+    x = a64x_emit(x, arm64_word_str(xn, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr_d(dd, 31, 0));
+    return a64x_emit(x, arm64_word_add_imm(31, 31, 16));
+}
+
+pub fn a64rt_tox(x0: A64X, xd: Int, dn: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_sub_imm(31, 31, 16));
+    x = a64x_emit(x, arm64_word_str_d(dn, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(xd, 31, 0));
+    return a64x_emit(x, arm64_word_add_imm(31, 31, 16));
+}
+
+fn a64rt_exp_body(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_movz(9, 0, 0));
+    x = a64rt_bits(x, 10, 4607182418800017408);
+    x = a64rt_bits(x, 11, 4604418534313441775);
+    let hi: Int = list_len(x.p.words);
+    x = a64rt_tod(x, 0, 0);
+    x = a64rt_tod(x, 1, 11);
+    x = a64x_emit(x, arm64_word_fcmp_d(0, 1));
+    let bhi: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_le(), 0));
+    x = a64x_emit(x, arm64_word_fsub_d(0, 0, 1));
+    x = a64rt_tox(x, 0, 0);
+    x = a64x_emit(x, arm64_word_add_imm(9, 9, 1));
+    x = a64x_emit(x, arm64_word_b(hi - list_len(x.p.words)));
+    let lo: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bhi, arm64_word_b_cond(arm64_cond_le(), lo - bhi)));
+    x = a64rt_tod(x, 0, 0);
+    x = a64rt_tod(x, 1, 11);
+    x = a64x_emit(x, arm64_word_fneg_d(1, 1));
+    x = a64x_emit(x, arm64_word_fcmp_d(0, 1));
+    let blo: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0));
+    x = a64rt_tod(x, 1, 11);
+    x = a64x_emit(x, arm64_word_fadd_d(0, 0, 1));
+    x = a64rt_tox(x, 0, 0);
+    x = a64x_emit(x, arm64_word_sub_imm(9, 9, 1));
+    x = a64x_emit(x, arm64_word_b(lo - list_len(x.p.words)));
+    let tay: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, blo, arm64_word_b_cond(arm64_cond_ge(), tay - blo)));
+    x = a64rt_tox(x, 12, 0);
+    x = a64x_emit(x, arm64_word_mov_reg(13, 10));
+    x = a64x_emit(x, arm64_word_mov_reg(14, 10));
+    x = a64x_emit(x, arm64_word_movz(15, 1, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(15, 31));
+    x = a64x_emit(x, arm64_word_sub_imm(2, 15, 16));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 31));
+    let bdn: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 0));
+    x = a64rt_tod(x, 0, 14);
+    x = a64rt_tod(x, 1, 12);
+    x = a64x_emit(x, arm64_word_fmul_d(0, 0, 1));
+    x = a64x_emit(x, arm64_word_scvtf_d_x(1, 15));
+    x = a64x_emit(x, arm64_word_fdiv_d(0, 0, 1));
+    x = a64rt_tox(x, 14, 0);
+    x = a64rt_tod(x, 1, 13);
+    x = a64x_emit(x, arm64_word_fadd_d(0, 1, 0));
+    x = a64rt_tox(x, 13, 0);
+    x = a64x_emit(x, arm64_word_add_imm(15, 15, 1));
+    x = a64x_emit(x, arm64_word_b(lp - list_len(x.p.words)));
+    let scl: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bdn, arm64_word_b_cond(arm64_cond_gt(), scl - bdn)));
+    x = a64x_emit(x, arm64_word_movz(2, 52, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(9, 9, 2));
+    x = a64x_emit(x, arm64_word_add_reg(0, 13, 9));
+    return x;
+}
+
+pub fn a64rt_exp(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "exp");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64rt_exp_body(x);
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "math_exp");
+    x = a64rt_prol(r.x);
+    x = a64rt_exp_body(x);
+    return a64rt_setx(r, a64rt_epi(x));
+}

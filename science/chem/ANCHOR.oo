@@ -1,0 +1,73 @@
+// # Chem Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard chem (chemistry) domain library. Re-exports a stable chem_mod_* surface for the most-used public API (Arrhenius, chemical equilibrium, Henry, Raoult, Hohenberg-Kohn DFT, transition state, Nernst, Marcus electron transfer). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private chem siblings; no caps required for pure numerical chemistry.
+//
+// Beats:
+//   1. Re-export the Arrhenius and chemical-equilibrium surface as chem_mod_arrhenius_*, chem_mod_equilibrium_*.
+//   2. Re-export the Henry, Raoult, and vapor-pressure surface as chem_mod_henry_*, chem_mod_raoult_*.
+//   3. Re-export the Hohenberg-Kohn DFT and transition-state surface as chem_mod_hk_*, chem_mod_tst_*.
+//   4. Re-export the Nernst and Marcus electron-transfer surface as chem_mod_nernst_*, chem_mod_marcus_*.
+//   5. Document the private siblings (theories, laws, principles, invariants, KATs).
+
+import "arrhenius.oo";
+import "equilibrium.oo";
+import "henry_law.oo";
+import "raoult_law.oo";
+import "raoult_law_vapor_pressure.oo";
+import "hohenberg_kohn_theorem.oo";
+import "transition_state_theory.oo";
+import "nernst_equation_law.oo";
+import "marcus_electron_transfer_law.oo";
+
+// Public Arrhenius surface: chem_mod_arrhenius_*
+pub fn chem_mod_arrhenius_gas_constant() -> Float { return arrhenius_gas_constant(); }
+pub fn chem_mod_arrhenius_reaction_new(a: Float, ea: Float) -> ArrheniusReaction { return arrhenius_reaction_new(a, ea); }
+pub fn chem_mod_arrhenius_kooij_new(a: Float, ea: Float, n: Float) -> ArrheniusReaction { return arrhenius_kooij_new(a, ea, n); }
+pub fn chem_mod_arrhenius_rate_k(rxn: ArrheniusReaction, temp_k: Float) -> Float { return arrhenius_rate_k(rxn, temp_k); }
+
+// Public chemical equilibrium surface: chem_mod_equilibrium_*
+pub fn chem_mod_chem_gas_constant() -> Float { return chem_gas_constant(); }
+pub fn chem_mod_chemical_equilibrium_solve(gibbs_kj: Float, temp_k: Float) -> Float { return chemical_equilibrium_solve(gibbs_kj, temp_k); }
+pub fn chem_mod_vant_hoff_k2(k1: Float, delta_h: Float, t1: Float, t2: Float) -> Float { return vant_hoff_k2(k1, delta_h, t1, t2); }
+pub fn chem_mod_equilibrium_from_gibbs(delta_g_std: Float, temp_k: Float) -> Float { return equilibrium_constant_from_gibbs(delta_g_std, temp_k); }
+
+// Public Henry law surface: chem_mod_henry_*
+pub fn chem_mod_henry_solubility(partial_pressure_pa: Float, k_h: Float) -> Result[Float, String] { return henry_solubility(partial_pressure_pa, k_h); }
+pub fn chem_mod_henry_partial_pressure(concentration: Float, k_h: Float) -> Result[Float, String] { return henry_partial_pressure(concentration, k_h); }
+
+// Public Raoult law surface: chem_mod_raoult_*
+pub fn chem_mod_raoult_partial_pressure(mole_fraction: Float, pure_pressure_pa: Float) -> Result[Float, String] { return raoult_partial_pressure(mole_fraction, pure_pressure_pa); }
+pub fn chem_mod_raoult_mole_fraction(partial_pressure_pa: Float, pure_pressure_pa: Float) -> Result[Float, String] { return raoult_mole_fraction(partial_pressure_pa, pure_pressure_pa); }
+pub fn chem_mod_raoult_ideal_partial(x_a: Float, p_a_star: Float) -> Float { return raoult_ideal_partial(x_a, p_a_star); }
+pub fn chem_mod_raoult_nonideal_partial(x_a: Float, gamma_a: Float, p_a_star: Float) -> Float { return raoult_nonideal_partial(x_a, gamma_a, p_a_star); }
+
+// Public Hohenberg-Kohn DFT surface: chem_mod_hk_*
+pub fn chem_mod_hk_hubbard_density(hopping_t: Float, on_site_u: Float) -> Result[Float, String] { return hk_hubbard_density(hopping_t, on_site_u); }
+pub fn chem_mod_hk_potential_from_density(density_n: Float, hopping_t: Float) -> Result[Float, String] { return hk_potential_from_density(density_n, hopping_t); }
+pub fn chem_mod_hk_energy_functional(density_n: Float, hopping_t: Float, on_site_u: Float) -> Result[Float, String] { return hk_energy_functional(density_n, hopping_t, on_site_u); }
+pub fn chem_mod_hk_kohn_sham_orbital_energy(density_n: Float, hopping_t: Float) -> Result[Float, String] { return hk_kohn_sham_orbital_energy(density_n, hopping_t); }
+
+// Public transition-state-theory surface: chem_mod_tst_*
+pub fn chem_mod_tst_prefactor(temp_k: Float, k_b_jk: Float, h_js: Float) -> Result[Float, String] { return tst_prefactor(temp_k, k_b_jk, h_js); }
+pub fn chem_mod_tst_rate_constant(prefactor: Float, activation_energy: Float, temp_k: Float) -> Result[Float, String] { return tst_rate_constant(prefactor, activation_energy, temp_k); }
+pub fn chem_mod_tst_activation_enthalpy(rate: Float, prefactor: Float, temp_k: Float) -> Result[Float, String] { return tst_activation_enthalpy(rate, prefactor, temp_k); }
+
+// Public Nernst surface: chem_mod_nernst_*
+pub fn chem_mod_nernst_gas_constant() -> Float { return nernst_gas_constant(); }
+pub fn chem_mod_nernst_faraday_constant() -> Float { return nernst_faraday_constant(); }
+pub fn chem_mod_nernst_cell_potential(e_std: Float, n_electrons: Int, conc_red: Float, conc_ox: Float, temp_k: Float) -> Result[Float, String] { return nernst_cell_potential(e_std, n_electrons, conc_red, conc_ox, temp_k); }
+pub fn chem_mod_nernst_nonideal_potential(e_std: Float, n_electrons: Int, activity_red: Float, activity_ox: Float, temp_k: Float) -> Result[Float, String] { return nernst_nonideal_potential(e_std, n_electrons, activity_red, activity_ox, temp_k); }
+
+// Public Marcus surface: chem_mod_marcus_*
+pub fn chem_mod_marcus_activation_free_energy(reorg_eV: Float, delta_g_eV: Float) -> Result[Float, String] { return marcus_activation_free_energy(reorg_eV, delta_g_eV); }
+pub fn chem_mod_marcus_is_inverted(reorg_eV: Float, delta_g_eV: Float) -> Result[Float, String] { return marcus_is_inverted(reorg_eV, delta_g_eV); }
+pub fn chem_mod_marcus_symmetry_check(reorg_eV: Float, delta_g_eV: Float) -> Result[Float, String] { return marcus_symmetry_check(reorg_eV, delta_g_eV); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. graham_effusion_law.oo, marcus_electron_transfer_law.oo, nernst_equation_law.oo, raoult_law.oo)
+//   _theory files (e.g. debye_huckel_theory.oo, hohenberg_kohn_theorem.oo, kramers_turnover_theory.oo, transition_state_theory.oo)
+//   _principle files (e.g. hund_rule_principle.oo, le_chatelier_principle.oo, microscopic_reversibility_principle.oo)
+//   _invariants files (e.g. chem_invariants.oo)
+//   _kat files (e.g. thermochemistry_codata_kat.oo)

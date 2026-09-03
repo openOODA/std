@@ -1,0 +1,120 @@
+// # Hawking temperature law
+//
+// Logline: T_H = hbar c^3 / (8 pi G M k_B). Equivalent form T_H = hbar c / (4 pi k_B r_s) via r_s = 2 G M / c^2.
+//
+// Setup: Imports std/principles/constants.oo for G, c, hbar, k_B. M > 0 in kg. M <= 0 fails closed.
+//
+// Beats:
+//   1. Hawking T_H(M) = hbar * c^3 / (8 * pi * G * M * k_B).
+//   2. Schwarzschild radius r_s(M) = 2 * G * M / c^2.
+//   3. Equivalent form T_H = hbar * c / (4 * pi * k_B * r_s) agrees numerically.
+//   4. DomainCert holds=1 when M > 0.
+//
+// References:
+//   - Hawking 1974, Nature 248, 30 ("Black hole explosions?").
+//   - Hawking 1975, Commun. Math. Phys. 43, 199.
+//   - Wall 2010, Int. J. Mod. Phys. D 19, 2133 (arXiv:1010.5513).
+
+import "std/core/principles/physical_constants.oo";
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_hawking_temperature_law() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn hk_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Schwarzschild radius r_s = 2 * G * M / c^2 in meters. M <= 0 returns Err.
+pub fn hawking_schwarzschild_radius(M: Float) -> Result[Float, String] {
+    if M <= 0.0 { return Err("ERR\thk\tm"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let g: Float = pc.gravitational_constant;
+    let c_val: Float = pc.speed_of_light;
+    let c2: Float = c_val * c_val;
+    return Ok((2.0 * g * M) / c2);
+}
+
+// Hawking temperature T_H = hbar * c^3 / (8 * pi * G * M * k_B) in Kelvin.
+// M <= 0 returns Err.
+pub fn hawking_temperature(M: Float) -> Result[Float, String] {
+    if M <= 0.0 { return Err("ERR\thk\tm"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let hbar: Float = pc.planck_reduced;
+    let c_val: Float = pc.speed_of_light;
+    let g: Float = pc.gravitational_constant;
+    let k_b: Float = pc.boltzmann_constant;
+    let pi_val: Float = circ_pi_std_phys_hawking_temperature_law();
+    let c2: Float = c_val * c_val;
+    let c3: Float = c2 * c_val;
+    let num: Float = hbar * c3;
+    let den: Float = 8.0 * pi_val * g * M * k_b;
+    return Ok(num / den);
+}
+
+// Equivalent form T_H = hbar * c / (4 * pi * k_B * r_s).
+pub fn hawking_temperature_from_radius(r_s: Float) -> Result[Float, String] {
+    if r_s <= 0.0 { return Err("ERR\thk\trs"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let hbar: Float = pc.planck_reduced;
+    let c_val: Float = pc.speed_of_light;
+    let k_b: Float = pc.boltzmann_constant;
+    let pi_val: Float = circ_pi_std_phys_hawking_temperature_law();
+    return Ok((hbar * c_val) / (4.0 * pi_val * k_b * r_s));
+}
+
+// DomainCert holds=1 iff M > 0.
+pub fn phys_hawking_temperature_law(M: Float) -> DomainCert {
+    let r: Result[Float, String] = hawking_temperature(M);
+    let mut h: Int = 0;
+    match r {
+        Ok(t)  => { if t > 0.0 { h = 1; } },
+        Err(_) => { }
+    }
+    return domain_cert("phys", "hawking_temperature", h);
+}
+
+// Verify: golden M=2e30 -> T_H matches formula; M=M_sun -> 6.17e-8 K within published tolerance;
+//         hostile M<=0; coupled with Schwarzschild radius.
+pub fn verify_hawking_temperature_law() -> Bool {
+    let pc: PhysicalConstants = constants_codata_2022();
+    let hbar: Float = pc.planck_reduced;
+    let c_val: Float = pc.speed_of_light;
+    let g: Float = pc.gravitational_constant;
+    let k_b: Float = pc.boltzmann_constant;
+    let pi_val: Float = circ_pi_std_phys_hawking_temperature_law();
+    let m_sun: Float = 1989000000000000000000000000000.0;
+    // Golden: solar mass BH T_H = hbar*c^3/(8 pi G M_sun k_B) ~ 6.17e-8 K.
+    let t_sun: Float = hk_got(hawking_temperature(m_sun));
+    let want_sun: Float = 0.0000000617;
+    let mut d_sun: Float = t_sun - want_sun;
+    if d_sun < 0.0 { d_sun = 0.0 - d_sun; }
+    let b_sun: Float = want_sun * 0.005;
+    if d_sun > b_sun { return false; }
+    // Golden: M=2e30 kg gives 6.1345e-8 K (formula exact via CODATA 2022).
+    let t_2sun: Float = hk_got(hawking_temperature(2000000000000000000000000000000.0));
+    let want_2sun: Float = (hbar * c_val * c_val * c_val) / (8.0 * pi_val * g * 2000000000000000000000000000000.0 * k_b);
+    let mut d_2sun: Float = t_2sun - want_2sun;
+    if d_2sun < 0.0 { d_2sun = 0.0 - d_2sun; }
+    if d_2sun > 0.0000001 { return false; }
+    // Hostile: M<=0 fails closed.
+    if hawking_temperature(0.0).is_ok() { return false; }
+    if hawking_temperature(0.0 - 1.0).is_ok() { return false; }
+    // Coupled: equivalent form T_H = hbar c / (4 pi k_B r_s) agrees exactly.
+    let rs: Float = hk_got(hawking_schwarzschild_radius(m_sun));
+    let t_alt: Float = hk_got(hawking_temperature_from_radius(rs));
+    let mut dc: Float = t_sun - t_alt;
+    if dc < 0.0 { dc = 0.0 - dc; }
+    let rel_dc: Float = dc / t_sun;
+    if rel_dc > 0.0000001 { return false; }
+    if hawking_temperature_from_radius(0.0).is_ok() { return false; }
+    // DomainCert sanity.
+    if phys_hawking_temperature_law(m_sun).holds != 1 { return false; }
+    if phys_hawking_temperature_law(0.0).holds != 0 { return false; }
+    if phys_hawking_temperature_law(0.0 - 1.0).holds != 0 { return false; }
+    return true;
+}

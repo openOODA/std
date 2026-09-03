@@ -1,0 +1,169 @@
+// # 64-bit vector Base64 codec
+//
+// Logline: RFC 4648 Base64 and URL-safe Base64 encode and decode on a List[Int] byte buffer with 24-bit vector packing.
+//
+// Setup: Pure. Input bytes are List[Int] 0..255. Output is the 4-character block form padded with '=' to a multiple of 4.
+//
+// Beats:
+//   1. Pack three input bytes into a 24-bit word and split into four 6-bit indices.
+//   2. Translate the indices through the standard or URL-safe alphabet and append '=' for short tails.
+//   3. Decode by mapping each char to a 6-bit value and packing four values into a 24-bit word.
+//   4. Translate the standard or URL-safe alphabet and reject invalid characters.
+
+// residual: no streaming, no MIME line wrapping; strict 4-char block form only
+
+import "std/core/primitives/byte_out.oo";
+
+pub fn b64v_block_size() -> Int { return 3; }
+pub fn b64v_pad() -> Int { return 61; }
+
+pub fn b64v_alphabet_std() -> String {
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+}
+
+pub fn b64v_alphabet_url() -> String {
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+}
+
+pub fn b64v_char_at(al: String, idx: Int) -> String {
+    if idx < 0 { return ""; }
+    if idx > 63 { return ""; }
+    return char_at(al, idx);
+}
+
+pub fn b64v_decode_value(ch: Int) -> Int {
+    if ch < 48 {
+        if ch == 43 { return 62; }
+        if ch == 47 { return 63; }
+        return 0 - 1;
+    }
+    if ch < 58 { return ch - 48 + 52; }
+    if ch < 65 { return 0 - 1; }
+    if ch < 91 { return ch - 65; }
+    if ch < 97 { return 0 - 1; }
+    if ch < 123 { return ch - 97 + 26; }
+    return 0 - 1;
+}
+
+pub fn b64v_decode_value_url(ch: Int) -> Int {
+    if ch < 45 { return 0 - 1; }
+    if ch == 45 { return 62; }
+    if ch < 48 {
+        if ch == 47 { return 0 - 1; }
+        return 0 - 1;
+    }
+    if ch < 58 { return ch - 48 + 52; }
+    if ch < 65 { return 0 - 1; }
+    if ch < 91 { return ch - 65; }
+    if ch == 95 { return 63; }
+    if ch < 97 { return 0 - 1; }
+    if ch < 123 { return ch - 97 + 26; }
+    return 0 - 1;
+}
+
+pub fn b64v_encode_with(al: String, data: List[Int]) -> String {
+    let n: Int = list_len(data);
+    if n == 0 { return ""; }
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i + 3 <= n {
+        let b0: Int = list_get(data, i) & 255;
+        let b1: Int = list_get(data, i + 1) & 255;
+        let b2: Int = list_get(data, i + 2) & 255;
+        let v: Int = (b0 * 65536) + (b1 * 256) + b2;
+        let i0: Int = (v >> 18) & 63;
+        let i1: Int = (v >> 12) & 63;
+        let i2: Int = (v >> 6) & 63;
+        let i3: Int = v & 63;
+        out = out + b64v_char_at(al, i0);
+        out = out + b64v_char_at(al, i1);
+        out = out + b64v_char_at(al, i2);
+        out = out + b64v_char_at(al, i3);
+        i = i + 3;
+    }
+    let rem: Int = n - i;
+    if rem == 1 {
+        let b0: Int = list_get(data, i) & 255;
+        let v: Int = b0 * 65536;
+        let i0: Int = (v >> 18) & 63;
+        let i1: Int = (v >> 12) & 63;
+        out = out + b64v_char_at(al, i0);
+        out = out + b64v_char_at(al, i1);
+        out = out + "=";
+        out = out + "=";
+    } else if rem == 2 {
+        let b0: Int = list_get(data, i) & 255;
+        let b1: Int = list_get(data, i + 1) & 255;
+        let v: Int = (b0 * 65536) + (b1 * 256);
+        let i0: Int = (v >> 18) & 63;
+        let i1: Int = (v >> 12) & 63;
+        let i2: Int = (v >> 6) & 63;
+        out = out + b64v_char_at(al, i0);
+        out = out + b64v_char_at(al, i1);
+        out = out + b64v_char_at(al, i2);
+        out = out + "=";
+    }
+    return out;
+}
+
+pub fn b64v_encode_std(data: List[Int]) -> String {
+    return b64v_encode_with(b64v_alphabet_std(), data);
+}
+
+pub fn b64v_encode_url(data: List[Int]) -> String {
+    return b64v_encode_with(b64v_alphabet_url(), data);
+}
+
+pub fn b64v_decode_with(use_url: Int, s: String) -> ByteOut {
+    let n: Int = chars_len(s);
+    if n == 0 { return byte_out_ok(list_new()); }
+    if n % 4 != 0 { return byte_out_err("ERR\tb64v_decode\tbad_block_size"); }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let c0: Int = byte_at(s, i);
+        let c1: Int = byte_at(s, i + 1);
+        let c2: Int = byte_at(s, i + 2);
+        let c3: Int = byte_at(s, i + 3);
+        let pad2: Int = if c2 == 61 { 1 } else { 0 };
+        let pad3: Int = if c3 == 61 { 1 } else { 0 };
+        if pad3 == 1 && pad2 == 0 { return byte_out_err("ERR\tb64v_decode\tbad_padding"); }
+        let v0: Int = if use_url == 1 { b64v_decode_value_url(c0) } else { b64v_decode_value(c0) };
+        let v1: Int = if use_url == 1 { b64v_decode_value_url(c1) } else { b64v_decode_value(c1) };
+        if v0 < 0 { return byte_out_err("ERR\tb64v_decode\tinvalid_char"); }
+        if v1 < 0 { return byte_out_err("ERR\tb64v_decode\tinvalid_char"); }
+        if pad3 == 1 {
+            let v: Int = (v0 * 4096) + (v1 * 64);
+            let b0: Int = ((v0 & 63) << 2) | ((v1 >> 4) & 3);
+            out = list_push(out, b0 & 255);
+        } else if pad2 == 1 {
+            let v2: Int = if use_url == 1 { b64v_decode_value_url(c2) } else { b64v_decode_value(c2) };
+            if v2 < 0 { return byte_out_err("ERR\tb64v_decode\tinvalid_char"); }
+            let b0: Int = ((v0 & 63) << 2) | ((v1 >> 4) & 3);
+            let b1: Int = ((v1 & 15) << 4) | ((v2 >> 2) & 15);
+            out = list_push(out, b0 & 255);
+            out = list_push(out, b1 & 255);
+        } else {
+            let v2: Int = if use_url == 1 { b64v_decode_value_url(c2) } else { b64v_decode_value(c2) };
+            let v3: Int = if use_url == 1 { b64v_decode_value_url(c3) } else { b64v_decode_value(c3) };
+            if v2 < 0 { return byte_out_err("ERR\tb64v_decode\tinvalid_char"); }
+            if v3 < 0 { return byte_out_err("ERR\tb64v_decode\tinvalid_char"); }
+            let b0: Int = ((v0 & 63) << 2) | ((v1 >> 4) & 3);
+            let b1: Int = ((v1 & 15) << 4) | ((v2 >> 2) & 15);
+            let b2: Int = ((v2 & 3) << 6) | (v3 & 63);
+            out = list_push(out, b0 & 255);
+            out = list_push(out, b1 & 255);
+            out = list_push(out, b2 & 255);
+        }
+        i = i + 4;
+    }
+    return byte_out_ok(out);
+}
+
+pub fn b64v_decode_std(s: String) -> ByteOut {
+    return b64v_decode_with(0, s);
+}
+
+pub fn b64v_decode_url(s: String) -> ByteOut {
+    return b64v_decode_with(1, s);
+}

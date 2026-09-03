@@ -1,0 +1,164 @@
+// # Merkle proof law
+//
+// Logline: A Merkle proof of leaf k in a balanced tree of n leaves reconstructs the root from the leaf hash and exactly log2(n) sibling digests; a corrupted sibling fails closed; the proof checks against the expected root.
+//
+// Setup: Pure 8-byte (16 hex char) digests from the first 8 bytes of SHA-256. Empty digest fails closed (""). Imports hash_sha256_forward from std/hash/sha256.oo.
+//
+// Beats:
+//   1. mp_root_8 reduces 8 leaves to a single 16-hex-char root.
+//   2. mp_sibling_count(n) returns log2(n) (number of siblings per proof).
+//   3. mp_verify_proof_8_0 reconstructs the root from leaf[0] and 3 siblings.
+//   4. A corrupted sibling digest fails closed (proof != expected root).
+//   5. The proof reconstructs the same root that mp_root_8 produces (consistency check).
+
+import "std/core/primitives/domain_cert.oo";
+import "std/sec/hash/sha256.oo";
+
+// Leaf digest: first 8 bytes of SHA-256(block) as 16 hex chars.
+pub fn mp_leaf(block: String) -> String {
+    let h: String = hash_sha256_forward(block);
+    let m: Int = h.len();
+    if m < 16 {
+        return "";
+    }
+    return str_slice(h, 0, 16);
+}
+
+// Internal node: first 8 bytes of SHA-256(left || right).
+// Empty left or right fails closed (returns "").
+pub fn mp_parent(left: String, right: String) -> String {
+    if left.len() != 16 {
+        return "";
+    }
+    if right.len() != 16 {
+        return "";
+    }
+    let h: String = hash_sha256_forward(left + right);
+    let m: Int = h.len();
+    if m < 16 {
+        return "";
+    }
+    return str_slice(h, 0, 16);
+}
+
+// Merkle root of 8 leaves. Returns "" if any leaf digest is empty.
+pub fn mp_root_8(a: String, b: String, c: String, d: String, e: String, f: String, g: String, h: String) -> String {
+    let la: String = mp_leaf(a);
+    if la.len() != 16 { return ""; }
+    let lb: String = mp_leaf(b);
+    if lb.len() != 16 { return ""; }
+    let lc: String = mp_leaf(c);
+    if lc.len() != 16 { return ""; }
+    let ld: String = mp_leaf(d);
+    if ld.len() != 16 { return ""; }
+    let le: String = mp_leaf(e);
+    if le.len() != 16 { return ""; }
+    let lf: String = mp_leaf(f);
+    if lf.len() != 16 { return ""; }
+    let lg: String = mp_leaf(g);
+    if lg.len() != 16 { return ""; }
+    let lh: String = mp_leaf(h);
+    if lh.len() != 16 { return ""; }
+    let p01: String = mp_parent(la, lb);
+    let p23: String = mp_parent(lc, ld);
+    let p45: String = mp_parent(le, lf);
+    let p67: String = mp_parent(lg, lh);
+    let p0123: String = mp_parent(p01, p23);
+    let p4567: String = mp_parent(p45, p67);
+    let r: String = mp_parent(p0123, p4567);
+    return r;
+}
+
+// Number of sibling digests in a Merkle proof of a leaf in a balanced tree of n leaves.
+// For n = 2^k, returns k.
+fn mp_sib_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn mp_sibling_count(leaf_count: Int) -> Result[Int, String] {
+    if leaf_count < 1 { return Err("ERR\tmp\tdomain"); }
+    let mut s: Int = 0;
+    let mut n: Int = leaf_count;
+    while n > 1 {
+        n = n / 2;
+        s = s + 1;
+    }
+    return Ok(s);
+}
+
+// Reconstruct the root from leaf[0] and three siblings in an 8-leaf tree.
+// leaf[0] is the leftmost leaf; at every level the accumulated digest is the
+// left child, so each sibling sits on the right. Returns "" if any digest is empty.
+pub fn mp_verify_proof_8_0(leaf0: String, s0: String, s1: String, s2: String) -> String {
+    let h0: String = mp_parent(leaf0, s0);
+    if h0.len() != 16 { return ""; }
+    let h1: String = mp_parent(h0, s1);
+    if h1.len() != 16 { return ""; }
+    let h2: String = mp_parent(h1, s2);
+    return h2;
+}
+
+// 1 iff proof reconstruction equals the 8-leaf root and the root has 16 hex chars.
+pub fn merkle_proof_holds(proof_root: String, root: String) -> Int {
+    if proof_root != root {
+        return 0;
+    }
+    if root.len() != 16 {
+        return 0;
+    }
+    return 1;
+}
+
+// DomainCert for the Merkle proof law. Holds iff proof reconstruction equals the
+// 8-leaf root for blocks A..H.
+pub fn merkle_proof_law() -> DomainCert {
+    let root: String = mp_root_8("A", "B", "C", "D", "E", "F", "G", "H");
+    let la: String = mp_leaf("A");
+    let s0: String = mp_leaf("B");
+    let s1: String = mp_parent(mp_leaf("C"), mp_leaf("D"));
+    let s2: String = mp_parent(mp_parent(mp_leaf("E"), mp_leaf("F")), mp_parent(mp_leaf("G"), mp_leaf("H")));
+    let r: String = mp_verify_proof_8_0(la, s0, s1, s2);
+    let ok: Int = merkle_proof_holds(r, root);
+    return domain_cert("hash", "merkle_proof", ok);
+}
+
+pub fn verify_merkle_proof_law() -> Bool {
+    // Golden: sibling count for n=8 is log2(8)=3.
+    if mp_sib_got(mp_sibling_count(8)) != 3 { return false; }
+    let zsib: Result[Int, String] = mp_sibling_count(1);
+    if zsib.is_ok() == false { return false; }
+    if mp_sib_got(zsib) != 0 { return false; }
+    if mp_sib_got(mp_sibling_count(4)) != 2 { return false; }
+    if mp_sibling_count(0).is_ok() { return false; }
+    // Golden: root of 8 leaves is a valid 16-hex-char digest and is deterministic.
+    let root1: String = mp_root_8("A", "B", "C", "D", "E", "F", "G", "H");
+    if root1.len() != 16 { return false; }
+    let root2: String = mp_root_8("A", "B", "C", "D", "E", "F", "G", "H");
+    if root1 != root2 { return false; }
+    // Golden: proof of leaf[0] reconstructs the same root.
+    let la: String = mp_leaf("A");
+    let s0: String = mp_leaf("B");
+    let lc: String = mp_leaf("C");
+    let ld: String = mp_leaf("D");
+    let s1: String = mp_parent(lc, ld);
+    let s2: String = mp_parent(mp_parent(mp_leaf("E"), mp_leaf("F")), mp_parent(mp_leaf("G"), mp_leaf("H")));
+    let proof_root: String = mp_verify_proof_8_0(la, s0, s1, s2);
+    if proof_root != root1 { return false; }
+    // Hostile: corrupted sibling (replace s0 with zeros) fails closed (proof != root).
+    let bad: String = "0000000000000000";
+    let corrupt_root: String = mp_verify_proof_8_0(la, bad, s1, s2);
+    if corrupt_root == root1 { return false; }
+    if corrupt_root.len() != 16 { return false; }
+    // Hostile: empty sibling fails closed.
+    let empty_root: String = mp_verify_proof_8_0(la, "", s1, s2);
+    if empty_root.len() != 0 { return false; }
+    let empty_root2: String = mp_verify_proof_8_0(la, s0, "", s2);
+    if empty_root2.len() != 0 { return false; }
+    let empty_root3: String = mp_verify_proof_8_0(la, s0, s1, "");
+    if empty_root3.len() != 0 { return false; }
+    let empty_root4: String = mp_verify_proof_8_0("", s0, s1, s2);
+    if empty_root4.len() != 0 { return false; }
+    // Coupled: proof against expected root (consistency check via the law).
+    if merkle_proof_law().holds != 1 { return false; }
+    return true;
+}

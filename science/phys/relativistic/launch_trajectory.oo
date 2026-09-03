@@ -1,0 +1,42 @@
+// # Launch Vehicle Gravity Turn Ascent Trajectory
+//
+// Logline: Models multi-stage launch ascent kinematics, dynamic pressure (Max-Q), thrust-to-weight ratio, and pitchover profiles.
+//
+// Setup: Pure launch vehicle flight dynamics incorporating aerodynamic drag, gravitational turn, and staged propulsion.
+//
+// Beats:
+//   1. Nominal two-stage launch architecture query.
+//   2. Calculate dynamic pressure q = 0.5 * rho * v^2 (Max-Q tracking).
+//   3. Compute instantaneous thrust-to-weight ratio (TWR).
+//   4. Calculate gravity-turn pitchover angle profile theta(t).
+
+pub fn launch_az_deg() -> Int {
+    return 90;
+}
+
+pub fn launch_stages() -> Int {
+    return 2;
+}
+
+pub fn launch_dynamic_pressure(air_density_kg_m3: Float, velocity_m_s: Float) -> Float {
+    return 0.5 * air_density_kg_m3 * (velocity_m_s * velocity_m_s);
+}
+
+pub fn launch_thrust_to_weight(thrust_n: Float, mass_kg: Float, g0_m_s2: Float) -> Float {
+    let weight: Float = mass_kg * g0_m_s2;
+    if weight <= 0.0001 { return 0.0; }
+    return thrust_n / weight;
+}
+
+/// Computes gravity-turn flight path angle pitch (radians from vertical) during ascent.
+pub fn launch_gravity_turn_pitch(
+    time_since_pitchover_s: Float,
+    burn_duration_s: Float,
+    initial_pitchover_rad: Float
+) -> Float {
+    let pi_over_2: Float = 1.5707963267948966;
+    if time_since_pitchover_s <= 0.0 { return initial_pitchover_rad; }
+    let frac: Float = time_since_pitchover_s / burn_duration_s;
+    if frac >= 1.0 { return pi_over_2; } // Horizontal insertion
+    return initial_pitchover_rad + (frac * (pi_over_2 - initial_pitchover_rad));
+}

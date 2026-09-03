@@ -1,0 +1,29 @@
+// # WHATWG-style URL Parser (Spec API)
+//
+// Logline: Pure string-only URL decomposition into scheme, host, port, path, query, and fragment, plus Result[Url, String] parsing of the spec API.
+//
+// Setup: Pure module. Inputs are Strings. Output is a Url struct or a Result[Url, String] for fallible parsing. The scheme is validated as ASCII alpha then lowercased on every parse so canonical form is stable. Kept in a sibling file so fixtures that import the parent module avoid the C emit Result[Struct, String] redefinition bug.
+//
+// Beats:
+//   1. Validate the scheme as one or more ASCII letters followed by a colon.
+//   2. Scan the authority (host[:port]) until the first '/', '?', or '#'.
+//   3. Split the path, query, and fragment at '?' and '#' boundaries.
+//   4. Lowercase the scheme on parse for canonical output and omit the port when absent.
+//   5. Reassemble scheme + "://" + host + optional ":port" + path + optional "?query" + optional "#fragment".
+
+import "std/core/primitives/result.oo";
+import "std/net/url_parser.oo";
+
+pub fn url_parse(s: String) -> Result[Url, String] {
+    if chars_len(s) == 0 {
+        return Err("url_parse: empty input");
+    }
+    let u: Url = url_inner(s);
+    if chars_len(u.scheme) == 0 {
+        return Err("url_parse: missing or invalid scheme");
+    }
+    if chars_len(u.host) == 0 {
+        return Err("url_parse: missing host");
+    }
+    return Ok(u);
+}

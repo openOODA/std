@@ -1,0 +1,78 @@
+// # Simplifying Graph Convolutional Networks (SGC)
+//
+// Logline: Linearizes deep GCN models by pre-computing K-th power normalized graph smoothing operators S^K.
+//
+// Setup: High-throughput linear graph classification engine eliminating intermediate non-linear activation layers.
+//
+// Beats:
+//   1. Construct augmented self-loop normalized transition matrix S = D_tilde^{-1/2} * A_tilde * D_tilde^{-1/2}.
+//   2. Precompute collapsed multi-hop propagation X_bar = S^K * X in closed-form.
+//   3. Predict node logits via linear regression Y = X_bar * W.
+
+type SGCConfig = struct {
+    in_features: Int,
+    out_features: Int,
+    k_hops: Int,
+    learning_rate_milli: Int
+};
+
+pub fn sgc_config_new(
+    in_f: Int,
+    out_f: Int,
+    k: Int,
+    lr_milli: Int
+) -> SGCConfig {
+    return SGCConfig {
+        in_features: in_f,
+        out_features: out_f,
+        k_hops: k,
+        learning_rate_milli: lr_milli
+    };
+}
+
+pub fn sgc_init_weights(total_w: Int, seed_val: Int) -> List[Int] {
+    let mut w_mat: List[Int] = list_new();
+    let mut state: Int = seed_val;
+    let mut i: Int = 0;
+    while i < total_w {
+        state = (state * 1103515245 + 12345) % 2147483647;
+        if state < 0 { state = 0 - state; }
+        let val: Int = (state % 2000) - 1000;
+        w_mat = list_push(w_mat, val);
+        i = i + 1;
+    }
+    return w_mat;
+}
+
+pub fn sgc_predict_node(
+    in_features: Int,
+    out_features: Int,
+    weight: List[Int],
+    bias: List[Int],
+    precomputed_feat: List[Int],
+    feat_offset: Int
+) -> List[Int] {
+    let in_f: Int = in_features;
+    let out_f: Int = out_features;
+
+    let mut logits: List[Int] = list_new();
+    let mut o: Int = 0;
+    while o < out_f {
+        let b: Int = list_get(bias, o);
+        let mut dot: Int = 0;
+        let mut c: Int = 0;
+        while c < in_f {
+            let x_idx: Int = feat_offset + c;
+            let x: Int = list_get(precomputed_feat, x_idx);
+            let mut w_idx: Int = c * out_f;
+            w_idx = w_idx + o;
+            let w: Int = list_get(weight, w_idx);
+            dot = dot + (x * w);
+            c = c + 1;
+        }
+        let logit: Int = dot + b;
+        logits = list_push(logits, logit);
+        o = o + 1;
+    }
+    return logits;
+}

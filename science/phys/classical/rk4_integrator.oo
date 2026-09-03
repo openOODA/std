@@ -1,0 +1,179 @@
+// # Runge-Kutta 4th Order (RK4) High-Precision Integrator
+//
+// Logline: Provides 4th-order Runge-Kutta state evaluation and derivative blending for orbital mechanics and stiff differential equations.
+//
+// Setup: High-order multi-stage numerical integrator for continuous dynamical systems.
+//
+// Beats:
+//   1. Define Rk4State and Rk4Derivative 3D phase-space vectors.
+//   2. Compute k1, k2, k3, k4 intermediate acceleration and velocity evaluation stages.
+//   3. Blend weighted derivative stages (1/6 * (k1 + 2*k2 + 2*k3 + k4)) for fourth-order convergence.
+
+type Rk4State = struct {
+    x: Float,
+    y: Float,
+    z: Float,
+    vx: Float,
+    vy: Float,
+    vz: Float,
+    t: Float
+};
+
+type Rk4Derivative = struct {
+    dx: Float,
+    dy: Float,
+    dz: Float,
+    dvx: Float,
+    dvy: Float,
+    dvz: Float
+};
+
+pub fn rk4_state_new(
+    x: Float, y: Float, z: Float,
+    vx: Float, vy: Float, vz: Float,
+    t: Float
+) -> Rk4State {
+    return Rk4State { x: x, y: y, z: z, vx: vx, vy: vy, vz: vz, t: t };
+}
+
+pub fn rk4_derivative_new(
+    dx: Float, dy: Float, dz: Float,
+    dvx: Float, dvy: Float, dvz: Float
+) -> Rk4Derivative {
+    return Rk4Derivative { dx: dx, dy: dy, dz: dz, dvx: dvx, dvy: dvy, dvz: dvz };
+}
+
+pub fn rk4_evaluate_stage(
+    initial: Rk4State,
+    t: Float,
+    dt: Float,
+    d: Rk4Derivative,
+    ax: Float,
+    ay: Float,
+    az: Float
+) -> Rk4Derivative {
+    let sx: Float = initial.x + (d.dx * dt);
+    let sy: Float = initial.y + (d.dy * dt);
+    let sz: Float = initial.z + (d.dz * dt);
+    let svx: Float = initial.vx + (d.dvx * dt);
+    let svy: Float = initial.vy + (d.dvy * dt);
+    let svz: Float = initial.vz + (d.dvz * dt);
+    return Rk4Derivative { dx: svx, dy: svy, dz: svz, dvx: ax, dvy: ay, dvz: az };
+}
+
+/// Blend four evaluated RK4 derivative stages into the next phase state.
+pub fn rk4_step_blend(
+    state: Rk4State,
+    k1: Rk4Derivative,
+    k2: Rk4Derivative,
+    k3: Rk4Derivative,
+    k4: Rk4Derivative,
+    dt: Float
+) -> Rk4State {
+    let inv_six: Float = 0.16666666666666666;
+    let dxdt: Float = inv_six * (k1.dx + (2.0 * (k2.dx + k3.dx)) + k4.dx);
+    let dydt: Float = inv_six * (k1.dy + (2.0 * (k2.dy + k3.dy)) + k4.dy);
+    let dzdt: Float = inv_six * (k1.dz + (2.0 * (k2.dz + k3.dz)) + k4.dz);
+
+    let dvxdt: Float = inv_six * (k1.dvx + (2.0 * (k2.dvx + k3.dvx)) + k4.dvx);
+    let dvydt: Float = inv_six * (k1.dvy + (2.0 * (k2.dvy + k3.dvy)) + k4.dvy);
+    let dvzdt: Float = inv_six * (k1.dvz + (2.0 * (k2.dvz + k3.dvz)) + k4.dvz);
+
+    return Rk4State {
+        x: state.x + (dxdt * dt),
+        y: state.y + (dydt * dt),
+        z: state.z + (dzdt * dt),
+        vx: state.vx + (dvxdt * dt),
+        vy: state.vy + (dvydt * dt),
+        vz: state.vz + (dvzdt * dt),
+        t: state.t + dt
+    };
+}
+
+pub fn rk4_step(
+    state: Rk4State,
+    ax: Float,
+    ay: Float,
+    az: Float,
+    dt: Float
+) -> Rk4State {
+    let zero_d: Rk4Derivative = rk4_derivative_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    let a: Rk4Derivative = rk4_evaluate_stage(state, state.t, 0.0, zero_d, ax, ay, az);
+    let b: Rk4Derivative = rk4_evaluate_stage(state, state.t + (0.5 * dt), 0.5 * dt, a, ax, ay, az);
+    let c: Rk4Derivative = rk4_evaluate_stage(state, state.t + (0.5 * dt), 0.5 * dt, b, ax, ay, az);
+    let d: Rk4Derivative = rk4_evaluate_stage(state, state.t + dt, dt, c, ax, ay, az);
+    return rk4_step_blend(state, a, b, c, d, dt);
+}
+
+/// Compute central gravitational acceleration vector: a = -mu * r / |r|^3
+pub fn rk4_gravitational_accel(x: Float, y: Float, z: Float, mu: Float) -> Rk4Derivative {
+    let r_sq: Float = (x * x) + (y * y) + (z * z);
+    let mut r: Float = sqrt(r_sq);
+    if r < 0.0001 { r = 0.0001; }
+    let r_cb: Float = r * r * r;
+    let factor: Float = (0.0 - mu) / r_cb;
+    return rk4_derivative_new(0.0, 0.0, 0.0, factor * x, factor * y, factor * z);
+}
+
+/// Specialized 2-Body Gravitational Acceleration RK4 Integration with 4-stage acceleration evaluation.
+pub fn rk4_step_gravity_central(
+    state: Rk4State,
+    mu: Float,
+    dt: Float
+) -> Rk4State {
+    let half_dt: Float = 0.5 * dt;
+
+    let g1: Rk4Derivative = rk4_gravitational_accel(state.x, state.y, state.z, mu);
+    let k1: Rk4Derivative = rk4_derivative_new(state.vx, state.vy, state.vz, g1.dvx, g1.dvy, g1.dvz);
+
+    let s2_x: Float = state.x + (k1.dx * half_dt);
+    let s2_y: Float = state.y + (k1.dy * half_dt);
+    let s2_z: Float = state.z + (k1.dz * half_dt);
+    let g2: Rk4Derivative = rk4_gravitational_accel(s2_x, s2_y, s2_z, mu);
+    let k2: Rk4Derivative = rk4_derivative_new(state.vx + (k1.dvx * half_dt), state.vy + (k1.dvy * half_dt), state.vz + (k1.dvz * half_dt), g2.dvx, g2.dvy, g2.dvz);
+
+    let s3_x: Float = state.x + (k2.dx * half_dt);
+    let s3_y: Float = state.y + (k2.dy * half_dt);
+    let s3_z: Float = state.z + (k2.dz * half_dt);
+    let g3: Rk4Derivative = rk4_gravitational_accel(s3_x, s3_y, s3_z, mu);
+    let k3: Rk4Derivative = rk4_derivative_new(state.vx + (k2.dvx * half_dt), state.vy + (k2.dvy * half_dt), state.vz + (k2.dvz * half_dt), g3.dvx, g3.dvy, g3.dvz);
+
+    let s4_x: Float = state.x + (k3.dx * dt);
+    let s4_y: Float = state.y + (k3.dy * dt);
+    let s4_z: Float = state.z + (k3.dz * dt);
+    let g4: Rk4Derivative = rk4_gravitational_accel(s4_x, s4_y, s4_z, mu);
+    let k4: Rk4Derivative = rk4_derivative_new(state.vx + (k3.dvx * dt), state.vy + (k3.dvy * dt), state.vz + (k3.dvz * dt), g4.dvx, g4.dvy, g4.dvz);
+
+    return rk4_step_blend(state, k1, k2, k3, k4, dt);
+}
+
+/// Harmonic Oscillator 4-stage RK4 integration: a = -(k/m) * x
+pub fn rk4_step_harmonic(
+    state: Rk4State,
+    k_spring: Float,
+    mass: Float,
+    dt: Float
+) -> Rk4State {
+    if mass <= 0.000001 { return state; }
+    let omega_sq: Float = k_spring / mass;
+    let half_dt: Float = 0.5 * dt;
+
+    let k1: Rk4Derivative = rk4_derivative_new(state.vx, state.vy, state.vz, 0.0 - (omega_sq * state.x), 0.0 - (omega_sq * state.y), 0.0 - (omega_sq * state.z));
+
+    let s2_x: Float = state.x + (k1.dx * half_dt);
+    let s2_y: Float = state.y + (k1.dy * half_dt);
+    let s2_z: Float = state.z + (k1.dz * half_dt);
+    let k2: Rk4Derivative = rk4_derivative_new(state.vx + (k1.dvx * half_dt), state.vy + (k1.dvy * half_dt), state.vz + (k1.dvz * half_dt), 0.0 - (omega_sq * s2_x), 0.0 - (omega_sq * s2_y), 0.0 - (omega_sq * s2_z));
+
+    let s3_x: Float = state.x + (k2.dx * half_dt);
+    let s3_y: Float = state.y + (k2.dy * half_dt);
+    let s3_z: Float = state.z + (k2.dz * half_dt);
+    let k3: Rk4Derivative = rk4_derivative_new(state.vx + (k2.dvx * half_dt), state.vy + (k2.dvy * half_dt), state.vz + (k2.dvz * half_dt), 0.0 - (omega_sq * s3_x), 0.0 - (omega_sq * s3_y), 0.0 - (omega_sq * s3_z));
+
+    let s4_x: Float = state.x + (k3.dx * dt);
+    let s4_y: Float = state.y + (k3.dy * dt);
+    let s4_z: Float = state.z + (k3.dz * dt);
+    let k4: Rk4Derivative = rk4_derivative_new(state.vx + (k3.dvx * dt), state.vy + (k3.dvy * dt), state.vz + (k3.dvz * dt), 0.0 - (omega_sq * s4_x), 0.0 - (omega_sq * s4_y), 0.0 - (omega_sq * s4_z));
+
+    return rk4_step_blend(state, k1, k2, k3, k4, dt);
+}

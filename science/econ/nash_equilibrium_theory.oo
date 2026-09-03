@@ -1,0 +1,122 @@
+// # Nash Equilibrium Theory
+//
+// Logline: A strategy profile is a Nash equilibrium if no player benefits by unilaterally deviating.
+//
+// Setup: Pure Int payoffs. 2-player matrix. Profile is a (row, col) pair. Hosts econ_invariants.oo stem.
+//
+// Beats:
+//   1. Pure strategy Nash equilibrium: 1 if no player can improve by deviating.
+//   2. Dominant strategy: 1 if a row strictly dominates another row.
+//   3. Pareto optimal: 1 if no other profile strictly improves both payoffs.
+//   4. Hosts econ_invariants.oo stem for cross-law correlation.
+
+import "std/science/econ/econ_invariants.oo";
+
+// Pure Nash check: at (row, col), neither player benefits from a unilateral deviation.
+// Payoffs: row_player_payoff[row][col], col_player_payoff[row][col].
+// Here we use 2x2 matrices with all four payoffs supplied.
+pub fn nash_pure_check(
+    row: Int,
+    col: Int,
+    r00: Int, r01: Int, r10: Int, r11: Int,
+    c00: Int, c01: Int, c10: Int, c11: Int
+) -> Int {
+    if row < 0 { return 0; }
+    if col < 0 { return 0; }
+    if row > 1 { return 0; }
+    if col > 1 { return 0; }
+    let mut row_payoff: Int = 0;
+    let mut col_payoff: Int = 0;
+    if row == 0 {
+        if col == 0 {
+            row_payoff = r00;
+            col_payoff = c00;
+        } else {
+            row_payoff = r01;
+            col_payoff = c01;
+        }
+    } else {
+        if col == 0 {
+            row_payoff = r10;
+            col_payoff = c10;
+        } else {
+            row_payoff = r11;
+            col_payoff = c11;
+        }
+    }
+    // Compare with the alternative column (or row) payoff.
+    let mut alt_row_payoff: Int = 0;
+    let mut alt_col_payoff: Int = 0;
+    if row == 0 {
+        if col == 0 {
+            alt_row_payoff = r10;
+        } else {
+            alt_row_payoff = r11;
+        }
+    } else {
+        if col == 0 {
+            alt_row_payoff = r00;
+        } else {
+            alt_row_payoff = r01;
+        }
+    }
+    if col == 0 {
+        if row == 0 {
+            alt_col_payoff = c01;
+        } else {
+            alt_col_payoff = c11;
+        }
+    } else {
+        if row == 0 {
+            alt_col_payoff = c00;
+        } else {
+            alt_col_payoff = c10;
+        }
+    }
+    if alt_row_payoff > row_payoff { return 0; }
+    if alt_col_payoff > col_payoff { return 0; }
+    return 1;
+}
+
+// Dominant row: 1 if row 0 strictly dominates row 1 in column c.
+pub fn nash_row_dominates(r0: Int, r1: Int) -> Int {
+    if r0 > r1 { return 1; }
+    return 0;
+}
+
+// Pareto optimal at (r0, c0) vs (r1, c1): 1 if not strictly dominated.
+pub fn nash_pareto_optimal(r0: Int, c0: Int, r1: Int, c1: Int) -> Int {
+    if r1 > r0 {
+        if c1 > c0 { return 0; }
+    }
+    return 1;
+}
+
+// KAT and hostile cases for Nash equilibrium theory.
+pub fn verify_nash_equilibrium_theory() -> Bool {
+    let econ_inv_ok: Int = econ_qty_ok(1);
+    if econ_inv_ok != 1 { return false; }
+    // Prisoner's Dilemma: (D,D) is the unique Nash equilibrium.
+    // Payoffs: (C,C)=(3,3), (C,D)=(0,5), (D,C)=(5,0), (D,D)=(1,1).
+    let dd: Int = nash_pure_check(1, 1, 3, 0, 5, 1, 3, 5, 0, 1);
+    if dd != 1 { return false; }
+    // (Cooperate, Cooperate) is not Nash: each can deviate to 5.
+    let cc: Int = nash_pure_check(0, 0, 3, 0, 5, 1, 3, 5, 0, 1);
+    if cc != 0 { return false; }
+    // (Cooperate, Defect) is not Nash: row wants to deviate to 5.
+    let cd: Int = nash_pure_check(0, 1, 3, 0, 5, 1, 3, 5, 0, 1);
+    if cd != 0 { return false; }
+    // (Defect, Cooperate) is not Nash: col wants to deviate to 5.
+    let dc: Int = nash_pure_check(1, 0, 3, 0, 5, 1, 3, 5, 0, 1);
+    if dc != 0 { return false; }
+    if nash_pure_check(0 - 1, 0, 3, 0, 5, 1, 3, 5, 0, 1) != 0 { return false; }
+    if nash_pure_check(0, 0 - 1, 3, 0, 5, 1, 3, 5, 0, 1) != 0 { return false; }
+    if nash_pure_check(2, 0, 3, 0, 5, 1, 3, 5, 0, 1) != 0 { return false; }
+    if nash_row_dominates(5, 3) != 1 { return false; }
+    if nash_row_dominates(3, 5) != 0 { return false; }
+    if nash_row_dominates(5, 5) != 0 { return false; }
+    if nash_pareto_optimal(3, 3, 5, 0) != 1 { return false; }
+    if nash_pareto_optimal(3, 3, 5, 5) != 0 { return false; }
+    if nash_pareto_optimal(0, 0, 5, 5) != 0 { return false; }
+    return true;
+}

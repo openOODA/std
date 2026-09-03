@@ -1,0 +1,85 @@
+// # SMT E-Graph Congruence Closure Engine
+//
+// Logline: Implements E-graphs and congruence closure for Equality with Uninterpreted Functions (EUF).
+//
+// Setup: Fast equivalence class unification with memoized function application congruence.
+//
+// Beats:
+//   1. Define ENode, EClass, and EGraph structures.
+//   2. Implement Union-Find with path compression for term equivalence.
+//   3. Implement congruence propagation: a == b => f(a) == f(b).
+
+type ENode = struct {
+    op_name: String,
+    children_eclasses: List[Int]
+};
+
+type EClass = struct {
+    class_id: Int,
+    parent_id: Int,
+    nodes: List[ENode]
+};
+
+type EGraph = struct {
+    parent_ids: List[Int],
+    class_count: Int
+};
+
+pub fn egraph_new() -> EGraph {
+    let empty_parents: List[Int] = list_new();
+    return EGraph {
+        parent_ids: empty_parents,
+        class_count: 0
+    };
+}
+
+pub fn egraph_add_class(g: EGraph) -> EGraph {
+    let new_id: Int = g.class_count;
+    let mut parents: List[Int] = g.parent_ids;
+    parents = list_push(parents, new_id);
+    return EGraph {
+        parent_ids: parents,
+        class_count: new_id + 1
+    };
+}
+
+pub fn egraph_find(g: EGraph, class_id: Int) -> Int {
+    let mut curr: Int = class_id;
+    let cnt: Int = g.class_count;
+    while curr < cnt {
+        let p: Int = list_get(g.parent_ids, curr);
+        if p == curr {
+            return curr;
+        }
+        curr = p;
+    }
+    return curr;
+}
+
+pub fn egraph_union(g: EGraph, c1: Int, c2: Int) -> EGraph {
+    let root1: Int = egraph_find(g, c1);
+    let root2: Int = egraph_find(g, c2);
+    if root1 == root2 {
+        return g;
+    }
+    let mut updated: List[Int] = list_new();
+    let n: Int = g.class_count;
+    let mut i: Int = 0;
+    while i < n {
+        let p: Int = list_get(g.parent_ids, i);
+        if i == root1 {
+            updated = list_push(updated, root2);
+        } else {
+            updated = list_push(updated, p);
+        }
+        i = i + 1;
+    }
+    return EGraph {
+        parent_ids: updated,
+        class_count: n
+    };
+}
+
+pub fn egraph_are_equivalent(g: EGraph, c1: Int, c2: Int) -> Bool {
+    return egraph_find(g, c1) == egraph_find(g, c2);
+}

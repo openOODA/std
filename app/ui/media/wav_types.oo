@@ -1,0 +1,58 @@
+// # RIFF / WAVE PCM Audio Structures & Formats
+//
+// Logline: Defines RIFF WAVE audio container headers, sample tracks, and mixed audio buffers.
+//
+// Setup: Pure audio codec data structures with zero struct trailing commas.
+//
+// Beats:
+//   1. Define WavHeader with channel count, sample rate, bits per sample, and data length.
+//   2. Define AudioTrack holding sample buffers and gain multipliers.
+//   3. Define MixedAudio for combined multi-track output buffers.
+//   4. Export constructor functions for audio headers, tracks, and mixed buffers.
+
+type WavHeader = struct {
+    num_channels: Int,
+    sample_rate: Int,
+    bits_per_sample: Int,
+    byte_rate: Int,
+    block_align: Int,
+    data_size: Int
+};
+
+type AudioTrack = struct {
+    gain: Float,
+    samples: List[Int]
+};
+
+type MixedAudio = struct {
+    num_channels: Int,
+    sample_rate: Int,
+    samples: List[Int]
+};
+
+pub fn wav_header_new(channels: Int, rate: Int, bits: Int, size: Int) -> WavHeader {
+    return WavHeader {
+        num_channels: channels,
+        sample_rate: rate,
+        bits_per_sample: bits,
+        byte_rate: rate * channels * (bits / 8),
+        block_align: channels * (bits / 8),
+        data_size: size
+    };
+}
+
+pub fn audio_track_new(gain: Float, samples: List[Int]) -> AudioTrack {
+    return AudioTrack {
+        gain: gain,
+        samples: samples
+    };
+}
+
+pub fn mixed_audio_new(channels: Int, rate: Int, samples: List[Int]) -> MixedAudio {
+    return MixedAudio {
+        num_channels: channels,
+        sample_rate: rate,
+        samples: samples
+    };
+}
+

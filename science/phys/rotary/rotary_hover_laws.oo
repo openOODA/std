@@ -1,0 +1,238 @@
+// # Rotary Wing Hover and Flight Physical Domain Laws
+//
+// Logline: Canonical physics models for momentum theory hover induced velocity, power required curves, ground effect, and retreating blade stall.
+//
+// Setup: Pure mathematical implementation conforming to rotary aerodynamics standards with zero ambient authority.
+//
+// Beats:
+//   1. Momentum theory for rotor hover induced velocity and disk loading.
+//   2. Rotor power required curves across induced, profile, and parasite components.
+//   3. Ground effect (IGE vs OGE) power reduction and altitude scaling.
+//   4. Retreating blade stall speed limits, advance ratio, and flight envelope boundaries.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_rotary_rotary_hover_laws() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type RotorSpec = struct {
+    radius_m: Float,
+    blade_count: Int,
+    blade_chord_m: Float,
+    profile_cd0: Float,
+    tip_speed_m_s: Float,
+    mass_gross_kg: Float,
+    equivalent_flat_plate_area_m2: Float,
+    v_never_exceed_m_s: Float
+};
+
+type HoverState = struct {
+    altitude_agl_m: Float,
+    airspeed_m_s: Float,
+    thrust_n: Float,
+    air_density_kg_m3: Float
+};
+
+type RotaryPowerResult = struct {
+    induced_power_w: Float,
+    profile_power_w: Float,
+    parasite_power_w: Float,
+    total_power_w: Float,
+    advance_ratio: Float,
+    in_ground_effect: Bool,
+    is_blade_stalled: Bool
+};
+
+fn rot_pi_val() -> Float { return circ_pi_std_phys_rotary_rotary_hover_laws(); }
+
+fn rot_abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn rot_clamp_val(val: Float, min_val: Float, max_val: Float) -> Float {
+    if val < min_val { return min_val; }
+    if val > max_val { return max_val; }
+    return val;
+}
+
+pub fn calc_rotor_disk_area_m2(radius_m: Float) -> Float {
+    if radius_m <= 0.0 { return 0.0; }
+    let pi_val: Float = rot_pi_val();
+    return pi_val * (radius_m * radius_m);
+}
+
+pub fn calc_rotor_solidity(blade_count: Int, chord_m: Float, radius_m: Float) -> Float {
+    if radius_m <= 0.0 || blade_count <= 0 || chord_m <= 0.0 { return 0.0; }
+    let mut bc_f: Float = 0.0;
+    let mut c: Int = blade_count;
+    while c >= 10 { bc_f = bc_f + 10.0; c = c - 10; }
+    while c >= 1 { bc_f = bc_f + 1.0; c = c - 1; }
+    let total_blade_area: Float = bc_f * chord_m * radius_m;
+    let disk_area: Float = calc_rotor_disk_area_m2(radius_m);
+    if disk_area <= 0.0001 { return 0.0; }
+    return total_blade_area / disk_area;
+}
+
+pub fn rotary_momentum_induced_velocity(
+    thrust_n: Float,
+    air_density_kg_m3: Float,
+    rotor_area_m2: Float
+) -> Float {
+    if thrust_n <= 0.0 || air_density_kg_m3 <= 0.0 || rotor_area_m2 <= 0.0 { return 0.0; }
+    let denom: Float = 2.0 * air_density_kg_m3 * rotor_area_m2;
+    if denom <= 0.000001 { return 0.0; }
+    let v_sq: Float = thrust_n / denom;
+    return sqrt(v_sq);
+}
+
+pub fn calc_hover_induced_velocity(
+    thrust_n: Float,
+    air_density_kg_m3: Float,
+    rotor_area_m2: Float
+) -> Float {
+    return rotary_momentum_induced_velocity(thrust_n, air_density_kg_m3, rotor_area_m2);
+}
+
+pub fn calc_hover_induced_power_w(
+    thrust_n: Float,
+    air_density_kg_m3: Float,
+    rotor_area_m2: Float
+) -> Float {
+    if thrust_n <= 0.0 { return 0.0; }
+    let v_i: Float = rotary_momentum_induced_velocity(thrust_n, air_density_kg_m3, rotor_area_m2);
+    return thrust_n * v_i;
+}
+
+pub fn calc_ground_effect_factor(altitude_agl_m: Float, rotor_radius_m: Float) -> Float {
+    if rotor_radius_m <= 0.0 { return 1.0; }
+    if altitude_agl_m <= 0.0 { return 0.70; }
+    let z_over_r: Float = altitude_agl_m / rotor_radius_m;
+    if z_over_r >= 2.0 { return 1.0; }
+    let z_sq: Float = z_over_r * z_over_r;
+    let reduction: Float = 1.0 / (16.0 * z_sq);
+    let factor: Float = 1.0 - reduction;
+    return rot_clamp_val(factor, 0.70, 1.0);
+}
+
+pub fn calc_in_ground_effect(altitude_agl_m: Float, rotor_diameter_m: Float) -> Bool {
+    return altitude_agl_m <= rotor_diameter_m && altitude_agl_m >= 0.0;
+}
+
+pub fn calc_advance_ratio(airspeed_m_s: Float, tip_speed_m_s: Float) -> Float {
+    if tip_speed_m_s <= 0.001 { return 0.0; }
+    let v_abs: Float = rot_abs_val(airspeed_m_s);
+    return v_abs / tip_speed_m_s;
+}
+
+pub fn calc_profile_power_w(
+    rho: Float,
+    solidity: Float,
+    cd0: Float,
+    rotor_area_m2: Float,
+    tip_speed_m_s: Float,
+    advance_ratio: Float
+) -> Float {
+    if rho <= 0.0 || solidity <= 0.0 || tip_speed_m_s <= 0.0 { return 0.0; }
+    let v_tip3: Float = tip_speed_m_s * tip_speed_m_s * tip_speed_m_s;
+    let mu_sq: Float = advance_ratio * advance_ratio;
+    let comp: Float = 1.0 + (4.65 * mu_sq);
+    return 0.125 * rho * solidity * cd0 * rotor_area_m2 * v_tip3 * comp;
+}
+
+pub fn calc_parasite_power_w(
+    rho: Float,
+    airspeed_m_s: Float,
+    flat_plate_area_m2: Float
+) -> Float {
+    if rho <= 0.0 || airspeed_m_s <= 0.0 || flat_plate_area_m2 <= 0.0 { return 0.0; }
+    let v3: Float = airspeed_m_s * airspeed_m_s * airspeed_m_s;
+    return 0.5 * rho * v3 * flat_plate_area_m2;
+}
+
+pub fn rotary_power_required(
+    p_induced: Float,
+    p_profile: Float,
+    p_parasite: Float
+) -> Float {
+    return p_induced + p_profile + p_parasite;
+}
+
+pub fn rotary_retreating_blade_stall_check(
+    airspeed_m_s: Float,
+    tip_speed_m_s: Float,
+    v_ne_m_s: Float
+) -> Bool {
+    let mu: Float = calc_advance_ratio(airspeed_m_s, tip_speed_m_s);
+    let stall_mu: Bool = mu > 0.35;
+    let stall_vne: Bool = if v_ne_m_s > 0.0 { airspeed_m_s >= v_ne_m_s } else { false };
+    return stall_mu || stall_vne;
+}
+
+pub fn check_retreating_blade_stall(
+    airspeed_m_s: Float,
+    tip_speed_m_s: Float,
+    v_ne_m_s: Float
+) -> Bool {
+    return rotary_retreating_blade_stall_check(airspeed_m_s, tip_speed_m_s, v_ne_m_s);
+}
+
+pub fn calc_total_power_required_w(spec: RotorSpec, state: HoverState) -> RotaryPowerResult {
+    let disk_a: Float = calc_rotor_disk_area_m2(spec.radius_m);
+    let sigma: Float = calc_rotor_solidity(spec.blade_count, spec.blade_chord_m, spec.radius_m);
+    let mu: Float = calc_advance_ratio(state.airspeed_m_s, spec.tip_speed_m_s);
+
+    let p_ind_oge: Float = calc_hover_induced_power_w(state.thrust_n, state.air_density_kg_m3, disk_a);
+    let ige_factor: Float = calc_ground_effect_factor(state.altitude_agl_m, spec.radius_m);
+    let is_ige: Bool = calc_in_ground_effect(state.altitude_agl_m, spec.radius_m * 2.0);
+    let p_ind: Float = if is_ige { p_ind_oge * ige_factor } else { p_ind_oge };
+
+    let p_prof: Float = calc_profile_power_w(state.air_density_kg_m3, sigma, spec.profile_cd0, disk_a, spec.tip_speed_m_s, mu);
+    let p_para: Float = calc_parasite_power_w(state.air_density_kg_m3, state.airspeed_m_s, spec.equivalent_flat_plate_area_m2);
+    let p_tot: Float = rotary_power_required(p_ind, p_prof, p_para);
+
+    let is_stalled: Bool = rotary_retreating_blade_stall_check(state.airspeed_m_s, spec.tip_speed_m_s, spec.v_never_exceed_m_s);
+
+    return RotaryPowerResult {
+        induced_power_w: p_ind,
+        profile_power_w: p_prof,
+        parasite_power_w: p_para,
+        total_power_w: p_tot,
+        advance_ratio: mu,
+        in_ground_effect: is_ige,
+        is_blade_stalled: is_stalled
+    };
+}
+
+pub fn verify_rotary_hover_laws() -> Bool {
+    let radius: Float = 7.315;
+    let disk_a: Float = calc_rotor_disk_area_m2(radius);
+    let rho: Float = 1.225;
+    let thrust: Float = 80000.0;
+
+    let v_i: Float = rotary_momentum_induced_velocity(thrust, rho, disk_a);
+    let expected_vi: Float = sqrt(80000.0 / (2.0 * 1.225 * disk_a));
+    if rot_abs_val(v_i - expected_vi) > 0.001 { return false; }
+
+    let p_ind: Float = calc_hover_induced_power_w(thrust, rho, disk_a);
+    if rot_abs_val(p_ind - (thrust * v_i)) > 0.01 { return false; }
+
+    let ige_high: Float = calc_ground_effect_factor(30.0, radius);
+    if rot_abs_val(ige_high - 1.0) > 0.0001 { return false; }
+
+    let ige_low: Float = calc_ground_effect_factor(7.315, radius);
+    let expected_low: Float = 1.0 - (1.0 / 16.0);
+    if rot_abs_val(ige_low - expected_low) > 0.001 { return false; }
+
+    let mu_norm: Float = calc_advance_ratio(50.0, 220.0);
+    let exp_mu: Float = 50.0 / 220.0;
+    if rot_abs_val(mu_norm - exp_mu) > 0.0001 { return false; }
+
+    let stall_no: Bool = rotary_retreating_blade_stall_check(50.0, 220.0, 85.0);
+    if stall_no { return false; }
+
+    let stall_vne: Bool = rotary_retreating_blade_stall_check(90.0, 220.0, 85.0);
+    if !stall_vne { return false; }
+
+    let stall_mu: Bool = rotary_retreating_blade_stall_check(80.0, 200.0, 100.0);
+    if !stall_mu { return false; }
+
+    return true;
+}

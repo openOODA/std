@@ -1,0 +1,98 @@
+// # Cascaded Integrase Cellular Pulse Counters
+//
+// Logline: Simulates synthetic biological counter circuits registering sequential induction pulses into distinct DNA orientations.
+//
+// Setup: Multi-stage recombinase cascade where each consecutive pulse inverts the next stage promoter and primes the subsequent register.
+//
+// Beats:
+//   1. Define CounterStage, CellularCounterState, and PulseResponseResult data structures.
+//   2. Model sequential promoter hand-off and stage activation upon transient inducer exposure.
+//   3. Compute current pulse count tally, digital verification flag, and final terminal state reporter.
+
+type CounterStage = struct {
+    stage_index: Int,
+    is_primed: Bool,
+    is_inverted: Bool,
+    integrase_affinity: Float
+};
+
+type CellularCounterState = struct {
+    current_count: Int,
+    max_count_capacity: Int,
+    stages: List[CounterStage],
+    terminal_reporter_active: Bool
+};
+
+type PulseResponseResult = struct {
+    new_count: Int,
+    pulse_successfully_registered: Bool,
+    terminal_reached: Bool,
+    reporter_fluorescence: Float
+};
+
+pub fn counter_process_pulse(
+    state: CellularCounterState,
+    pulse_duration_min: Float,
+    inducer_conc_u_m: Float,
+) -> PulseResponseResult {
+    if pulse_duration_min < 5.0 || inducer_conc_u_m < 0.5 {
+        return PulseResponseResult {
+            new_count: state.current_count,
+            pulse_successfully_registered: false,
+            terminal_reached: state.terminal_reporter_active,
+            reporter_fluorescence: if state.terminal_reporter_active { 1000.0 } else { 10.0 }
+        };
+    }
+
+    let next_c: Int = state.current_count + 1;    let term: Bool = next_c >= state.max_count_capacity;
+    let mut fluor: Float = integrase_cellular_counter_to_f(next_c) * 50.0;
+
+
+    if term {
+
+
+        fluor = 1000.0;
+
+
+    }
+
+    return PulseResponseResult {
+        new_count: next_c,
+        pulse_successfully_registered: true,
+        terminal_reached: term,
+        reporter_fluorescence: fluor
+    };
+}
+
+
+fn integrase_cellular_counter_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

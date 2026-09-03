@@ -1,0 +1,83 @@
+// # Clark-Wilson Commercial Integrity Law
+//
+// Logline: Constrained data items change only via certified transformation procedures enforcing separation of duty.
+//
+// Setup: Pure Int counters and IDs. Negative counts or out-of-range roles fail closed.
+//
+// Beats:
+//   1. CDIs and TPs: only certified TPs may modify certified CDIs.
+//   2. Separation of duty: at least two distinct roles for sensitive ops.
+//   3. Well-formed transaction: a TP applied to a CDI produces a valid CDI.
+//   4. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+
+// Number of distinct roles required for a sensitive operation.
+pub fn clark_wilson_required_roles() -> Int {
+    return 2;
+}
+
+// Role codes: 0 NONE, 1 CLERK, 2 SUPERVISOR, 3 AUDITOR.
+pub fn clark_wilson_role_none() -> Int {
+    return 0;
+}
+
+pub fn clark_wilson_role_supervisor() -> Int {
+    return 2;
+}
+
+// Validation result: 1 ok, 0 fail.
+pub fn clark_wilson_validate_result(ok: Bool) -> Int {
+    if ok { return 1; }
+    return 0;
+}
+
+// Separation of duty check: at least two distinct non-zero role codes are present.
+pub fn clark_wilson_separation_of_duty(role_a: Int, role_b: Int) -> Bool {
+    if role_a <= 0 { return false; }
+    if role_b <= 0 { return false; }
+    if role_a == role_b { return false; }
+    return true;
+}
+
+// Well-formed transaction: the TP id is non-zero and the CDI id is non-zero.
+pub fn clark_wilson_well_formed_transaction(tp_id: Int, cdi_id: Int) -> Bool {
+    if tp_id <= 0 { return false; }
+    if cdi_id <= 0 { return false; }
+    return true;
+}
+
+// Certified TP: returns 1 if the TP is in the certified set; else 0.
+// Here we model "certified" as a contiguous ID range with caller-supplied upper bound.
+pub fn clark_wilson_certified_tp(tp_id: Int, max_certified: Int) -> Int {
+    if tp_id <= 0 { return 0; }
+    if max_certified <= 0 { return 0; }
+    if tp_id > max_certified { return 0; }
+    return 1;
+}
+
+// KAT and hostile cases for the Clark-Wilson law.
+pub fn verify_clark_wilson_law() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if clark_wilson_separation_of_duty(1, 2) == false { return false; }
+    if clark_wilson_separation_of_duty(2, 3) == false { return false; }
+    if clark_wilson_separation_of_duty(1, 1) == true { return false; }
+    if clark_wilson_separation_of_duty(0, 1) == true { return false; }
+    if clark_wilson_separation_of_duty(0 - 1, 2) == true { return false; }
+    if clark_wilson_well_formed_transaction(1, 1) == false { return false; }
+    if clark_wilson_well_formed_transaction(0, 1) == true { return false; }
+    if clark_wilson_well_formed_transaction(1, 0) == true { return false; }
+    if clark_wilson_well_formed_transaction(0 - 1, 1) == true { return false; }
+    if clark_wilson_well_formed_transaction(1, 0 - 1) == true { return false; }
+    if clark_wilson_certified_tp(5, 10) != 1 { return false; }
+    if clark_wilson_certified_tp(10, 10) != 1 { return false; }
+    if clark_wilson_certified_tp(11, 10) != 0 { return false; }
+    if clark_wilson_certified_tp(0, 10) != 0 { return false; }
+    if clark_wilson_certified_tp(1, 0) != 0 { return false; }
+    if clark_wilson_certified_tp(0 - 1, 10) != 0 { return false; }
+    if clark_wilson_validate_result(true) != 1 { return false; }
+    if clark_wilson_validate_result(false) != 0 { return false; }
+    if clark_wilson_required_roles() != 2 { return false; }
+    return true;
+}

@@ -1,0 +1,30 @@
+// # HFT types
+//
+// Logline: TickData destubbed off pub type String symbol.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed to Int floor.
+
+type TickData = struct {
+    price: Int,
+    quantity: Int,
+    seq_num: Int
+};
+
+pub fn hft_tick_new(price: Int, quantity: Int, seq_num: Int) -> TickData {
+    return TickData {
+        price: price,
+        quantity: quantity,
+        seq_num: seq_num
+    };
+}
+
+pub fn hft_tick_price(t: TickData) -> Int {
+    return t.price;
+}

@@ -1,0 +1,100 @@
+// # Natural Cubic Spline
+//
+// Logline: Interpolates knots with a natural cubic spline and evaluates at a query abscissa.
+//
+// Setup: Pure math. Knots are strictly increasing. Second derivatives vanish at the ends.
+//
+// Beats:
+//   1. Reject fewer than two knots or a length mismatch.
+//   2. Solve the natural-spline tridiagonal system for second derivatives.
+//   3. Locate the span that holds the query.
+//   4. Evaluate the cubic Hermite form on that span.
+
+import "std/core/primitives/result.oo";
+
+pub fn spline_natural_eval(xs: List[Float], ys: List[Float], xq: Float) -> Result[Float, String] {
+    let n: Int = list_len(xs);
+    if n < 2 { return Err("ERR\tspline\tn"); }
+    if list_len(ys) != n { return Err("ERR\tspline\tys"); }
+    let mut i: Int = 1;
+    while i < n {
+        if list_get(xs, i) <= list_get(xs, i - 1) { return Err("ERR\tspline\tx"); }
+        i = i + 1;
+    }
+    let mut h: List[Float] = list_new();
+    i = 0;
+    while i < n - 1 {
+        h = list_push(h, list_get(xs, i + 1) - list_get(xs, i));
+        i = i + 1;
+    }
+    let mut m: List[Float] = list_new();
+    let mut k: Int = 0;
+    while k < n {
+        m = list_push(m, 0.0);
+        k = k + 1;
+    }
+    if n >= 3 {
+        let inner: Int = n - 2;
+        let mut a: List[Float] = list_new();
+        let mut b: List[Float] = list_new();
+        let mut c: List[Float] = list_new();
+        let mut r: List[Float] = list_new();
+        let mut t: Int = 0;
+        while t < inner {
+            let hi: Float = list_get(h, t);
+            let hip: Float = list_get(h, t + 1);
+            a = list_push(a, hi);
+            b = list_push(b, 2.0 * (hi + hip));
+            c = list_push(c, hip);
+            let dy1: Float = (list_get(ys, t + 1) - list_get(ys, t)) / hi;
+            let dy2: Float = (list_get(ys, t + 2) - list_get(ys, t + 1)) / hip;
+            r = list_push(r, 6.0 * (dy2 - dy1));
+            t = t + 1;
+        }
+        let mut j: Int = 1;
+        while j < inner {
+            let w: Float = list_get(a, j) / list_get(b, j - 1);
+            b = list_set(b, j, list_get(b, j) - w * list_get(c, j - 1));
+            r = list_set(r, j, list_get(r, j) - w * list_get(r, j - 1));
+            j = j + 1;
+        }
+        let mut mm: List[Float] = list_new();
+        let mut u: Int = 0;
+        while u < inner {
+            mm = list_push(mm, 0.0);
+            u = u + 1;
+        }
+        mm = list_set(mm, inner - 1, list_get(r, inner - 1) / list_get(b, inner - 1));
+        j = inner - 2;
+        while j >= 0 {
+            mm = list_set(mm, j, (list_get(r, j) - list_get(c, j) * list_get(mm, j + 1)) / list_get(b, j));
+            j = j - 1;
+        }
+        t = 0;
+        while t < inner {
+            m = list_set(m, t + 1, list_get(mm, t));
+            t = t + 1;
+        }
+    }
+    let mut span: Int = 0;
+    let mut s: Int = 0;
+    while s < n - 1 {
+        if xq >= list_get(xs, s) {
+            if xq <= list_get(xs, s + 1) { span = s; }
+        }
+        s = s + 1;
+    }
+    if xq < list_get(xs, 0) { return Err("ERR\tspline\trange"); }
+    if xq > list_get(xs, n - 1) { return Err("ERR\tspline\trange"); }
+    let x1: Float = list_get(xs, span);
+    let x2: Float = list_get(xs, span + 1);
+    let y1: Float = list_get(ys, span);
+    let y2: Float = list_get(ys, span + 1);
+    let m1: Float = list_get(m, span);
+    let m2: Float = list_get(m, span + 1);
+    let hs: Float = x2 - x1;
+    let a1: Float = (x2 - xq) / hs;
+    let a2: Float = (xq - x1) / hs;
+    let val: Float = a1 * y1 + a2 * y2 + ((a1 * a1 * a1 - a1) * m1 + (a2 * a2 * a2 - a2) * m2) * (hs * hs) / 6.0;
+    return Ok(val);
+}

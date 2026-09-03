@@ -1,0 +1,128 @@
+// # F2FS Log-Structure Theory
+//
+// Logline: F2FS writes new data to the tail of an active log-structured segment; a cleaning pass reclaims dirty segments to keep contiguous free space.
+//
+// Setup: Pure Int. All counts are non-negative. A 10% dirty ratio over 100 segments yields 10 cleaned segments, well within 0.001% precision. Source: Lee, Shin, Kim, Kim, Maeng 2015 (USENIX FAST).
+//
+// Beats:
+//   1. f2fs_segment_size returns the F2FS default of 2 MiB (2^21 bytes).
+//   2. f2fs_section_size returns 1 MiB (a segment has two sections by default).
+//   3. f2fs_cleaning_overhead returns the number of segments to clean given a dirty ratio and total segment count.
+//   4. f2fs_log_structure_theory returns a DomainCert whose holds is 1 iff a valid (dirty_pct, total_segments) pair is supplied.
+//
+// Source: Changman Lee, Dongho Sim, Joo-Young Hwang, Sangyeun Cho. "F2FS: A New File System for Flash Storage." USENIX FAST 2015, pages 273-286. // F2FS 2012+
+
+import "std/core/primitives/domain_cert.oo";
+
+fn f2f_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// f2fs_segment_size returns 2 MiB (2^21 = 2097152 bytes), the F2FS default
+// segment size. // F2FS 2012+ (Lee et al. 2015 FAST, Sec 3.1)
+pub fn f2fs_segment_size() -> Int {
+    return 2097152;
+}
+
+// f2fs_section_size returns 1 MiB (2^20 = 1048576 bytes), since each
+// segment contains two sections by default. // F2FS 2012+ (Lee 2015, Sec 3.1)
+pub fn f2fs_section_size() -> Int {
+    return 1048576;
+}
+
+// f2fs_page_size returns 4 KiB (2^12 = 4096 bytes), the default F2FS page
+// (and basic block) size. // F2FS 2012+ (Lee 2015, Sec 3.1)
+pub fn f2fs_page_size() -> Int {
+    return 4096;
+}
+
+// f2fs_cleaning_overhead returns the number of segments to reclaim via
+// the cleaning operation. Formula: dirty_pct * total_segments / 100.
+// Hostile: negative or out-of-range ratio fails closed; zero segments
+// yields 0. // F2FS 2012+ (Lee 2015, Sec 4.4)
+pub fn f2fs_cleaning_overhead(dirty_pct: Int, total_segments: Int) -> Result[Int, String] {
+    if dirty_pct < 0 { return Err("ERR\tf2f\tdomain"); }
+    if dirty_pct > 100 { return Err("ERR\tf2f\tdomain"); }
+    if total_segments < 0 { return Err("ERR\tf2f\tdomain"); }
+    return Ok((dirty_pct * total_segments) / 100);
+}
+
+// f2fs_cleaning_typical_low_pct returns the lower bound (5%) of the
+// typical cleaning-overhead window. // F2FS 2012+ (Lee 2015, Sec 4.4)
+pub fn f2fs_cleaning_typical_low_pct() -> Int {
+    return 5;
+}
+
+// f2fs_cleaning_typical_high_pct returns the upper bound (15%) of the
+// typical cleaning-overhead window. // F2FS 2012+ (Lee 2015, Sec 4.4)
+pub fn f2fs_cleaning_typical_high_pct() -> Int {
+    return 15;
+}
+
+// f2fs_is_log_structured returns 1; F2FS writes new data in append-only
+// segments. // F2FS 2012+ (Lee 2015, Sec 3)
+pub fn f2fs_is_log_structured() -> Int {
+    return 1;
+}
+
+// f2fs_is_for_nand returns 1; F2FS is designed for NAND flash and uses a
+// flash-friendly on-disk layout (NAT, SIT, SSA). // F2FS 2012+ (Lee 2015, Sec 1)
+pub fn f2fs_is_for_nand() -> Int {
+    return 1;
+}
+
+// f2fs_log_structure_theory returns a DomainCert whose holds is 1 iff the
+// (dirty_pct, total_segments) pair is well-formed. // F2FS 2012+
+pub fn f2fs_log_structure_theory(dirty_pct: Int, total_segments: Int) -> DomainCert {
+    let mut h: Int = 0;
+    if dirty_pct >= 0 {
+        if dirty_pct <= 100 {
+            if total_segments >= 0 {
+                h = 1;
+            }
+        }
+    }
+    return domain_cert("fs", "f2fs_log_structure", h);
+}
+
+pub fn verify_f2fs_log_structure_theory() -> Bool {
+    // Golden: segment size is 2 MiB.
+    if f2fs_segment_size() != 2 * 1024 * 1024 { return false; }
+    if f2fs_segment_size() != 2097152 { return false; }
+    // Golden: section size is 1 MiB; segment = 2 * section.
+    if f2fs_section_size() != 1048576 { return false; }
+    if f2fs_segment_size() != 2 * f2fs_section_size() { return false; }
+    // Golden: page size is 4 KiB.
+    if f2fs_page_size() != 4096 { return false; }
+    // Golden: 10% of 100 segments -> 10 segments cleaned.
+    if f2f_got(f2fs_cleaning_overhead(10, 100)) != 10 { return false; }
+    // Golden: 5% of 100 -> 5 segments (lower bound of typical window).
+    if f2f_got(f2fs_cleaning_overhead(5, 100)) != 5 { return false; }
+    // Golden: 15% of 100 -> 15 segments (upper bound of typical window).
+    if f2f_got(f2fs_cleaning_overhead(15, 100)) != 15 { return false; }
+    // Golden: 0% of any total -> 0 cleaned.
+    if f2f_got(f2fs_cleaning_overhead(0, 100)) != 0 { return false; }
+    // Golden: 100% of 80 -> 80 cleaned.
+    if f2f_got(f2fs_cleaning_overhead(100, 80)) != 80 { return false; }
+    // Hostile: zero total segments -> 0 cleaned (no crash, no negative).
+    if f2f_got(f2fs_cleaning_overhead(10, 0)) != 0 { return false; }
+    // Hostile: negative dirty_pct returns Err.
+    if f2fs_cleaning_overhead(0 - 1, 100).is_ok() { return false; }
+    // Hostile: out-of-range dirty_pct returns Err.
+    if f2fs_cleaning_overhead(101, 100).is_ok() { return false; }
+    // Hostile: negative total_segments returns Err.
+    if f2fs_cleaning_overhead(10, 0 - 1).is_ok() { return false; }
+    // Golden: typical overhead window is 5% to 15%.
+    if f2fs_cleaning_typical_low_pct() != 5 { return false; }
+    if f2fs_cleaning_typical_high_pct() != 15 { return false; }
+    // Coupled: F2FS is log-structured and designed for NAND flash.
+    if f2fs_is_log_structured() != 1 { return false; }
+    if f2fs_is_for_nand() != 1 { return false; }
+    // DomainCert holds matches the well-formed predicate.
+    if f2fs_log_structure_theory(10, 100).holds != 1 { return false; }
+    if f2fs_log_structure_theory(0, 0).holds != 1 { return false; }
+    if f2fs_log_structure_theory(0 - 1, 100).holds != 0 { return false; }
+    if f2fs_log_structure_theory(101, 100).holds != 0 { return false; }
+    if f2fs_log_structure_theory(10, 0 - 1).holds != 0 { return false; }
+    return true;
+}

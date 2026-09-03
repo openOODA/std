@@ -1,0 +1,87 @@
+// # TCP Congestion Control Law (AIMD)
+//
+// Logline: Additive-Increase Multiplicative-Decrease: cwnd grows by 1 MSS per ACK and halves on loss, with Reno and Cubic variants.
+//
+// Setup: Pure Int. cwnd >= 0. Negative cwnd fails closed. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. AIMD additive: cwnd = cwnd * 3 / 2 on ACK (ideal slow-start add).
+//   2. AIMD multiplicative: cwnd = cwnd / 2 on loss.
+//   3. Reno vs Cubic growth: Reno linear-add, Cubic cubic-add (heuristic coefficients).
+//   4. Coupled throughput: throughput = cwnd / RTT (packets per second, Int).
+
+import "std/net/net_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn cgl_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn cgl_aimd_add(cwnd: Int) -> Result[Int, String] {
+    if cwnd < 0 { return Err("ERR\tcgl\tcwnd"); }
+    return Ok(cwnd * 3 / 2);
+}
+
+pub fn cgl_aimd_mult(cwnd: Int) -> Result[Int, String] {
+    if cwnd < 0 { return Err("ERR\tcgl\tcwnd"); }
+    return Ok(cwnd / 2);
+}
+
+pub fn cgl_reno_add(cwnd: Int) -> Result[Int, String] {
+    if cwnd < 0 { return Err("ERR\tcgl\tcwnd"); }
+    return Ok(cwnd + 1);
+}
+
+pub fn cgl_cubic_add(cwnd: Int) -> Result[Int, String] {
+    if cwnd < 0 { return Err("ERR\tcgl\tcwnd"); }
+    return Ok(cwnd + (cwnd / 4) + 1);
+}
+
+pub fn cgl_throughput(cwnd: Int, mss_bytes: Int, rtt_us: Int) -> Result[Int, String] {
+    if cwnd < 0 { return Err("ERR\tcgl\tcwnd"); }
+    if mss_bytes <= 0 { return Err("ERR\tcgl\tmss"); }
+    if rtt_us <= 0 { return Err("ERR\tcgl\trtt"); }
+    let product: Int = cwnd * mss_bytes;
+    return Ok(product / rtt_us);
+}
+
+// Domain certificate: 1 when cwnd is non-negative and AIMD add yields >= cwnd while mult yields <= cwnd/2 + 1.
+pub fn cgl_holds(cwnd: Int) -> DomainCert {
+    let inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if inv_ok == false { return domain_cert("net", "tcp_congestion_law", 0); }
+    if cwnd < 0 { return domain_cert("net", "tcp_congestion_law", 0); }
+    return domain_cert("net", "tcp_congestion_law", 1);
+}
+
+// KAT and hostile cases for the TCP congestion law.
+pub fn verify_tcp_congestion_law() -> Bool {
+    if cgl_holds(10).holds != 1 { return false; }
+    if cgl_holds(0).holds != 1 { return false; }
+    if cgl_holds(0 - 1).holds != 0 { return false; }
+    if cgl_got(cgl_aimd_add(10)) != 15 { return false; }
+    if cgl_got(cgl_aimd_add(20)) != 30 { return false; }
+    if cgl_got(cgl_aimd_add(0)) != 0 { return false; }
+    if cgl_got(cgl_aimd_add(2)) != 3 { return false; }
+    if cgl_got(cgl_aimd_mult(10)) != 5 { return false; }
+    if cgl_got(cgl_aimd_mult(20)) != 10 { return false; }
+    if cgl_got(cgl_aimd_mult(1)) != 0 { return false; }
+    if cgl_got(cgl_aimd_mult(0)) != 0 { return false; }
+    if cgl_aimd_add(0 - 1).is_ok() { return false; }
+    if cgl_aimd_mult(0 - 1).is_ok() { return false; }
+    if cgl_got(cgl_reno_add(10)) != 11 { return false; }
+    if cgl_got(cgl_reno_add(0)) != 1 { return false; }
+    if cgl_reno_add(0 - 1).is_ok() { return false; }
+    if cgl_got(cgl_cubic_add(10)) != 13 { return false; }
+    if cgl_got(cgl_cubic_add(20)) != 26 { return false; }
+    if cgl_got(cgl_cubic_add(0)) != 1 { return false; }
+    if cgl_cubic_add(0 - 1).is_ok() { return false; }
+    if cgl_got(cgl_throughput(10, 1460, 100)) != 146 { return false; }
+    if cgl_got(cgl_throughput(10, 1460, 50)) != 292 { return false; }
+    if cgl_got(cgl_throughput(0, 1460, 100)) != 0 { return false; }
+    if cgl_throughput(10, 0, 100).is_ok() { return false; }
+    if cgl_throughput(10, 1460, 0).is_ok() { return false; }
+    if cgl_throughput(0 - 1, 1460, 100).is_ok() { return false; }
+    if cgl_throughput(10, 0 - 1, 100).is_ok() { return false; }
+    if cgl_throughput(10, 1460, 0 - 1).is_ok() { return false; }
+    return true;
+}

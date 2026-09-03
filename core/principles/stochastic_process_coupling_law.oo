@@ -1,0 +1,147 @@
+// # Stochastic process coupling law
+//
+// Logline: A coupling of two probability distributions P and Q is a joint distribution (X, Y) with marginals P and Q; the maximal coupling minimizes P[X != Y] = 1 - (1 - TV(P, Q)) (cross-domain: math coupling from the past (Propp-Wilson 1996), AI MCMC, econ Nash equilibrium existence, data DP composition).
+//
+// Setup: Pure Int scaled by 10000 (so 10000 = 1.0). Bernoulli distributions (p1, p2 in [0, 1] scaled). Maximal coupling: P[0,0] = 1 - max(p1,p2), P[1,1] = min(p1,p2), P[1,0] = max(p1-p2, 0), P[0,1] = max(p2-p1, 0). Tol 1e-9 is exact for Int scaled values. Probabilities < 0 or > 1 fail closed.
+//
+// Beats:
+//   1. maximal_coupling_bernoulli returns the joint distribution [P[0,0], P[0,1], P[1,0], P[1,1]].
+//   2. marginals are preserved: P[X=1] = p1, P[Y=1] = p2.
+//   3. P[X != Y] = |p1 - p2| (coupling inequality TV <= P[X != Y]).
+//   4. Hostile p < 0 or p > 1 fails closed.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn sp_pxabs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+pub fn sp_got(r: Result[List[Int], String]) -> List[Int] {
+    match r { Ok(v) => { return v; }, Err(_) => { return list_new(); } }
+}
+
+fn sp_max(a: Int, b: Int) -> Int {
+    if a > b { return a; }
+    return b;
+}
+
+fn sp_min(a: Int, b: Int) -> Int {
+    if a < b { return a; }
+    return b;
+}
+
+pub fn maximal_coupling_bernoulli(p1: Int, p2: Int) -> Result[List[Int], String] {
+    if p1 < 0 { return Err("ERR\tsp\tp1"); }
+    if p1 > 10000 { return Err("ERR\tsp\tp1"); }
+    if p2 < 0 { return Err("ERR\tsp\tp2"); }
+    if p2 > 10000 { return Err("ERR\tsp\tp2"); }
+    let p00: Int = 10000 - sp_max(p1, p2);
+    let p11: Int = sp_min(p1, p2);
+    let p10: Int = sp_max(p1 - p2, 0);
+    let p01: Int = sp_max(p2 - p1, 0);
+    let mut out: List[Int] = list_new();
+    out = list_push(out, p00);
+    out = list_push(out, p01);
+    out = list_push(out, p10);
+    out = list_push(out, p11);
+    return Ok(out);
+}
+
+pub fn coupling_marginal_check(p1: Int, p2: Int, joint: List[Int]) -> Int {
+    if list_len(joint) != 4 { return 0; }
+    let p00: Int = list_get(joint, 0);
+    let p01: Int = list_get(joint, 1);
+    let p10: Int = list_get(joint, 2);
+    let p11: Int = list_get(joint, 3);
+    let x_marginal: Int = p10 + p11;
+    let y_marginal: Int = p01 + p11;
+    let dx: Int = sp_pxabs(x_marginal - p1);
+    let dy: Int = sp_pxabs(y_marginal - p2);
+    if dx > 100 { return 0; }
+    if dy > 100 { return 0; }
+    return 1;
+}
+
+pub fn coupling_disagreement(joint: List[Int]) -> Int {
+    if list_len(joint) != 4 { return 0 - 1; }
+    return list_get(joint, 1) + list_get(joint, 2);
+}
+
+pub fn total_variation_bernoulli(p1: Int, p2: Int) -> Int {
+    return sp_pxabs(p1 - p2) / 2;
+}
+
+pub fn coupling_inequality_holds(p1: Int, p2: Int, joint: List[Int]) -> Int {
+    let tv: Int = total_variation_bernoulli(p1, p2);
+    let d: Int = coupling_disagreement(joint);
+    if d < 0 { return 0; }
+    if d >= tv { return 1; }
+    return 0;
+}
+
+pub fn coupling_principle_cert(p1: Int, p2: Int) -> DomainCert {
+    let r: Result[List[Int], String] = maximal_coupling_bernoulli(p1, p2);
+    let mut h: Int = 0;
+    if r.is_ok() {
+        let j: List[Int] = sp_got(r);
+        if coupling_marginal_check(p1, p2, j) == 1 { h = 1; }
+    }
+    return domain_cert("principles", "stochastic_process_coupling", h);
+}
+
+pub fn coupling_law_check(p1: Int, p2: Int) -> Int {
+    let r: Result[List[Int], String] = maximal_coupling_bernoulli(p1, p2);
+    if r.is_ok() == false { return 0; }
+    let j: List[Int] = sp_got(r);
+    if coupling_marginal_check(p1, p2, j) == 0 { return 0; }
+    if coupling_inequality_holds(p1, p2, j) == 0 { return 0; }
+    return 1;
+}
+
+pub fn verify_stochastic_process_coupling_law() -> Bool {
+    // Golden: maximal coupling of Bernoulli(0.3) and Bernoulli(0.7) preserves marginals.
+    let r1: Result[List[Int], String] = maximal_coupling_bernoulli(3000, 7000);
+    if r1.is_ok() == false { return false; }
+    let j1: List[Int] = sp_got(r1);
+    if coupling_marginal_check(3000, 7000, j1) != 1 { return false; }
+    // Golden: maximal coupling Bernoulli(0.5) and Bernoulli(0.5): all on diagonal.
+    let r2: Result[List[Int], String] = maximal_coupling_bernoulli(5000, 5000);
+    if r2.is_ok() == false { return false; }
+    let j2: List[Int] = sp_got(r2);
+    if list_get(j2, 1) != 0 { return false; }
+    if list_get(j2, 2) != 0 { return false; }
+    if coupling_marginal_check(5000, 5000, j2) != 1 { return false; }
+    // Golden: Bernoulli(0.3) and Bernoulli(0.3) identical: all on diagonal.
+    let r3: Result[List[Int], String] = maximal_coupling_bernoulli(3000, 3000);
+    if r3.is_ok() == false { return false; }
+    let j3: List[Int] = sp_got(r3);
+    if list_get(j3, 1) != 0 { return false; }
+    if list_get(j3, 2) != 0 { return false; }
+    if list_get(j3, 0) != 7000 { return false; }
+    if list_get(j3, 3) != 3000 { return false; }
+    // Golden: Bernoulli(0) and Bernoulli(1): maximal coupling P[0,0] = 0, P[1,1] = 0.
+    let r4: Result[List[Int], String] = maximal_coupling_bernoulli(0, 10000);
+    if r4.is_ok() == false { return false; }
+    let j4: List[Int] = sp_got(r4);
+    if list_get(j4, 0) != 0 { return false; }
+    if list_get(j4, 3) != 0 { return false; }
+    // Golden: total variation TV(0.3, 0.7) = 0.2 scaled -> 2000 (in Int) but TV = |p1-p2|/2 = 2000.
+    if total_variation_bernoulli(3000, 7000) != 2000 { return false; }
+    // Golden: TV inequality TV <= P[X != Y].
+    if coupling_inequality_holds(3000, 7000, j1) != 1 { return false; }
+    if coupling_inequality_holds(5000, 5000, j2) != 1 { return false; }
+    // Hostile: p < 0 or p > 1 fails closed.
+    if maximal_coupling_bernoulli(0 - 1, 5000).is_ok() { return false; }
+    if maximal_coupling_bernoulli(5000, 10001).is_ok() { return false; }
+    if maximal_coupling_bernoulli(0 - 100, 5000).is_ok() { return false; }
+    // Cert sanity.
+    let c1: DomainCert = coupling_principle_cert(3000, 7000);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "principles" { return false; }
+    if c1.law_name != "stochastic_process_coupling" { return false; }
+    let c2: DomainCert = coupling_principle_cert(0 - 1, 5000);
+    if c2.holds != 0 { return false; }
+    let _: Int = sp_pxabs(0 - 7);
+    return true;
+}

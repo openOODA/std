@@ -1,0 +1,54 @@
+// # CFI Fail-Closed Stubs
+//
+// Logline: Fail-closed process_exit residuals for hardware CET, kernel kCFI table, ARM PAC, and IBT endbr patch.
+//
+// Setup: Default-deny per RULES.oot 1.4 (require &SysCap). oodac lacks x86_64 prctl / MSR FFI, kernel kCFI table bindings, and ARM PAC inline-assembly lowering.
+//
+// Beats:
+//   1. cfi_enable_hardware_cet_sys: refuse x86_64 ARCH_SET_CPUID / Intel CET MSR setup.
+//   2. cfi_register_kernel_kcfi_table_sys: refuse kernel kCFI function pointer table registration.
+//   3. cfi_read_arm_pac_key_sys: refuse ARM PAC APIAKey / APDBKey register read.
+//   4. cfi_patch_binary_ibt_endbr_sys: refuse ELF ENDBR64 / ENDBR32 opcode injection.
+//   5. fail-closed error: default-deny on unbuilt kernel FFI surface.
+//   6. SysCap / Fail / Default: zero-sized capability shims for the residual surface.
+//
+// residual: not a real CFI pass; integrate host platform runtime.
+
+import "std/sec/sys/cfi_engine.oo";
+
+// -------------------------------------------------------------------
+// Fail-Closed Hardware, Kernel & Architecture Direct Access Stubs
+// -------------------------------------------------------------------
+
+pub fn cfi_enable_hardware_cet_sys(sys: &SysCap, engine_ref: &CfiEngine, hw_flags: Int) -> Result[Bool, String] {
+    // COMPILER LIMITATION: openOODA lacks native C-FFI lowering for x86_64 ARCH_SET_CPUID / prctl(PR_SET_TAGGED_ADDR_CTRL) or Intel CET MSR register setup.
+    // Hardware Indirect Branch Tracking (IBT) and Shadow Stack (SS) must be enabled by kernel/host runtime.
+    return Err("Unimplemented: kernel hardware CET setup requires native host FFI lowering");
+}
+
+pub fn cfi_register_kernel_kcfi_table_sys(sys: &SysCap, cfg_ref: &ControlFlowGraph) -> Result[Int, String] {
+    // COMPILER LIMITATION: openOODA lacks low-level kernel FFI bindings for registering dynamic kCFI function pointer target tables.
+    // Kernel-space CFI target mapping requires native OS kernel syscall bindings.
+    return Err("Unimplemented: kernel kCFI target table registration requires native host FFI lowering");
+}
+
+pub fn cfi_read_arm_pac_key_sys(sys: &SysCap, key_index: Int) -> Result[String, String] {
+    // COMPILER LIMITATION: openOODA lacks inline assembly lowering for ARM PAC (Pointer Authentication Code) key register access (APIAKey / APDBKey).
+    // ARM PAC cryptographic key register queries require architecture-specific assembly instructions.
+    return Err("Unimplemented: ARM PAC key register access requires inline assembly FFI lowering");
+}
+
+pub fn cfi_patch_binary_ibt_endbr_sys(sys: &SysCap, binary_path: String) -> Result[Bool, String] {
+    // COMPILER LIMITATION: Binary rewriting and landing pad (ENDBR64/ENDBR32) opcode injection require raw host file binary manipulation.
+    // ELF binary patching must be performed by host compiler toolchain.
+    return Err("Unimplemented: binary IBT landing pad patching requires host toolchain lowering");
+}
+
+type SysCap = struct {};
+type Fail = struct {};
+type Default = struct {};
+
+
+pub fn __dummy_std_src_ooda_sec_sys_cfi_stubs_oo() -> Int {
+    return 0;
+}

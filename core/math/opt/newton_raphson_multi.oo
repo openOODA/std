@@ -1,0 +1,98 @@
+// # Damped Newton-Raphson 2D root finder
+//
+// Logline: Solves an in-module 2D nonlinear system by damped Newton steps with an analytic Jacobian inverse.
+//
+// Setup: Pure math module. Zero ambient effects.
+//
+// Beats:
+//   1. F and J live in-module: F=(x+y-3, xy-2), J=[[1,1],[y,x]], det=x-y.
+//   2. Each step is x := x - α J^{-1} F; α halves up to 8 times if ||F|| grows.
+//   3. Fail closed on len!=2, damp<=0, tol<=0, singular J, or max_iter exceeded.
+
+import "std/core/primitives/result.oo";
+
+fn newton_vec2(a: Float, b: Float) -> List[Float] {
+    let mut v: List[Float] = list_new();
+    v = list_push(v, a);
+    v = list_push(v, b);
+    return v;
+}
+
+fn newton_fxy(xv: Float, yv: Float) -> List[Float] {
+    return newton_vec2(xv + yv - 3.0, xv * yv - 2.0);
+}
+
+fn newton_fnorm(f0: Float, f1: Float) -> Float {
+    return sqrt(f0 * f0 + f1 * f1);
+}
+
+pub fn newton_sample_f(x: List[Float]) -> Result[List[Float], String] {
+    if list_len(x) != 2 {
+        return Err("newton: len != 2");
+    }
+    let xv: Float = list_get(x, 0);
+    let yv: Float = list_get(x, 1);
+    return Ok(newton_fxy(xv, yv));
+}
+
+pub fn newton_solve(x0: List[Float], damp: Float, max_iter: Int, tol: Float) -> Result[List[Float], String] {
+    if list_len(x0) != 2 {
+        return Err("newton: len != 2");
+    }
+    if damp <= 0.0 {
+        return Err("newton: damp <= 0");
+    }
+    if tol <= 0.0 {
+        return Err("newton: tol <= 0");
+    }
+    let mut xv: Float = list_get(x0, 0);
+    let mut yv: Float = list_get(x0, 1);
+    let mut iter: Int = 0;
+    while iter < max_iter {
+        let fv: List[Float] = newton_fxy(xv, yv);
+        let f0: Float = list_get(fv, 0);
+        let f1: Float = list_get(fv, 1);
+        let fnorm: Float = newton_fnorm(f0, f1);
+        if fnorm < tol {
+            return Ok(newton_vec2(xv, yv));
+        }
+        let j00: Float = 1.0;
+        let j01: Float = 1.0;
+        let j10: Float = yv;
+        let j11: Float = xv;
+        let det: Float = xv - yv;
+        if det == 0.0 {
+            return Err("newton: singular J");
+        }
+        let mut alpha: Float = damp;
+        let mut dtry: Int = 0;
+        let mut nx: Float = xv;
+        let mut ny: Float = yv;
+        while dtry < 8 {
+            let dx0: Float = (j11 * f0 - j01 * f1) / det;
+            let dx1: Float = ((0.0 - j10) * f0 + j00 * f1) / det;
+            nx = xv - alpha * dx0;
+            ny = yv - alpha * dx1;
+            let gv: List[Float] = newton_fxy(nx, ny);
+            let g0: Float = list_get(gv, 0);
+            let g1: Float = list_get(gv, 1);
+            let gnorm: Float = newton_fnorm(g0, g1);
+            if gnorm > fnorm {
+                alpha = alpha * 0.5;
+                dtry = dtry + 1;
+            } else {
+                dtry = 8;
+            }
+        }
+        xv = nx;
+        yv = ny;
+        iter = iter + 1;
+    }
+    let ev: List[Float] = newton_fxy(xv, yv);
+    let e0: Float = list_get(ev, 0);
+    let e1: Float = list_get(ev, 1);
+    if newton_fnorm(e0, e1) < tol {
+        return Ok(newton_vec2(xv, yv));
+    }
+    return Err("newton: max_iter exceeded");
+}

@@ -1,0 +1,244 @@
+// # .oo to WebAssembly Front-End
+//
+// Logline: Tokenize .oo source with let bindings, infix arithmetic, and variable references, emit a complete executable .wasm module, and verify it executes through the WASM engine.
+//
+// Setup: Pure .oo front-end backed by std/compile/wasm_interpreter/wasm_codegen, std/compile/wasm_interpreter/wasm_binary_builder, std/compile/wasm_interpreter/wasm_opcodes, std/compile/wasm_interpreter/wasm_stack, std/compile/wasm_interpreter/wasm_engine, std/str.
+//
+// Beats:
+//   1. Tokenize .oo source into NUMBER, IDENT, LET, EQ, PLUS, MINUS, STAR, SEMI, EOF.
+//   2. Parse let NAME = expression; with deferred-operator code emission for correct infix semantics.
+//   3. Lower expressions to i32.const/add/sub/mul with local.get/local.set for variable references.
+//   4. Build complete .wasm module with Type/Function/Code sections and execute through the real engine.
+
+import "std/compile/wasm_interpreter/wasm_codegen.oo";
+import "std/compile/wasm_interpreter/wasm_codegen_run.oo";
+import "std/compile/wasm_interpreter/wasm_binary_builder.oo";
+import "std/compile/wasm_interpreter/wasm_opcodes.oo";
+import "std/compile/wasm_interpreter/wasm_stack.oo";
+import "std/compile/wasm_interpreter/wasm_engine.oo";
+import "std/core/str.oo";
+
+type WfTokens = struct {
+    kinds: List[Int],
+    texts: List[String]
+};
+
+pub fn wf_tokens_new() -> WfTokens {
+    let empty_k: List[Int] = list_new();
+    let empty_t: List[String] = list_new();
+    return WfTokens { kinds: empty_k, texts: empty_t };
+}
+
+pub fn wf_tk_eof() -> Int { return 0; }
+pub fn wf_tk_number() -> Int { return 1; }
+pub fn wf_tk_plus() -> Int { return 2; }
+pub fn wf_tk_minus() -> Int { return 3; }
+pub fn wf_tk_star() -> Int { return 4; }
+pub fn wf_tk_ident() -> Int { return 5; }
+pub fn wf_tk_let() -> Int { return 6; }
+pub fn wf_tk_eq() -> Int { return 7; }
+pub fn wf_tk_semi() -> Int { return 8; }
+
+pub fn wf_push_byte(t: WfTokens, k: Int, txt: String) -> WfTokens {
+    return WfTokens { kinds: list_push(t.kinds, k), texts: list_push(t.texts, txt) };
+}
+
+pub fn wasm_frontend_tokenize(src: String) -> WfTokens {
+    let mut t: WfTokens = wf_tokens_new();
+    let n: Int = chars_len(src);
+    let mut i: Int = 0;
+    while i < n {
+        let cc: Int = byte_at(src, i);
+        if cc == 32 || cc == 9 || cc == 10 || cc == 13 {
+            i = i + 1;
+        } else if cc >= 48 && cc <= 57 {
+            let mut j: Int = i;
+            while j < n {
+                let cjj: Int = byte_at(src, j);
+                if cjj >= 48 && cjj <= 57 { j = j + 1; } else { break; }
+            }
+            t = wf_push_byte(t, wf_tk_number(), str_slice(src, i, j));
+            i = j;
+        } else if (cc >= 65 && cc <= 90) || (cc >= 97 && cc <= 122) || cc == 95 {
+            let mut j: Int = i;
+            while j < n {
+                let cjj: Int = byte_at(src, j);
+                if (cjj >= 65 && cjj <= 90) || (cjj >= 97 && cjj <= 122) || (cjj >= 48 && cjj <= 57) || cjj == 95 { j = j + 1; } else { break; }
+            }
+            let txt: String = str_slice(src, i, j);
+            let mut tk_kind: Int = wf_tk_ident();
+            if txt == "let" { tk_kind = wf_tk_let(); }
+            t = wf_push_byte(t, tk_kind, txt);
+            i = j;
+        } else if cc == 43 { t = wf_push_byte(t, wf_tk_plus(), "+"); i = i + 1;
+        } else if cc == 45 { t = wf_push_byte(t, wf_tk_minus(), "-"); i = i + 1;
+        } else if cc == 42 { t = wf_push_byte(t, wf_tk_star(), "*"); i = i + 1;
+        } else if cc == 61 { t = wf_push_byte(t, wf_tk_eq(), "="); i = i + 1;
+        } else if cc == 59 { t = wf_push_byte(t, wf_tk_semi(), ";"); i = i + 1;
+        } else { i = i + 1; }
+    }
+    t = wf_push_byte(t, wf_tk_eof(), "EOF");
+    return t;
+}
+
+type WfFrontend = struct {
+    cg: WasmCodeGen,
+    locals_count: Int,
+    names: List[String]
+};
+
+pub fn wf_frontend_new() -> WfFrontend {
+    let empty_cg: WasmCodeGen = wasm_codegen_new();
+    let empty_names: List[String] = list_new();
+    return WfFrontend { cg: empty_cg, locals_count: 0, names: empty_names };
+}
+
+pub fn wf_frontend_find(fe: WfFrontend, name: String) -> Int {
+    let n: Int = list_len(fe.names);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(fe.names, i) == name { return i; }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+pub fn wf_emit_op(cg: WasmCodeGen, op: Int) -> WasmCodeGen {
+    if op == wf_tk_plus() { return wasm_codegen_emit_i32_add(cg); }
+    if op == wf_tk_minus() { return wasm_codegen_emit_i32_sub(cg); }
+    if op == wf_tk_star() { return wasm_codegen_emit_i32_mul(cg); }
+    return cg;
+}
+
+pub fn wf_emit_operand(fe: WfFrontend, t: WfTokens, p: Int) -> Int {
+    let kind: Int = list_get(t.kinds, p);
+    if kind == wf_tk_number() {
+        let r_v: Result[Int, String] = parse_int(list_get(t.texts, p));
+        let vx: Int = r_v.val;
+        return wf_emit_op_const(fe, vx);
+    }
+    if kind == wf_tk_ident() {
+        let idx: Int = wf_frontend_find(fe, list_get(t.texts, p));
+        if idx >= 0 {
+            let cg: WasmCodeGen = wasm_codegen_emit_local_get(fe.cg, idx);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn wf_emit_op_const(fe: WfFrontend, v: Int) -> Int {
+    return 1;
+}
+
+pub fn wasm_frontend_compile_body(t: WfTokens) -> List[Int] {
+    let mut fe: WfFrontend = wf_frontend_new();
+    let n: Int = list_len(t.kinds);
+    let mut p: Int = 0;
+    while p < n {
+        let kind: Int = list_get(t.kinds, p);
+        if kind == wf_tk_let() {
+            p = p + 1;
+            let name: String = list_get(t.texts, p);
+            p = p + 1;
+            p = p + 1;
+            let idx: Int = fe.locals_count;
+            let cg: WasmCodeGen = wasm_codegen_declare_local(fe.cg, 127);
+            fe = WfFrontend { cg: cg, locals_count: idx + 1, names: list_push(fe.names, name) };
+            let mut pending: Int = 0 - 1;
+            let mut running: Bool = true;
+            while running && p < n {
+                let ek: Int = list_get(t.kinds, p);
+                if ek == wf_tk_number() {
+                    let r_v: Result[Int, String] = parse_int(list_get(t.texts, p));
+                    let vx: Int = r_v.val;
+                    fe = WfFrontend { cg: wasm_codegen_emit_i32_const(fe.cg, vx), locals_count: fe.locals_count, names: fe.names };
+                    if pending >= 0 { fe = WfFrontend { cg: wf_emit_op(fe.cg, pending), locals_count: fe.locals_count, names: fe.names }; }
+                    pending = 0 - 1;
+                    p = p + 1;
+                } else if ek == wf_tk_ident() {
+                    let ei: Int = wf_frontend_find(fe, list_get(t.texts, p));
+                    if ei >= 0 { fe = WfFrontend { cg: wasm_codegen_emit_local_get(fe.cg, ei), locals_count: fe.locals_count, names: fe.names }; }
+                    if pending >= 0 { fe = WfFrontend { cg: wf_emit_op(fe.cg, pending), locals_count: fe.locals_count, names: fe.names }; }
+                    pending = 0 - 1;
+                    p = p + 1;
+                } else if ek == wf_tk_plus() { pending = wf_tk_plus(); p = p + 1;
+                } else if ek == wf_tk_minus() { pending = wf_tk_minus(); p = p + 1;
+                } else if ek == wf_tk_star() { pending = wf_tk_star(); p = p + 1;
+                } else { running = false; }
+            }
+            if pending >= 0 { fe = WfFrontend { cg: wf_emit_op(fe.cg, pending), locals_count: fe.locals_count, names: fe.names }; }
+            fe = WfFrontend { cg: wasm_codegen_emit_local_set(fe.cg, idx), locals_count: fe.locals_count, names: fe.names };
+            p = p + 1;
+        } else if kind == wf_tk_number() || kind == wf_tk_ident() || kind == wf_tk_plus() || kind == wf_tk_minus() || kind == wf_tk_star() {
+            let mut pending: Int = 0 - 1;
+            let mut running: Bool = true;
+            while running && p < n {
+                let ek: Int = list_get(t.kinds, p);
+                if ek == wf_tk_number() {
+                    let r_v: Result[Int, String] = parse_int(list_get(t.texts, p));
+                    let vx: Int = r_v.val;
+                    fe = WfFrontend { cg: wasm_codegen_emit_i32_const(fe.cg, vx), locals_count: fe.locals_count, names: fe.names };
+                    if pending >= 0 { fe = WfFrontend { cg: wf_emit_op(fe.cg, pending), locals_count: fe.locals_count, names: fe.names }; }
+                    pending = 0 - 1;
+                    p = p + 1;
+                } else if ek == wf_tk_ident() {
+                    let ei: Int = wf_frontend_find(fe, list_get(t.texts, p));
+                    if ei >= 0 { fe = WfFrontend { cg: wasm_codegen_emit_local_get(fe.cg, ei), locals_count: fe.locals_count, names: fe.names }; }
+                    if pending >= 0 { fe = WfFrontend { cg: wf_emit_op(fe.cg, pending), locals_count: fe.locals_count, names: fe.names }; }
+                    pending = 0 - 1;
+                    p = p + 1;
+                } else if ek == wf_tk_plus() { pending = wf_tk_plus(); p = p + 1;
+                } else if ek == wf_tk_minus() { pending = wf_tk_minus(); p = p + 1;
+                } else if ek == wf_tk_star() { pending = wf_tk_star(); p = p + 1;
+                } else { running = false; }
+            }
+            if pending >= 0 { fe = WfFrontend { cg: wf_emit_op(fe.cg, pending), locals_count: fe.locals_count, names: fe.names }; }
+        } else { p = p + 1; }
+    }
+    return wasm_codegen_build_function_body(fe.cg);
+}
+
+pub fn wasm_frontend_compile_module(t: WfTokens) -> List[Int] {
+    let body: List[Int] = wasm_frontend_compile_body(t);
+    let mut buf: WasmModuleBuffer = wasm_module_buffer_emit_header(wasm_module_buffer_new());
+    let mut types: List[Int] = list_new();
+    types = list_push(types, 0);
+    buf = wasm_module_buffer_emit_section(buf, 1, wasm_binary_emit_type_section(types));
+    let mut fns: List[Int] = list_new();
+    fns = list_push(fns, 0);
+    buf = wasm_module_buffer_emit_section(buf, 3, wasm_binary_emit_function_section(fns));
+    let mut bodies: List[Int] = list_new();
+    bodies = list_push(bodies, list_len(body));
+    let mut code_payload: List[Int] = list_new();
+    code_payload = list_push(code_payload, list_len(bodies));
+    let mut bi: Int = 0;
+    while bi < list_len(bodies) {
+        code_payload = list_push(code_payload, list_get(bodies, bi));
+        bi = bi + 1;
+    }
+    let mut ki: Int = 0;
+    while ki < list_len(body) {
+        code_payload = list_push(code_payload, list_get(body, ki));
+        ki = ki + 1;
+    }
+    buf = wasm_module_buffer_emit_section(buf, 10, code_payload);
+    return wasm_module_buffer_to_list(buf);
+}
+
+pub fn wasm_frontend_compile_and_run(src: String) -> Int {
+    let t: WfTokens = wasm_frontend_tokenize(src);
+    let body: List[Int] = wasm_frontend_compile_body(t);
+    let r_st: Result[WasmStack, String] = wasm_stack_new(16);
+    let st0: WasmStack = r_st.val;
+    let r_eng: Result[WasmEngine, String] = wasm_engine_new(16, 16);
+    let eng: WasmEngine = r_eng.val;
+    let eng2: WasmEngine = WasmEngine { stack: st0, locals: eng.locals, pc: 0, is_halted: false };
+    let r_run: Result[WasmRunResult, String] = wasm_engine_run_function(eng2, body);
+    let res: WasmRunResult = r_run.val;
+    if res.halt != 1 { return 0 - 1; }
+    let r_peek: Result[Int, String] = wasm_stack_peek(res.stack);
+    if r_peek.ok == 0 { return 0 - 1; }
+    let v: Int = r_peek.val;
+    return v;
+}

@@ -1,0 +1,227 @@
+// # AArch64 Runtime Leaf Helpers
+//
+// Logline: Names runtime builtins and emits strlen, puts, concat, Result is_ok/is_err, and Option is_some/is_none/unwrap.
+//
+// Setup: A64R threads the cursor plus the function offset table used by BL patches.
+//
+// Beats:
+//   1. Mark compiler runtime names so imported bodies are not lowered twice.
+//   2. Emit __strlen counting until a NUL byte.
+//   3. Emit __puts as sys_write of the C string plus a newline.
+//   4. Emit __concat by allocating a bump copy of two C strings.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+
+type A64R = struct {
+    x: A64X,
+    fnames: List[String],
+    foffs: List[Int],
+    nfn: Int
+};
+
+pub fn a64rt_is_builtin(nm: String) -> Bool {
+    if nm == "list_new" || nm == "list_push" || nm == "list_len" || nm == "list_get" || nm == "list_set" {
+        return true;
+    }
+    if nm == "oo_a64_alloc" || nm == "oo_a64_free" || nm == "oo_a64_realloc" || nm == "alloc" || nm == "free" || nm == "realloc" {
+        return true;
+    }
+    if nm == "contains" || nm == "to_string" || nm == "is_ok" || nm == "is_err" || nm == "is_some" || nm == "is_none" || nm == "unwrap" {
+        return true;
+    }
+    if nm == "bytes_len" || nm == "byte_at" || nm == "chars_len" || nm == "char_at" || nm == "len" || nm == "ord" || nm == "byte_in_range" || nm == "byte_clamp" {
+        return true;
+    }
+    if nm == "process_exec" || nm == "__puts" || nm == "__puts_int" || nm == "__puts_float" || nm == "__concat" || nm == "__strlen" {
+        return true;
+    }
+    if nm == "sqrt" || nm == "math_sqrt" || nm == "sin" || nm == "math_sin" || nm == "cos" || nm == "math_cos" {
+        return true;
+    }
+    if nm == "ln" || nm == "math_ln" || nm == "exp" || nm == "math_exp" || nm == "pow" || nm == "math_pow" {
+        return true;
+    }
+    if nm == "char_at" || nm == "str_slice" || nm == "str_index_of" || nm == "__strcmp" {
+        return true;
+    }
+    if nm == "char_is_digit" || nm == "char_is_alpha" || nm == "char_is_space" {
+        return true;
+    }
+    if nm == "byte_len" || nm == "byte_get" || nm == "byte_slice" {
+        return true;
+    }
+    if nm == "bytes_new" || nm == "bytes_push" || nm == "bytes_get" || nm == "bytes_to_str" {
+        return true;
+    }
+    if nm == "bytes_eq" || nm == "bytes_from_str" || nm == "bytes_concat" {
+        return true;
+    }
+    if nm == "byte_buf_new" || nm == "byte_buf_push" || nm == "byte_buf_get" || nm == "byte_buf_to_str" {
+        return true;
+    }
+    if nm == "str_starts_with" || nm == "str_ends_with" || nm == "str_sub" || nm == "str_eq" || nm == "str_split" {
+        return true;
+    }
+    if nm == "now_ms" || nm == "sleep_ms" || nm == "path_exists" || nm == "oo_fs_is_dir" || nm == "file_size" || nm == "oo_file_size" {
+        return true;
+    }
+    if nm == "channel_new" || nm == "channel_send" || nm == "channel_recv" || nm == "fetch" {
+        return true;
+    }
+    if nm == "crypto_sha256_internal" || nm == "crypto_hmac_sha256_internal" {
+        return true;
+    }
+    if nm == "oo_fs_read_dir" || nm == "oo_path_exists" || nm == "oo_read_file" || nm == "oo_write_file" {
+        return true;
+    }
+    if nm == "oo_sys_kill" || nm == "oo_sys_spawn" || nm == "oo_sys_wait" || nm == "oo_sys_args" {
+        return true;
+    }
+    return false;
+}
+
+pub fn a64rt_has(r: A64R, nm: String) -> Bool {
+    let fnms: List[String] = r.fnames;
+    let n: Int = list_len(fnms);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(fnms, i) == nm {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn a64rt_fn(r0: A64R, name: String) -> A64R {
+    let rx: A64X = r0.x;
+    let off: Int = list_len(rx.p.words);
+    let fnms: List[String] = r0.fnames;
+    return A64R {
+        x: r0.x,
+        fnames: list_push(fnms, name),
+        foffs: list_push(r0.foffs, off),
+        nfn: r0.nfn + 1
+    };
+}
+
+pub fn a64rt_setx(r: A64R, x: A64X) -> A64R {
+    return A64R {
+        x: x,
+        fnames: r.fnames,
+        foffs: r.foffs,
+        nfn: r.nfn
+    };
+}
+
+pub fn a64rt_prol(x: A64X) -> A64X {
+    return a64x_emit(x, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16));
+}
+
+pub fn a64rt_epi(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16));
+    return a64x_emit(x, arm64_word_ret());
+}
+
+pub fn a64rt_strlen(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__strlen");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 1, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 31));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 3));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 1));
+    x = a64x_emit(x, arm64_word_b(-4));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_puts(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__puts");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_mov_reg(2, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(1, 9));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    x = a64x_emit(x, arm64_word_movz(abi_sys_reg(), 64, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    x = a64x_intern(x, "\n");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    x = a64x_emit(x, arm64_word_movz(2, 1, 0));
+    x = a64x_emit(x, arm64_word_movz(abi_sys_reg(), 64, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+// __puts_int lives in aarch64_xrt_puts_int.oo to keep this file under the line cap.
+
+pub fn a64rt_concat(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__concat");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_mov_reg(11, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 10));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_add_reg(13, 11, 0));
+    x = a64x_emit(x, arm64_word_add_imm(13, 13, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(14, 28));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 13));
+    x = a64x_emit(x, arm64_word_mov_reg(12, 0));
+    x = a64x_emit(x, arm64_word_movz(15, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(15, 11));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 5));
+    x = a64x_emit(x, arm64_word_ldrb_reg(0, 9, 15));
+    x = a64x_emit(x, arm64_word_strb_reg(0, 14, 15));
+    x = a64x_emit(x, arm64_word_add_imm(15, 15, 1));
+    x = a64x_emit(x, arm64_word_b(-5));
+    x = a64x_emit(x, arm64_word_movz(15, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(15, 12));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 6));
+    x = a64x_emit(x, arm64_word_ldrb_reg(0, 10, 15));
+    x = a64x_emit(x, arm64_word_add_reg(1, 14, 11));
+    x = a64x_emit(x, arm64_word_strb_reg(0, 1, 15));
+    x = a64x_emit(x, arm64_word_add_imm(15, 15, 1));
+    x = a64x_emit(x, arm64_word_b(-6));
+    x = a64x_emit(x, arm64_word_add_reg(1, 14, 11));
+    x = a64x_emit(x, arm64_word_add_reg(1, 1, 12));
+    x = a64x_emit(x, arm64_word_strb_reg(31, 1, 31));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 14));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_isok(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "is_ok");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_movz(1, 1, 0));
+    x = a64x_emit(x, arm64_word_sub_reg(0, 1, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "is_err");
+    x = a64rt_prol(r.x);
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "is_some");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_movz(1, 1, 0));
+    x = a64x_emit(x, arm64_word_sub_reg(0, 1, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "is_none");
+    x = a64rt_prol(r.x);
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "unwrap");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 1));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 4));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    x = a64x_emit(x, arm64_word_movz(abi_sys_reg(), 93, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    return a64rt_setx(r, a64rt_epi(x));
+}

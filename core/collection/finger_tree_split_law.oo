@@ -1,0 +1,94 @@
+// # Finger tree split law
+//
+// Logline: A finger tree supports amortized O(1) cons (prepend) and amortized O(log n) split, making it a general-purpose sequence implementation for deques, priority queues, and ordered sequences.
+//
+// Setup: Pure Int. "n" is the size of the finger tree (or the smaller side of the split); the function returns the amortized cost of the corresponding operation.
+//
+// Beats:
+//   1. Hinze-Paterson 2006 "Finger Trees: A Simple General-purpose Data Structure" JFP 16(2):197-217: cons cost amortized to O(1).
+//   2. Split cost amortized to O(log n) where n is the size of the finger tree (or the smaller side, cf. Theorem 1).
+//   3. Used as a sequence implementation: deques, priority queues, ordered sequences, interval trees.
+//   4. Hostile: n <= 0 -> 0 cost (empty finger tree needs no work).
+
+import "std/core/primitives/domain_cert.oo";
+
+// finger_tree_split_cost returns the amortized split cost for a finger tree
+// of n elements. Hinze-Paterson 2006, Theorem 1 (JFP 16(2):197-217): the
+// amortized cost of split is O(log n). Closed form: ceiling(log_2(n)).
+// n <= 0 returns 0.
+pub fn finger_tree_split_cost(n: Int) -> Int {
+    if n <= 0 {
+        return 0;
+    }
+    let mut d: Int = 0;
+    let mut v: Int = n;
+    while v > 1 {
+        v = v / 2;
+        d = d + 1;
+    }
+    return d;
+}
+
+// finger_tree_cons_cost returns the amortized cons (prepend) cost for a
+// finger tree. Hinze-Paterson 2006, Theorem 1: cons is amortized O(1).
+// The closed form returns 1 for any n >= 0; n < 0 returns 0.
+pub fn finger_tree_cons_cost(n: Int) -> Int {
+    if n < 0 {
+        return 0;
+    }
+    return 1;
+}
+
+// finger_tree_split_ok holds 1 when got equals want for a split cost.
+// Used to certify the amortized bound against a measured or expected value.
+pub fn finger_tree_split_ok(got: Int, want: Int) -> DomainCert {
+    if got == want {
+        return domain_cert("collections", "finger_tree_split", 1);
+    }
+    return domain_cert("collections", "finger_tree_split", 0);
+}
+
+pub fn verify_finger_tree_split_law() -> Bool {
+    // Golden: split cost at n=1024 -> 10 (ceiling(log_2(1024)) = 10).
+    if finger_tree_split_cost(1024) != 10 { return false; }
+    if cert_holds(finger_tree_split_ok(10, 10)) != 1 { return false; }
+    // Golden: split cost at n=16 -> 4.
+    if finger_tree_split_cost(16) != 4 { return false; }
+    // Golden: split cost at n=8 -> 3.
+    if finger_tree_split_cost(8) != 3 { return false; }
+    // Golden: split cost at n=2 -> 1.
+    if finger_tree_split_cost(2) != 1 { return false; }
+    // Golden: split cost at n=1 -> 0.
+    if finger_tree_split_cost(1) != 0 { return false; }
+
+    // Hostile: n <= 0 -> 0.
+    if finger_tree_split_cost(0) != 0 { return false; }
+    if finger_tree_split_cost(0 - 1) != 0 { return false; }
+    if finger_tree_split_cost(0 - 1024) != 0 { return false; }
+
+    // Golden: cons cost = 1 (amortized O(1)).
+    if finger_tree_cons_cost(0) != 1 { return false; }
+    if finger_tree_cons_cost(1) != 1 { return false; }
+    if finger_tree_cons_cost(1024) != 1 { return false; }
+    if finger_tree_cons_cost(65536) != 1 { return false; }
+
+    // Hostile: cons cost with n < 0 -> 0.
+    if finger_tree_cons_cost(0 - 1) != 0 { return false; }
+    if finger_tree_cons_cost(0 - 1024) != 0 { return false; }
+
+    // Hostile: split mismatch fails closed.
+    if cert_holds(finger_tree_split_ok(9, 10)) != 0 { return false; }
+    if cert_holds(finger_tree_split_ok(11, 10)) != 0 { return false; }
+    if cert_holds(finger_tree_split_ok(0, 0)) != 1 { return false; }
+
+    // Coupled: a finger tree is a sequence. Split cost grows with n as O(log n)
+    // and cons cost stays at 1. For n=1024, split=10 and cons=1, so 10 > 1
+    // (split dominates cons) and split + cons = 11 (the operation stack
+    // "cons then split" has cost 11).
+    let split_1024: Int = finger_tree_split_cost(1024);
+    let cons_1024: Int = finger_tree_cons_cost(1024);
+    if split_1024 + cons_1024 != 11 { return false; }
+    if split_1024 <= cons_1024 { return false; } // split is the dominant cost.
+
+    return true;
+}

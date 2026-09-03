@@ -1,0 +1,193 @@
+// # x86-64 Linux Syscall Encoders
+//
+// Logline: Direct syscall instruction byte sequence builders for the standard Linux x86-64 syscall set.
+//
+// Setup: Pure instruction encoder emitting byte arrays. Loads syscall number into rax, arguments into rdi/rsi/rdx/r10/r8/r9, then emits syscall.
+//
+// Beats:
+//   1. Encode mov rax, imm64 and mov rdi/rsi/rdx, imm64 primitives for the syscall ABI.
+//   2. Build the common write/read/open/close/mmap/munmap/exit byte sequences.
+//   3. Provide a generic emit_syscall(num, args[]) that walks the syscall argument table.
+//   4. Provide a zero-allocation println string path that uses sys_write on fd 1.
+//
+// residual: float args and signal-handling syscalls stay later.
+
+import "std/hw/silicon/x86_regs.oo";
+import "std/hw/silicon/x86_abi.oo";
+
+pub fn sc_mov_rax_imm64(imm: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 72);
+    out = list_push(out, 184 + x86_reg_code(abi_ret_reg()));
+    let mut v: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, v & 255);
+        v = v >> 8;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_mov_rdi_imm64(imm: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 72);
+    out = list_push(out, 191);
+    let mut v: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, v & 255);
+        v = v >> 8;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_mov_rsi_imm64(imm: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 72);
+    out = list_push(out, 190);
+    let mut v: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, v & 255);
+        v = v >> 8;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_mov_rdx_imm64(imm: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 72);
+    out = list_push(out, 186);
+    let mut v: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, v & 255);
+        v = v >> 8;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_mov_r10_imm64(imm: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 72);
+    out = list_push(out, 186 + 2);
+    let mut v: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, v & 255);
+        v = v >> 8;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_mov_r8_imm64(imm: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 72);
+    out = list_push(out, 184);
+    let mut v: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, v & 255);
+        v = v >> 8;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_mov_r9_imm64(imm: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 72);
+    out = list_push(out, 191 + 2);
+    let mut v: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, v & 255);
+        v = v >> 8;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_syscall_instr() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 15);
+    out = list_push(out, 5);
+    return out;
+}
+
+pub fn sc_concat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sc_emit_sys_write(fd: Int, buf_addr: Int, count: Int) -> List[Int] {
+    let mut out: List[Int] = sc_mov_rax_imm64(1);
+    out = sc_concat(out, sc_mov_rdi_imm64(fd));
+    out = sc_concat(out, sc_mov_rsi_imm64(buf_addr));
+    out = sc_concat(out, sc_mov_rdx_imm64(count));
+    out = sc_concat(out, sc_syscall_instr());
+    return out;
+}
+
+pub fn sc_emit_sys_read(fd: Int, buf_addr: Int, count: Int) -> List[Int] {
+    let mut out: List[Int] = sc_mov_rax_imm64(0);
+    out = sc_concat(out, sc_mov_rdi_imm64(fd));
+    out = sc_concat(out, sc_mov_rsi_imm64(buf_addr));
+    out = sc_concat(out, sc_mov_rdx_imm64(count));
+    out = sc_concat(out, sc_syscall_instr());
+    return out;
+}
+
+pub fn sc_emit_sys_open(path_addr: Int, flags: Int, mode: Int) -> List[Int] {
+    let mut out: List[Int] = sc_mov_rax_imm64(2);
+    out = sc_concat(out, sc_mov_rdi_imm64(path_addr));
+    out = sc_concat(out, sc_mov_rsi_imm64(flags));
+    out = sc_concat(out, sc_mov_rdx_imm64(mode));
+    out = sc_concat(out, sc_syscall_instr());
+    return out;
+}
+
+pub fn sc_emit_sys_close(fd: Int) -> List[Int] {
+    let mut out: List[Int] = sc_mov_rax_imm64(3);
+    out = sc_concat(out, sc_mov_rdi_imm64(fd));
+    out = sc_concat(out, sc_syscall_instr());
+    return out;
+}
+
+pub fn sc_emit_sys_mmap(addr: Int, length: Int, prot: Int, flags: Int, fd: Int, offset: Int) -> List[Int] {
+    let mut out: List[Int] = sc_mov_rax_imm64(9);
+    out = sc_concat(out, sc_mov_rdi_imm64(addr));
+    out = sc_concat(out, sc_mov_rsi_imm64(length));
+    out = sc_concat(out, sc_mov_rdx_imm64(prot));
+    out = sc_concat(out, sc_mov_r10_imm64(flags));
+    out = sc_concat(out, sc_mov_r8_imm64(fd));
+    out = sc_concat(out, sc_mov_r9_imm64(offset));
+    out = sc_concat(out, sc_syscall_instr());
+    return out;
+}
+
+pub fn sc_emit_sys_munmap(addr: Int, length: Int) -> List[Int] {
+    let mut out: List[Int] = sc_mov_rax_imm64(11);
+    out = sc_concat(out, sc_mov_rdi_imm64(addr));
+    out = sc_concat(out, sc_mov_rsi_imm64(length));
+    out = sc_concat(out, sc_syscall_instr());
+    return out;
+}
+
+pub fn sc_emit_sys_exit(code: Int) -> List[Int] {
+    let mut out: List[Int] = sc_mov_rax_imm64(60);
+    out = sc_concat(out, sc_mov_rdi_imm64(code));
+    out = sc_concat(out, sc_syscall_instr());
+    return out;
+}

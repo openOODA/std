@@ -1,0 +1,50 @@
+// # Argv command builder
+//
+// Logline: Build a program-plus-args list and execute it under ProcessCap without ambient shell.
+//
+// Setup: Import std/os/process.oo. Caller passes &ProcessCap. First list element is the program.
+//
+// Beats:
+//   1. cmd_new starts a list with the program name.
+//   2. cmd_arg pushes one argument.
+//   3. cmd_execute maps up to five args to sys_exec; arity > 5 fails closed (no sh -c).
+
+import "std/fs/process/process.oo";
+
+// A command is simply a List[String] where the first element is the program,
+// and the subsequent elements are arguments.
+pub fn cmd_new(prog: String) -> List[String] {
+    let mut cmd: List[String] = list_new();
+    cmd = list_push(cmd, prog);
+    return cmd;
+}
+
+// Add an argument to the command.
+pub fn cmd_arg(cmd: List[String], arg: String) -> List[String] {
+    return list_push(cmd, arg);
+}
+
+// Execute the command directly via sys_exec (without relying on sh -c).
+// Arity > 5 fails closed rather than falling back to shell interpolation.
+pub fn cmd_execute(cmd: List[String], p: &ProcessCap) -> Result[String, String] {
+    let n: Int = list_len(cmd);
+    if n == 0 {
+        return Err("empty command");
+    }
+    if n > 5 {
+        return Err("cmd_execute: arity > 5 not supported; refusing shell fallback");
+    }
+
+    let prog: String = list_get(cmd, 0);
+
+    if n == 1 {
+        return sys_exec(p, prog);
+    } else if n == 2 {
+        return sys_exec(p, prog, list_get(cmd, 1));
+    } else if n == 3 {
+        return sys_exec(p, prog, list_get(cmd, 1), list_get(cmd, 2));
+    } else if n == 4 {
+        return sys_exec(p, prog, list_get(cmd, 1), list_get(cmd, 2), list_get(cmd, 3));
+    }
+    return sys_exec(p, prog, list_get(cmd, 1), list_get(cmd, 2), list_get(cmd, 3), list_get(cmd, 4));
+}

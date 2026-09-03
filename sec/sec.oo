@@ -1,0 +1,65 @@
+// # Unified Active Binary Defense and Memory Morpher Facade
+//
+// Logline: Exposes unified control flow flattening, stack-transient string encryption, and autonomic RASP watchdog APIs.
+//
+// Setup: Cap-checked. Requires unforgeable &SysCap capability token for live memory integrity scanning and rollback.
+//
+// Beats:
+//   1. Re-export control flow flattening and quadratic residue opaque predicate evaluators.
+//   2. Re-export stack-transient string encryption and volatile memory zeroization barriers.
+//   3. Re-export autonomic RASP integrity scanners, rollback restorers, and fail-closed aborts.
+
+import "./control/dispatcher_engine.oo";
+import "./string_encrypt/string_crypto.oo";
+import "./string_encrypt/stack_zeroizer.oo";
+import "./rasp/memory_watchdog.oo";
+import "./rasp/tamper_rollback.oo";
+
+pub fn sec_defense_version() -> String {
+    return "openOODA Sovereign Active Binary Defense v1.0.0";
+}
+
+pub fn sec_full_defense_pipeline_check(
+    sys: &SysCap,
+    master: GoldMasterImage,
+    payload: EncryptedStringPayload
+) -> Bool {
+    // 0. Verify dispatch loop integrity
+    let dummy_b: FlattenBlock = flatten_block_new(1, 1, 2, -1, true);
+    let mut dummy_list: List[FlattenBlock] = list_new();
+    dummy_list = list_push(dummy_list, dummy_b);
+    let dummy_loop: FlattenedDispatchLoop = dispatcher_engine_flatten(dummy_list, 42);
+    if !dispatcher_verify_integrity(dummy_loop) {
+        return false;
+    }
+
+    // 1. Verify opaque predicate invariant
+    if !opaque_predicate_eval(17, 29) {
+        return false;
+    }
+
+    // 2. Decrypt string and verify zeroization
+    let plain_bytes: List[Int] = string_crypto_decrypt(payload);
+    if list_len(plain_bytes) == 0 {
+        return false;
+    }
+    stack_zeroizer_wipe(plain_bytes);
+
+    // 3. Scan memory watchdog integrity
+    let report_res: Result[RaspIntegrityReport, String] = memory_watchdog_scan(sys, master);
+    match report_res {
+        Ok(rep)                => {
+            if !rep.is_intact {
+                let rollback_res: Result[Bool, String] = tamper_rollback_execute(sys, rep);
+                match rollback_res {
+                    Ok(ok_val) => { return ok_val; },
+                    Err(_)     => { return false; }
+                }
+            }
+            return true;
+        },
+        Err(_) => {
+            return false;
+        }
+    }
+}

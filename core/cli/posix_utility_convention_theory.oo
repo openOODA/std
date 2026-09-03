@@ -1,0 +1,167 @@
+// # POSIX.1-2017 §12.2 utility convention theory
+//
+// Logline: per POSIX.1-2017 §12.2 Utility Conventions, options are single ASCII letters preceded by '-'; posix_opt_count scans argv and reports how many leading tokens are short options of that exact shape.
+//
+// Setup: Pure Int. No FS, no process. Coupling is with GNU getopt_long in std/cli/optparse_long_options_law.oo, which covers the long-option namespace.
+// Source: POSIX.1-2017, Base Definitions, §12.2 Utility Conventions (option: "name of an argument beginning with '-' of the form -c where c is a single letter").
+//
+// Beats:
+//   1. posix_opt_is_short(c) returns 1 iff c is a single ASCII letter [A-Za-z].
+//   2. posix_opt_count(argv) counts argv tokens of the form "-X" with X a single letter.
+//   3. Hostile multi-char ("--foo") and bare "-" tokens contribute 0; unknown bytes contribute 0.
+//   4. Coupled with GNU getopt_long: short options live in the "-X" namespace; long options live in the "--name" namespace.
+
+import "std/core/primitives/domain_cert.oo";
+
+// ASCII 45 = '-', 65 = 'A', 90 = 'Z', 97 = 'a', 122 = 'z'.
+// Source: POSIX.1-2017 §6.1 Character Set; RFC 20 / ASCII 1968.
+fn byte_dash() -> Int { return 45; }
+fn byte_eq() -> Int { return 61; }
+
+// 1 if c is exactly one ASCII letter [A-Za-z]; 0 otherwise.
+// Source: POSIX.1-2017 §12.2 — "single letter".
+pub fn posix_opt_is_short(c: String) -> Int {
+    let n: Int = c.len();
+    if n != 1 { return 0; }
+    let b: Int = byte_at(c, 0);
+    if b >= 65 {
+        if b <= 90 { return 1; }
+    }
+    if b >= 97 {
+        if b <= 122 { return 1; }
+    }
+    return 0;
+}
+
+// Count the number of argv entries that are valid short options "-X" with X a letter.
+// Source: POSIX.1-2017 §12.2 Utility Conventions, Guideline 1: "options are single letters preceded by '-'".
+// Each token of length 2, starting with '-', with an ASCII letter in position 1, adds 1.
+pub fn posix_opt_count(argv: List[String]) -> Int {
+    let n: Int = list_len(argv);
+    let mut i: Int = 0;
+    let mut c: Int = 0;
+    while i < n {
+        let tok: String = list_get(argv, i);
+        let tl: Int = tok.len();
+        if tl == 2 {
+            if byte_at(tok, 0) == byte_dash() {
+                let b: Int = byte_at(tok, 1);
+                if b >= 65 && b <= 90 { c = c + 1; }
+                if b >= 97 && b <= 122 { c = c + 1; }
+            }
+        }
+        i = i + 1;
+    }
+    return c;
+}
+
+// 1 if the count matches the published POSIX count for the given argv shape.
+// Used to expose the holds bit for domain_cert.
+pub fn posix_opt_count_is(expected: Int, argv: List[String]) -> Int {
+    let got: Int = posix_opt_count(argv);
+    if got == expected { return 1; }
+    return 0;
+}
+
+// domain_cert wrapper for the theory.
+pub fn posix_utility_theory_holds(expected: Int, argv: List[String]) -> DomainCert {
+    let v: Int = posix_opt_count_is(expected, argv);
+    return domain_cert("cli", "posix_utility_convention_theory", v);
+}
+
+// The two published namespaces: short is "-X", long is "--name" / "--name=value".
+// Source: POSIX.1-2017 §12.2 (short); GNU getopt_long (Fogel 1994+) (long).
+pub fn posix_namespace_short() -> Int { return 1; }
+pub fn posix_namespace_long() -> Int { return 2; }
+
+pub fn verify_posix_utility_convention_theory() -> Bool {
+    // is_short: 1-letter input [A-Za-z] returns 1.
+    if posix_opt_is_short("a") != 1 { return false; }
+    if posix_opt_is_short("z") != 1 { return false; }
+    if posix_opt_is_short("A") != 1 { return false; }
+    if posix_opt_is_short("Z") != 1 { return false; }
+    if posix_opt_is_short("m") != 1 { return false; }
+
+    // is_short: digits, symbols, and multi-char inputs return 0.
+    if posix_opt_is_short("0") != 0 { return false; }
+    if posix_opt_is_short("9") != 0 { return false; }
+    if posix_opt_is_short("-") != 0 { return false; }
+    if posix_opt_is_short("=") != 0 { return false; }
+    if posix_opt_is_short("") != 0 { return false; }
+    if posix_opt_is_short("ab") != 0 { return false; }
+    if posix_opt_is_short("abc") != 0 { return false; }
+
+    // Count: golden "-a -b -c" -> 3 short options.
+    let a1: List[String] = list_new();
+    let a2: List[String] = list_push(a1, "-a");
+    let a3: List[String] = list_push(a2, "-b");
+    let a4: List[String] = list_push(a3, "-c");
+    if posix_opt_count(a4) != 3 { return false; }
+
+    // Count: golden "-a -b" -> 2.
+    let b1: List[String] = list_new();
+    let b2: List[String] = list_push(b1, "-a");
+    let b3: List[String] = list_push(b2, "-b");
+    if posix_opt_count(b3) != 2 { return false; }
+
+    // Count: single option "-v" -> 1.
+    let c1: List[String] = list_new();
+    let c2: List[String] = list_push(c1, "-v");
+    if posix_opt_count(c2) != 1 { return false; }
+
+    // Count: hostile multi-char non-flag "--foo" -> 0.
+    let d1: List[String] = list_new();
+    let d2: List[String] = list_push(d1, "--foo");
+    if posix_opt_count(d2) != 0 { return false; }
+
+    // Count: hostile digit option "-9" -> 0 (digit is not a letter).
+    let e1: List[String] = list_new();
+    let e2: List[String] = list_push(e1, "-9");
+    if posix_opt_count(e2) != 0 { return false; }
+
+    // Count: hostile bare "-" -> 0.
+    let f1: List[String] = list_new();
+    let f2: List[String] = list_push(f1, "-");
+    if posix_opt_count(f2) != 0 { return false; }
+
+    // Count: empty argv -> 0.
+    let g0: List[String] = list_new();
+    if posix_opt_count(g0) != 0 { return false; }
+
+    // Count: mixed short + long: "-x --name -y" -> 2 short options.
+    let h1: List[String] = list_new();
+    let h2: List[String] = list_push(h1, "-x");
+    let h3: List[String] = list_push(h2, "--name");
+    let h4: List[String] = list_push(h3, "-y");
+    if posix_opt_count(h4) != 2 { return false; }
+
+    // Count: with positional "file.txt" -> 0 short options.
+    let k1: List[String] = list_new();
+    let k2: List[String] = list_push(k1, "file.txt");
+    if posix_opt_count(k2) != 0 { return false; }
+
+    // count_is: equality wrapper holds for golden and rejects hostile.
+    let m1: List[String] = list_new();
+    let m2: List[String] = list_push(m1, "-a");
+    let m3: List[String] = list_push(m2, "-b");
+    if posix_opt_count_is(2, m3) != 1 { return false; }
+    if posix_opt_count_is(3, m3) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the holds bit.
+    let p1: List[String] = list_new();
+    let p2: List[String] = list_push(p1, "-a");
+    let p3: List[String] = list_push(p2, "-b");
+    let p4: List[String] = list_push(p3, "-c");
+    let c_good: DomainCert = posix_utility_theory_holds(3, p4);
+    if c_good.domain != "cli" { return false; }
+    if c_good.law_name != "posix_utility_convention_theory" { return false; }
+    if c_good.holds != 1 { return false; }
+    let c_bad: DomainCert = posix_utility_theory_holds(2, p4);
+    if c_bad.holds != 0 { return false; }
+
+    // namespace constants.
+    if posix_namespace_short() != 1 { return false; }
+    if posix_namespace_long() != 2 { return false; }
+
+    return true;
+}

@@ -1,0 +1,157 @@
+// # Homeostasis negative-feedback internal-state regulation principle
+//
+// Logline: A regulated variable returns toward a set-point after perturbation; the controller output is proportional to the deviation. Illegal gain or decay returns Err.
+//
+// Setup: Pure Float. Set-points and gains are caller-supplied; the principle is unit-agnostic.
+//
+// Beats:
+//   1. Compute regulated variable next state under proportional negative feedback.
+//   2. Compute controller output as gain times (set-point - measured).
+//   3. Classify state relative to tolerance band around set-point. Negative tolerance returns Err. In-band is Ok(0).
+//   4. Hostile negative gain, non-positive-path decay, or decay > 1 return Err.
+//   5. Zero deviation yields Ok(0) controller output.
+
+pub fn homeo_controller_output(setpoint: Float, measured: Float, gain: Float) -> Result[Float, String] {
+    if gain < 0.0 {
+        return Err("ERR\thm\tdomain");
+    }
+    return Ok(gain * (setpoint - measured));
+}
+
+pub fn homeo_next_state(
+    setpoint: Float,
+    measured: Float,
+    gain: Float,
+    decay: Float
+) -> Result[Float, String] {
+    if gain < 0.0 {
+        return Err("ERR\thm\tdomain");
+    }
+    if decay < 0.0 {
+        return Err("ERR\thm\tdomain");
+    }
+    if decay > 1.0 {
+        return Err("ERR\thm\tdomain");
+    }
+    let correction: Float = gain * (setpoint - measured);
+    let mut new_state: Float = measured + correction;
+    if decay > 0.0 {
+        new_state = measured + (correction * decay);
+    }
+    return Ok(new_state);
+}
+
+pub fn homeo_state_class(setpoint: Float, measured: Float, tolerance: Float) -> Result[Int, String] {
+    if tolerance < 0.0 { return Err("ERR\thm\tdomain"); }
+    let mut diff: Float = measured - setpoint;
+    if diff < 0.0 {
+        diff = 0.0 - diff;
+    }
+    if diff <= tolerance {
+        return Ok(0);
+    }
+    if measured > setpoint {
+        return Ok(1);
+    }
+    return Ok(0 - 1);
+}
+
+pub fn homeo_steady_state_error(
+    setpoint: Float,
+    measured: Float,
+    gain: Float
+) -> Result[Float, String] {
+    if gain < 0.0 {
+        return Err("ERR\thm\tdomain");
+    }
+    if gain >= 1.0 {
+        return Ok(measured);
+    }
+    let err: Float = setpoint - measured;
+    let corrected: Float = measured + (gain * err);
+    let new_err: Float = setpoint - corrected;
+    return Ok(new_err);
+}
+
+fn hm_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn hm_cls_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 2; } }
+}
+
+pub fn verify_homeostasis_principle() -> Bool {
+    let out_zero: Float = hm_got(homeo_controller_output(37.0, 37.0, 0.5));
+    if out_zero != 0.0 {
+        return false;
+    }
+
+    let out_high: Float = hm_got(homeo_controller_output(37.0, 40.0, 0.5));
+    if out_high >= 0.0 {
+        return false;
+    }
+
+    let out_low: Float = hm_got(homeo_controller_output(37.0, 35.0, 0.5));
+    if out_low <= 0.0 {
+        return false;
+    }
+
+    let next: Float = hm_got(homeo_next_state(37.0, 40.0, 0.5, 1.0));
+    let mut d: Float = next - 38.5;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+
+    let mut s: Float = 40.0;
+    let mut step: Int = 0;
+    while step < 5 {
+        s = hm_got(homeo_next_state(37.0, s, 0.5, 1.0));
+        step = step + 1;
+    }
+    let mut diff_initial: Float = 40.0 - 37.0;
+    if diff_initial < 0.0 {
+        diff_initial = 0.0 - diff_initial;
+    }
+    let mut diff_final: Float = s - 37.0;
+    if diff_final < 0.0 {
+        diff_final = 0.0 - diff_final;
+    }
+    if diff_final >= diff_initial {
+        return false;
+    }
+
+    let inband: Result[Int, String] = homeo_state_class(37.0, 37.0, 0.5);
+    if inband.is_ok() == false { return false; }
+    if hm_cls_got(inband) != 0 {
+        return false;
+    }
+    if hm_cls_got(homeo_state_class(37.0, 37.4, 0.5)) != 0 {
+        return false;
+    }
+    if hm_cls_got(homeo_state_class(37.0, 40.0, 0.5)) != 1 {
+        return false;
+    }
+    if hm_cls_got(homeo_state_class(37.0, 34.0, 0.5)) != 0 - 1 {
+        return false;
+    }
+
+    let err1: Float = hm_got(homeo_steady_state_error(37.0, 40.0, 0.5));
+    let mut diff_err: Float = err1 - (0.0 - 1.5);
+    if diff_err < 0.0 {
+        diff_err = 0.0 - diff_err;
+    }
+    if diff_err > 0.0000001 {
+        return false;
+    }
+
+    if homeo_controller_output(37.0, 40.0, 0.0 - 0.5).is_ok() { return false; }
+    if homeo_next_state(37.0, 40.0, 0.5, 0.0 - 0.1).is_ok() { return false; }
+    if homeo_next_state(37.0, 40.0, 0.5, 1.5).is_ok() { return false; }
+    if homeo_state_class(37.0, 40.0, 0.0 - 0.1).is_ok() { return false; }
+    if homeo_steady_state_error(37.0, 40.0, 0.0 - 0.5).is_ok() { return false; }
+    return true;
+}

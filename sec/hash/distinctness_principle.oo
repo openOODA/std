@@ -1,0 +1,67 @@
+// # Hash distinctness principle
+//
+// Logline: A good hash has low collision rate; hash_distinctness_score returns 1 iff fewer than 5% of the seen hashes are duplicates.
+//
+// Setup: Pure Int. seen_hashes is the number of distinct outputs; count is the total number of inputs sampled. Non-positive count, negative seen, or seen > count fails closed (0).
+//
+// Beats:
+//   1. dup = count - seen_hashes; threshold is dup * 100 < count * 5 (strict < 5%).
+//   2. 100/100 -> score 1 (no duplicates).
+//   3. 0/100 -> score 0 (all duplicates).
+//   4. Boundary: 95/100 -> score 1 (5% duplicates is not strictly less than 5%).
+//   5. 94/100 -> score 0 (6% duplicates exceeds the 5% threshold).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Quantitative distinctness score.
+// Returns 1 iff (count - seen_hashes) / count < 5% strictly.
+// Returns 0 for invalid inputs or duplicates >= 5%.
+pub fn hash_distinctness_score(seen_hashes: Int, count: Int) -> Int {
+    if count <= 0 {
+        return 0;
+    }
+    if seen_hashes < 0 {
+        return 0;
+    }
+    if seen_hashes > count {
+        return 0;
+    }
+    let dup: Int = count - seen_hashes;
+    if (dup * 100) < (count * 5) {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn hash_distinctness_principle(seen_hashes: Int, count: Int) -> DomainCert {
+    return domain_cert("hash", "distinctness", hash_distinctness_score(seen_hashes, count));
+}
+
+pub fn verify_distinctness_principle() -> Bool {
+    // Golden: 100 unique of 100 inputs => no duplicates => score 1.
+    if hash_distinctness_score(100, 100) != 1 { return false; }
+    // Golden: 1 unique of 1 => score 1.
+    if hash_distinctness_score(1, 1) != 1 { return false; }
+    // Golden: 95/100 is at the boundary (5% dup is NOT strictly < 5%) => score 0.
+    if hash_distinctness_score(95, 100) != 0 { return false; }
+    // Golden: 96/100 (4% dup) => score 1.
+    if hash_distinctness_score(96, 100) != 1 { return false; }
+    // Hostile: 0/100 => all duplicates => score 0.
+    if hash_distinctness_score(0, 100) != 0 { return false; }
+    // Hostile: 1/100 => 99% dup => score 0.
+    if hash_distinctness_score(1, 100) != 0 { return false; }
+    // Hostile: 50/100 => 50% dup => score 0.
+    if hash_distinctness_score(50, 100) != 0 { return false; }
+    // Hostile: negative count fails closed.
+    if hash_distinctness_score(10, -1) != 0 { return false; }
+    // Hostile: zero count fails closed.
+    if hash_distinctness_score(0, 0) != 0 { return false; }
+    // Hostile: negative seen fails closed.
+    if hash_distinctness_score(-1, 100) != 0 { return false; }
+    // Hostile: seen > count fails closed.
+    if hash_distinctness_score(101, 100) != 0 { return false; }
+    // DomainCert: 100/100 holds, 0/100 does not hold.
+    if hash_distinctness_principle(100, 100).holds != 1 { return false; }
+    if hash_distinctness_principle(0, 100).holds != 0 { return false; }
+    return true;
+}

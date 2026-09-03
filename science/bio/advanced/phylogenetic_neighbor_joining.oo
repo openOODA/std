@@ -1,0 +1,81 @@
+// # Saitou-Nei Neighbor-Joining (NJ) Phylogenetic Tree Builder
+//
+// Logline: Reconstructs unrooted phylogenetic trees from distance matrices using the Saitou-Nei Neighbor-Joining algorithm without molecular clock assumptions.
+//
+// Setup: Distance-based evolutionary tree reconstruction module calculating Q-matrix criterion scores.
+//
+// Beats:
+//   1. Define NjNode and NjQMatrixEntry data structures.
+//   2. Calculate net divergence r(i) = sum_k(d(i, k)) / (n - 2) and Q-matrix: Q(i, j) = (n - 2)*d(i, j) - r(i) - r(j).
+//   3. Compute branch lengths from newly created internal nodes to joining taxon pairs.
+
+type NjNode = struct {
+    node_id: Int,
+    name: String,
+    branch_length: Float,
+    is_leaf: Bool
+};
+
+type NjQMatrixEntry = struct {
+    taxon_i: Int,
+    taxon_j: Int,
+    q_value: Float
+};
+
+pub fn nj_calc_r_value(sum_dist_i: Float, active_taxa_count: Int) -> Float {
+    if active_taxa_count <= 2 { return 0.0; }
+    let denom: Float = phylogenetic_neighbor_joining_to_f(active_taxa_count) - 2.0;    return sum_dist_i / denom;
+}
+
+pub fn nj_calc_q_score(d_ij: Float, sum_dist_i: Float, sum_dist_j: Float, n_taxa: Int) -> Float {
+    if n_taxa <= 2 { return d_ij; }
+    let factor: Float = phylogenetic_neighbor_joining_to_f(n_taxa) - 2.0;    let term1: Float = factor * d_ij;    return term1 - sum_dist_i - sum_dist_j;
+}
+
+pub fn nj_calc_branch_lengths(d_ij: Float, sum_dist_i: Float, sum_dist_j: Float, n_taxa: Int) -> List[Float] {
+    let mut lengths: List[Float] = list_new();
+    if n_taxa <= 2 {
+        let half: Float = d_ij / 2.0;        list_push(lengths, half);
+        list_push(lengths, half);
+        return lengths;
+    }
+
+    let denom: Float = phylogenetic_neighbor_joining_to_f(n_taxa) - 2.0;    let r_i: Float = sum_dist_i / denom;    let r_j: Float = sum_dist_j / denom;
+    let r_diff: Float = r_i - r_j;    let b_i: Float = (0.5 * d_ij) + (0.5 * r_diff);    let b_j: Float = d_ij - b_i;
+    list_push(lengths, if b_i >= 0.0 { b_i } else { 0.0 });
+    list_push(lengths, if b_j >= 0.0 { b_j } else { 0.0 });
+    return lengths;
+}
+
+
+fn phylogenetic_neighbor_joining_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

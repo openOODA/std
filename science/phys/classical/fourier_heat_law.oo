@@ -1,0 +1,107 @@
+// # Fourier Law of Heat Conduction
+//
+// Logline: One-dimensional heat flux q = -k * dT/dx through a solid material.
+//
+// Setup: Pure Float. k > 0, A > 0. Zero gradient is Ok(0). Hosts carnot.oo stem.
+//
+// Beats:
+//   1. Heat flux density q = -k * dT/dx (W/m^2).
+//   2. Heat rate Q = -k * A * dT/dx (W) through a flat area.
+//   3. Thermal resistance R = L / (k * A) (K/W) for a slab of thickness L.
+//   4. Series thermal resistance and total heat rate through a wall.
+
+import "std/science/phys/classical/carnot.oo";
+
+fn fh_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn fourier_heat_flux(conductivity: Float, temp_gradient_k_per_m: Float) -> Result[Float, String] {
+    if conductivity <= 0.0 { return Err("ERR\tfh\tk"); }
+    if temp_gradient_k_per_m < 0.0 { return Err("ERR\tfh\tgrad"); }
+    return Ok(conductivity * temp_gradient_k_per_m);
+}
+
+pub fn fourier_heat_rate(
+    conductivity: Float,
+    area_m2: Float,
+    thickness_m: Float,
+    t_hot: Float,
+    t_cold: Float
+) -> Result[Float, String] {
+    if conductivity <= 0.0 { return Err("ERR\tfh\tk"); }
+    if area_m2 <= 0.0 { return Err("ERR\tfh\tA"); }
+    if thickness_m <= 0.0 { return Err("ERR\tfh\tL"); }
+    if t_hot <= 0.0 { return Err("ERR\tfh\tth"); }
+    if t_cold <= 0.0 { return Err("ERR\tfh\ttc"); }
+    if t_hot < t_cold { return Err("ERR\tfh\torder"); }
+    if t_hot == t_cold { return Ok(0.0); }
+    let carnot_ok: Float = carnot_efficiency(t_hot, t_cold);
+    if carnot_ok < 0.0 { return Err("ERR\tfh\tcarnot"); }
+    let dt: Float = t_hot - t_cold;
+    return Ok((conductivity * area_m2 * dt) / thickness_m);
+}
+
+pub fn fourier_thermal_resistance(conductivity: Float, area_m2: Float, thickness_m: Float) -> Result[Float, String] {
+    if conductivity <= 0.0 { return Err("ERR\tfh\tk"); }
+    if area_m2 <= 0.0 { return Err("ERR\tfh\tA"); }
+    if thickness_m <= 0.0 { return Err("ERR\tfh\tL"); }
+    return Ok(thickness_m / (conductivity * area_m2));
+}
+
+pub fn fourier_resistance_series(r_list: List[Float]) -> Result[Float, String] {
+    let n: Int = list_len(r_list);
+    if n <= 0 { return Err("ERR\tfh\tempty"); }
+    let mut total: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let r: Float = list_get(r_list, i);
+        if r <= 0.0 { return Err("ERR\tfh\tr"); }
+        total = total + r;
+        i = i + 1;
+    }
+    return Ok(total);
+}
+
+pub fn fourier_wall_heat_rate(t_hot: Float, t_cold: Float, r_total: Float) -> Result[Float, String] {
+    if t_hot <= 0.0 { return Err("ERR\tfh\tth"); }
+    if t_cold <= 0.0 { return Err("ERR\tfh\ttc"); }
+    if r_total <= 0.0 { return Err("ERR\tfh\tr"); }
+    if t_hot < t_cold { return Err("ERR\tfh\torder"); }
+    if t_hot == t_cold { return Ok(0.0); }
+    return Ok((t_hot - t_cold) / r_total);
+}
+
+pub fn verify_fourier_heat_law() -> Bool {
+    let q_grad: Float = fh_got(fourier_heat_flux(0.5, 100.0));
+    let mut dq: Float = q_grad - 50.0;
+    if dq < 0.0 { dq = 0.0 - dq; }
+    if dq > 0.0001 { return false; }
+    if fh_got(fourier_heat_flux(0.5, 0.0)) != 0.0 { return false; }
+    let q_rate: Float = fh_got(fourier_heat_rate(0.5, 2.0, 0.1, 400.0, 300.0));
+    let target: Float = (0.5 * 2.0 * 100.0) / 0.1;
+    let mut dq2: Float = q_rate - target;
+    if dq2 < 0.0 { dq2 = 0.0 - dq2; }
+    if dq2 > 0.0001 { return false; }
+    if fh_got(fourier_heat_rate(0.5, 1.0, 0.1, 300.0, 300.0)) != 0.0 { return false; }
+    let r_slab: Float = fh_got(fourier_thermal_resistance(0.5, 2.0, 0.1));
+    let target_r: Float = 0.1 / (0.5 * 2.0);
+    let mut dr: Float = r_slab - target_r;
+    if dr < 0.0 { dr = 0.0 - dr; }
+    if dr > 0.0001 { return false; }
+    if fourier_heat_flux(0.0, 100.0).is_ok() { return false; }
+    if fourier_heat_flux(0.5, 0.0 - 50.0).is_ok() { return false; }
+    if fourier_heat_rate(0.0, 1.0, 0.1, 400.0, 300.0).is_ok() { return false; }
+    if fourier_heat_rate(0.5, 1.0, 0.1, 300.0, 400.0).is_ok() { return false; }
+    if fourier_heat_rate(0.5, 1.0, 0.0, 400.0, 300.0).is_ok() { return false; }
+    if fourier_thermal_resistance(0.0, 1.0, 0.1).is_ok() { return false; }
+    if fourier_thermal_resistance(0.5, 0.0, 0.1).is_ok() { return false; }
+    let mut rs: List[Float] = list_new();
+    rs = list_push(rs, 0.1);
+    rs = list_push(rs, 0.2);
+    let series_total: Float = fh_got(fourier_resistance_series(rs));
+    let mut dseries: Float = series_total - 0.3;
+    if dseries < 0.0 { dseries = 0.0 - dseries; }
+    if dseries > 0.0001 { return false; }
+    return true;
+}

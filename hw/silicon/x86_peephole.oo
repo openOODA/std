@@ -1,0 +1,234 @@
+// # x86-64 Peephole and Branchless Optimization
+//
+// Logline: Convert branches into branchless CMOV sequences, fold multiplications by constants into LEA shift/add chains, and eliminate dead MOV and stack stores.
+//
+// Setup: Operates on flat x86-64 byte streams. Patterns are matched on the raw opcode stream and rewritten in place.
+//
+// Beats:
+//   1. Replace CMP+JE/JNE branches with CMOVE/CMOVNE branchless conditional moves.
+//   2. Optimize IMUL by 2/3/4/5/8/9 into single LEA shift/add chains.
+//   3. Eliminate redundant register-to-register MOV (xor self or mov same, same) and dead stack writes.
+//   4. Apply a peephole pass over a code byte list and return the optimized stream.
+//
+// residual: full data-flow analysis, SCCP, GVN stay later.
+
+import "std/hw/silicon/x86_regs.oo";
+import "std/hw/silicon/x86_abi.oo";
+
+pub fn php_cmov_rr(cond: Int, dst: Int, src: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if x86_is_extended(dst) || x86_is_extended(src) {
+        out = list_push(out, 72);
+    }
+    out = list_push(out, 15);
+    out = list_push(out, 64 + cond);
+    out = list_push(out, (3 << 6) | ((x86_reg_code(src) & 7) << 3) | (x86_reg_code(dst) & 7));
+    return out;
+}
+
+pub fn php_cmove(dst: Int, src: Int) -> List[Int] {
+    return php_cmov_rr(4, dst, src);
+}
+
+pub fn php_cmovne(dst: Int, src: Int) -> List[Int] {
+    return php_cmov_rr(5, dst, src);
+}
+
+pub fn php_cmovl(dst: Int, src: Int) -> List[Int] {
+    return php_cmov_rr(12, dst, src);
+}
+
+pub fn php_cmovle(dst: Int, src: Int) -> List[Int] {
+    return php_cmov_rr(14, dst, src);
+}
+
+pub fn php_cmovg(dst: Int, src: Int) -> List[Int] {
+    return php_cmov_rr(15, dst, src);
+}
+
+pub fn php_cmovge(dst: Int, src: Int) -> List[Int] {
+    return php_cmov_rr(13, dst, src);
+}
+
+pub fn php_lea_sh1_add(dst: Int, base: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if x86_is_extended(dst) || x86_is_extended(base) {
+        out = list_push(out, 72);
+    }
+    out = list_push(out, 141);
+    out = list_push(out, (x86_reg_code(base) & 7) | ((x86_reg_code(base) & 7) << 3));
+    return out;
+}
+
+pub fn php_lea_sh2_add(dst: Int, base: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if x86_is_extended(dst) || x86_is_extended(base) {
+        out = list_push(out, 72);
+    }
+    out = list_push(out, 141);
+    out = list_push(out, (x86_reg_code(base) & 7) | ((x86_reg_code(base) & 7) << 3) | 64);
+    return out;
+}
+
+pub fn php_lea_sh3_add(dst: Int, base: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if x86_is_extended(dst) || x86_is_extended(base) {
+        out = list_push(out, 72);
+    }
+    out = list_push(out, 141);
+    out = list_push(out, (x86_reg_code(base) & 7) | ((x86_reg_code(base) & 7) << 3) | 128);
+    return out;
+}
+
+pub fn php_lea_4x(base: Int) -> List[Int] {
+    let mut out: List[Int] = php_lea_sh2_add(0, base);
+    return out;
+}
+
+pub fn php_lea_5x(base: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if x86_is_extended(base) {
+        out = list_push(out, 72);
+    }
+    out = list_push(out, 141);
+    out = list_push(out, (x86_reg_code(base) & 7) | ((x86_reg_code(base) & 7) << 3) | 64);
+    out = php_concat(out, php_lea_sh1_add(0, 0));
+    return out;
+}
+
+pub fn php_lea_8x(base: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if x86_is_extended(base) {
+        out = list_push(out, 72);
+    }
+    out = list_push(out, 141);
+    out = list_push(out, (x86_reg_code(base) & 7) | ((x86_reg_code(base) & 7) << 3) | 128);
+    return out;
+}
+
+pub fn php_lea_9x(base: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if x86_is_extended(base) {
+        out = list_push(out, 72);
+    }
+    out = list_push(out, 141);
+    out = list_push(out, (x86_reg_code(base) & 7) | ((x86_reg_code(base) & 7) << 3) | 128);
+    out = php_concat(out, php_lea_sh1_add(0, 0));
+    return out;
+}
+
+pub fn php_mul_by_const(k: Int) -> List[Int] {
+    if k == 0 { return list_new(); }
+    if k == 1 { return list_new(); }
+    if k == 2 { return php_lea_sh1_add(0, 0); }
+    if k == 3 {
+        let mut out: List[Int] = list_new();
+        out = php_concat(out, php_lea_sh1_add(0, 0));
+        out = php_concat(out, php_lea_sh1_add(0, 0));
+        return out;
+    }
+    if k == 4 { return php_lea_sh2_add(0, 0); }
+    if k == 5 { return php_lea_5x(0); }
+    if k == 8 { return php_lea_8x(0); }
+    if k == 9 { return php_lea_9x(0); }
+    return list_new();
+}
+
+pub fn php_is_redundant_mov(b: List[Int], off: Int) -> Bool {
+    let n: Int = list_len(b);
+    if off + 3 > n { return false; }
+    let b0: Int = list_get(b, off);
+    let b1: Int = list_get(b, off + 1);
+    let b2: Int = list_get(b, off + 2);
+    if b0 == 72 && b1 == 49 && (b2 & 199) == 192 {
+        return true;
+    }
+    if b0 == 49 && (b1 & 199) == 192 && (b2 & 7) == ((b1 >> 3) & 7) {
+        return true;
+    }
+    return false;
+}
+
+pub fn php_elim_redundant_mov(code: List[Int]) -> List[Int] {
+    let n: Int = list_len(code);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if php_is_redundant_mov(code, i) {
+            i = i + 3;
+        } else {
+            out = list_push(out, list_get(code, i));
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+pub fn php_dead_store_at(code: List[Int], off: Int) -> Bool {
+    let n: Int = list_len(code);
+    if off + 4 > n { return false; }
+    let b0: Int = list_get(code, off);
+    let b1: Int = list_get(code, off + 1);
+    if b0 == 72 && b1 == 137 {
+        return true;
+    }
+    if b0 == 137 {
+        return true;
+    }
+    return false;
+}
+
+pub fn php_elim_dead_stores(code: List[Int]) -> List[Int] {
+    let n: Int = list_len(code);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    let mut removed: Int = 0;
+    while i < n {
+        if i > 32 {
+            if php_dead_store_at(code, i) {
+                let mut j: Int = 0;
+                let mut new_removed: Int = 1;
+                let mut k: Int = 0;
+                while k < 7 {
+                    if (i + k) < n {
+                        if list_get(code, i + k) == 0 {
+                            new_removed = new_removed + 1;
+                        }
+                    }
+                    k = k + 1;
+                }
+                let mut m: Int = 0;
+                while m < new_removed {
+                    let _x: Int = i + m;
+                    m = m + 1;
+                }
+                i = i + new_removed;
+                removed = removed + 1;
+            } else {
+                out = list_push(out, list_get(code, i));
+                i = i + 1;
+            }
+        } else {
+            out = list_push(out, list_get(code, i));
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+pub fn php_concat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn php_pass(code: List[Int]) -> List[Int] {
+    let mut out: List[Int] = php_elim_redundant_mov(code);
+    out = php_elim_dead_stores(out);
+    return out;
+}

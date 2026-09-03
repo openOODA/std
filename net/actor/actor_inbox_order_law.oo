@@ -1,0 +1,74 @@
+// # Actor inbox FIFO order law
+//
+// Logline: An actor inbox that took [1,2,3] must yield 1,2,3 in that order on read.
+//
+// Setup: Pure Int-only model. Models a small inbox; no ThreadCap, no FS, no net.
+//
+// Beats:
+//   1. inbox_push appends to the back of the buffer.
+//   2. inbox_pop removes from the front of the buffer.
+//   3. After push(1,2,3) the front is 1, then 2, then 3; an empty inbox must NOT report a valid front.
+
+pub type Inbox = struct {
+    data: List[Int],
+    size: Int
+};
+
+pub fn inbox_new() -> Inbox {
+    let d: List[Int] = list_new();
+    return Inbox { data: d, size: 0 };
+}
+
+pub fn inbox_push(mb: Inbox, val: Int) -> Inbox {
+    let new_data: List[Int] = list_push(mb.data, val);
+    let n: Int = mb.size;
+    return Inbox { data: new_data, size: n + 1 };
+}
+
+pub fn inbox_pop(mb: Inbox) -> Inbox {
+    let n: Int = mb.size;
+    if n <= 1 {
+        return inbox_new();
+    }
+    let cur: List[Int] = mb.data;
+    let mut new_data: List[Int] = list_new();
+    let mut i: Int = 1;
+    while i < n {
+        new_data = list_push(new_data, list_get(cur, i));
+        i = i + 1;
+    }
+    return Inbox { data: new_data, size: n - 1 };
+}
+
+pub fn inbox_front(mb: Inbox) -> Result[Int, String] {
+    if mb.size == 0 {
+        return Err("ERR\tinbox\tempty");
+    }
+    let cur: List[Int] = mb.data;
+    return Ok(list_get(cur, 0));
+}
+
+fn inbox_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn verify_actor_inbox_order_law() -> Bool {
+    let mut m: Inbox = inbox_new();
+    m = inbox_push(m, 1);
+    m = inbox_push(m, 2);
+    m = inbox_push(m, 3);
+    if inbox_got(inbox_front(m)) != 1 { return false; }
+    m = inbox_pop(m);
+    if inbox_got(inbox_front(m)) != 2 { return false; }
+    m = inbox_pop(m);
+    if inbox_got(inbox_front(m)) != 3 { return false; }
+    let mut m2: Inbox = inbox_new();
+    m2 = inbox_push(m2, 9);
+    m2 = inbox_push(m2, 7);
+    if inbox_got(inbox_front(m2)) != 9 { return false; }
+    m2 = inbox_pop(m2);
+    if inbox_got(inbox_front(m2)) != 7 { return false; }
+    let e: Inbox = inbox_new();
+    if inbox_front(e).is_ok() { return false; }
+    return true;
+}

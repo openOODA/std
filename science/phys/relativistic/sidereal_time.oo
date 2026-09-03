@@ -1,0 +1,48 @@
+// # Greenwich & Local Sidereal Time
+//
+// Logline: Calculates Greenwich Mean Sidereal Time (GMST) and Local Sidereal Time (LST) from astronomical Julian Date.
+//
+// Setup: Pure astronomical earth rotation angle algorithms for inertial-to-fixed celestial tracking.
+//
+// Beats:
+//   1. GMST epoch reference hour integer query.
+//   2. Calculate Greenwich Mean Sidereal Time in hours from Julian Date.
+//   3. Convert GMST hours to radians / Earth rotation angle.
+//   4. Calculate Local Sidereal Time (LST) given observer longitude.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astrodynamics_sidereal_time() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn sidereal_day_s() -> Int {
+    return 86164;
+}
+
+pub fn gmst_hours_j2000() -> Int {
+    return 18;
+}
+
+/// Computes Greenwich Mean Sidereal Time (GMST) in hours [0.0, 24.0) given Julian Date.
+pub fn julian_date_to_gmst_hours(jd: Float) -> Float {
+    let d: Float = jd - 2451545.0; // Days since J2000.0
+    let mut gmst: Float = 18.697374558 + (24.06570982441908 * d);
+    while gmst >= 24.0 { gmst = gmst - 24.0; }
+    while gmst < 0.0 { gmst = gmst + 24.0; }
+    return gmst;
+}
+
+/// Converts GMST hours to radians [0.0, 2*pi).
+pub fn gmst_hours_to_radians(gmst_hours: Float) -> Float {
+    let pi: Float = circ_pi_std_phys_astrodynamics_sidereal_time();
+    return (gmst_hours / 24.0) * (2.0 * pi);
+}
+
+/// Computes Local Sidereal Time (LST) in radians given Julian Date and observer longitude (radians).
+pub fn local_sidereal_time_rad(jd: Float, longitude_rad: Float) -> Float {
+    let pi: Float = circ_pi_std_phys_astrodynamics_sidereal_time();
+    let two_pi: Float = 2.0 * pi;
+    let gmst_h: Float = julian_date_to_gmst_hours(jd);
+    let gmst_rad: Float = gmst_hours_to_radians(gmst_h);
+    let mut lst: Float = gmst_rad + longitude_rad;
+    while lst >= two_pi { lst = lst - two_pi; }
+    while lst < 0.0 { lst = lst + two_pi; }
+    return lst;
+}

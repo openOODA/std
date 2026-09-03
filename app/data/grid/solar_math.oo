@@ -1,0 +1,33 @@
+// # Solar Geometry & Trigonometric Math Helpers
+//
+// Logline: Provides angular conversions, absolute value, and trigonometric helpers for solar positioning.
+//
+// Setup: Pure floating-point numerical functions.
+//
+// Beats:
+//   1. Define mathematical constant Pi.
+//   2. Implement absolute value arithmetic.
+//   3. Convert degrees to radians and radians to degrees.
+
+
+// -------------------------------------------------------------------
+// Primitive Math & Trigonometric Helpers
+// -------------------------------------------------------------------
+
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_data_grid_solar_math() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn math_abs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn deg_to_rad(deg: Float) -> Float {
+    return (deg * circ_pi_std_data_grid_solar_math()) / 180.0;
+}
+
+pub fn rad_to_deg(rad: Float) -> Float {
+    return (rad * 180.0) / circ_pi_std_data_grid_solar_math();
+}

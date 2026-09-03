@@ -1,0 +1,147 @@
+// # State Vector and Coordinate Transformations
+//
+// Logline: Converts between classical Keplerian orbital elements and Cartesian ECI J2000 state vectors.
+//
+// Setup: Imports orbital_types.oo and anomaly_transforms.oo for coordinate transformations.
+//
+// Beats:
+//   1. Convert Keplerian elements to perifocal PQW frame and rotate into ECI coordinates.
+//   2. Extract angular momentum, eccentricity, and node vectors from Cartesian state.
+//   3. Invert Cartesian position and velocity into osculating Keplerian orbital elements.
+
+import "./orbital_types.oo";
+import "./anomaly_transforms.oo";
+
+pub fn state_vector_from_keplerian(elem: OrbitElements, mu: Float) -> StateVector {
+    let a: Float = elem.semi_major_axis;
+    let e: Float = elem.eccentricity;
+    let inc: Float = elem.inclination;
+    let raan: Float = elem.raan;
+    let argp: Float = elem.arg_of_perigee;
+    let nu: Float = elem.true_anomaly;
+    let ep: Float = elem.epoch_sec;
+
+    let p: Float = a * (1.0 - (e * e));
+    let cos_nu: Float = cos(nu);
+    let sin_nu: Float = sin(nu);
+    let denom: Float = 1.0 + (e * cos_nu);
+    let r_mag: Float = p / denom;
+
+    let x_pqw: Float = r_mag * cos_nu;
+    let y_pqw: Float = r_mag * sin_nu;
+
+    let v_factor: Float = sqrt(mu / p);
+    let vx_pqw: Float = (0.0 - v_factor) * sin_nu;
+    let vy_pqw: Float = v_factor * (e + cos_nu);
+
+    let cos_raan: Float = cos(raan);
+    let sin_raan: Float = sin(raan);
+    let cos_inc: Float = cos(inc);
+    let sin_inc: Float = sin(inc);
+    let cos_argp: Float = cos(argp);
+    let sin_argp: Float = sin(argp);
+
+    let p_x: Float = (cos_raan * cos_argp) - ((sin_raan * sin_argp) * cos_inc);
+    let p_y: Float = (sin_raan * cos_argp) + ((cos_raan * sin_argp) * cos_inc);
+    let p_z: Float = sin_argp * sin_inc;
+
+    let q_x: Float = ((0.0 - cos_raan) * sin_argp) - ((sin_raan * cos_argp) * cos_inc);
+    let q_y: Float = ((0.0 - sin_raan) * sin_argp) + ((cos_raan * cos_argp) * cos_inc);
+    let q_z: Float = cos_argp * sin_inc;
+
+    let rx: Float = (p_x * x_pqw) + (q_x * y_pqw);
+    let ry: Float = (p_y * x_pqw) + (q_y * y_pqw);
+    let rz: Float = (p_z * x_pqw) + (q_z * y_pqw);
+
+    let vx: Float = (p_x * vx_pqw) + (q_x * vy_pqw);
+    let vy: Float = (p_y * vx_pqw) + (q_y * vy_pqw);
+    let vz: Float = (p_z * vx_pqw) + (q_z * vy_pqw);
+
+    let pos: Vec3 = vec3_new(rx, ry, rz);
+    let vel: Vec3 = vec3_new(vx, vy, vz);
+    return state_vector_new(pos, vel, ep);
+}
+
+pub fn keplerian_to_state_vector(elem: OrbitElements, mu: Float) -> StateVector {
+    return state_vector_from_keplerian(elem, mu);
+}
+
+pub fn state_vector_to_keplerian(state: StateVector, mu: Float) -> OrbitElements {
+    let r_vec: Vec3 = state.position;
+    let v_vec: Vec3 = state.velocity;
+    let ep: Float = state.epoch_sec;
+
+    let r_mag: Float = vec3_length(r_vec);
+    let v_mag: Float = vec3_length(v_vec);
+    if r_mag <= 0.000000001 {
+        return orbit_elements_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ep);
+    }
+
+    let h_vec: Vec3 = vec3_cross(r_vec, v_vec);
+    let h_mag: Float = vec3_length(h_vec);
+    if h_mag <= 0.000000001 {
+        return orbit_elements_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ep);
+    }
+
+    let n_vec: Vec3 = vec3_new(0.0 - h_vec.y, h_vec.x, 0.0);
+    let n_mag: Float = vec3_length(n_vec);
+
+    let mut inc: Float = 0.0;
+    if h_mag > 0.000000001 {
+        inc = trig_acos(h_vec.z / h_mag);
+    }
+
+    let mut raan: Float = 0.0;
+    if n_mag > 0.000000001 {
+        raan = trig_atan2(n_vec.y, n_vec.x);
+        raan = normalize_angle_2pi(raan);
+    }
+
+    let v_sq: Float = v_mag * v_mag;
+    let term_r: Float = v_sq - (mu / r_mag);
+    let r_dot_v: Float = vec3_dot(r_vec, v_vec);
+
+    let part1: Vec3 = vec3_scale(r_vec, term_r);
+    let part2: Vec3 = vec3_scale(v_vec, r_dot_v);
+    let e_vec: Vec3 = vec3_scale(vec3_sub(part1, part2), 1.0 / mu);
+    let e_mag: Float = vec3_length(e_vec);
+
+    let energy: Float = (v_sq / 2.0) - (mu / r_mag);
+    let mut a: Float = 0.0;
+    if float_abs(energy) > 0.000000000001 {
+        a = (0.0 - mu) / (2.0 * energy);
+    }
+
+    let mut argp: Float = 0.0;
+    if e_mag > 0.000000001 {
+        if n_mag > 0.000000001 {
+            let dot_n_e: Float = vec3_dot(n_vec, e_vec) / (n_mag * e_mag);
+            argp = trig_acos(dot_n_e);
+            if e_vec.z < 0.0 {
+                argp = const_two_pi() - argp;
+            }
+        }
+    }
+
+    let mut nu: Float = 0.0;
+    if e_mag > 0.000000001 {
+        let dot_e_r: Float = vec3_dot(e_vec, r_vec) / (e_mag * r_mag);
+        nu = trig_acos(dot_e_r);
+        if r_dot_v < 0.0 {
+            nu = const_two_pi() - nu;
+        }
+    } else {
+        if n_mag > 0.000000001 {
+            let dot_n_r: Float = vec3_dot(n_vec, r_vec) / (n_mag * r_mag);
+            nu = trig_acos(dot_n_r);
+            if r_vec.z < 0.0 {
+                nu = const_two_pi() - nu;
+            }
+        } else {
+            nu = trig_atan2(r_vec.y, r_vec.x);
+            nu = normalize_angle_2pi(nu);
+        }
+    }
+
+    return orbit_elements_new(a, e_mag, inc, raan, argp, nu, ep);
+}

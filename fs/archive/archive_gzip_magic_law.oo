@@ -1,0 +1,57 @@
+// # Gzip magic byte law
+//
+// Logline: A gzip stream begins with byte 31 followed by byte 139 in that order.
+//
+// Setup: Pure Int. RFC 1952 section 2.2 fixes the magic bytes as 0x1F 0x8B (31, 139).
+//
+// Beats:
+//   1. archive_gzip_magic1() returns 31.
+//   2. archive_gzip_magic2() returns 139.
+//   3. archive_gzip_magic_ok(31, 139) holds; any other pair fails closed.
+
+pub fn archive_gzip_magic1() -> Int {
+    return 31;
+}
+
+pub fn archive_gzip_magic2() -> Int {
+    return 139;
+}
+
+pub fn archive_gzip_magic_ok(byte1: Int, byte2: Int) -> Int {
+    let b1: Int = archive_gzip_magic1();
+    let b2: Int = archive_gzip_magic2();
+    if byte1 == b1 && byte2 == b2 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_archive_gzip_magic_law() -> Bool {
+    // golden: 31, 139 is the gzip magic.
+    if archive_gzip_magic1() != 31 {
+        return false;
+    }
+    if archive_gzip_magic2() != 139 {
+        return false;
+    }
+    if archive_gzip_magic_ok(31, 139) != 1 {
+        return false;
+    }
+    // hostile: any wrong byte must fail closed.
+    if archive_gzip_magic_ok(30, 139) != 0 {
+        return false;
+    }
+    if archive_gzip_magic_ok(31, 138) != 0 {
+        return false;
+    }
+    if archive_gzip_magic_ok(0, 0) != 0 {
+        return false;
+    }
+    if archive_gzip_magic_ok(255, 255) != 0 {
+        return false;
+    }
+    if archive_gzip_magic_ok(-1, 139) != 0 {
+        return false;
+    }
+    return true;
+}

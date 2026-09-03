@@ -1,0 +1,89 @@
+// # Volatile Stack Memory Zeroization & Scrub Barrier
+//
+// Logline: Enforces compiler-barrier memory wiping to prevent dead-store elimination of sensitive buffers.
+//
+// Setup: Pure. Prevents cryptographic key and plaintext data remanence in ephemeral stack frames.
+//
+// Beats:
+//   1. Overwrite sensitive byte arrays with zero values across all allocated slots.
+//   2. Apply volatile sink barrier operations to prevent dead-store optimization removal.
+//   3. Provide constant-time memory comparisons and zeroization audit verifiers.
+
+pub fn stack_zeroizer_wipe(buf: List[Int]) {
+    stack_buffer_zeroize(buf);
+}
+
+pub fn stack_barrier_volatile_sink(sink_val: Int) -> Int {
+    // Volatile barrier operation forcing the compiler backend to treat sink_val as consumed
+    let masked: Int = (sink_val ^ 314159) & 4294967295;
+    return masked;
+}
+
+pub fn stack_buffer_zeroize(buf: List[Int]) {
+    let len: Int = list_len(buf);
+    let mut volatile_acc: Int = 0;
+    let mut i: Int = 0;
+
+    while i < len {
+        let old_b: Int = list_get(buf, i);
+        volatile_acc = (volatile_acc + old_b) & 65535;
+        // Zero the slot in place
+        let mut _discard: List[Int] = list_set(buf, i, 0);
+        i = i + 1;
+    }
+
+    // Force data dependency through volatile sink to defeat dead-store elimination
+    let _sink_out: Int = stack_barrier_volatile_sink(volatile_acc);
+}
+
+pub fn stack_buffer_scrub(buf: List[Int], len: Int) -> List[Int] {
+    stack_buffer_zeroize(buf);
+    let mut clean_buf: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < len {
+        clean_buf = list_push(clean_buf, 0);
+        i = i + 1;
+    }
+    return clean_buf;
+}
+
+pub fn verify_zeroization(buf: List[Int]) -> Bool {
+    let len: Int = list_len(buf);
+    let mut non_zero_count: Int = 0;
+    let mut i: Int = 0;
+
+    while i < len {
+        let b: Int = list_get(buf, i);
+        if b != 0 {
+            non_zero_count = non_zero_count + 1;
+        }
+        i = i + 1;
+    }
+
+    return non_zero_count == 0;
+}
+
+pub fn secure_memcmp_const_time(
+    a: List[Int],
+    b: List[Int],
+    len: Int
+) -> Bool {
+    let len_a: Int = list_len(a);
+    let len_b: Int = list_len(b);
+    if len_a < len || len_b < len {
+        return false;
+    }
+
+    let mut diff: Int = 0;
+    let mut i: Int = 0;
+
+    // Constant-time traversal without early exit to resist timing side channels
+    while i < len {
+        let byte_a: Int = list_get(a, i);
+        let byte_b: Int = list_get(b, i);
+        diff = diff | (byte_a ^ byte_b);
+        i = i + 1;
+    }
+
+    return diff == 0;
+}

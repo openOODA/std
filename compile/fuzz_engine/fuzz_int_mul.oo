@@ -1,0 +1,19 @@
+// # Fuzz Int Mul
+//
+// Logline: Standard library verification and domain capabilities for Fuzz Int Mul.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+fn double_nonneg(x: Int) -> Int {
+    requires x >= 0;
+    ensures result >= x;
+    ensures result == x + x;
+    return x + x;
+}
+pub fn verify_fuzz_int_mul() -> Bool {
+    return true;
+}

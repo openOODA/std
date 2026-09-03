@@ -1,0 +1,91 @@
+// # Persistent balanced tree principle
+//
+// Logline: A persistent balanced tree preserves the old root on insert; the new root is a path-copied spine of O(log n) nodes, sharing the rest of the structure with the old.
+//
+// Setup: Pure Int. "versions" is the count of distinct root identities observed across sequential inserts; "path_depth" is the height of the new spine; "shared" is the count of nodes reused from the old tree.
+//
+// Beats:
+//   1. Okasaki 1998 "Purely Functional Data Structures" (Cambridge UP), Ch. 2 pp. 17-22: each insert returns a new tree, the old root is preserved.
+//   2. The new tree shares O(n - log n) structure with the old (path copy of height = O(log n)).
+//   3. persistent_version_count_ok holds 1 when observed equals want; mismatch fails closed.
+//   4. persistent_path_copy_depth is bounded by floor(log_2(n+1)) for a balanced tree of n nodes.
+
+import "std/core/primitives/domain_cert.oo";
+
+// persistent_version_count_ok holds 1 when observed equals want, else 0.
+// Golden: 1 version -> 1; 2 versions after 2 inserts -> 2.
+// Hostile: observed 0 with want 1 -> 0; observed 2 with want 3 -> 0.
+pub fn persistent_version_count_ok(observed: Int, want: Int) -> DomainCert {
+    if observed == want {
+        return domain_cert("collections", "persistent_version_count", 1);
+    }
+    return domain_cert("collections", "persistent_version_count", 0);
+}
+
+// persistent_path_copy_depth returns the typical O(log n) spine length copied
+// on a persistent insert into a balanced tree of n nodes.
+// Okasaki 1998, Ch. 4 (red-black): height <= 2*log_2(n+1); the closed form
+// floor(log_2(n+1)) is the canonical balanced-tree height. n <= 0 -> 0.
+pub fn persistent_path_copy_depth(n: Int) -> Int {
+    if n <= 0 {
+        return 0;
+    }
+    let mut d: Int = 0;
+    let mut v: Int = n + 1;
+    while v > 1 {
+        v = v / 2;
+        d = d + 1;
+    }
+    return d;
+}
+
+// persistent_sharing_ok holds 1 when shared + path_depth = n (the new tree
+// reuses "shared" nodes from the old tree and creates "path_depth" new nodes
+// along the spine). Okasaki 1998, Ch. 2 invariant.
+pub fn persistent_sharing_ok(shared: Int, path_depth: Int, n: Int) -> DomainCert {
+    let sum: Int = shared + path_depth;
+    if sum == n {
+        return domain_cert("collections", "persistent_sharing", 1);
+    }
+    return domain_cert("collections", "persistent_sharing", 0);
+}
+
+pub fn verify_persistent_balanced_tree_principle() -> Bool {
+    // Golden: 1 version -> 1 (initial root counts as 1).
+    if cert_holds(persistent_version_count_ok(1, 1)) != 1 { return false; }
+    // Golden: 2 versions after 2 sequential inserts -> 2.
+    if cert_holds(persistent_version_count_ok(2, 2)) != 1 { return false; }
+    // Golden: 1024 versions after 1024 sequential inserts -> 1024.
+    if cert_holds(persistent_version_count_ok(1024, 1024)) != 1 { return false; }
+
+    // Hostile: mismatch fails closed.
+    if cert_holds(persistent_version_count_ok(0, 1)) != 0 { return false; }
+    if cert_holds(persistent_version_count_ok(2, 3)) != 0 { return false; }
+    if cert_holds(persistent_version_count_ok(100, 99)) != 0 { return false; }
+    if cert_holds(persistent_version_count_ok(0 - 1, 0)) != 0 { return false; }
+
+    // Path copy depth: O(log n). Okasaki 1998, Ch. 4.
+    if persistent_path_copy_depth(1) != 1 { return false; }   // floor(log_2(2)) = 1.
+    if persistent_path_copy_depth(7) != 3 { return false; }   // floor(log_2(8)) = 3.
+    if persistent_path_copy_depth(8) != 3 { return false; }   // floor(log_2(9)) = 3.
+    if persistent_path_copy_depth(15) != 4 { return false; }  // floor(log_2(16)) = 4.
+    if persistent_path_copy_depth(1024) != 10 { return false; } // floor(log_2(1025)) = 10.
+    if persistent_path_copy_depth(65535) != 16 { return false; } // floor(log_2(65536)) = 16.
+
+    // Hostile: n <= 0 -> 0.
+    if persistent_path_copy_depth(0) != 0 { return false; }
+    if persistent_path_copy_depth(0 - 1) != 0 { return false; }
+    if persistent_path_copy_depth(0 - 1024) != 0 { return false; }
+
+    // Coupled: shared + path_depth = n. For n=1024, depth=10, shared=1014.
+    if cert_holds(persistent_sharing_ok(1014, 10, 1024)) != 1 { return false; }
+    if cert_holds(persistent_sharing_ok(0, 0, 0)) != 1 { return false; }
+    if cert_holds(persistent_sharing_ok(15, 1, 16)) != 1 { return false; }
+    if cert_holds(persistent_sharing_ok(7, 3, 10)) != 1 { return false; }
+
+    // Hostile: shared + path_depth != n -> 0.
+    if cert_holds(persistent_sharing_ok(1013, 10, 1024)) != 0 { return false; }
+    if cert_holds(persistent_sharing_ok(1014, 11, 1024)) != 0 { return false; }
+
+    return true;
+}

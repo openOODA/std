@@ -1,0 +1,109 @@
+// # Monotonic clock principle
+//
+// Logline: A monotonic clock only moves forward; a later reading is greater than or equal to an earlier reading, and two readings at the same instant are equal.
+//
+// Setup: Pure Int on a ClockReading record. No FS, net, env, or wall clock.
+//
+// Beats:
+//   1. New reading has tick 0.
+//   2. advance bumps tick by a positive step and never decreases.
+//   3. A later reading is greater than or equal to an earlier one.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub type ClockReading = struct {
+    tick: Int
+};
+
+fn cr_got(r: Result[ClockReading, String]) -> ClockReading {
+    match r { Ok(v) => { return v; }, Err(_) => { return ClockReading { tick: 0 - 1 }; } }
+}
+
+pub fn clock_reading_new() -> ClockReading {
+    return ClockReading {
+        tick: 0
+    };
+}
+
+// Build a reading at a given tick. tick=0 is Ok(epoch). tick<0 is Err.
+pub fn clock_reading_at(tick: Int) -> Result[ClockReading, String] {
+    if tick < 0 { return Err("ERR\tcr\tdomain"); }
+    return Ok(ClockReading { tick: tick });
+}
+
+// Advance by step. step=0 is Ok(r). step<0 is Err.
+pub fn clock_reading_advance(r: ClockReading, step: Int) -> Result[ClockReading, String] {
+    if step < 0 { return Err("ERR\tcr\tdomain"); }
+    if step == 0 { return Ok(r); }
+    return Ok(ClockReading { tick: r.tick + step });
+}
+
+// True when reading a is at or after reading b (a.tick >= b.tick).
+pub fn clock_reading_ordered(a: ClockReading, b: ClockReading) -> Bool {
+    let at: Int = a.tick;
+    let bt: Int = b.tick;
+    if at < bt {
+        return false;
+    }
+    return true;
+}
+
+// True when two readings are at the same tick.
+pub fn clock_reading_equal(a: ClockReading, b: ClockReading) -> Bool {
+    let at: Int = a.tick;
+    let bt: Int = b.tick;
+    if at != bt {
+        return false;
+    }
+    return true;
+}
+
+pub fn verify_monotonic_clock_principle() -> Bool {
+    // Golden: starting at 0 and advancing by 5 lands at 5.
+    let c0: ClockReading = clock_reading_new();
+    if c0.tick != 0 {
+        return false;
+    }
+    let c1: ClockReading = cr_got(clock_reading_advance(c0, 5));
+    if c1.tick != 5 {
+        return false;
+    }
+    let c2: ClockReading = cr_got(clock_reading_advance(c1, 3));
+    if c2.tick != 8 {
+        return false;
+    }
+    // Golden: ordering holds: c1 >= c0, c2 >= c1, c2 >= c0.
+    if clock_reading_ordered(c1, c0) != true {
+        return false;
+    }
+    if clock_reading_ordered(c2, c1) != true {
+        return false;
+    }
+    if clock_reading_ordered(c2, c0) != true {
+        return false;
+    }
+    // Hostile: c0 is earlier, so ordered(c0, c1) is false.
+    if clock_reading_ordered(c0, c1) != false {
+        return false;
+    }
+    // Golden: two readings at the same tick are equal.
+    let a: ClockReading = cr_got(clock_reading_at(42));
+    let b: ClockReading = cr_got(clock_reading_at(42));
+    if clock_reading_equal(a, b) != true {
+        return false;
+    }
+    // Hostile: advance by a non-positive step leaves the reading unchanged.
+    let c3: ClockReading = cr_got(clock_reading_advance(c1, 0));
+    if c3.tick != 5 {
+        return false;
+    }
+    if clock_reading_advance(c1, 0 - 1).is_ok() { return false; }
+    if clock_reading_at(0 - 7).is_ok() { return false; }
+    let z0: ClockReading = cr_got(clock_reading_at(0));
+    if z0.tick != 0 { return false; }
+    let c5: ClockReading = cr_got(clock_reading_advance(c1, 1));
+    if clock_reading_equal(c1, c5) != false {
+        return false;
+    }
+    return true;
+}

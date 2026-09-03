@@ -1,0 +1,122 @@
+// # Hasbrouck Information Share and Price Discovery
+//
+// Logline: Measures venue price discovery contribution and permanent market impact using Hasbrouck's Information Share (IS) and vector autoregression.
+//
+// Setup: Pure econometrics and market microstructure module estimating price discovery fractions across fragmented venues.
+//
+// Beats:
+//   1. Define VenueDiscoveryStats, HasbrouckVarParams, and InformationShareResult structures.
+//   2. Compute venue covariance matrix elements and permanent random-walk innovations.
+//   3. Calculate Hasbrouck upper and lower information share bounds using Cholesky factor ordering.
+
+type VenueDiscoveryStats = struct {
+    venue_name: String,
+    variance_innovations: Float,
+    lead_coefficient: Float
+};
+
+type HasbrouckVarParams = struct {
+    cross_venue_covariance: Float,
+    venue_a_variance: Float,
+    venue_b_variance: Float
+};
+
+type InformationShareResult = struct {
+    venue_a_is_lower: Float,
+    venue_a_is_upper: Float,
+    venue_a_is_midpoint: Float,
+    venue_b_is_midpoint: Float,
+    leading_venue_index: Int
+};
+
+pub fn hasbrouck_params_new(
+    var_a: Float,
+    var_b: Float,
+    cov_ab: Float
+) -> HasbrouckVarParams {
+    return HasbrouckVarParams {
+        cross_venue_covariance: cov_ab,
+        venue_a_variance: var_a,
+        venue_b_variance: var_b
+    };
+}
+
+pub fn hasbrouck_compute_information_share(
+    params: HasbrouckVarParams
+) -> InformationShareResult {
+    let s11: Float = params.venue_a_variance;
+    let s22: Float = params.venue_b_variance;
+    let s12: Float = params.cross_venue_covariance;
+
+    // Cholesky lower triangular factorization L:
+    // L11 = sqrt(s11)
+    // L21 = s12 / sqrt(s11)
+    // L22 = sqrt(s22 - s12^2 / s11)
+    let mut l11: Float = 1.0;
+    if s11 > 0.0 {
+        l11 = sqrt(s11);
+    }
+    let mut l21: Float = 0.0;
+    if l11 > 0.0 {
+        l21 = s12 / l11;
+    }
+    let rem_diag: Float = s22 - (l21 * l21);
+    let mut l22: Float = 0.0;
+    if rem_diag > 0.0 {
+        l22 = sqrt(rem_diag);
+    }
+
+    // Total variance factor: (L11 + L21)^2 + L22^2
+    let sum1: Float = l11 + l21;
+    let total_common_var: Float = (sum1 * sum1) + (l22 * l22);
+
+    let mut is_a_order1: Float = 0.5;
+    if total_common_var > 0.0 {
+        is_a_order1 = (sum1 * sum1) / total_common_var;
+    }
+
+    // Reverse ordering for Cholesky bounds (Venue B first)
+    let mut m22: Float = 1.0;
+    if s22 > 0.0 {
+        m22 = sqrt(s22);
+    }
+    let mut m12: Float = 0.0;
+    if m22 > 0.0 {
+        m12 = s12 / m22;
+    }
+    let rem2_diag: Float = s11 - (m12 * m12);
+    let mut m11: Float = 0.0;
+    if rem2_diag > 0.0 {
+        m11 = sqrt(rem2_diag);
+    }
+
+    let sum2: Float = m22 + m12;
+    let total_rev_var: Float = (sum2 * sum2) + (m11 * m11);
+    let mut is_b_order2: Float = 0.5;
+    if total_rev_var > 0.0 {
+        is_b_order2 = (sum2 * sum2) / total_rev_var;
+    }
+    let is_a_order2: Float = 1.0 - is_b_order2;
+
+    let mut is_a_low: Float = is_a_order1;
+    let mut is_a_high: Float = is_a_order2;
+    if is_a_order1 > is_a_order2 {
+        is_a_low = is_a_order2;
+        is_a_high = is_a_order1;
+    }
+
+    let is_a_mid: Float = (is_a_low + is_a_high) * 0.5;
+    let is_b_mid: Float = 1.0 - is_a_mid;
+    let mut lead_idx: Int = 2;
+    if is_a_mid >= 0.5 {
+        lead_idx = 1;
+    }
+
+    return InformationShareResult {
+        venue_a_is_lower: is_a_low,
+        venue_a_is_upper: is_a_high,
+        venue_a_is_midpoint: is_a_mid,
+        venue_b_is_midpoint: is_b_mid,
+        leading_venue_index: lead_idx
+    };
+}

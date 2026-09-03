@@ -1,0 +1,225 @@
+// # Software GUI Rendering Engine
+//
+// Logline: Software 2D pixel buffer operations, shape drawing routines, and color primitives for GUI elements.
+//
+// Setup: Pure computational rasterizer operating on in-memory color pixel buffers.
+//
+// Beats:
+//   1. Define primitive geometry and color data structures.
+//   2. Allocate and clear 2D pixel render buffers.
+//   3. Draw pixels, filled rectangles, lines, circles, and rectangle outlines.
+
+type Color = struct {
+    r: Int,
+    g: Int,
+    b: Int,
+    a: Int
+};
+
+pub fn color_new(r: Int, g: Int, b: Int, a: Int) -> Color {
+    return Color { r: r, g: g, b: b, a: a };
+}
+
+type Point = struct {
+    x: Int,
+    y: Int
+};
+
+pub fn point_new(x: Int, y: Int) -> Point {
+    return Point { x: x, y: y };
+}
+
+type Size = struct {
+    width: Int,
+    height: Int
+};
+
+pub fn size_new(width: Int, height: Int) -> Size {
+    return Size { width: width, height: height };
+}
+
+type Rect = struct {
+    origin: Point,
+    size: Size
+};
+
+pub fn rect_new(x: Int, y: Int, w: Int, h: Int) -> Rect {
+    return Rect {
+        origin: Point { x: x, y: y },
+        size: Size { width: w, height: h }
+    };
+}
+
+pub fn rect_contains_point(r: Rect, p: Point) -> Bool {
+    let px: Int = p.x;
+    let py: Int = p.y;
+    let rx: Int = (r.origin).x;
+    let ry: Int = (r.origin).y;
+    let rw: Int = (r.size).width;
+    let rh: Int = (r.size).height;
+    if px < rx { return false; }
+    if px > rx + rw { return false; }
+    if py < ry { return false; }
+    if py > ry + rh { return false; }
+    return true;
+}
+
+type Circle = struct {
+    center: Point,
+    radius: Int
+};
+
+pub fn circle_new(center: Point, radius: Int) -> Circle {
+    return Circle { center: center, radius: radius };
+}
+
+type RenderContext = struct {
+    width: Int,
+    height: Int,
+    pixels: List[Color]
+};
+
+pub fn render_context_new(width: Int, height: Int) -> RenderContext {
+    let mut pixels: List[Color] = list_new();
+    let mut i: Int = 0;
+    let total: Int = width * height;
+    let bg_color: Color = color_new(0, 0, 0, 255);
+    while i < total {
+        pixels = list_push(pixels, bg_color);
+        i = i + 1;
+    }
+    return RenderContext { width: width, height: height, pixels: pixels };
+}
+
+pub fn render_clear(rctx: RenderContext, c: Color) -> RenderContext {
+    let mut pixels: List[Color] = rctx.pixels;
+    let w: Int = rctx.width;
+    let h: Int = rctx.height;
+    let mut i: Int = 0;
+    let total: Int = w * h;
+    while i < total {
+        pixels = list_set(pixels, i, c);
+        i = i + 1;
+    }
+    return RenderContext { width: w, height: h, pixels: pixels };
+}
+
+pub fn render_draw_pixel(rctx: RenderContext, p: Point, c: Color) -> RenderContext {
+    let mut pixels: List[Color] = rctx.pixels;
+    let w: Int = rctx.width;
+    let h: Int = rctx.height;
+    let x: Int = p.x;
+    let y: Int = p.y;
+    if x >= 0 && x < w && y >= 0 && y < h {
+        pixels = list_set(pixels, (y * w) + x, c);
+    }
+    return RenderContext { width: w, height: h, pixels: pixels };
+}
+
+pub fn render_fill_rect(rctx: RenderContext, r: Rect, c: Color) -> RenderContext {
+    let mut pixels: List[Color] = rctx.pixels;
+    let w: Int = rctx.width;
+    let h: Int = rctx.height;
+    let r_x: Int = (r.origin).x;
+    let r_y: Int = (r.origin).y;
+    let r_w: Int = (r.size).width;
+    let r_h: Int = (r.size).height;
+    let mut y_i: Int = 0;
+    while y_i < r_h {
+        let mut x_i: Int = 0;
+        let cy: Int = r_y + y_i;
+        while x_i < r_w {
+            let cx: Int = r_x + x_i;
+            if cx >= 0 && cx < w && cy >= 0 && cy < h {
+                pixels = list_set(pixels, (cy * w) + cx, c);
+            }
+            x_i = x_i + 1;
+        }
+        y_i = y_i + 1;
+    }
+    return RenderContext { width: w, height: h, pixels: pixels };
+}
+
+pub fn render_draw_line(rctx: RenderContext, p1: Point, p2: Point, c: Color) -> RenderContext {
+    let mut pixels: List[Color] = rctx.pixels;
+    let w: Int = rctx.width;
+    let h: Int = rctx.height;
+    let mut x0: Int = p1.x;
+    let mut y0: Int = p1.y;
+    let x1: Int = p2.x;
+    let y1: Int = p2.y;
+    let mut dx: Int = x1 - x0;
+    if dx < 0 { dx = 0 - dx; }
+    let mut dy: Int = y1 - y0;
+    if dy < 0 { dy = 0 - dy; }
+    let mut sx: Int = -1;
+    if x0 < x1 { sx = 1; }
+    let mut sy: Int = -1;
+    if y0 < y1 { sy = 1; }
+    let mut err: Int = dx - dy;
+    let mut done: Bool = false;
+    while !done {
+        if x0 >= 0 && x0 < w && y0 >= 0 && y0 < h {
+            pixels = list_set(pixels, (y0 * w) + x0, c);
+        }
+        if x0 == x1 && y0 == y1 {
+            done = true;
+        }
+        if !done {
+            let e2: Int = 2 * err;
+            if e2 > (0 - dy) {
+                err = err - dy;
+                x0 = x0 + sx;
+            }
+            if e2 < dx {
+                err = err + dx;
+                y0 = y0 + sy;
+            }
+        }
+    }
+    return RenderContext { width: w, height: h, pixels: pixels };
+}
+
+pub fn render_draw_circle(rctx: RenderContext, circle: Circle, c: Color) -> RenderContext {
+    let mut pixels: List[Color] = rctx.pixels;
+    let w: Int = rctx.width;
+    let h: Int = rctx.height;
+    let cx: Int = (circle.center).x;
+    let cy: Int = (circle.center).y;
+    let r: Int = circle.radius;
+    let mut x: Int = r;
+    let mut y: Int = 0;
+    let mut err: Int = 0;
+    while x >= y {
+        let px1: Int = cx + x; let py1: Int = cy + y;
+        let px2: Int = cx + y; let py2: Int = cy + x;
+        let px3: Int = cx - y; let py3: Int = cy + x;
+        let px4: Int = cx - x; let py4: Int = cy + y;
+        let px5: Int = cx - x; let py5: Int = cy - y;
+        let px6: Int = cx - y; let py6: Int = cy - x;
+        let px7: Int = cx + y; let py7: Int = cy - x;
+        let px8: Int = cx + x; let py8: Int = cy - y;
+        if px1 >= 0 && px1 < w && py1 >= 0 && py1 < h { pixels = list_set(pixels, (py1 * w) + px1, c); }
+        if px2 >= 0 && px2 < w && py2 >= 0 && py2 < h { pixels = list_set(pixels, (py2 * w) + px2, c); }
+        if px3 >= 0 && px3 < w && py3 >= 0 && py3 < h { pixels = list_set(pixels, (py3 * w) + px3, c); }
+        if px4 >= 0 && px4 < w && py4 >= 0 && py4 < h { pixels = list_set(pixels, (py4 * w) + px4, c); }
+        if px5 >= 0 && px5 < w && py5 >= 0 && py5 < h { pixels = list_set(pixels, (py5 * w) + px5, c); }
+        if px6 >= 0 && px6 < w && py6 >= 0 && py6 < h { pixels = list_set(pixels, (py6 * w) + px6, c); }
+        if px7 >= 0 && px7 < w && py7 >= 0 && py7 < h { pixels = list_set(pixels, (py7 * w) + px7, c); }
+        if px8 >= 0 && px8 < w && py8 >= 0 && py8 < h { pixels = list_set(pixels, (py8 * w) + px8, c); }
+        if err <= 0 { y = y + 1; err = err + (2 * y) + 1; }
+        if err > 0 { x = x - 1; err = err - (2 * x) + 1; }
+    }
+    return RenderContext { width: w, height: h, pixels: pixels };
+}
+
+pub fn render_draw_rect(rctx: RenderContext, r: Rect, c: Color) -> RenderContext {
+    let p1: Point = Point { x: (r.origin).x, y: (r.origin).y };
+    let p2: Point = Point { x: (r.origin).x + (r.size).width, y: (r.origin).y };
+    let p3: Point = Point { x: (r.origin).x + (r.size).width, y: (r.origin).y + (r.size).height };
+    let p4: Point = Point { x: (r.origin).x, y: (r.origin).y + (r.size).height };
+    let ctx1: RenderContext = render_draw_line(rctx, p1, p2, c);
+    let ctx2: RenderContext = render_draw_line(ctx1, p2, p3, c);
+    let ctx3: RenderContext = render_draw_line(ctx2, p3, p4, c);
+    return render_draw_line(ctx3, p4, p1, c);
+}

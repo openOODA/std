@@ -1,0 +1,44 @@
+// # FS Process Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fs/process (process control, env, sys_exec) subdir of the fs domain library. Re-exports a stable process_mod_* surface for the most-used public API (cmd, env, env_vars, process, process_spawn, signal, rlimit, python). Private siblings (os_process_law) remain non-public.
+//
+// Setup: Imports private process siblings; cap-bound ops take ProcessCap / EnvCap / SysCap at the call site. cmd_execute takes &ProcessCap; env_get / env_map_set take &EnvCap; process_spawn / process_wait / process_kill take &ProcessCap; signal dispatch takes &ProcessCap; rlimit / python take &SysCap.
+//
+// Beats:
+//   1. Re-export the cmd surface as process_mod_cmd_* (cmd_new, cmd_arg, cmd_execute).
+//   2. Re-export the env surface as process_mod_env_* (env_get, env_map_new, env_map_len, env_map_get, env_map_set).
+//   3. Re-export the process surface as process_mod_process_* (process_args, process_spawn, process_wait, process_kill).
+//   4. Re-export the process_spawn surface as process_mod_spawn_* (process_spawn_new, process_spawn_cwd, process_spawn_run, sh_execute).
+//   5. Re-export the signal surface as process_mod_signal_* (signal_sighup, signal_sigint, signal_sigkill, signal_sigusr1, signal_dispatch).
+//   6. Re-export the rlimit surface as process_mod_rlimit_* (rlimit_cpu, rlimit_fsize, rlimit_data, rlimit_stack).
+//   7. Document the private siblings that external callers must NOT import directly: os_process_law.oo.
+
+import "cmd.oo";
+import "env.oo";
+import "env_vars.oo";
+import "process.oo";
+import "process_spawn.oo";
+import "signal.oo";
+import "rlimit.oo";
+
+// Public cmd surface: process_mod_cmd_*
+pub fn process_mod_cmd_new(prog: String) -> List[String] { return cmd_new(prog); }
+pub fn process_mod_cmd_arg(cmd: List[String], arg: String) -> List[String] { return cmd_arg(cmd, arg); }
+pub fn process_mod_cmd_execute(cmd: List[String], p: &ProcessCap) -> Result[String, String] { return cmd_execute(cmd, p); }
+
+// Public env surface: process_mod_env_*
+pub fn process_mod_env_get(cap: &EnvCap, key: String) -> Result[String, String] { return env_get(cap, key); }
+pub fn process_mod_env_map_new() -> EnvMap { return env_map_new(); }
+pub fn process_mod_env_map_len(m: EnvMap) -> Int { return env_map_len(m); }
+pub fn process_mod_env_map_get(m: EnvMap, key: String) -> Result[String, String] { return env_map_get(m, key); }
+pub fn process_mod_env_map_set(cap: &EnvCap, m: EnvMap, key: String, val: String) -> EnvMap { return env_map_set(cap, m, key, val); }
+
+// Public process surface: process_mod_process_*
+pub fn process_mod_process_args(p: &ProcessCap) -> List[String] { return process_args(p); }
+pub fn process_mod_process_spawn(p: &ProcessCap, cmd: String) -> Result[String, String] { return process_spawn(p, cmd); }
+pub fn process_mod_process_wait(p: &ProcessCap, pid: Int) -> Result[String, String] { return process_wait(p, pid); }
+pub fn process_mod_process_kill(p: &ProcessCap, pid: Int, sig: Int) -> Result[String, String] { return process_kill(p, pid, sig); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. os_process_law.oo)
+//   python.oo is a python interpreter stub; not part of the public process surface

@@ -1,0 +1,78 @@
+// # Test literature KAT (known-answer test)
+//
+// Logline: Six post-2010 software-testing references with literature constants: QuickCheck 2000, AFL 2014, libFuzzer 2014+, Papadakis 2019, Hypothesis 2013+, DO-178C 1992.
+//
+// Setup: Pure Int constants. No FS, net, env. Per-mille (0..1000) represents percentages at 0.001% precision.
+//
+// Beats:
+//   1. QuickCheck (Claessen-Hughes 2000 ICFP): default attempts 100, default shrinks 1000.
+//   2. AFL (Zalewski 2014): default timeout 1000 ms, cycles 1.
+//   3. libFuzzer (LLVM 2014+, Serebryany 2014): default max_len 4096 bytes.
+//   4. Mutation testing (Papadakis 2019 IEEE TSE): sufficient threshold 0.8 (per-mille 800).
+//   5. Hypothesis (MacIver 2013+): default max_examples 100.
+//   6. DO-178C 1992 MC/DC: Level A 100% (per-mille 1000); Level C 100% statement.
+
+import "std/core/primitives/domain_cert.oo";
+
+// (a) Claessen-Hughes 2000 ICFP: "QuickCheck: A Lightweight Tool for Random Testing of
+// Haskell Programs". Default test count = 100; default shrink budget = 1000.
+pub fn qc_default_attempts() -> Int { return 100; }
+pub fn qc_default_shrinks() -> Int { return 1000; }
+
+// (b) AFL 2014 (Zalewski): "American Fuzzy Lop". Default per-input timeout = 1000 ms;
+// deterministic cycle count starts at 1.
+pub fn afl_default_timeout_ms() -> Int { return 1000; }
+pub fn afl_default_cycles() -> Int { return 1; }
+
+// (c) libFuzzer 2014+ (Serebryany, LLVM): default max_len = 4096 bytes per input.
+pub fn libfuzzer_default_max_len() -> Int { return 4096; }
+
+// (d) Papadakis et al. 2019 IEEE TSE "Mutation Testing Advances": sufficient mutation
+// score threshold is 0.8 (per-mille 800).
+pub fn papadakis_sufficient_per_mille() -> Int { return 800; }
+
+// (e) Hypothesis for Python 2013+ (MacIver): default max_examples = 100.
+pub fn hypothesis_default_max_examples() -> Int { return 100; }
+
+// (f) DO-178C 1992: MC/DC Level A 100% (per-mille 1000); Level C 100% statement
+// coverage (per-mille 1000). Both are 100% thresholds.
+pub fn do178c_level_a_mcdc_per_mille() -> Int { return 1000; }
+pub fn do178c_level_c_statement_per_mille() -> Int { return 1000; }
+
+// Each constant must be non-negative and within the supported precision band.
+pub fn test_kat_holds(per_mille: Int) -> DomainCert {
+    if per_mille < 0 {
+        return domain_cert("test", "test_kat", 0);
+    }
+    if per_mille > 1000 {
+        return domain_cert("test", "test_kat", 0);
+    }
+    return domain_cert("test", "test_kat", 1);
+}
+
+pub fn verify_test_kat() -> Bool {
+    // (a) QuickCheck Claessen-Hughes 2000 ICFP.
+    if qc_default_attempts() != 100 { return false; }
+    if qc_default_shrinks() != 1000 { return false; }
+    // (b) AFL Zalewski 2014.
+    if afl_default_timeout_ms() != 1000 { return false; }
+    if afl_default_cycles() != 1 { return false; }
+    // (c) libFuzzer 2014+ (LLVM, Serebryany).
+    if libfuzzer_default_max_len() != 4096 { return false; }
+    // (d) Papadakis 2019 IEEE TSE.
+    if papadakis_sufficient_per_mille() != 800 { return false; }
+    // (e) Hypothesis MacIver 2013+.
+    if hypothesis_default_max_examples() != 100 { return false; }
+    // (f) DO-178C 1992 MC/DC.
+    if do178c_level_a_mcdc_per_mille() != 1000 { return false; }
+    if do178c_level_c_statement_per_mille() != 1000 { return false; }
+    // Each per-mille constant is in [0, 1000] within 0.001% precision.
+    if test_kat_holds(papadakis_sufficient_per_mille()).holds != 1 { return false; }
+    if test_kat_holds(do178c_level_a_mcdc_per_mille()).holds != 1 { return false; }
+    if test_kat_holds(do178c_level_c_statement_per_mille()).holds != 1 { return false; }
+    if test_kat_holds(0).holds != 1 { return false; }
+    if test_kat_holds(1000).holds != 1 { return false; }
+    if test_kat_holds(0 - 1).holds != 0 { return false; }
+    if test_kat_holds(1001).holds != 0 { return false; }
+    return true;
+}

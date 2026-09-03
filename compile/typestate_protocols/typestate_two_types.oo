@@ -1,0 +1,30 @@
+// # Drive two machines
+//
+// Logline: Advance a Sock and a File through their own TYPESTATE machines.
+//
+// Setup: Test fixture. Keep TYPESTATE directives and all code exact.
+//
+// Beats:
+//   1. Open a Sock and a File.
+//   2. Connect the Sock to Open.
+//   3. Read the File to Ready.
+//
+// TYPESTATE: Sock Closed Open
+// TYPESTATE fn open_sock: -> Closed
+// TYPESTATE fn connect: Closed -> Open
+// TYPESTATE: File Shut Ready
+// TYPESTATE fn fopen: -> Shut
+// TYPESTATE fn fread: Shut -> Ready
+
+fn open_sock() -> Int { return 1; }
+fn connect(s: Int) { let x = s; }
+fn fopen() -> Int { return 2; }
+fn fread(f: Int) { let x = f; }
+
+pub fn verify_typestate_two_types() -> Bool {
+    let s = open_sock();
+    let f = fopen();
+    connect(s);
+    fread(f);
+    return true;
+}

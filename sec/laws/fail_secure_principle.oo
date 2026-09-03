@@ -1,0 +1,71 @@
+// # Fail-Secure Default Principle
+//
+// Logline: On error, missing input, or unknown state, the system defaults to the secure (deny) state.
+//
+// Setup: Pure Int. Default-deny token 0. Authenticity checks, validation, and policy must fail closed.
+//
+// Beats:
+//   1. Default-deny on missing input: missing token -> 0.
+//   2. Validation error: invalid input -> 0.
+//   3. Composite decision: any zero input -> zero output.
+//   4. Hosts sec_invariants.oo stem for cross-law consistency.
+
+import "std/sec/sec_invariants.oo";
+
+// Gate the secure decision: 1 if all inputs are nonzero, else 0.
+pub fn fail_secure_gate_all(a: Int, b: Int, c: Int) -> Int {
+    if a == 0 { return 0; }
+    if b == 0 { return 0; }
+    if c == 0 { return 0; }
+    return 1;
+}
+
+// Missing-input detector: 1 if any required input is zero or negative, else 0.
+pub fn fail_secure_missing(a: Int, b: Int) -> Int {
+    if a <= 0 { return 1; }
+    if b <= 0 { return 1; }
+    return 0;
+}
+
+// Invalid-input check: 1 if the input is in the invalid set (0 or negative).
+pub fn fail_secure_invalid(x: Int) -> Int {
+    if x == 0 { return 1; }
+    if x < 0 { return 1; }
+    return 0;
+}
+
+// Final decision: 1 (allow) only if all preconditions pass; else 0.
+pub fn fail_secure_decide(auth_ok: Int, policy_ok: Int, validation_ok: Int) -> Int {
+    if auth_ok == 0 { return 0; }
+    if policy_ok == 0 { return 0; }
+    if validation_ok == 0 { return 0; }
+    return 1;
+}
+
+// KAT and hostile cases for the fail-secure principle.
+pub fn verify_fail_secure_principle() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if sec_grant_ok(0) != 0 { return false; }
+    if fail_secure_gate_all(1, 1, 1) != 1 { return false; }
+    if fail_secure_gate_all(0, 1, 1) != 0 { return false; }
+    if fail_secure_gate_all(1, 0, 1) != 0 { return false; }
+    if fail_secure_gate_all(1, 1, 0) != 0 { return false; }
+    if fail_secure_gate_all(0, 0, 0) != 0 { return false; }
+    if fail_secure_gate_all(2, 3, 7) != 1 { return false; }
+    if fail_secure_missing(1, 1) != 0 { return false; }
+    if fail_secure_missing(0, 1) != 1 { return false; }
+    if fail_secure_missing(1, 0) != 1 { return false; }
+    if fail_secure_missing(0, 0) != 1 { return false; }
+    if fail_secure_missing(0 - 1, 1) != 1 { return false; }
+    if fail_secure_invalid(1) != 0 { return false; }
+    if fail_secure_invalid(0) != 1 { return false; }
+    if fail_secure_invalid(0 - 1) != 1 { return false; }
+    if fail_secure_invalid(2) != 0 { return false; }
+    if fail_secure_decide(1, 1, 1) != 1 { return false; }
+    if fail_secure_decide(0, 1, 1) != 0 { return false; }
+    if fail_secure_decide(1, 0, 1) != 0 { return false; }
+    if fail_secure_decide(1, 1, 0) != 0 { return false; }
+    if fail_secure_decide(0, 0, 0) != 0 { return false; }
+    return true;
+}

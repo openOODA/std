@@ -1,0 +1,84 @@
+// # LZMA dictionary size law
+//
+// Logline: Larger dictionary sizes unlock longer matches and higher compression ratios on highly redundant inputs; undersized dictionaries fail closed.
+//
+// Setup: Pure Int. input_size is the byte length of the source. dict_size is the dictionary size in bytes. compress_ratio_x100 returns the integer compression ratio scaled by 100.
+//
+// Beats:
+//   1. Ideal 4KB dict on 1MB input yields ratio ~2x (200 scaled).
+//   2. Non-ideal 2MB dict on 1MB input yields ratio ~3x (300 scaled).
+//   3. Hostile dict_size < 1024 fails closed to 0.
+//   4. dict_size >= 2 * input_size caps the ratio at 300 (3x).
+
+import "std/core/primitives/domain_cert.oo";
+
+// compress_ratio_x100: returns the integer compression ratio scaled by 100.
+// Model:
+//   - input_size < 1: return 0 (hostile).
+//   - dict_size < 1024: return 0 (hostile).
+//   - input_size < dict_size (and dict_size <= 2 * input_size): return 100 (modest gain).
+//   - dict_size >= 2 * input_size: return 300 (long matches dominate; cap 3x).
+//   - dict_size in [input_size, 2*input_size): return 250 (large dict, plenty of context).
+//   - dict_size in [1024, input_size): return 200 (small dict, limited context).
+pub fn compression_lzma_compress_ratio_x100(input_size: Int, dict_size: Int) -> Int {
+    if input_size < 1 {
+        return 0;
+    }
+    if dict_size < 1024 {
+        return 0;
+    }
+    if dict_size >= 2 * input_size {
+        return 300;
+    }
+    if dict_size >= input_size {
+        return 250;
+    }
+    if input_size < dict_size {
+        return 100;
+    }
+    return 200;
+}
+
+// compress_ok: holds 1 only when input_size > 0 and dict_size >= 1024.
+pub fn compression_lzma_compress_ok(input_size: Int, dict_size: Int) -> DomainCert {
+    if input_size < 1 {
+        return domain_cert("compression", "lzma_compress", 0);
+    }
+    if dict_size < 1024 {
+        return domain_cert("compression", "lzma_compress", 0);
+    }
+    return domain_cert("compression", "lzma_compress", 1);
+}
+
+pub fn verify_compression_lzma_dict_law() -> Bool {
+    // Golden: 4KB dict on 1MB input -> ratio ~2x.
+    if cert_holds(compression_lzma_compress_ok(1024 * 1024, 4096)) != 1 { return false; }
+    let r4k: Int = compression_lzma_compress_ratio_x100(1024 * 1024, 4096);
+    if r4k < 100 { return false; }
+    if r4k > 300 { return false; }
+
+    // Golden: non-ideal 2MB dict on 1MB input -> ratio ~3x.
+    let r_big: Int = compression_lzma_compress_ratio_x100(1024 * 1024, 1024 * 1024 * 2);
+    if r_big < 100 { return false; }
+    if r_big > 300 { return false; }
+    if r_big <= r4k { return false; }
+
+    // Golden: small dict on huge input -> ratio near 100.
+    let rsmall: Int = compression_lzma_compress_ratio_x100(1024 * 1024, 1024);
+    if rsmall < 100 { return false; }
+    if rsmall > 250 { return false; }
+
+    // Hostile: dict_size < 1024 fails closed to 0.
+    if compression_lzma_compress_ratio_x100(1024 * 1024, 1023) != 0 { return false; }
+    if compression_lzma_compress_ratio_x100(1024 * 1024, 0) != 0 { return false; }
+    if cert_holds(compression_lzma_compress_ok(1024, 512)) != 0 { return false; }
+
+    // Hostile: input_size < 1 fails closed to 0.
+    if compression_lzma_compress_ratio_x100(0, 4096) != 0 { return false; }
+    if cert_holds(compression_lzma_compress_ok(0, 4096)) != 0 { return false; }
+
+    // Golden: dict_size >= 2 * input_size caps the ratio at 300.
+    if compression_lzma_compress_ratio_x100(1024, 4096) != 300 { return false; }
+
+    return true;
+}

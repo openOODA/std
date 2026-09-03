@@ -1,0 +1,69 @@
+// # FS Archive Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fs/archive (archive format I/O) subdir of the fs domain library. Re-exports a stable archive_mod_* surface for the most-used public API (format detect, gzip stream, tar writer/header, zip stream, zstd stream, pcap reader). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private archive siblings; no caps required for pure parse/format/stream operations. File-backed archive operations take FsReadCap / FsWriteCap at the call site.
+//
+// Beats:
+//   1. Re-export the archive catalog and format detection surface as archive_mod_archive_*.
+//   2. Re-export the gzip surface (detect, magic, header, member) as archive_mod_gzip_*.
+//   3. Re-export the tar surface (writer, header, octal, pad) as archive_mod_tar_*.
+//   4. Re-export the zip and zstd surface (stream, header, block, finalize) as archive_mod_zip_*, archive_mod_zstd_*.
+//   5. Re-export the pcap reader surface. Document the private siblings.
+
+import "archive.oo";
+import "gzip.oo";
+import "gzip_stream.oo";
+import "tar.oo";
+import "tar_writer.oo";
+import "tar_header_safe.oo";
+import "zip.oo";
+import "zip_stream.oo";
+import "zstd_stream.oo";
+import "pcap_reader.oo";
+
+// Public archive catalog surface: archive_mod_archive_*
+pub fn archive_mod_archive_detect_format(raw: String) -> String { return archive_detect_format(raw); }
+pub fn archive_mod_archive_formats_list() -> List[String] { return archive_formats_list(); }
+pub fn archive_mod_archive_catalog() -> ArchiveCatalog { return archive_catalog(); }
+pub fn archive_mod_archive_supports(format_name: String) -> Bool { return archive_supports(format_name); }
+
+// Public gzip surface: archive_mod_gzip_*
+pub fn archive_mod_gzip_detect(raw: String) -> Result[String, String] { return gzip_detect(raw); }
+pub fn archive_mod_gzip_validate_magic(raw: String) -> Bool { return gzip_stream_validate_magic(raw); }
+pub fn archive_mod_gzip_header_parse(raw: String) -> GzipHeader { return gzip_header_parse(raw); }
+pub fn archive_mod_gzip_member_is_valid(member: GzipMember) -> Bool { return gzip_member_is_valid(member); }
+pub fn archive_mod_gzip_member_filename(member: GzipMember) -> String { return gzip_member_filename(member); }
+
+// Public tar surface: archive_mod_tar_*
+pub fn archive_mod_tar_detect(raw: String) -> Result[String, String] { return tar_detect(raw); }
+pub fn archive_mod_tar_writer_new() -> TarWriter { return tar_writer_new(); }
+pub fn archive_mod_tar_format_header(name: String, size_bytes: Int, mode: Int) -> String { return tar_format_header(name, size_bytes, mode); }
+pub fn archive_mod_tar_writer_add_file(writer: TarWriter, name: String, content: String) -> TarWriter { return tar_writer_add_file(writer, name, content); }
+pub fn archive_mod_tar_header_safe_parse(buf: List[Int]) -> TarHdr { return tar_header_safe_parse(buf); }
+
+// Public zip surface: archive_mod_zip_*
+pub fn archive_mod_zip_detect(raw: String) -> Result[String, String] { return zip_detect(raw); }
+pub fn archive_mod_zip_detect_magic(raw: String) -> Bool { return zip_detect_magic(raw); }
+pub fn archive_mod_zip_stream_new() -> ZipStream { return zip_stream_new(); }
+pub fn archive_mod_zip_format_local_header(name: String, size_bytes: Int) -> String { return zip_format_local_header(name, size_bytes); }
+pub fn archive_mod_zip_add_entry(stream: ZipStream, filename: String, content: String) -> ZipStream { return zip_add_entry(stream, filename, content); }
+pub fn archive_mod_zip_finalize(stream: ZipStream) -> String { return zip_finalize(stream); }
+
+// Public zstd surface: archive_mod_zstd_*
+pub fn archive_mod_zstd_check_magic(raw: String) -> Bool { return zstd_check_magic(raw); }
+pub fn archive_mod_zstd_header_parse(raw: String) -> ZstdFrameHeader { return zstd_header_parse(raw); }
+pub fn archive_mod_zstd_block_is_last(block: ZstdBlock) -> Bool { return zstd_block_is_last(block); }
+pub fn archive_mod_zstd_block_size(block: ZstdBlock) -> Int { return zstd_block_size(block); }
+
+// Public pcap surface: archive_mod_pcap_*
+pub fn archive_mod_pcap_reader_header(buf: List[Int]) -> PcapOut { return pcap_reader_header(buf); }
+pub fn archive_mod_pcap_reader_packet(buf: List[Int], ns: Int) -> PcapOut { return pcap_reader_packet(buf, ns); }
+pub fn archive_mod_pcap_reader_flag(o: PcapOut) -> Int { return pcap_reader_flag(o); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. archive_gzip_magic_law.oo, archive_tar_magic_law.oo, deflate_block_law.oo, tar_header_law.oo, zfs_snapshots_law.oo)
+//   _theory files (e.g. zip_crc32_theory.oo, zstd_dictionary_compression_theory.oo)
+//   _principle files (e.g. cdc_rsync_principle.oo, streaming_integrity_principle.oo)
+//   _invariants files (e.g. archive_invariants.oo)
+//   _kat files (e.g. archive_kat.oo)

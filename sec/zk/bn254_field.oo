@@ -1,0 +1,18 @@
+// # BN254 / alt_bn128 Base and Extension Field Facade
+//
+// Logline: Implements finite field arithmetic over BN254 base field F_p and quadratic extension field F_p2.
+//
+// Setup: Pure algebraic field engine with 256-bit multi-limb representation and modular reduction.
+//
+// Beats:
+//   1. Represent 254-bit base field elements with 8 32-bit limbs.
+//   2. Compute field addition, subtraction, multiplication, and inversion in F_p.
+//   3. Compute quadratic extension arithmetic in F_p2 = F_p[u]/(u^2+1).
+//   4. Validate non-zero field elements and multiplicative inverse idempotence.
+
+import "./bn254_fp.oo";
+import "./bn254_fp2.oo";
+
+pub fn bn254_field_probe() -> Bn254Fp {
+    return bn254_fp_zero();
+}

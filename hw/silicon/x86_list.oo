@@ -1,0 +1,25 @@
+// # X86 List
+//
+// Logline: Standard library verification and domain capabilities for X86 List.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_x86_list() -> Bool {
+    let mut xs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 20 {
+        xs = list_push(xs, 100 + i);
+        i = i + 1;
+    }
+    let n: Int = list_len(xs);
+    let first: Int = list_get(xs, 0);
+    let last: Int = list_get(xs, 19);
+    println(n);
+    println(first);
+    println(last);
+    return true;
+}

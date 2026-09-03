@@ -1,0 +1,99 @@
+// # CLI glob expansion theory
+//
+// Logline: glob expansion maps a pattern id and a known file tree to a count of matching paths; closed for a single pattern and coupled with recursive ** descent across subdirectories.
+//
+// Setup: Pure Int. No FS. Pattern 0 = "*.oo" (flat), 1 = "test_*.oo", 2 = "**/*.oo" (recursive), 3 = "" (empty). Hostile counts or unknown pattern ids fail closed to 0.
+//
+// Beats:
+//   1. glob_count(pattern_id, total, test_n, sub_n) returns the match count for that pattern.
+//   2. "*.oo" returns the flat total; "test_*.oo" returns the test subset; "**/*.oo" returns total + sub.
+//   3. Empty pattern returns 0; unknown pattern returns 0; negative counts fail closed to 0.
+//   4. Coupled recursive: "**/*.oo" returns the union of flat and sub counts at any depth.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn glb_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Match count for a glob pattern id against a fixed file tree.
+// pattern 0 = "*.oo" flat; 1 = "test_*.oo"; 2 = "**/*.oo" recursive; 3 = "" empty Ok(0).
+// Negative counts or unknown pattern_id return Err.
+pub fn glob_count(pattern_id: Int, total: Int, test_n: Int, sub_n: Int) -> Result[Int, String] {
+    if total < 0 { return Err("ERR\tglob\tdomain"); }
+    if test_n < 0 { return Err("ERR\tglob\tdomain"); }
+    if sub_n < 0 { return Err("ERR\tglob\tdomain"); }
+    if pattern_id == 0 { return Ok(total); }
+    if pattern_id == 1 { return Ok(test_n); }
+    if pattern_id == 2 { return Ok(total + sub_n); }
+    if pattern_id == 3 { return Ok(0); }
+    return Err("ERR\tglob\tdomain");
+}
+
+// True when a single pattern id is recognized.
+pub fn glob_pattern_known(pattern_id: Int) -> Int {
+    if pattern_id < 0 { return 0; }
+    if pattern_id > 3 { return 0; }
+    return 1;
+}
+
+// domain_cert wrapper for the theory lock.
+pub fn glob_theory_holds(pattern_id: Int, total: Int, test_n: Int, sub_n: Int) -> DomainCert {
+    let cr: Result[Int, String] = glob_count(pattern_id, total, test_n, sub_n);
+    if cr.is_ok() == false {
+        return domain_cert("cli", "glob_expansion_theory", 0);
+    }
+    return domain_cert("cli", "glob_expansion_theory", 1);
+}
+
+pub fn verify_glob_expansion_theory() -> Bool {
+    // Golden: "*.oo" returns the flat total.
+    if glb_got(glob_count(0, 10, 3, 5)) != 10 { return false; }
+    let zflat: Result[Int, String] = glob_count(0, 0, 0, 0);
+    if zflat.is_ok() == false { return false; }
+    if glb_got(zflat) != 0 { return false; }
+    if glb_got(glob_count(0, 50, 20, 30)) != 50 { return false; }
+
+    // Golden: "test_*.oo" returns the test subset.
+    if glb_got(glob_count(1, 10, 3, 5)) != 3 { return false; }
+    if glb_got(glob_count(1, 50, 20, 30)) != 20 { return false; }
+    if glb_got(glob_count(1, 10, 0, 0)) != 0 { return false; }
+
+    // Golden: "**/*.oo" recursive returns flat + sub.
+    if glb_got(glob_count(2, 10, 3, 5)) != 15 { return false; }
+    if glb_got(glob_count(2, 0, 0, 0)) != 0 { return false; }
+    if glb_got(glob_count(2, 7, 2, 11)) != 18 { return false; }
+
+    // Coupled recursive: depth-1 tree and depth-2 tree both report the union.
+    let depth1: Int = glb_got(glob_count(2, 4, 1, 2));
+    let depth2: Int = glb_got(glob_count(2, 4, 1, 8));
+    if depth1 != 6 { return false; }
+    if depth2 != 12 { return false; }
+
+    // Identity: empty pattern is Ok(0) regardless of counts.
+    let zempty: Result[Int, String] = glob_count(3, 100, 50, 25);
+    if zempty.is_ok() == false { return false; }
+    if glb_got(zempty) != 0 { return false; }
+    if glb_got(glob_count(3, 0, 0, 0)) != 0 { return false; }
+
+    // Hostile: unknown pattern id returns Err.
+    if glob_count(99, 10, 3, 5).is_ok() { return false; }
+    if glob_count(0 - 1, 10, 3, 5).is_ok() { return false; }
+
+    // Hostile: negative counts return Err.
+    if glob_count(0, 0 - 1, 0, 0).is_ok() { return false; }
+    if glob_count(1, 0, 0 - 1, 0).is_ok() { return false; }
+    if glob_count(2, 0, 0, 0 - 1).is_ok() { return false; }
+
+    // Golden: pattern_known matches the four legal ids.
+    if glob_pattern_known(0) != 1 { return false; }
+    if glob_pattern_known(1) != 1 { return false; }
+    if glob_pattern_known(2) != 1 { return false; }
+    if glob_pattern_known(3) != 1 { return false; }
+
+    // Hostile: pattern_known rejects out-of-range ids.
+    if glob_pattern_known(4) != 0 { return false; }
+    if glob_pattern_known(0 - 1) != 0 { return false; }
+
+    return true;
+}

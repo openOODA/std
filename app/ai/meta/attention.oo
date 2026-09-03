@@ -1,0 +1,120 @@
+// # Cognitive Attention Gating, Working Memory, and Sparing Ingress
+//
+// Logline: Cognitive sensory filter and bounded working memory buffer eliminating context clutter and token drag.
+//
+// Setup: Pure cognitive cybernetic model based on human sensory gating and Miller's Law (7 ± 2 items).
+//
+// Beats:
+//   1. Construct an attention gate with salience threshold.
+//   2. Gate incoming signals, filtering out low-information noise.
+//   3. Manage working memory slots with bounded FIFO eviction.
+//   4. Compute sparing ingress token reduction ratio.
+
+type AttentionGate = struct {
+    threshold: Float,
+    filtered_count: Int,
+    admitted_count: Int
+};
+
+type WorkingMemory = struct {
+    capacity: Int,
+    items: List[String]
+};
+
+pub fn att_gate_new(salience_threshold: Float) -> AttentionGate {
+    let mut th: Float = salience_threshold;
+    if th < 0.0 { th = 0.0; }
+    return AttentionGate {
+        threshold: th,
+        filtered_count: 0,
+        admitted_count: 0
+    };
+}
+
+// Evaluate signal salience (0.0 to 1.0) and admit only if exceeding threshold
+pub fn att_gate_eval(gate: AttentionGate, signal_salience: Float) -> Bool {
+    if signal_salience >= gate.threshold {
+        return true;
+    }
+    return false;
+}
+
+pub fn att_gate_record_admit(gate: AttentionGate) -> AttentionGate {
+    return AttentionGate {
+        threshold: gate.threshold,
+        filtered_count: gate.filtered_count,
+        admitted_count: gate.admitted_count + 1
+    };
+}
+
+pub fn att_gate_record_filter(gate: AttentionGate) -> AttentionGate {
+    return AttentionGate {
+        threshold: gate.threshold,
+        filtered_count: gate.filtered_count + 1,
+        admitted_count: gate.admitted_count
+    };
+}
+
+// Bounded working memory (Miller's law defaults to 7 slots)
+pub fn wm_new(max_slots: Int) -> WorkingMemory {
+    let mut cap: Int = max_slots;
+    if cap < 1 { cap = 1; }
+    if cap > 9 { cap = 9; }
+    let empty_items: List[String] = list_new();
+    return WorkingMemory {
+        capacity: cap,
+        items: empty_items
+    };
+}
+
+// Push item to working memory with automatic FIFO eviction if full
+pub fn wm_push(wm: WorkingMemory, item: String) -> WorkingMemory {
+    let cur_len: Int = list_len(wm.items);
+    let mut new_items: List[String] = list_new();
+    if cur_len >= wm.capacity {
+        // Evict oldest item at index 0 (drop 1)
+        let mut i: Int = 1;
+        while i < cur_len {
+            new_items = list_push(new_items, list_get(wm.items, i));
+            i = i + 1;
+        }
+    } else {
+        let mut i: Int = 0;
+        while i < cur_len {
+            new_items = list_push(new_items, list_get(wm.items, i));
+            i = i + 1;
+        }
+    }
+    new_items = list_push(new_items, item);
+    return WorkingMemory {
+        capacity: wm.capacity,
+        items: new_items
+    };
+}
+
+pub fn wm_len(wm: WorkingMemory) -> Int {
+    return list_len(wm.items);
+}
+
+// Calculate token compression efficiency: (raw - compressed) / raw
+pub fn att_compression_ratio(raw_tokens: Int, compressed_tokens: Int) -> Float {
+    if raw_tokens <= 0 { return 0.0; }
+    let raw_f: Float = att_int_to_float_w(raw_tokens);
+    let comp_f: Float = att_int_to_float_w(compressed_tokens);
+    let saved: Float = raw_f - comp_f;
+    let total: Float = raw_f;
+    return saved / total;
+}
+
+// Helper to convert Int to Float via repeated addition (works around ooda
+// compiler bug where `as Float` cast and Float*Int arithmetic don't promote).
+fn att_int_to_float_w(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}

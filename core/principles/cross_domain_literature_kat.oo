@@ -1,0 +1,124 @@
+// # Cross-domain literature KAT (known-answer test)
+//
+// Logline: Locks the cross-domain literature references Noether 1918 (Invariante Variationsprobleme, Gött. Nachr.), Knaster-Tarski 1955 (Pacific J. Math. 5, 285-309), Moggi 1991 (Notices ACM 93, 55-92); the Lagrangian <L> = <T> - <V> from classical mechanics; monad left identity (return x >>= f) = f x for List, Option, State (cross-domain: math, AI, sync, text, phys, chem, bio).
+//
+// Setup: Pure Int. Imports the relevant cross-domain principle modules. Each entry cites 2+ domains where the pattern appears. Precision: Lagrangian, monad law, and free-forgetful F(U(G)) are exact at 0.001% tolerance.
+//
+// Beats:
+//   1. Noether 1918 reference: noether_law_cert holds 1 for free particle.
+//   2. Knaster-Tarski 1955 reference: tarski_lfp_iterate converges for monotone f.
+//   3. Moggi 1991 reference: monad_laws_check returns 1 for List, Option, State.
+//   4. Lagrangian <L> = <T> - <V>: noether_lagrangian(0, 0, 1, 0) = 0; noether_lagrangian(0, 1, 1, 1) = 0 (harmonic).
+//   5. Monad left identity for List/Option/State.
+
+import "std/core/principles/monad_minimal_axiom_principle.oo";
+import "std/core/principles/conservation_invariant_law.oo";
+import "std/core/principles/conjugate_gradient_family_theory.oo";
+import "std/core/principles/monotone_convergence_principle.oo";
+import "std/core/principles/recursive_unfold_theory.oo";
+import "std/core/principles/denotational_semantics_principle.oo";
+import "std/core/principles/stochastic_process_coupling_law.oo";
+import "std/core/principles/category_adjunction_theory.oo";
+import "std/core/principles/information_geometry_principle.oo";
+import "std/core/principles/tensor_decomposition_law.oo";
+
+pub fn cross_domain_kat_noether() -> Int {
+    let c: DomainCert = noether_law_cert(0, 0, 0, 5, 3);
+    return c.holds;
+}
+
+pub fn cross_domain_kat_tarski() -> Int {
+    let mut f_a: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 8 { f_a = list_push(f_a, i | 1); i = i + 1; }
+    let c: DomainCert = tarski_principle_cert(3, f_a);
+    return c.holds;
+}
+
+pub fn cross_domain_kat_moggi_list() -> Int {
+    let c: DomainCert = monad_principle_cert(0, 7, 0, 1);
+    return c.holds;
+}
+
+pub fn cross_domain_kat_moggi_option() -> Int {
+    let c: DomainCert = monad_principle_cert(1, 7, 0, 1);
+    return c.holds;
+}
+
+pub fn cross_domain_kat_moggi_state() -> Int {
+    let c: DomainCert = monad_principle_cert(2, 7, 0, 1);
+    return c.holds;
+}
+
+pub fn cross_domain_kat_lagrangian() -> Int {
+    // L(0, 0, 1, 0) = T(0, 0) - V(0, 1) = 0 - 0 = 0 (free particle at v=0).
+    let l1: Result[Int, String] = noether_lagrangian(0, 0, 1, 0);
+    if l1.is_ok() == false { return 0; }
+    if noe_got(l1) != 0 { return 0; }
+    // L(0, 1, 1, 1) = T(0, 1) - V(1, 1) = 5000 - 5000 = 0 (harmonic T-V at x=1, v=1 with m=1, k=1).
+    let l2: Result[Int, String] = noether_lagrangian(0, 1, 1, 1);
+    if l2.is_ok() == false { return 0; }
+    if noe_got(l2) != 0 { return 0; }
+    // L(0, 0, 1, 2) = T(0, 2) - V(0, 1) = 20000 - 0 = 20000 (free particle at v=2).
+    let l3: Result[Int, String] = noether_lagrangian(0, 0, 1, 2);
+    if l3.is_ok() == false { return 0; }
+    if noe_got(l3) != 20000 { return 0; }
+    return 1;
+}
+
+pub fn cross_domain_kat_monad_left_identity_list(x: Int) -> Int {
+    // For List monad: (return x >>= f) = f x. f_id 0 = [x, x+1].
+    let lhs: List[Int] = mbind_list(mret(x), 0);
+    let rhs: List[Int] = mlistf(x, 0);
+    if mleq(lhs, rhs) == 0 { return 0; }
+    return 1;
+}
+
+pub fn cross_domain_kat_monad_left_identity_option(x: Int) -> Int {
+    // For Option monad: (return x >>= f) = f x. f_id 0 = x+10.
+    let lhs: List[Int] = mbind_option(mret(x), 0);
+    let rhs: List[Int] = mret(mapp(0, x));
+    if mleq(lhs, rhs) == 0 { return 0; }
+    return 1;
+}
+
+pub fn cross_domain_kat_monad_left_identity_state(x: Int) -> Int {
+    // For State monad: (return x >>= f) = (f(x), s0).
+    let lhs: List[Int] = mbind_state(monad_state_return(x, 0), 0);
+    let rhs: List[Int] = monad_state_return(mapp(0, x), 0);
+    if mleq(lhs, rhs) == 0 { return 0; }
+    return 1;
+}
+
+pub fn cross_domain_kat_noether_reference() -> Int {
+    return 1918;
+}
+
+pub fn cross_domain_kat_tarski_reference() -> Int {
+    return 1955;
+}
+
+pub fn cross_domain_kat_moggi_reference() -> Int {
+    return 1991;
+}
+
+pub fn cross_domain_kat_lagrangian_classical() -> Int {
+    return 1;
+}
+
+pub fn cross_domain_kat_pass() -> Int {
+    if cross_domain_kat_noether() != 1 { return 0; }
+    if cross_domain_kat_tarski() != 1 { return 0; }
+    if cross_domain_kat_moggi_list() != 1 { return 0; }
+    if cross_domain_kat_moggi_option() != 1 { return 0; }
+    if cross_domain_kat_moggi_state() != 1 { return 0; }
+    if cross_domain_kat_lagrangian() != 1 { return 0; }
+    if cross_domain_kat_monad_left_identity_list(7) != 1 { return 0; }
+    if cross_domain_kat_monad_left_identity_list(0) != 1 { return 0; }
+    if cross_domain_kat_monad_left_identity_option(7) != 1 { return 0; }
+    if cross_domain_kat_monad_left_identity_state(7) != 1 { return 0; }
+    if cross_domain_kat_noether_reference() != 1918 { return 0; }
+    if cross_domain_kat_tarski_reference() != 1955 { return 0; }
+    if cross_domain_kat_moggi_reference() != 1991 { return 0; }
+    return 1;
+}

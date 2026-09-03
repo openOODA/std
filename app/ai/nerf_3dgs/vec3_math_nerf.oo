@@ -1,0 +1,184 @@
+// # 3D Vector Mathematics for Neural Rendering
+//
+// Logline: Float Vec3 vector and math operations for neural radiance modeling.
+//
+// Setup: Pure Float vector arithmetic.
+//
+// Beats:
+//   1. Construct Vec3.
+//   2. Vector arithmetic, dot product, scaling, normalization.
+//   3. Math helper functions (clamp, exp).
+
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+pub fn vec3_new(x: Float, y: Float, z: Float) -> Vec3 {
+    return Vec3 { x: x, y: y, z: z };
+}
+
+pub fn vec3_zero() -> Vec3 {
+    return Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+}
+
+pub fn vec3_one() -> Vec3 {
+    return Vec3 { x: 1.0, y: 1.0, z: 1.0 };
+}
+
+pub fn vec3_add(a: Vec3, b: Vec3) -> Vec3 {
+    return Vec3 {
+        x: a.x + b.x,
+        y: a.y + b.y,
+        z: a.z + b.z
+    };
+}
+
+pub fn vec3_sub(a: Vec3, b: Vec3) -> Vec3 {
+    return Vec3 {
+        x: a.x - b.x,
+        y: a.y - b.y,
+        z: a.z - b.z
+    };
+}
+
+pub fn vec3_scale(v: Vec3, s: Float) -> Vec3 {
+    return Vec3 {
+        x: v.x * s,
+        y: v.y * s,
+        z: v.z * s
+    };
+}
+
+pub fn vec3_dot(a: Vec3, b: Vec3) -> Float {
+    return (a.x * b.x) + (a.y * b.y) + (a.z * b.z);
+}
+
+pub fn vec3_length_sq(v: Vec3) -> Float {
+    return ((v.x * v.x) + (v.y * v.y)) + (v.z * v.z);
+}
+
+pub fn vec3_length(v: Vec3) -> Float {
+    return sqrt(vec3_length_sq(v));
+}
+
+pub fn vec3_normalize(v: Vec3) -> Vec3 {
+    let l_sq: Float = vec3_length_sq(v);
+    if l_sq < 0.0000000001 {
+        return vec3_zero();
+    }
+    let inv_l: Float = 1.0 / sqrt(l_sq);
+    return vec3_scale(v, inv_l);
+}
+
+pub fn math_clamp(v: Float, min_val: Float, max_val: Float) -> Float {
+    if v < min_val {
+        return min_val;
+    }
+    if v > max_val {
+        return max_val;
+    }
+    return v;
+}
+
+pub fn math_exp(v: Float) -> Float {
+    return exp(v);
+}
+
+type Mat3 = struct {
+    m00: Float, m01: Float, m02: Float,
+    m10: Float, m11: Float, m12: Float,
+    m20: Float, m21: Float, m22: Float
+};
+
+type Quat = struct {
+    x: Float, y: Float, z: Float, w: Float
+};
+
+pub fn mat3_zero() -> Mat3 {
+    return Mat3 { m00: 0.0, m01: 0.0, m02: 0.0, m10: 0.0, m11: 0.0, m12: 0.0, m20: 0.0, m21: 0.0, m22: 0.0 };
+}
+
+pub fn mat3_identity() -> Mat3 {
+    return Mat3 { m00: 1.0, m01: 0.0, m02: 0.0, m10: 0.0, m11: 1.0, m12: 0.0, m20: 0.0, m21: 0.0, m22: 1.0 };
+}
+
+pub fn mat3_transpose(m: Mat3) -> Mat3 {
+    return Mat3 { m00: m.m00, m01: m.m10, m02: m.m20, m10: m.m01, m11: m.m11, m12: m.m21, m20: m.m02, m21: m.m12, m22: m.m22 };
+}
+
+pub fn mat3_mul_vec(m: Mat3, v: Vec3) -> Vec3 {
+    let x: Float = m.m00 * v.x + m.m01 * v.y + m.m02 * v.z;
+    let y: Float = m.m10 * v.x + m.m11 * v.y + m.m12 * v.z;
+    let z: Float = m.m20 * v.x + m.m21 * v.y + m.m22 * v.z;
+    return Vec3 { x: x, y: y, z: z };
+}
+
+pub fn quat_identity() -> Quat {
+    return Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+}
+
+pub fn quat_to_mat3(q: Quat) -> Mat3 {
+    let x: Float = q.x;
+    let y: Float = q.y;
+    let z: Float = q.z;
+    let w: Float = q.w;
+    let xx: Float = x * x;
+    let yy: Float = y * y;
+    let zz: Float = z * z;
+    let xy: Float = x * y;
+    let xz: Float = x * z;
+    let yz: Float = y * z;
+    let wx: Float = w * x;
+    let wy: Float = w * y;
+    let wz: Float = w * z;
+    return Mat3 {
+        m00: 1.0 - 2.0 * (yy + zz), m01: 2.0 * (xy - wz), m02: 2.0 * (xz + wy),
+        m10: 2.0 * (xy + wz), m11: 1.0 - 2.0 * (xx + zz), m12: 2.0 * (yz - wx),
+        m20: 2.0 * (xz - wy), m21: 2.0 * (yz + wx), m22: 1.0 - 2.0 * (xx + yy)
+    };
+}
+
+pub fn vec3_mul(a: &Vec3, b: &Vec3) -> Vec3 {
+    return Vec3 { x: a.x * b.x, y: a.y * b.y, z: a.z * b.z };
+}
+
+pub fn fourier_encode_scalar(x: Float, num_bands: Int) -> List[Float] {
+    let mut out: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < num_bands {
+        let mut fi: Float = 0.0; let mut ci: Int = i; while ci >= 1 { fi = fi + 1.0; ci = ci - 1; } let freq: Float = fi + fi;
+        let p: Float = freq * x;
+        out = list_push(out, math_sin(p));
+        out = list_push(out, math_cos(p));
+        i = i + 1;
+    }
+    return out;
+}
+
+// Minimal math stubs for trigonometry.
+pub fn math_sin(x: Float) -> Float {
+    return x - (x * x * x) / 6.0 + (x * x * x * x * x) / 120.0;
+}
+
+pub fn math_cos(x: Float) -> Float {
+    let x2: Float = x * x;
+    return 1.0 - x2 / 2.0 + (x2 * x2) / 24.0 - (x2 * x2 * x2) / 720.0;
+}
+
+pub fn vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
+    return Vec3 {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
+    };
+}
+
+// Minimal camera projection: orthographic + perspective via focal.
+pub fn camera_project_point(p: Vec3, fx: Float, fy: Float, cx: Float, cy: Float) -> Vec3 {
+    let z: Float = if p.z > 0.1 { p.z } else { 0.1 };
+    let u: Float = (p.x * fx) / z + cx;
+    let v: Float = (p.y * fy) / z + cy;
+    return Vec3 { x: u, y: v, z: z };
+}

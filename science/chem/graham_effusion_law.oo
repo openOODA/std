@@ -1,0 +1,57 @@
+// # Graham gas effusion law
+//
+// Logline: Effusion rate ratio equals inverse square root of molar mass ratio. Non-positive masses return Err.
+//
+// Setup: Pure Float. Molar masses are caller-supplied in kg/mol; the identity is unit-agnostic.
+//
+// Beats:
+//   1. Rate ratio v1/v2 = sqrt(M2/M1) when both molar masses > 0.
+//   2. Time ratio t1/t2 = sqrt(M1/M2) (inverse of rate ratio).
+//   3. Hostile M <= 0 or negative reference rate return Err. Zero reference rate is Ok(0).
+
+fn ge_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn ge_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn graham_rate_ratio(mass_1_kgmol: Float, mass_2_kgmol: Float) -> Result[Float, String] {
+    if mass_1_kgmol <= 0.0 { return Err("ERR\tgraham\tm1"); }
+    if mass_2_kgmol <= 0.0 { return Err("ERR\tgraham\tm2"); }
+    return Ok(sqrt(mass_2_kgmol / mass_1_kgmol));
+}
+
+pub fn graham_time_ratio(mass_1_kgmol: Float, mass_2_kgmol: Float) -> Result[Float, String] {
+    if mass_1_kgmol <= 0.0 { return Err("ERR\tgraham\tm1"); }
+    if mass_2_kgmol <= 0.0 { return Err("ERR\tgraham\tm2"); }
+    return Ok(sqrt(mass_1_kgmol / mass_2_kgmol));
+}
+
+pub fn graham_effusion_rate(
+    reference_rate: Float,
+    reference_mass_kgmol: Float,
+    sample_mass_kgmol: Float
+) -> Result[Float, String] {
+    if reference_rate < 0.0 { return Err("ERR\tgraham\trate"); }
+    if reference_mass_kgmol <= 0.0 { return Err("ERR\tgraham\tmref"); }
+    if sample_mass_kgmol <= 0.0 { return Err("ERR\tgraham\tms"); }
+    return Ok(reference_rate * sqrt(reference_mass_kgmol / sample_mass_kgmol));
+}
+
+pub fn verify_graham_effusion_law() -> Bool {
+    let r: Float = ge_got(graham_rate_ratio(2.0, 32.0));
+    if ge_eabs(r - 4.0) > 0.0000001 { return false; }
+    let t: Float = ge_got(graham_time_ratio(2.0, 32.0));
+    if ge_eabs(t - 0.25) > 0.0000001 { return false; }
+    let one: Float = ge_got(graham_rate_ratio(28.0, 28.0));
+    if ge_eabs(one - 1.0) > 0.0000001 { return false; }
+    let scaled: Float = ge_got(graham_effusion_rate(10.0, 32.0, 2.0));
+    if ge_eabs(scaled - 40.0) > 0.0000001 { return false; }
+    if graham_rate_ratio(0.0, 32.0).is_ok() { return false; }
+    if graham_rate_ratio(2.0, 0.0).is_ok() { return false; }
+    if graham_effusion_rate(0.0 - 1.0, 32.0, 2.0).is_ok() { return false; }
+    return true;
+}

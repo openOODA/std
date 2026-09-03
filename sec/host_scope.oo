@@ -1,0 +1,179 @@
+// # Host scope (library, not a NetCap)
+//
+// Logline: Decide if a host string is allowed. No fetch.
+//
+// Setup: Exact host, or *.example.com suffix at a dot boundary.
+//
+// Beats:
+//   1. Empty allowed is denied.
+//   2. Exact match is allowed.
+//   3. *.example.com allows foo.example.com, not example.com, not example.com.evil, not evil.example.com.attacker.
+//
+// residual: not &NetCap; no DNS; no fetch
+
+import "std/core/primitives/str.oo";
+
+fn ascii_lo(c: String) -> String {
+    let up: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let lo: String = "abcdefghijklmnopqrstuvwxyz";
+    let mut k: Int = 0;
+    while k < 26 {
+        if char_at(up, k) == c {
+            return char_at(lo, k);
+        }
+        k = k + 1;
+    }
+    return c;
+}
+
+fn ascii_lower(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        out = out + ascii_lo(char_at(s, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn host_has_prefix(s: String, pre: String) -> Bool {
+    let n: Int = chars_len(s);
+    let m: Int = chars_len(pre);
+    if m > n {
+        return false;
+    }
+    let mut i: Int = 0;
+    while i < m {
+        if char_at(s, i) != char_at(pre, i) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn host_has_suffix(s: String, suf: String) -> Bool {
+    let n: Int = chars_len(s);
+    let m: Int = chars_len(suf);
+    if m > n {
+        return false;
+    }
+    let mut i: Int = 0;
+    while i < m {
+        if char_at(s, n - m + i) != char_at(suf, i) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn host_scope_allows(allowed: String, host: String) -> Bool {
+    if allowed == "" {
+        return false;
+    }
+    if host == "" {
+        return false;
+    }
+    let al: String = ascii_lower(allowed);
+    let ho: String = ascii_lower(host);
+    if host_has_prefix(ho, ".") {
+        return false;
+    }
+    if host_has_suffix(ho, ".") {
+        return false;
+    }
+    if host_has_suffix(ho, "..") {
+        return false;
+    }
+    let ddot: String = "..";
+    if str_index_of(ho, ddot) >= 0 {
+        return false;
+    }
+    if al == ho {
+        return true;
+    }
+    let an: Int = chars_len(al);
+    if an < 2 {
+        return false;
+    }
+    if char_at(al, 0) != "*" {
+        return false;
+    }
+    if char_at(al, 1) != "." {
+        return false;
+    }
+    let apex: String = str_slice(al, 2, an);
+    if ho == apex {
+        return false;
+    }
+    let suf: String = str_slice(al, 1, an);
+    if !host_has_suffix(ho, suf) {
+        return false;
+    }
+    let hn: Int = chars_len(ho);
+    let sm: Int = chars_len(suf);
+    if hn <= sm {
+        return false;
+    }
+    return char_at(ho, hn - sm) == ".";
+}
+
+pub fn host_scope_from_url(url: String) -> String {
+    let n: Int = chars_len(url);
+    let mut start: Int = 0;
+    if host_has_prefix(url, "https://") {
+        start = 8;
+    } else if host_has_prefix(url, "http://") {
+        start = 7;
+    }
+    if start == 0 {
+        return "";
+    }
+    if start >= n {
+        return "";
+    }
+    if char_at(url, start) == "[" {
+        let mut j: Int = start + 1;
+        while j < n {
+            if char_at(url, j) == "]" {
+                return str_slice(url, start, j + 1);
+            }
+            j = j + 1;
+        }
+        return "";
+    }
+    let mut i: Int = start;
+    let mut host_end: Int = -1;
+    while i < n {
+        let c: String = char_at(url, i);
+        if c == "@" {
+            return "";
+        }
+        if c == " " {
+            return "";
+        }
+        if c == "/" || c == "?" || c == "#" {
+            break;
+        }
+        if c == ":" {
+            if host_end < 0 {
+                host_end = i;
+            }
+        }
+        i = i + 1;
+    }
+    if host_end < 0 {
+        host_end = i;
+    }
+    if host_end <= start {
+        return "";
+    }
+    return str_slice(url, start, host_end);
+}
+
+pub fn host_scope_ok_url(allowed: String, url: String) -> Bool {
+    let host: String = host_scope_from_url(url);
+    return host_scope_allows(allowed, host);
+}

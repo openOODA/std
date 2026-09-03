@@ -1,0 +1,49 @@
+// # UI Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard ui domain library. The ui/ subdirectory is a theoretical-foundation library: laws and principles for human-computer interaction, ergonomics, accessibility, motion, and information design (Fitts's law, Hick's law, Steering law, Squares law, ISO 9241 ergonomics, WCAG 2.2 accessibility, Fitts 3D, scroll physics, consistency, feedback, information scent, progressive disclosure, visibility, animation curves, skill transfer). No public API code -- the directory is documentation and verification rules.
+//
+// Setup: No caps required. ui/ is a theoretical-foundation library; no FS, net, or env.
+//
+// Beats:
+//   1. Document the Fitts and Fitts-3D motion law surface as private siblings (target acquisition time).
+//   2. Document the Hick's law, Steering law, Squares law, and information-scent surface as private siblings.
+//   3. Document the WCAG 2.2 accessibility and ISO 9241 ergonomics surface as private siblings.
+//   4. Document the animation-curve, scroll-physics, and consistency/feedback/progressive-disclosure/visibility surface as private siblings.
+//   5. Document the invariants and KATs as private siblings. External callers must not import _law, _theory, _principle, _invariants, _kat files directly.
+
+import "fitts_law.oo";
+import "fitts_3d_theory.oo";
+import "fitts_3d_strict.oo";
+import "fitts_skill_transfer_theory.oo";
+import "hicks_law.oo";
+import "steering_law.oo";
+import "squares_law.oo";
+import "information_scent_theory.oo";
+import "iso_9241_ergo_law.oo";
+import "wcag_2_2_principle.oo";
+import "animation_curve_law.oo";
+import "scroll_physics_theory.oo";
+import "consistency_principle.oo";
+import "feedback_principle.oo";
+import "progressive_disclosure_principle.oo";
+import "visibility_principle.oo";
+
+// Note: ui/ has no public API code; every sibling is a _law, _theory,
+// _principle, _invariants, or _kat file. The mod.oo exists to satisfy
+// the Pillar 6 seam rule (FORMAT.oot §1.4) and to provide a single
+// public entry door whose surface is empty. Internal callers (tests,
+// audit harnesses) reference the theoretical files directly; external
+// callers must go through this mod.oo and receive no public functions.
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. animation_curve_law.oo, fitts_law.oo, hicks_law.oo, iso_9241_ergo_law.oo, squares_law.oo, steering_law.oo)
+//   _theory files (e.g. fitts_3d_theory.oo, fitts_skill_transfer_theory.oo, information_scent_theory.oo, scroll_physics_theory.oo)
+//   _principle files (e.g. consistency_principle.oo, feedback_principle.oo, progressive_disclosure_principle.oo, visibility_principle.oo, wcag_2_2_principle.oo)
+//   _invariants files (e.g. ui_invariants.oo)
+//   _kat files (e.g. ui_kat.oo)
+//   _strict files (e.g. fitts_3d_strict.oo)
+//
+// Migration path: if a future caller needs to verify a specific UI
+// law, they should add a re-export wrapper here (e.g.
+// ui_mod_fitts_law_compliant) rather than importing the private
+// _law file directly.

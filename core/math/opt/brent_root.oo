@@ -1,0 +1,119 @@
+// # Brent-Dekker Hybrid Root Finder
+//
+// Logline: Finds a bracketed 1D root by mixing bisection, secant, and inverse quadratic interpolation.
+//
+// Setup: Pure math. In-module f(x) = x^3 - x - 2. Fail-closes when the interval does not bracket.
+//
+// Beats:
+//   1. Reject a bracket with no sign change.
+//   2. Try inverse quadratic interpolation, else secant.
+//   3. Fall back to bisection when the trial step is unsafe.
+//   4. Stop when |b-a| is below tol or f(b) is zero.
+
+import "std/core/primitives/result.oo";
+
+fn brent_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn brent_sample_f(x: Float) -> Float {
+    return x * x * x - x - 2.0;
+}
+
+pub fn brent_solve(a0: Float, b0: Float, tol: Float, max_iter: Int) -> Result[Float, String] {
+    if max_iter < 1 { return Err("ERR\tbrent\titers"); }
+    if tol <= 0.0 { return Err("ERR\tbrent\ttol"); }
+    let mut a: Float = a0;
+    let mut b: Float = b0;
+    let mut fa: Float = brent_sample_f(a);
+    let mut fb: Float = brent_sample_f(b);
+    if fa * fb > 0.0 { return Err("ERR\tbrent\tnobracket"); }
+    if brent_abs(fa) < brent_abs(fb) {
+        let ts: Float = a;
+        a = b;
+        b = ts;
+        let tf: Float = fa;
+        fa = fb;
+        fb = tf;
+    }
+    let mut c: Float = a;
+    let mut fc: Float = fa;
+    let mut d: Float = b - a;
+    let mut mflag: Int = 1;
+    let mut it: Int = 0;
+    while it < max_iter {
+        if brent_abs(b - a) < tol { return Ok(b); }
+        if fb == 0.0 { return Ok(b); }
+        let mut s: Float = 0.0;
+        let mut used_bis: Int = 0;
+        if fa != fc {
+            if fb != fc {
+                s = a * fb * fc / ((fa - fb) * (fa - fc)) + b * fa * fc / ((fb - fa) * (fb - fc)) + c * fa * fb / ((fc - fa) * (fc - fb));
+            } else {
+                s = b - fb * (b - a) / (fb - fa);
+            }
+        } else {
+            if fb != fa {
+                s = b - fb * (b - a) / (fb - fa);
+            } else {
+                s = 0.5 * (a + b);
+                used_bis = 1;
+            }
+        }
+        let lo: Float = (3.0 * a + b) / 4.0;
+        let hi: Float = b;
+        let mut ok_int: Int = 0;
+        if lo <= hi {
+            if s >= lo {
+                if s <= hi { ok_int = 1; }
+            }
+        } else {
+            if s >= hi {
+                if s <= lo { ok_int = 1; }
+            }
+        }
+        let mut ok_delta: Int = 0;
+        let sb: Float = brent_abs(s - b);
+        if mflag == 1 {
+            if sb < 0.5 * brent_abs(b - c) { ok_delta = 1; }
+        } else {
+            if sb < 0.5 * brent_abs(c - d) { ok_delta = 1; }
+        }
+        if ok_int == 0 {
+            used_bis = 1;
+        }
+        if ok_delta == 0 {
+            used_bis = 1;
+        }
+        if used_bis == 1 {
+            s = 0.5 * (a + b);
+            mflag = 1;
+        } else {
+            mflag = 0;
+        }
+        let fs: Float = brent_sample_f(s);
+        d = c;
+        c = b;
+        fc = fb;
+        if fa * fs < 0.0 {
+            b = s;
+            fb = fs;
+        } else {
+            a = s;
+            fa = fs;
+        }
+        if brent_abs(fa) < brent_abs(fb) {
+            let ts2: Float = a;
+            a = b;
+            b = ts2;
+            let tf2: Float = fa;
+            fa = fb;
+            fb = tf2;
+        }
+        it = it + 1;
+    }
+    if brent_abs(b - a) < tol { return Ok(b); }
+    if fb == 0.0 { return Ok(b); }
+    return Err("ERR\tbrent\max_iter");
+}

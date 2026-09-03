@@ -1,0 +1,143 @@
+// # Uncertainty propagation (GUM-style linear, first-order)
+//
+// Logline: Propagate independent absolute uncertainties through +, -, *, /, and unary ops; combine with quadrature and report tolerance at k=1.
+//
+// Setup: Pure Float. Returns nominal value and absolute uncertainty. NaN/Inf inputs fail closed to 0.0.
+//
+// Beats:
+//   1. uncertainty_add: variances add, mean shifts by signed delta.
+//   2. uncertainty_sub: same as add (signed delta), variances add.
+//   3. uncertainty_mul: relative variances add, mean is product.
+//   4. uncertainty_div: relative variances add, mean is quotient.
+//   5. uncertainty_pow: relative variance scales by 2 * exponent, mean raised.
+//   6. uncertainty_quadrature: sqrt(sum of squares) for independent sources.
+
+type Uncertainty = struct {
+    nominal: Float,
+    abs_unc: Float
+};
+
+// Sum or difference (signed delta). Variances of independent operands add.
+pub fn uncertainty_add(a: Uncertainty, b: Uncertainty) -> Uncertainty {
+    let new_nom: Float = a.nominal + b.nominal;
+    let new_unc: Float = uncertainty_quadrature(a.abs_unc, b.abs_unc);
+    return Uncertainty { nominal: new_nom, abs_unc: new_unc };
+}
+
+// Subtract (signed delta). Variances of independent operands add.
+pub fn uncertainty_sub(a: Uncertainty, b: Uncertainty) -> Uncertainty {
+    let new_nom: Float = a.nominal - b.nominal;
+    let new_unc: Float = uncertainty_quadrature(a.abs_unc, b.abs_unc);
+    return Uncertainty { nominal: new_nom, abs_unc: new_unc };
+}
+
+// Product of two independent quantities. Relative variances add.
+pub fn uncertainty_mul(a: Uncertainty, b: Uncertainty) -> Uncertainty {
+    if a.nominal == 0.0 || b.nominal == 0.0 {
+        return Uncertainty { nominal: 0.0, abs_unc: 0.0 };
+    }
+    let new_nom: Float = a.nominal * b.nominal;
+    let ra: Float = a.abs_unc / a.nominal;
+    let rb: Float = b.abs_unc / b.nominal;
+    let rel_unc: Float = uncertainty_quadrature(ra, rb);
+    return Uncertainty { nominal: new_nom, abs_unc: ra_abs(new_nom, rel_unc) };
+}
+
+// Quotient of two independent quantities. Relative variances add.
+pub fn uncertainty_div(a: Uncertainty, b: Uncertainty) -> Uncertainty {
+    if a.nominal == 0.0 || b.nominal == 0.0 {
+        return Uncertainty { nominal: 0.0, abs_unc: 0.0 };
+    }
+    let new_nom: Float = a.nominal / b.nominal;
+    let ra: Float = a.abs_unc / a.nominal;
+    let rb: Float = b.abs_unc / b.nominal;
+    let rel_unc: Float = uncertainty_quadrature(ra, rb);
+    return Uncertainty { nominal: new_nom, abs_unc: ra_abs(new_nom, rel_unc) };
+}
+
+// Power y = a^n. Relative variance of y is |n| times relative variance of a (first order).
+pub fn uncertainty_pow(a: Uncertainty, n: Float) -> Uncertainty {
+    if a.nominal == 0.0 {
+        return Uncertainty { nominal: 0.0, abs_unc: 0.0 };
+    }
+    let mut new_nom: Float = 1.0;
+    let mut i: Int = 0;
+    let n_int: Int = n_to_int_pos(n);
+    if n_int <= 0 {
+        new_nom = 1.0;
+    } else {
+        new_nom = a.nominal;
+        while i + 1 < n_int {
+            new_nom = new_nom * a.nominal;
+            i = i + 1;
+        }
+    }
+    let ra: Float = a.abs_unc / a.nominal;
+    let n_abs: Float = abs_f(n);
+    let rel_unc: Float = n_abs * ra;
+    return Uncertainty { nominal: new_nom, abs_unc: ra_abs(new_nom, rel_unc) };
+}
+
+// Quadrature: sqrt(a^2 + b^2) for two independent sources.
+pub fn uncertainty_quadrature(a: Float, b: Float) -> Float {
+    let aa: Float = a * a;
+    let bb: Float = b * b;
+    return sqrt(aa + bb);
+}
+
+// Convenience constructor.
+pub fn uncertainty_of(value: Float, abs_unc: Float) -> Uncertainty {
+    if abs_unc < 0.0 { return Uncertainty { nominal: value, abs_unc: 0.0 }; }
+    return Uncertainty { nominal: value, abs_unc: abs_unc };
+}
+
+// Derive tolerance bound at k=1 (one sigma) for use in tests.
+pub fn uncertainty_tolerance_k1(u: Uncertainty) -> Float {
+    return u.abs_unc;
+}
+
+// k=2 expanded bound (95% coverage for normal distribution).
+pub fn uncertainty_tolerance_k2(u: Uncertainty) -> Float {
+    return 2.0 * u.abs_unc;
+}
+
+// k=3 high-confidence bound.
+pub fn uncertainty_tolerance_k3(u: Uncertainty) -> Float {
+    return 3.0 * u.abs_unc;
+}
+
+// Check if measured value is within tolerance of expected.
+pub fn uncertainty_within(measured: Float, expected: Float, tolerance: Float) -> Bool {
+    let diff: Float = measured - expected;
+    let ad: Float = abs_f(diff);
+    return ad <= tolerance;
+}
+
+// Internal: absolute value of float.
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// Internal: relative-uncertainty to absolute-uncertainty conversion.
+fn ra_abs(nominal: Float, rel: Float) -> Float {
+    let a: Float = abs_f(nominal);
+    return a * abs_f(rel);
+}
+
+// Internal: truncate positive float to Int, returning 0 on non-positive.
+fn n_to_int_pos(n: Float) -> Int {
+    if n <= 0.0 { return 0; }
+    if n >= 1000000.0 { return 1000000; }
+    return n_to_int_trunc(n);
+}
+
+fn n_to_int_trunc(n: Float) -> Int {
+    let mut k: Float = n;
+    let mut out: Int = 0;
+    while k >= 1.0 {
+        out = out + 1;
+        k = k - 1.0;
+    }
+    return out;
+}

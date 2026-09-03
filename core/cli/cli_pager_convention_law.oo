@@ -1,0 +1,98 @@
+// # CLI pager convention law
+//
+// Logline: a program should page output to $PAGER when stdout is a TTY and the output is longer than the page height; non-TTY or short output must skip the pager.
+//
+// Setup: Pure Int. page_height is 24 by convention. Mode 0 = auto (use TTY + length), 1 = force on, 2 = force off. Hostile page_height < 1 fails closed to no-pager.
+//
+// Beats:
+//   1. should_page(tty, lines, page_height, mode) returns 1 when the pager should be used.
+//   2. TTY + long output → page; TTY + short output → no page; non-TTY → no page.
+//   3. Force on / off override the auto rule.
+//   4. page_height < 1 fails closed to 0 (no pager).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Default page height: 24 lines.
+pub fn default_page_height() -> Int {
+    return 24;
+}
+
+// Decides whether to use a pager.
+// mode 0 = auto, 1 = force on, 2 = force off.
+pub fn should_page(tty: Int, lines: Int, page_height: Int, mode: Int) -> Int {
+    if page_height < 1 { return 0; }
+    if lines < 0 { return 0; }
+    if mode == 1 { return 1; }
+    if mode == 2 { return 0; }
+    if tty == 0 { return 0; }
+    if lines > page_height { return 1; }
+    return 0;
+}
+
+// 1 if the mode id is one of {0, 1, 2}.
+pub fn pager_mode_known(mode: Int) -> Int {
+    if mode == 0 { return 1; }
+    if mode == 1 { return 1; }
+    if mode == 2 { return 1; }
+    return 0;
+}
+
+// domain_cert wrapper for the pager law lock.
+pub fn pager_law_holds(tty: Int, lines: Int, page_height: Int, mode: Int) -> DomainCert {
+    let v: Int = should_page(tty, lines, page_height, mode);
+    return domain_cert("cli", "pager_convention_law", v);
+}
+
+pub fn verify_pager_convention_law() -> Bool {
+    let h: Int = default_page_height();
+    if h != 24 { return false; }
+
+    // Ideal: TTY + long output → use pager.
+    if should_page(1, 100, 24, 0) != 1 { return false; }
+    if should_page(1, 25, 24, 0) != 1 { return false; }
+
+    // Ideal: TTY + short output → no pager.
+    if should_page(1, 24, 24, 0) != 0 { return false; }
+    if should_page(1, 10, 24, 0) != 0 { return false; }
+    if should_page(1, 0, 24, 0) != 0 { return false; }
+
+    // Ideal: non-TTY → no pager regardless of length.
+    if should_page(0, 1000, 24, 0) != 0 { return false; }
+    if should_page(0, 1, 24, 0) != 0 { return false; }
+    if should_page(0, 0, 24, 0) != 0 { return false; }
+
+    // Non-ideal: force on overrides even non-TTY and short output.
+    if should_page(0, 0, 24, 1) != 1 { return false; }
+    if should_page(1, 1, 24, 1) != 1 { return false; }
+
+    // Non-ideal: force off overrides even TTY + long output.
+    if should_page(1, 1000, 24, 2) != 0 { return false; }
+    if should_page(0, 1000, 24, 2) != 0 { return false; }
+
+    // Hostile: page_height < 1 fails closed to no pager.
+    if should_page(1, 100, 0, 0) != 0 { return false; }
+    if should_page(1, 100, 0 - 1, 0) != 0 { return false; }
+    if should_page(1, 100, 0, 1) != 0 { return false; }
+    if should_page(1, 100, 0, 2) != 0 { return false; }
+
+    // Hostile: negative line count fails closed to no pager.
+    if should_page(1, 0 - 1, 24, 0) != 0 { return false; }
+    if should_page(1, 0 - 100, 24, 1) != 0 { return false; }
+
+    // Golden: mode_known accepts 0, 1, 2 and rejects the rest.
+    if pager_mode_known(0) != 1 { return false; }
+    if pager_mode_known(1) != 1 { return false; }
+    if pager_mode_known(2) != 1 { return false; }
+    if pager_mode_known(3) != 0 { return false; }
+    if pager_mode_known(0 - 1) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the value.
+    let c1: DomainCert = pager_law_holds(1, 100, 24, 0);
+    if c1.domain != "cli" { return false; }
+    if c1.law_name != "pager_convention_law" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = pager_law_holds(0, 100, 24, 0);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

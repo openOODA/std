@@ -1,0 +1,142 @@
+// # Time literature KAT
+//
+// Logline: time: known-good canonical time-synchronization literature constants hold at 0.001% precision: Spanner TrueTime uncertainty typically 1-7 ms (Corbett et al. OSDI 2012, Sec 3); IEEE 1588-2019 PTP published 2019-11-21; GPS satellite relativistic correction 45,700 ns/day (Ashby 2003 "Relativity in the Global Positioning System"); IERS Bulletin A weekly publication cadence; TAI-UTC leap-second offset at 2024 = 37 seconds.
+// Setup: Pure Int constants and helpers. Citations are in comments beside every constant. 0.001% tolerance = 1 ns for the GPS ns/day figure; for the IEEE 1588-2019 publication date the spec says "2019-11-21" exactly; for IERS Bulletin A the cadence is "weekly"; for TrueTime uncertainty 1-7 ms is the published band; for TAI-UTC at 2024 = 37 s.
+// Beats:
+//   1. Spanner TrueTime typical uncertainty 1-7 ms = 1,000-7,000 us (Corbett 2012).
+//   2. IEEE 1588-2019 published 2019-11-21 (IEEE Std 1588-2019 front matter).
+//   3. GPS relativistic correction = 45,700 ns/day (Ashby 2003).
+//   4. IERS Bulletin A published weekly (IERS conventions / IERS Central Bureau).
+//   5. TAI - UTC at 2024-01-01 = 37 seconds (IERS Bulletin C, leap-second table).
+//   6. Each constant within 0.001% or its spec-stated tolerance.
+
+import "std/core/primitives/domain_cert.oo";
+
+// (a) Spanner TrueTime typical uncertainty 1-7 ms in microseconds
+// (Corbett et al. OSDI 2012 "Spanner: Google's Globally Distributed Database",
+// Sec 3 "TrueTime API"). 1 ms = 1,000 us.
+pub fn tt_kat_min_uncertainty_us() -> Int {
+    return 1000;
+}
+
+pub fn tt_kat_max_uncertainty_us() -> Int {
+    return 7000;
+}
+
+// (b) IEEE Std 1588-2019 publication date (front matter, IEEE).
+pub fn ptp_kat_published_year() -> Int {
+    return 2019;
+}
+
+pub fn ptp_kat_published_month() -> Int {
+    return 11;
+}
+
+pub fn ptp_kat_published_day() -> Int {
+    return 21;
+}
+
+// (c) GPS satellite relativistic correction (Ashby 2003, "Relativity in the
+// Global Positioning System", Living Rev. Relativity 6, 1, Sec 2.2): +45.7
+// microseconds/day = 45,700 ns/day.
+pub fn gps_kat_correction_ns_per_day() -> Int {
+    return 45700;
+}
+
+// (d) IERS Bulletin A published weekly (IERS Central Bureau).
+pub fn iers_kat_cadence_days() -> Int {
+    return 7;
+}
+
+// (e) TAI - UTC offset at 2024-01-01 (IERS Bulletin C, leap-second table): 37.
+pub fn tai_kat_utc_offset_2024() -> Int {
+    return 37;
+}
+
+// 0.001% of 45,700 ns = 0.457 ns; we round up to 1 ns for strict comparison.
+pub fn gps_kat_tol_ns() -> Int {
+    return 1;
+}
+
+// 1 if observed equals the canonical value; 0 otherwise.
+pub fn kat_exact(observed: Int, expected: Int) -> Int {
+    if observed == expected { return 1; }
+    return 0;
+}
+
+// 1 if |observed - expected| <= tol; 0 otherwise.
+pub fn kat_within(observed: Int, expected: Int, tol: Int) -> Int {
+    let mut d: Int = observed - expected;
+    if d < 0 { d = 0 - d; }
+    if d <= tol { return 1; }
+    return 0;
+}
+
+// 1 if observed is in the closed range [low, high]; 0 otherwise. Used for
+// Spanner TrueTime typical 1-7 ms band.
+pub fn kat_in_band(observed: Int, low: Int, high: Int) -> Int {
+    if observed < low { return 0; }
+    if observed > high { return 0; }
+    return 1;
+}
+
+pub fn time_kat_holds(observed_correction: Int) -> DomainCert {
+    let mut holds: Int = 1;
+    if kat_within(observed_correction, gps_kat_correction_ns_per_day(), gps_kat_tol_ns()) != 1 {
+        holds = 0;
+    }
+    if tt_kat_min_uncertainty_us() != 1000 { holds = 0; }
+    if tt_kat_max_uncertainty_us() != 7000 { holds = 0; }
+    if ptp_kat_published_year() != 2019 { holds = 0; }
+    if iers_kat_cadence_days() != 7 { holds = 0; }
+    if tai_kat_utc_offset_2024() != 37 { holds = 0; }
+    return domain_cert("time", "time_kat", holds);
+}
+
+pub fn verify_time_kat() -> Bool {
+    // (a) Spanner TrueTime typical uncertainty 1-7 ms = 1,000-7,000 us.
+    if tt_kat_min_uncertainty_us() != 1000 { return false; }
+    if tt_kat_max_uncertainty_us() != 7000 { return false; }
+    if kat_in_band(1000, tt_kat_min_uncertainty_us(), tt_kat_max_uncertainty_us()) != 1 { return false; }
+    if kat_in_band(7000, tt_kat_min_uncertainty_us(), tt_kat_max_uncertainty_us()) != 1 { return false; }
+    if kat_in_band(4000, tt_kat_min_uncertainty_us(), tt_kat_max_uncertainty_us()) != 1 { return false; }
+    // Hostile: 500 us and 8,000 us are outside the 1-7 ms band.
+    if kat_in_band(500, tt_kat_min_uncertainty_us(), tt_kat_max_uncertainty_us()) != 0 { return false; }
+    if kat_in_band(8000, tt_kat_min_uncertainty_us(), tt_kat_max_uncertainty_us()) != 0 { return false; }
+    // (b) IEEE 1588-2019 publication date 2019-11-21.
+    if ptp_kat_published_year() != 2019 { return false; }
+    if ptp_kat_published_month() != 11 { return false; }
+    if ptp_kat_published_day() != 21 { return false; }
+    // (c) GPS relativistic correction 45,700 ns/day within 1 ns tolerance.
+    if gps_kat_correction_ns_per_day() != 45700 { return false; }
+    if kat_within(45700, gps_kat_correction_ns_per_day(), gps_kat_tol_ns()) != 1 { return false; }
+    if kat_within(45699, gps_kat_correction_ns_per_day(), gps_kat_tol_ns()) != 1 { return false; }
+    if kat_within(45701, gps_kat_correction_ns_per_day(), gps_kat_tol_ns()) != 1 { return false; }
+    if kat_within(45702, gps_kat_correction_ns_per_day(), gps_kat_tol_ns()) != 0 { return false; }
+    if kat_exact(45700, gps_kat_correction_ns_per_day()) != 1 { return false; }
+    // (d) IERS Bulletin A weekly (7 days).
+    if iers_kat_cadence_days() != 7 { return false; }
+    // Hostile: 1 day or 14 days is not the IERS Bulletin A cadence.
+    if kat_exact(1, iers_kat_cadence_days()) != 0 { return false; }
+    if kat_exact(14, iers_kat_cadence_days()) != 0 { return false; }
+    // (e) TAI - UTC at 2024-01-01 = 37.
+    if tai_kat_utc_offset_2024() != 37 { return false; }
+    if kat_exact(37, tai_kat_utc_offset_2024()) != 1 { return false; }
+    // Hostile: 36, 38 are not the 2024 offset.
+    if kat_exact(36, tai_kat_utc_offset_2024()) != 0 { return false; }
+    if kat_exact(38, tai_kat_utc_offset_2024()) != 0 { return false; }
+    // Coupled: gps_kat_tol_ns = 1 ns is 0.001% of 45,700 (rounded up).
+    if gps_kat_tol_ns() != 1 { return false; }
+    // Golden: domain_cert wrapper holds=1 for canonical value.
+    let c1: DomainCert = time_kat_holds(45700);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "time" { return false; }
+    if c1.law_name != "time_kat" { return false; }
+    // Golden: domain_cert wrapper holds=1 for 45,699 (within 1 ns).
+    let c2: DomainCert = time_kat_holds(45699);
+    if c2.holds != 1 { return false; }
+    // Golden: domain_cert wrapper holds=0 for 45,702 (deviation > 1 ns).
+    let c3: DomainCert = time_kat_holds(45702);
+    if c3.holds != 0 { return false; }
+    return true;
+}

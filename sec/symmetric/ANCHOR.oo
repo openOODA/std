@@ -1,0 +1,40 @@
+// # Symmetric Crypto Submodule Hub -- Zero-Drag
+//
+// Logline: Symmetric-key primitives: AES, ChaCha20, Poly1305, AEAD (aead), Argon2 password hashing, and Keccak/SHA-3 sponge support. Re-exports a stable sym_mod_* surface for the most-used public API.
+//
+// Setup: Pure compute, no caps. Most ops are constant-time via sec/ct/.
+//
+// Beats:
+//   1. Re-export AES-128 block cipher surface (sym_mod_aes_*).
+//   2. Re-export AES-GCM AEAD surface (sym_mod_aes_gcm_*).
+//   3. Re-export ChaCha20 stream cipher surface (sym_mod_chacha20_*).
+//   4. Re-export ChaCha20-Poly1305 AEAD and Poly1305 MAC surface (sym_mod_chacha20_poly1305_*, sym_mod_poly1305_*).
+//   5. Re-export AEAD facade and Argon2 password hashing surface.
+//   6. Document private siblings (sibling _core, _inv, _codec, _kat files).
+
+import "aes.oo";
+import "aes_inv.oo";
+import "aes_gcm.oo";
+import "aes_gcm_ghash.oo";
+import "chacha20.oo";
+import "chacha20_core.oo";
+import "chacha20_poly1305.oo";
+import "chacha20_poly1305_aead.oo";
+import "chacha20_poly1305_mac.oo";
+import "chacha20_quarter_round.oo";
+import "poly1305.oo";
+import "poly1305_core.oo";
+import "poly1305_alt.oo";
+import "aead.oo";
+import "argon2.oo";
+import "crypto_core.oo";
+
+pub fn sym_mod_aes_encrypt_block(key: String, block_hex: String) -> String { return aes_encrypt_block(key, block_hex); }
+pub fn sym_mod_aes_decrypt_block(key: String, block_hex: String) -> String { return aes_inv_block(key, block_hex); }
+pub fn sym_mod_aes_gcm_seal(key: String, nonce: String, plain: String, aad: String) -> Result[String, String] { return aes_gcm_seal(key, nonce, plain, aad); }
+pub fn sym_mod_aes_gcm_open(key: String, nonce: String, cipher: String, aad: String) -> Result[String, String] { return aes_gcm_open(key, nonce, cipher, aad); }
+pub fn sym_mod_chacha20_xor(key: String, nonce: String, counter: Int, plain: String) -> String { return chacha20_xor(key, nonce, counter, plain); }
+pub fn sym_mod_chacha20_poly1305_seal(key: String, nonce: String, plain: String, aad: String) -> Result[String, String] { return chacha20_poly1305_seal(key, nonce, plain, aad); }
+pub fn sym_mod_chacha20_poly1305_open(key: String, nonce: String, cipher: String, aad: String) -> Result[String, String] { return chacha20_poly1305_open(key, nonce, cipher, aad); }
+pub fn sym_mod_poly1305_mac(key: String, msg: String) -> String { return poly1305_mac_hex(key, msg); }
+pub fn sym_mod_argon2_hash(password: String, salt: String) -> String { return argon2_hash(password, salt); }

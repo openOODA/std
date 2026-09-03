@@ -1,0 +1,26 @@
+// # List Index
+//
+// Logline: Standard library verification and domain capabilities for List Index.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_list_index() -> Bool {
+    let mut xs: List[Int] = list_new();
+    xs = list_push(xs, 10);
+    xs = list_push(xs, 20);
+    xs = list_push(xs, 30);
+    // Product form
+    println(list_get(xs, 0));
+    println(list_get(xs, 1));
+    // Free-name alias
+    println(index_get(xs, 2));
+    // LBRACKET sugar → list_get lower (Backend-C path A)
+    println(xs[0]);
+    println(xs[1]);
+    println(xs[2]);
+    return true;
+}

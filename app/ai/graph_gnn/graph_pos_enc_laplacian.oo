@@ -1,0 +1,77 @@
+// # Laplacian Positional Encodings (LapPE)
+//
+// Logline: Computes Laplacian eigenvector positional encodings with sign-flip invariance for graph transformers.
+//
+// Setup: Low-frequency spectral coordinate generator establishing canonical spatial node positions on non-Euclidean graphs.
+//
+// Beats:
+//   1. Extract k smallest non-trivial eigenvectors of the normalized graph Laplacian.
+//   2. Apply random sign-flip augmentations during training to handle eigenvector sign ambiguity.
+//   3. Project spectral coordinates into d-dimensional transformer embedding space via linear MLP.
+
+type LapPEConfig = struct {
+    num_eigenvectors: Int,
+    pe_dim: Int
+};
+
+pub fn lap_pe_config_new(k_eig: Int, pe_dim: Int) -> LapPEConfig {
+    return LapPEConfig {
+        num_eigenvectors: k_eig,
+        pe_dim: pe_dim
+    };
+}
+
+pub fn lap_pe_init_weights(total_w: Int, seed_val: Int) -> List[Int] {
+    let mut w_mat: List[Int] = list_new();
+    let mut state: Int = seed_val;
+    let mut i: Int = 0;
+    while i < total_w {
+        state = (state * 1103515245 + 12345) % 2147483647;
+        if state < 0 { state = 0 - state; }
+        let val: Int = (state % 2000) - 1000;
+        w_mat = list_push(w_mat, val);
+        i = i + 1;
+    }
+    return w_mat;
+}
+
+pub fn lap_pe_transform_node(
+    cfg: LapPEConfig,
+    w_pe: List[Int],
+    bias: List[Int],
+    raw_eigenvectors: List[Int],
+    sign_flips: List[Int]
+) -> List[Int] {
+    let k: Int = cfg.num_eigenvectors;
+    let pe_d: Int = cfg.pe_dim;
+
+    let mut out_pe: List[Int] = list_new();
+    let mut o: Int = 0;
+    while o < pe_d {
+        let b: Int = list_get(bias, o);
+        let mut dot: Int = 0;
+        let mut i: Int = 0;
+        while i < k {
+            let eig_val: Int = list_get(raw_eigenvectors, i);
+            let sign: Int = list_get(sign_flips, i);
+            let mut w_idx: Int = i * pe_d;
+            w_idx = w_idx + o;
+            let w: Int = list_get(w_pe, w_idx);
+            let term: Int = eig_val * sign;
+            let term_w: Int = term * w;
+            dot = dot + term_w;
+            i = i + 1;
+        }
+        let total: Int = dot + b;
+        let mut act: Int = 0;
+
+        if total > 0 {
+
+            act = total;
+
+        }
+        out_pe = list_push(out_pe, act);
+        o = o + 1;
+    }
+    return out_pe;
+}

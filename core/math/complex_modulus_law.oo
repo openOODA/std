@@ -1,0 +1,63 @@
+// # Complex modulus and conjugation laws
+//
+// Logline: |3+4i|^2 = 25. Conjugate twice is identity. |0|=0.
+//
+// Setup: Self-contained arithmetic. Product complex.oo cannot be imported (Result C clash).
+//
+// Beats:
+//   1. mag_sq(3,4) is 25.
+//   2. conj(conj(z)) = z.
+//   3. mag_sq(0,0) is 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn mag_sq(re: Float, im: Float) -> Float {
+    return re * re + im * im;
+}
+
+pub fn math_complex_mag_sq_law(re: Float, im: Float) -> DomainCert {
+    let got: Float = mag_sq(re, im);
+    let mut h: Int = 0;
+    if abs_f(got - (re * re + im * im)) <= 0.0000000001 {
+        h = 1;
+    }
+    return domain_cert("math", "complex_mag_sq", h);
+}
+
+pub fn math_complex_mag_sq_kat() -> DomainCert {
+    let got: Float = mag_sq(3.0, 4.0);
+    let mut h: Int = 0;
+    if abs_f(got - 25.0) <= 0.0000000001 {
+        h = 1;
+    }
+    return domain_cert("math", "complex_mag_sq_3_4", h);
+}
+
+pub fn math_complex_conj_involution_law(re: Float, im: Float) -> DomainCert {
+    let c1_re: Float = re;
+    let c1_im: Float = 0.0 - im;
+    let c2_re: Float = c1_re;
+    let c2_im: Float = 0.0 - c1_im;
+    let mut h: Int = 0;
+    if abs_f(c2_re - re) <= 0.0000000001 {
+        if abs_f(c2_im - im) <= 0.0000000001 {
+            h = 1;
+        }
+    }
+    return domain_cert("math", "complex_conj_involution", h);
+}
+
+pub fn math_complex_zero_not_unit() -> DomainCert {
+    let mut h: Int = 0;
+    if mag_sq(0.0, 0.0) == 0.0 {
+        h = 1;
+    }
+    return domain_cert("math", "complex_zero_not_unit", h);
+}

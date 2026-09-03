@@ -1,0 +1,66 @@
+// # Sovereign GPU Compute Kernel & Pipeline Manager
+//
+// Logline: Manages compute kernel artifacts, dispatch pipelines, and thread block geometries.
+//
+// Setup: Configures kernel launch parameters and pipeline states for parallel accelerator dispatch.
+//
+// Beats:
+//   1. Construct GpuKernel descriptors from compiled shader strings.
+//   2. Configure GpuPipeline execution topology (grid and block dimensions).
+//   3. Validate pipeline resource limits and shared memory usage.
+//   4. Format kernel execution metadata.
+
+import "std/hw/gpu/gpu_types.oo";
+
+fn kernel_int_str(n: Int) -> String {
+    if n == 0 { return "0"; }
+    let mut val: Int = n;
+    let mut sign: String = "";
+    if val < 0 { sign = "-"; val = 0 - val; }
+    let digits: String = "0123456789";
+    let mut s: String = "";
+    while val > 0 {
+        let d: Int = val % 10;
+        s = char_at(digits, d) + s;
+        val = val / 10;
+    }
+    return sign + s;
+}
+
+pub fn gpu_kernel_create(name: String, target: String, code: String) -> GpuKernel {
+    return GpuKernel {
+        name: name,
+        target: target,
+        code: code
+    };
+}
+
+pub fn gpu_pipeline_create(kernel: GpuKernel, gx: Int, gy: Int, gz: Int, bx: Int, by: Int, bz: Int) -> GpuPipeline {
+    let g: GpuDim3 = gpu_dim3_raw(gx, gy, gz);
+    let b: GpuDim3 = gpu_dim3_raw(bx, by, bz);
+    return GpuPipeline {
+        kernel: kernel,
+        grid_dim: g,
+        block_dim: b
+    };
+}
+
+pub fn gpu_pipeline_validate(pipeline: &GpuPipeline) -> Result[Bool, String] {
+    let g: GpuDim3 = pipeline.grid_dim;
+    let b: GpuDim3 = pipeline.block_dim;
+    if g.x <= 0 || g.y <= 0 || g.z <= 0 {
+        return Err("Invalid grid dimensions: all axes must be positive");
+    }
+    if b.x <= 0 || b.y <= 0 || b.z <= 0 {
+        return Err("Invalid block dimensions: all axes must be positive");
+    }
+    let total_block_threads: Int = b.x * b.y * b.z;
+    if total_block_threads > 1024 {
+        return Err("Block thread count exceeds maximum limit (1024)");
+    }
+    return Ok(true);
+}
+
+pub fn gpu_kernel_summary(k: &GpuKernel) -> String {
+    return "GPU Kernel: " + k.name + " (Target: " + k.target + ", Size: " + kernel_int_str(chars_len(k.code)) + " bytes)";
+}

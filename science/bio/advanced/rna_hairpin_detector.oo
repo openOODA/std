@@ -1,0 +1,112 @@
+// # RNA Hairpin Stem-Loop & Terminator Detector
+//
+// Logline: Identifies intrinsic Rho-independent transcription terminators and stable hairpin stem-loop motifs across RNA transcripts.
+//
+// Setup: Transcriptional regulation module detecting palindromic GC-rich inverted repeats followed by poly-U tracts.
+//
+// Beats:
+//   1. Define HairpinMotif and TerminatorResult data structures.
+//   2. Detect inverted complementary repeat arms with minimal loop distances (3 to 8 nt).
+//   3. Score poly-U 3' tail length and calculate intrinsic termination efficiency.
+
+type HairpinMotif = struct {
+    stem_start_5p: Int,
+    stem_end_5p: Int,
+    stem_start_3p: Int,
+    stem_end_3p: Int,
+    stem_length: Int,
+    loop_length: Int,
+    gc_percentage: Float,
+    stem_free_energy: Float
+};
+
+type TerminatorResult = struct {
+    has_terminator: Bool,
+    hairpin: HairpinMotif,
+    poly_u_count: Int,
+    termination_efficiency_pct: Float
+};
+
+pub fn rna_hairpin_calc_gc(arm: String) -> Float {
+    let n: Int = chars_len(arm);    if n == 0 { return 0.0; }
+    let mut gc_cnt: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(arm, i);        if c == "G" || c == "g" || c == "C" || c == "c" {
+            gc_cnt = gc_cnt + 1;
+        }
+        i = i + 1;
+    }
+    return rna_hairpin_detector_to_f((gc_cnt) * 100.0) / rna_hairpin_detector_to_f(n);
+}
+
+pub fn rna_evaluate_terminator(
+    hairpin_dg: Float,
+    stem_gc_pct: Float,
+    poly_u_tract: Int
+) -> TerminatorResult {
+    let mut eff: Float = 0.0;
+    if hairpin_dg < -8.0 {
+        eff = eff + 50.0;
+    }
+    if stem_gc_pct >= 60.0 {
+        eff = eff + 20.0;
+    }
+    if poly_u_tract >= 6 {
+        eff = eff + 25.0;
+    } else if poly_u_tract >= 4 {
+        eff = eff + 15.0;
+    }
+
+    if eff > 100.0 { eff = 100.0; }
+    let is_term: Bool = eff >= 60.0 && poly_u_tract >= 4;
+    let dummy_hairpin: HairpinMotif = HairpinMotif {        stem_start_5p: 0,
+        stem_end_5p: 7,
+        stem_start_3p: 12,
+        stem_end_3p: 19,
+        stem_length: 8,
+        loop_length: 4,
+        gc_percentage: stem_gc_pct,
+        stem_free_energy: hairpin_dg
+    };
+
+    return TerminatorResult {
+        has_terminator: is_term,
+        hairpin: dummy_hairpin,
+        poly_u_count: poly_u_tract,
+        termination_efficiency_pct: eff
+    };
+}
+
+
+fn rna_hairpin_detector_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

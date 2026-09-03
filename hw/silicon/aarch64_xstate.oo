@@ -1,0 +1,241 @@
+// # AArch64 Program Lowering Cursor
+//
+// Logline: Extends the constrained scanner with a string pool and BL patch lists for multi-function files.
+//
+// Setup: Wraps A64P from aarch64_parse. Extra lists hold literals and call sites.
+//
+// Beats:
+//   1. Convert to and from A64P so skip, ident, and eat stay shared.
+//   2. Emit a 32-bit instruction word onto the cursor.
+//   3. Bind a local name to the next frame slot.
+//   4. Record a BL placeholder against a callee name.
+
+import "std/hw/silicon/aarch64_parse.oo";
+
+type A64S = struct {
+    err: String,
+    strs: List[String],
+    bl_at: List[Int],
+    bl_nm: List[String],
+    fld_nm: List[String],
+    fld_off: List[Int],
+    fp: Int,
+    flt: List[String]
+};
+
+type A64X = struct {
+    p: A64P,
+    st: A64S
+};
+
+pub fn a64s_new() -> A64S {
+    let empty_i: List[Int] = list_new();
+    let empty_s: List[String] = list_new();
+    let out: A64S = A64S {
+        err: "", strs: empty_s, bl_at: empty_i, bl_nm: empty_s,
+        fld_nm: empty_s, fld_off: empty_i, fp: 0, flt: empty_s
+    };
+    return out;
+}
+
+pub fn a64x_new(src: String) -> A64X {
+    let p: A64P = a64_new(src);
+    let st: A64S = a64s_new();
+    let out: A64X = A64X { p: p, st: st };
+    return out;
+}
+
+pub fn a64x_as_p(x: A64X) -> A64P {
+    return x.p;
+}
+
+pub fn a64x_from_p(p: A64P, x: A64X) -> A64X {
+    let out: A64X = A64X { p: p, st: x.st };
+    return out;
+}
+
+pub fn a64x_skip(x: A64X) -> A64X {
+    return a64x_from_p(a64_skip(x.p), x);
+}
+
+pub fn a64x_emit(x: A64X, w: Int) -> A64X {
+    return a64x_from_p(a64_emit(x.p, w), x);
+}
+
+pub fn a64x_bind(x: A64X, name: String) -> A64X {
+    if x.p.next_off > 4000 {
+        return a64x_fail(x, "ERR\ta64x_frame_overflow");
+    }
+    let y: A64X = a64x_from_p(a64_bind(x.p, name), x);
+    if y.p.next_off > 4000 {
+        return a64x_fail(y, "ERR\ta64x_frame_overflow");
+    }
+    return y;
+}
+
+pub fn a64x_fail(x: A64X, msg: String) -> A64X {
+    let mut st: A64S = x.st;
+    st.err = msg;
+    let out: A64X = A64X { p: x.p, st: st };
+    return out;
+}
+
+pub fn a64x_reset_locals(x: A64X) -> A64X {
+    let empty_s: List[String] = list_new();
+    let empty_i: List[Int] = list_new();
+    return a64x_with_scope(x, empty_s, empty_i, 16, empty_s);
+}
+
+pub fn a64x_set_words(x: A64X, words: List[Int]) -> A64X {
+    return a64x_with_words(x, words);
+}
+
+pub fn a64x_bind16(x: A64X, name: String) -> A64X {
+    if x.p.next_off > 4000 {
+        return a64x_fail(x, "ERR\ta64x_frame_overflow");
+    }
+    let y: A64X = a64x_bind(x, name);
+    if y.p.next_off > 4000 {
+        return a64x_fail(y, "ERR\ta64x_frame_overflow");
+    }
+    let mut fl: List[String] = y.st.flt;
+    if y.st.fp == 1 {
+        fl = list_push(fl, name);
+    }
+    return a64x_with_scope(y, y.p.names, y.p.offs, y.p.next_off + 8, fl);
+}
+
+pub fn a64x_intern(x: A64X, str_val: String) -> A64X {
+    let strs: List[String] = x.st.strs;
+    let idx: Int = list_len(strs);
+    let nstrs: List[String] = list_push(strs, str_val);
+    return a64x_with_strs(x, nstrs, idx, str_val);
+}
+
+pub fn a64x_bl(x: A64X, name: String) -> A64X {
+    let at: Int = list_len(x.p.words);
+    let mut y: A64X = a64x_emit(x, 0);
+    let bats: List[Int] = list_push(y.st.bl_at, at);
+    let bnms: List[String] = list_push(y.st.bl_nm, name);
+    return a64x_with_bl(y, bats, bnms);
+}
+
+pub fn a64x_add_field(x: A64X, nm: String, off: Int) -> A64X {
+    let fnms: List[String] = list_push(x.st.fld_nm, nm);
+    let fofs: List[Int] = list_push(x.st.fld_off, off);
+    return a64x_with_fields(x, fnms, fofs);
+}
+
+pub fn a64x_with_i(x: A64X, i: Int) -> A64X {
+    let mut p: A64P = x.p;
+    p.i = i;
+    let out: A64X = A64X { p: p, st: x.st };
+    return out;
+}
+
+pub fn a64x_with_words(x: A64X, words: List[Int]) -> A64X {
+    let mut p: A64P = x.p;
+    p.words = words;
+    let out: A64X = A64X { p: p, st: x.st };
+    return out;
+}
+
+pub fn a64x_with_scope(x: A64X, names: List[String], offs: List[Int], next_off: Int, flt: List[String]) -> A64X {
+    let mut p: A64P = x.p;
+    p.names = names;
+    p.offs = offs;
+    p.next_off = next_off;
+    let mut st: A64S = x.st;
+    st.flt = flt;
+    let out: A64X = A64X { p: p, st: st };
+    return out;
+}
+
+pub fn a64x_with_bl(x: A64X, bl_at: List[Int], bl_nm: List[String]) -> A64X {
+    let mut st: A64S = x.st;
+    st.bl_at = bl_at;
+    st.bl_nm = bl_nm;
+    let out: A64X = A64X { p: x.p, st: st };
+    return out;
+}
+
+pub fn a64x_with_strs(x: A64X, strs: List[String], ival: Int, text: String) -> A64X {
+    let mut p: A64P = x.p;
+    p.ival = ival;
+    p.text = text;
+    let mut st: A64S = x.st;
+    st.strs = strs;
+    let out: A64X = A64X { p: p, st: st };
+    return out;
+}
+
+pub fn a64x_with_fields(x: A64X, fld_nm: List[String], fld_off: List[Int]) -> A64X {
+    let mut st: A64S = x.st;
+    st.fld_nm = fld_nm;
+    st.fld_off = fld_off;
+    let out: A64X = A64X { p: x.p, st: st };
+    return out;
+}
+
+pub fn a64x_with_fields_err(x: A64X, fld_nm: List[String], fld_off: List[Int], err: String) -> A64X {
+    let mut st: A64S = x.st;
+    st.fld_nm = fld_nm;
+    st.fld_off = fld_off;
+    st.err = err;
+    let out: A64X = A64X { p: x.p, st: st };
+    return out;
+}
+
+pub fn a64x_with_fp(x: A64X, fp: Int) -> A64X {
+    let mut st: A64S = x.st;
+    st.fp = fp;
+    let out: A64X = A64X { p: x.p, st: st };
+    return out;
+}
+
+pub fn a64x_with_text(x: A64X, t: String) -> A64X {
+    let mut p: A64P = x.p;
+    p.text = t;
+    let out: A64X = A64X { p: p, st: x.st };
+    return out;
+}
+
+pub fn a64x_with_ival(x: A64X, v: Int) -> A64X {
+    let mut p: A64P = x.p;
+    p.ival = v;
+    let out: A64X = A64X { p: p, st: x.st };
+    return out;
+}
+
+pub fn a64x_with_flt(x: A64X, flt: List[String]) -> A64X {
+    let mut st: A64S = x.st;
+    st.flt = flt;
+    let out: A64X = A64X { p: x.p, st: st };
+    return out;
+}
+
+pub fn a64x_with_names_offs(x: A64X, names: List[String], offs: List[Int]) -> A64X {
+    let mut p: A64P = x.p;
+    p.names = names;
+    p.offs = offs;
+    let out: A64X = A64X { p: p, st: x.st };
+    return out;
+}
+
+pub fn a64x_with_words_bl(x: A64X, words: List[Int], bl_at: List[Int], bl_nm: List[String]) -> A64X {
+    let mut p: A64P = x.p;
+    p.words = words;
+    let mut st: A64S = x.st;
+    st.bl_at = bl_at;
+    st.bl_nm = bl_nm;
+    let out: A64X = A64X { p: p, st: st };
+    return out;
+}
+
+pub fn a64x_with_ival_text(x: A64X, ival: Int, text: String) -> A64X {
+    let mut p: A64P = x.p;
+    p.ival = ival;
+    p.text = text;
+    let out: A64X = A64X { p: p, st: x.st };
+    return out;
+}

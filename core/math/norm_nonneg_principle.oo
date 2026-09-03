@@ -1,0 +1,75 @@
+// # Euclidean norm is nonnegative
+//
+// Logline: ||x|| >= 0. Empty vector has norm 0. ||(3,4)|| = 5.
+//
+// Setup: Imports std/math/blas_level1.oo nrm2. Holds 1 or 0.
+//
+// Beats:
+//   1. nrm2 is never negative.
+//   2. Empty list nrm2 is 0.
+//   3. (3,4) nrm2 is 5.
+
+import "std/core/math/blas_level1.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn math_norm_nonneg(x: List[Float]) -> DomainCert {
+    let n: Float = blas_nrm2(x);
+    let mut h: Int = 0;
+    if n >= 0.0 {
+        h = 1;
+    }
+    return domain_cert("math", "norm_nonneg", h);
+}
+
+pub fn math_norm_empty_zero() -> DomainCert {
+    let empty: List[Float] = list_new();
+    let n: Float = blas_nrm2(empty);
+    let mut h: Int = 0;
+    if n == 0.0 {
+        h = 1;
+    }
+    return domain_cert("math", "norm_empty_zero", h);
+}
+
+pub fn math_norm_3_4_is_5() -> DomainCert {
+    let mut x: List[Float] = list_new();
+    x = list_push(x, 3.0);
+    x = list_push(x, 4.0);
+    let n: Float = blas_nrm2(x);
+    let mut h: Int = 0;
+    if abs_f(n - 5.0) <= 0.0000001 {
+        h = 1;
+    }
+    return domain_cert("math", "norm_3_4_is_5", h);
+}
+
+pub fn verify_norm_nonneg_principle() -> Bool {
+    let empty: List[Float] = list_new();
+    let a: DomainCert = math_norm_nonneg(empty);
+    let b: DomainCert = math_norm_empty_zero();
+    let c: DomainCert = math_norm_3_4_is_5();
+    let mut y: List[Float] = list_new();
+    y = list_push(y, 0.0 - 3.0);
+    y = list_push(y, 4.0);
+    let d: DomainCert = math_norm_nonneg(y);
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    if c.holds != 1 {
+        return false;
+    }
+    if d.holds != 1 {
+        return false;
+    }
+    return true;
+}

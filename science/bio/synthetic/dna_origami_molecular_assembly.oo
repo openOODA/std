@@ -1,0 +1,112 @@
+// # DNA Origami Nanostructure & Molecular Assembly
+//
+// Logline: Models scaffolded DNA origami staple hybridization thermodynamics, assembly yield, and spatial enzyme placement.
+//
+// Setup: Structural DNA nanotechnology thermodynamics predicting staple-scaffold crossover annealing and nanoscale spatial organization.
+//
+// Beats:
+//   1. Define OrigamiScaffoldParams, StapleHybridizationState, and NanostructureAssemblyResult data structures.
+//   2. Compute nearest-neighbor staple binding free energies Delta-G and melting temperature Tm profiles.
+//   3. Predict overall folding yield and nanometer-scale inter-enzyme spatial positioning precision.
+
+type OrigamiScaffoldParams = struct {
+    scaffold_length_nt: Int, // e.g. 7249 nt for M13mp18
+    num_staple_strands: Int,
+    mg_ion_conc_m_m: Float, // Magnesium requirement ~ 12-20 mM
+    annealing_start_temp_c: Float,
+    annealing_end_temp_c: Float
+};
+
+type StapleHybridizationState = struct {
+    staple_id: Int,
+    binding_domain_length_bp: Int,
+    gc_fraction: Float,
+    staple_conc_nm: Float
+};
+
+type NanostructureAssemblyResult = struct {
+    folding_yield_percent: Float,
+    mean_staple_melting_temp_c: Float,
+    is_structural_defect_free: Bool,
+    enzyme_positioning_precision_nm: Float
+};
+
+pub fn origami_calc_staple_tm(
+    bp_len: Int,
+    gc_frac: Float,
+    mg_mm: Float,
+) -> Float {
+    let bpf: Float = dna_origami_molecular_assembly_to_f(bp_len);
+    let term1: Float = 16.4 / bpf;
+    let diff: Float = gc_frac - term1;
+    let base_tm: Float = 64.9 + (41.0 * diff);
+    let mut mg_boost: Float = 5.0;
+
+    if mg_mm > 5.0 {
+
+        mg_boost = 12.0;
+
+    }
+    return base_tm + mg_boost;
+}
+
+pub fn origami_evaluate_assembly(
+    p: OrigamiScaffoldParams,
+    staple: StapleHybridizationState,
+) -> NanostructureAssemblyResult {
+    let tm: Float = origami_calc_staple_tm(staple.binding_domain_length_bp, staple.gc_fraction, p.mg_ion_conc_m_m);
+    let is_mg_optimal: Bool = p.mg_ion_conc_m_m >= 10.0 && p.mg_ion_conc_m_m <= 25.0;    let yield_pct: Bool = if is_mg_optimal && tm >= 50.0 {        88.5
+    } else if is_mg_optimal {
+        62.0
+    } else {
+        25.0
+    };
+
+    let defect_free: Bool = yield_pct > 75.0;    let mut prec_nm: Float = 3.5;
+
+    if defect_free {
+
+        prec_nm = 0.8;
+
+    }
+
+    return NanostructureAssemblyResult {
+        folding_yield_percent: yield_pct,
+        mean_staple_melting_temp_c: tm,
+        is_structural_defect_free: defect_free,
+        enzyme_positioning_precision_nm: prec_nm
+    };
+}
+
+
+fn dna_origami_molecular_assembly_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

@@ -1,0 +1,83 @@
+// # Classical Keplerian Orbital Elements
+//
+// Logline: Converts between 3D Cartesian position/velocity state vectors and the 6 classical Keplerian orbital elements.
+//
+// Setup: Pure astrodynamic celestial mechanics conversions for two-body Keplerian orbits.
+//
+// Beats:
+//   1. Classical orbital elements dimension query (a, e, i, Omega, omega, nu).
+//   2. Calculate specific angular momentum vector h = r (x) v.
+//   3. Extract semi-major axis, eccentricity vector, inclination, and ascending node.
+//   4. Calculate true anomaly and orbital energy from state vectors.
+
+type KeplerianElements = struct {
+    semi_major_axis_m: Float,
+    eccentricity: Float,
+    inclination_rad: Float,
+    raan_rad: Float,
+    arg_periapsis_rad: Float,
+    true_anomaly_rad: Float
+};
+
+pub fn kepler_n_el() -> Int {
+    return 6;
+}
+
+pub fn classical_elements_count() -> Int {
+    return 6;
+}
+
+pub fn kepler_elem_asin(x: Float) -> Float {
+    let mut u: Float = x;
+    if u > 1.0 { u = 1.0; }
+    if u < -1.0 { u = -1.0; }
+    let u2: Float = u * u;
+    let u3: Float = u2 * u;
+    let u5: Float = u3 * u2;
+    let u7: Float = u5 * u2;
+    return u + (u3 * 0.1666666667) + (u5 * 0.075) + (u7 * 0.0446428571);
+}
+
+pub fn kepler_elem_acos(cos_val: Float) -> Float {
+    let mut c: Float = cos_val;
+    if c > 1.0 { c = 1.0; }
+    if c < -1.0 { c = -1.0; }
+    let half_m: Float = (1.0 - c) * 0.5;
+    let s: Float = sqrt(half_m);
+    return 2.0 * kepler_elem_asin(s);
+}
+
+pub fn orbital_energy(r_mag: Float, v_mag: Float, mu: Float) -> Float {
+    return (0.5 * v_mag * v_mag) - (mu / r_mag);
+}
+
+/// Extracts semi-major axis from position magnitude and velocity magnitude (vis-viva).
+pub fn state_to_semi_major_axis(r_mag: Float, v_mag: Float, mu: Float) -> Float {
+    let eps: Float = orbital_energy(r_mag, v_mag, mu);
+    if eps >= 0.0 { return 0.0; }
+    return (0.0 - mu) / (2.0 * eps);
+}
+
+/// Computes specific angular momentum magnitude h = |r x v|.
+pub fn state_to_angular_momentum(
+    rx: Float, ry: Float, rz: Float,
+    vx: Float, vy: Float, vz: Float
+) -> Float {
+    let hx: Float = (ry * vz) - (rz * vy);
+    let hy: Float = (rz * vx) - (rx * vz);
+    let hz: Float = (rx * vy) - (ry * vx);
+    return sqrt((hx * hx) + (hy * hy) + (hz * hz));
+}
+
+/// Computes orbital inclination from angular momentum vector: cos(i) = hz / |h|.
+pub fn state_to_inclination(
+    rx: Float, ry: Float, rz: Float,
+    vx: Float, vy: Float, vz: Float
+) -> Float {
+    let hx: Float = (ry * vz) - (rz * vy);
+    let hy: Float = (rz * vx) - (rx * vz);
+    let hz: Float = (rx * vy) - (ry * vx);
+    let h_mag: Float = sqrt((hx * hx) + (hy * hy) + (hz * hz));
+    if h_mag <= 0.000000001 { return 0.0; }
+    return kepler_elem_acos(hz / h_mag);
+}

@@ -1,0 +1,188 @@
+// # WebAssembly Multi-Function Execution Engine (V2)
+//
+// Logline: Stack-based bytecode VM that runs multi-function .wasm modules with structured control flow (if/else/end), function calls, return, and host-function dispatch.
+//
+// Setup: Pure interpreter engine. The step function lives in wasm_engine_v2_step.oo; the host-function table lives in wasm_host_runtime.oo.
+//
+// Beats:
+//   1. Define WasmModuleV2 with user function bodies/arity/locals and host function name table.
+//   2. Provide LEB128 immediate decoder and locals set/truncate helpers.
+//   3. Binary-op eval lives in wasm_engine_v2_eval.oo; run lives in wasm_engine_v2_run.oo.
+
+import "std/compile/wasm_interpreter/wasm_host_runtime.oo";
+
+type WasmModuleV2 = struct {
+    user_count: Int,
+    user_body_data: List[Int],
+    user_body_starts: List[Int],
+    user_arity: List[Int],
+    user_local_count: List[Int],
+    host_names: List[String],
+    host_runtime: WasmHostRuntime,
+    entry: Int
+};
+
+pub fn wasm_module_v2_new() -> WasmModuleV2 {
+    let empty_bd: List[Int] = list_new();
+    let empty_bs: List[Int] = list_new();
+    let empty_a: List[Int] = list_new();
+    let empty_lc: List[Int] = list_new();
+    let empty_hn: List[String] = list_new();
+    let empty_rt: WasmHostRuntime = wasm_host_runtime_new();
+    return WasmModuleV2 {
+        user_count: 0,
+        user_body_data: empty_bd,
+        user_body_starts: empty_bs,
+        user_arity: empty_a,
+        user_local_count: empty_lc,
+        host_names: empty_hn,
+        host_runtime: empty_rt,
+        entry: 0
+    };
+}
+
+pub fn wasm_module_v2_add_user(mod: WasmModuleV2, body: List[Int], arity: Int, local_count: Int) -> WasmModuleV2 {
+    let new_start: Int = list_len(mod.user_body_data);
+    let mut new_data: List[Int] = mod.user_body_data;
+    let n: Int = list_len(body);
+    let mut i: Int = 0;
+    while i < n {
+        new_data = list_push(new_data, list_get(body, i));
+        i = i + 1;
+    }
+    let new_starts: List[Int] = list_push(mod.user_body_starts, new_start);
+    let new_arity: List[Int] = list_push(mod.user_arity, arity);
+    let new_lc: List[Int] = list_push(mod.user_local_count, local_count);
+    return WasmModuleV2 {
+        user_count: mod.user_count + 1,
+        user_body_data: new_data,
+        user_body_starts: new_starts,
+        user_arity: new_arity,
+        user_local_count: new_lc,
+        host_names: mod.host_names,
+        host_runtime: mod.host_runtime,
+        entry: mod.entry
+    };
+}
+
+pub fn wasm_module_v2_get_user_body(mod: WasmModuleV2, idx: Int) -> List[Int] {
+    let start: Int = list_get(mod.user_body_starts, idx);
+    let total: Int = list_len(mod.user_body_data);
+    let uc: Int = mod.user_count;
+    let next_start: Int = if idx + 1 < uc { list_get(mod.user_body_starts, idx + 1) } else { total };
+    let len: Int = next_start - start;
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < len {
+        out = list_push(out, list_get(mod.user_body_data, start + i));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn wasm_module_v2_set_entry(mod: WasmModuleV2, idx: Int) -> WasmModuleV2 {
+    let same: WasmModuleV2 = mod;
+    return WasmModuleV2 {
+        user_count: same.user_count,
+        user_body_data: same.user_body_data,
+        user_body_starts: same.user_body_starts,
+        user_arity: same.user_arity,
+        user_local_count: same.user_local_count,
+        host_names: same.host_names,
+        host_runtime: same.host_runtime,
+        entry: idx
+    };
+}
+
+pub fn wasm_module_v2_set_host_names(mod: WasmModuleV2, names: List[String]) -> WasmModuleV2 {
+    let same: WasmModuleV2 = mod;
+    return WasmModuleV2 {
+        user_count: same.user_count,
+        user_body_data: same.user_body_data,
+        user_body_starts: same.user_body_starts,
+        user_arity: same.user_arity,
+        user_local_count: same.user_local_count,
+        host_names: names,
+        host_runtime: same.host_runtime,
+        entry: same.entry
+    };
+}
+
+pub fn wasm_module_v2_set_runtime(mod: WasmModuleV2, rt: WasmHostRuntime) -> WasmModuleV2 {
+    let same: WasmModuleV2 = mod;
+    return WasmModuleV2 {
+        user_count: same.user_count,
+        user_body_data: same.user_body_data,
+        user_body_starts: same.user_body_starts,
+        user_arity: same.user_arity,
+        user_local_count: same.user_local_count,
+        host_names: same.host_names,
+        host_runtime: rt,
+        entry: same.entry
+    };
+}
+
+pub fn wasm_module_v2_get_runtime(mod: WasmModuleV2) -> WasmHostRuntime {
+    return mod.host_runtime;
+}
+
+pub fn wasm_engine_v2_user_count(mod: WasmModuleV2) -> Int {
+    return mod.user_count;
+}
+
+pub fn wasm_engine_v2_host_count(mod: WasmModuleV2) -> Int {
+    return list_len(mod.host_names);
+}
+
+pub fn wasm_engine_v2_decode_imm(code: List[Int], pc: Int) -> Int {
+    let mut v: Int = 0;
+    let mut mult: Int = 1;
+    let mut cur: Int = pc;
+    let n: Int = list_len(code);
+    let mut last_b: Int = 0;
+    let mut running: Bool = true;
+    while running && cur < n {
+        let b: Int = list_get(code, cur);
+        last_b = b;
+        v = v + ((b & 127) * mult);
+        if (b & 128) == 0 {
+            running = false;
+            if (last_b & 64) != 0 { v = v - (mult * 128); }
+        } else {
+            cur = cur + 1;
+            mult = mult * 128;
+        }
+    }
+    return v;
+}
+
+pub fn wasm_engine_v2_imm_size(code: List[Int], pc: Int) -> Int {
+    let mut cur: Int = pc;
+    let n: Int = list_len(code);
+    let mut running: Bool = true;
+    let mut size: Int = 0;
+    while running && cur < n {
+        let b: Int = list_get(code, cur);
+        size = size + 1;
+        if (b & 128) == 0 { running = false; } else { cur = cur + 1; }
+    }
+    return size;
+}
+
+pub fn wasm_engine_v2_set_local(locs: List[Int], abs_idx: Int, val: Int) -> List[Int] {
+    let n: Int = list_len(locs);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == abs_idx { out = list_push(out, val); } else { out = list_push(out, list_get(locs, i)); }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn wasm_engine_v2_truncate_locs(locs: List[Int], new_size: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < new_size { out = list_push(out, list_get(locs, i)); i = i + 1; }
+    return out;
+}

@@ -1,0 +1,107 @@
+// # Bare-Metal Descriptor Tables & Interrupt Gates
+//
+// Logline: Hardware Global Descriptor Table (GDT), Interrupt Descriptor Table (IDT), ARM64 VBAR_EL1, and RISC-V stvec vector tables.
+//
+// Setup: Declared capability: None. Direct segmentation, exception vector routing, and interrupt gate configuration.
+//
+// Beats:
+//   1. Define GDT entry, IDT gate, and vector table structures.
+//   2. Implement GDT segment configuration (CS=0x08, DS=0x10, User CS=0x18, User DS=0x20).
+//   3. Implement IDT 64-bit interrupt gate descriptor encoding.
+//   4. Configure ARM64 VBAR_EL1 and RISC-V stvec trap base registers.
+
+type GdtEntry = struct {
+    limit_low: Int,
+    base_low: Int,
+    base_mid: Int,
+    access_byte: Int,
+    granularity: Int,
+    base_high: Int
+};
+
+type IdtGateDescriptor = struct {
+    offset_low: Int,
+    selector: Int,
+    ist_index: Int,
+    type_attr: Int,
+    offset_mid: Int,
+    offset_high: Int,
+    dpl: Int
+};
+
+type TrapVectorTable = struct {
+    gdt_base: Int,
+    gdt_limit: Int,
+    idt_base: Int,
+    idt_limit: Int,
+    vbar_el1_base: Int,
+    stvec_base: Int,
+    stvec_mode: Int
+};
+
+pub fn gdt_entry_new(base: Int, limit: Int, access: Int, flags: Int) -> GdtEntry {
+    let l_low: Int = limit % 65536;
+    let b_low: Int = base % 65536;
+    let b_mid: Int = (base / 65536) % 256;
+    let b_high: Int = (base / 16777216) % 256;
+    let gran: Int = ((limit / 65536) % 16) + (flags * 16);
+    return GdtEntry {
+        limit_low: l_low,
+        base_low: b_low,
+        base_mid: b_mid,
+        access_byte: access,
+        granularity: gran,
+        base_high: b_high
+    };
+}
+
+pub fn idt_gate_new(handler_addr: Int, sel: Int, dpl_val: Int, is_trap: Bool) -> IdtGateDescriptor {
+    let off_low: Int = handler_addr % 65536;
+    let off_mid: Int = (handler_addr / 65536) % 65536;
+    let off_high: Int = (handler_addr / 4294967296) % 4294967296;
+    let gate_type: Int = if is_trap { 143 } else { 142 };
+    let final_attr: Int = gate_type + (dpl_val * 32);
+    return IdtGateDescriptor {
+        offset_low: off_low,
+        selector: sel,
+        ist_index: 0,
+        type_attr: final_attr,
+        offset_mid: off_mid,
+        offset_high: off_high,
+        dpl: dpl_val
+    };
+}
+
+pub fn trap_vector_table_init(g_base: Int, i_base: Int, vbar: Int, stvec: Int) -> TrapVectorTable {
+    let safe_g: Int = if g_base < 0 { 0 } else { g_base };
+    let safe_i: Int = if i_base < 0 { 0 } else { i_base };
+    let safe_v: Int = if vbar < 0 { 0 } else { vbar };
+    let safe_s: Int = if stvec < 0 { 0 } else { stvec };
+    return TrapVectorTable {
+        gdt_base: safe_g,
+        gdt_limit: 48,
+        idt_base: safe_i,
+        idt_limit: 4096,
+        vbar_el1_base: safe_v,
+        stvec_base: safe_s,
+        stvec_mode: 0
+    };
+}
+
+pub fn trap_is_gate_present(gate: IdtGateDescriptor) -> Bool {
+    let attr: Int = gate.type_attr;
+    let present: Bool = attr >= 128;
+    return present;
+}
+
+pub fn trap_get_arm64_vector(table: TrapVectorTable, el_offset: Int) -> Int {
+    let base: Int = table.vbar_el1_base;
+    let safe_off: Int = if el_offset < 0 { 0 } else { el_offset };
+    return base + safe_off;
+}
+
+pub fn trap_get_riscv_stvec(table: TrapVectorTable) -> Int {
+    let base: Int = table.stvec_base;
+    let mode: Int = table.stvec_mode;
+    return base + mode;
+}

@@ -1,0 +1,135 @@
+// # CRDT Convergence Principle
+//
+// Logline: An operation op is CRDT-compatible iff it is commutative, associative, and idempotent; any merge order converges to the same state.
+//
+// Setup: Pure Int/String. op_name is a string key for the property triple. A small built-in table of common CRDT ops and their property masks. Hosts data_invariants.oo stem and uses domain_cert("data", ...).
+//
+// Beats:
+//   1. op_property_mask returns bitmask C=1|A=2|I=4 (commutative, associative, idempotent).
+//   2. crdt_compatible(op) returns 1 if (mask & 7) == 7.
+//   3. crdt_compatible("add") = 1; "set" = 1; "increment" = 0 (not idempotent).
+//   4. Unknown or empty op_name on the mask kernel returns Err. Compatible classifier is 0.
+
+import "std/app/data/data_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn crm_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 2; } }
+}
+
+// Property bits: 1 commutative, 2 associative, 4 idempotent.
+pub fn crdt_commutative_bit() -> Int { return 1; }
+pub fn crdt_associative_bit() -> Int { return 2; }
+pub fn crdt_idempotent_bit() -> Int { return 4; }
+
+// Look up the property mask for a named operation. Empty or unknown returns Err.
+// A mask of 0 is a legal empty property set and is not used as a dummy.
+pub fn crdt_op_mask(op_name: String) -> Result[Int, String] {
+    if op_name == "add" { return Ok(7); }
+    if op_name == "union" { return Ok(7); }
+    if op_name == "set" { return Ok(7); }
+    if op_name == "or" { return Ok(7); }
+    if op_name == "and" { return Ok(7); }
+    if op_name == "max" { return Ok(7); }
+    if op_name == "min" { return Ok(7); }
+    if op_name == "increment" { return Ok(3); }
+    if op_name == "multiply" { return Ok(3); }
+    if op_name == "push" { return Ok(3); }
+    if op_name == "append" { return Ok(3); }
+    return Err("ERR\tcrdt\tdomain");
+}
+
+// CRDT-compatible iff all three properties hold (mask == 7). Err mask is 0.
+pub fn crdt_compatible(op_name: String) -> Int {
+    let mr: Result[Int, String] = crdt_op_mask(op_name);
+    if mr.is_ok() == false { return 0; }
+    let m: Int = crm_got(mr);
+    if m == 7 { return 1; }
+    return 0;
+}
+
+pub fn crdt_convergence_golden_cert() -> DomainCert {
+    let data_inv_ok: Int = data_table_ok("orders");
+    let mut holds: Int = 0;
+    if data_inv_ok == 1 {
+        if crdt_compatible("add") == 1 {
+            if crdt_compatible("set") == 1 {
+                if crdt_compatible("increment") == 0 {
+                    if crdt_compatible("multiply") == 0 {
+                        if crdt_compatible("unknown_op") == 0 {
+                            if crdt_compatible("") == 0 {
+                                holds = 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "crdt_convergence_principle", holds);
+}
+
+pub fn crdt_convergence_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    // Property bits are constants.
+    if crdt_commutative_bit() == 1 {
+        if crdt_associative_bit() == 2 {
+            if crdt_idempotent_bit() == 4 {
+                // Mask for add/union/or/and = 7.
+                if crm_got(crdt_op_mask("add")) == 7 {
+                    if crm_got(crdt_op_mask("union")) == 7 {
+                        // Mask for increment/push = 3 (no idempotence).
+                        if crm_got(crdt_op_mask("increment")) == 3 {
+                            if crm_got(crdt_op_mask("push")) == 3 {
+                                // Unknown and empty op_name return Err.
+                                if crdt_op_mask("nonexistent").is_ok() == false {
+                                    if crdt_op_mask("").is_ok() == false {
+                                        holds = 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "crdt_convergence_hostile", holds);
+}
+
+pub fn verify_crdt_convergence_principle() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    // Property bit constants.
+    if crdt_commutative_bit() != 1 { return false; }
+    if crdt_associative_bit() != 2 { return false; }
+    if crdt_idempotent_bit() != 4 { return false; }
+    // CRDT-compatible golden cases.
+    if crdt_compatible("add") != 1 { return false; }
+    if crdt_compatible("union") != 1 { return false; }
+    if crdt_compatible("set") != 1 { return false; }
+    if crdt_compatible("or") != 1 { return false; }
+    if crdt_compatible("and") != 1 { return false; }
+    if crdt_compatible("max") != 1 { return false; }
+    if crdt_compatible("min") != 1 { return false; }
+    // Non-idempotent ops fail (mask == 3, not 7).
+    if crdt_compatible("increment") != 0 { return false; }
+    if crdt_compatible("multiply") != 0 { return false; }
+    if crdt_compatible("push") != 0 { return false; }
+    if crdt_compatible("append") != 0 { return false; }
+    // Hostile: unknown op returns 0 (fails closed).
+    if crdt_compatible("unknown_op") != 0 { return false; }
+    if crdt_compatible("") != 0 { return false; }
+    // crdt_op_mask returns Err for unknown and empty (0 is a legal mask, not a dummy).
+    if crdt_op_mask("nonexistent").is_ok() { return false; }
+    if crdt_op_mask("").is_ok() { return false; }
+    // Property masks are correct.
+    if crm_got(crdt_op_mask("add")) != 7 { return false; }
+    if crm_got(crdt_op_mask("increment")) != 3 { return false; }
+    // Certificates.
+    let a: DomainCert = crdt_convergence_golden_cert();
+    let b: DomainCert = crdt_convergence_hostile_cert();
+    if a.holds != 1 { return false; }
+    if b.holds != 1 { return false; }
+    return true;
+}

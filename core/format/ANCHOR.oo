@@ -1,0 +1,50 @@
+// # Fmt Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fmt domain library. Re-exports a stable fmt_mod_* surface for the most-used public API (print, parse, verify, config, normalize, verify_identical). Private siblings (fmt_config, fmt_parser, fmt_printer, fmt_verify) remain non-public.
+//
+// Setup: Imports private fmt siblings; no caps required for pure string functions.
+//
+// Beats:
+//   1. Beat 1: Import the public-API siblings and re-export the print/parse/verify surface as fmt_mod_print, fmt_mod_parse, fmt_mod_verify.
+//   2. Beat 2: Re-export the config surface as fmt_mod_config_default, fmt_mod_is_radar.
+//   3. Beat 3: Re-export the normalize/verify_identical surface as fmt_mod_normalize, fmt_mod_verify_identical.
+//   4. Beat 4: Document the private siblings that external callers must NOT import directly.
+
+import "fmt_config.oo";
+import "fmt_parser.oo";
+import "fmt_printer.oo";
+import "fmt_verify.oo";
+
+// Public print/parse/verify surface: fmt_mod_print_*, fmt_mod_parse_*, fmt_mod_verify_*
+pub fn fmt_mod_print(src: String) -> String {
+    return fmt_print(src);
+}
+pub fn fmt_mod_parse(src: String) -> List[String] {
+    return fmt_parse(src);
+}
+pub fn fmt_mod_verify(src: String) -> Bool {
+    return fmt_verify_all(src);
+}
+
+// Public config surface: fmt_mod_config_*
+pub fn fmt_mod_config_default() -> FmtConfig {
+    return fmt_config_default();
+}
+pub fn fmt_mod_is_radar(c: FmtConfig) -> Bool {
+    return fmt_config_is_radar(c);
+}
+
+// Public normalize/verify_identical surface: fmt_mod_normalize_*, fmt_mod_verify_identical_*
+pub fn fmt_mod_normalize(line: String) -> String {
+    return fmt_normalize_line(line);
+}
+pub fn fmt_mod_verify_identical(a: String, b: String) -> Bool {
+    return fmt_verify_identical(a, b);
+}
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   fmt_config.oo  -- FmtConfig struct + helpers
+//   fmt_parser.oo  -- parse + tokenize primitives
+//   fmt_printer.oo -- print + format primitives
+//   fmt_verify.oo  -- verify + normalize primitives
+// External callers must import this mod.oo and use the fmt_mod_* surface.

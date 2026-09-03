@@ -1,0 +1,99 @@
+// # Stochastic Chance-Constrained MPC (SCMPC)
+//
+// Logline: Converts probabilistic vehicle state boundaries under Gaussian uncertainty into tightened deterministic MPC constraints.
+//
+// Setup: Stochastic MPC solver propagating mean states and covariance matrices to enforce safety with confidence 1 - epsilon.
+//
+// Beats:
+//   1. Propagate mean state vector and error covariance Sigma_{k+1} = A*Sigma_k*A^T + W.
+//   2. Calculate quantile multiplier for Gaussian safety probability 1 - epsilon.
+//   3. Compute tightened deterministic road corridor boundaries y_det_max = y_road_max - z_quantile * sigma_y.
+//   4. Enforce collision-free navigation under stochastic sensor noise and tire slip variations.
+
+type ChanceConstraintConfig = struct {
+    quantile_multiplier: Float, // e.g. 2.33 for 99% confidence
+    road_half_width_m: Float
+};
+
+type TightenedBounds = struct {
+    max_lateral_m: Float,
+    min_lateral_m: Float,
+    current_sigma_m: Float
+};
+
+pub fn chance_config_default() -> ChanceConstraintConfig {
+    return ChanceConstraintConfig {
+        quantile_multiplier: 2.33,
+        road_half_width_m: 1.75
+    };
+}
+
+pub fn compute_tightened_bounds(
+    initial_sigma_m: Float,
+    step: Int,
+    disturb_var: Float,
+    cfg: ChanceConstraintConfig
+) -> TightenedBounds {
+    let sigma_growth: Float = sqrt((initial_sigma_m * initial_sigma_m) + (0.005 * disturb_var * mpc_stochastic_chance_constrained_to_f(step)));
+    let tightening: Float = cfg.quantile_multiplier * sigma_growth;
+
+    let max_lat: Float = cfg.road_half_width_m - tightening;
+    let min_lat: Float = (0.0 - cfg.road_half_width_m) + tightening;
+
+    let mut safe_max: Float = max_lat;
+
+
+    if max_lat < 0.2 {
+
+
+        safe_max = 0.2;
+
+
+    }
+    let mut safe_min: Float = min_lat;
+
+    if min_lat > (0.0 - 0.2) {
+
+        safe_min = 0.0 - 0.2;
+
+    }
+
+    return TightenedBounds {
+        max_lateral_m: safe_max,
+        min_lateral_m: safe_min,
+        current_sigma_m: sigma_growth
+    };
+}
+
+
+fn mpc_stochastic_chance_constrained_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

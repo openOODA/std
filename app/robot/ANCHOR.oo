@@ -1,0 +1,117 @@
+// # Robot Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard robot (robotics) domain library. Re-exports a stable robot_mod_* surface for the most-used public API (kinematics arm/mobile/engine/ops, locomotion/engine/ops, motors DC/stepper/engine/ops, safety/engine/ops, SLAM/engine/ops, ROS ops). Private siblings (laws, theories, principles, invariants, KATs, stubs, shim_marker files) remain non-public.
+//
+// Setup: Imports private robot siblings; engine constructors take SysCap at the call site. Pure kinematics and ops take no caps.
+//
+// Beats:
+//   1. Re-export the kinematics surface (arm, mobile, engine, ops) as robot_mod_kin_*.
+//   2. Re-export the locomotion surface (engine, ops, diff-drive forward/inverse) as robot_mod_loco_*, robot_mod_diff_*.
+//   3. Re-export the motors surface (DC, stepper, engine, ops) as robot_mod_motor_*.
+//   4. Re-export the safety, SLAM, and ROS surface as robot_mod_safety_*, robot_mod_slam_*, robot_mod_ros_*.
+//   5. Document the private siblings (laws, theories, principles, invariants, KATs, stubs).
+
+import "kinematics.oo";
+import "kinematics_arm.oo";
+import "kinematics_mobile.oo";
+import "kinematics_engine.oo";
+import "kinematics_ops.oo";
+import "locomotion.oo";
+import "locomotion_engine.oo";
+import "locomotion_ops.oo";
+import "motors.oo";
+import "motors_dc.oo";
+import "motors_stepper.oo";
+import "motors_engine.oo";
+import "motors_ops.oo";
+import "safety.oo";
+import "safety_engine.oo";
+import "safety_ops.oo";
+import "slam.oo";
+import "slam_engine.oo";
+import "slam_ops.oo";
+import "ros.oo";
+import "ros_ops.oo";
+
+// Public kinematics arm surface: robot_mod_kin_*
+pub fn robot_mod_kin_dh_link_new(a_val: Float, alpha_val: Float, d_val: Float, theta_val: Float, kind_val: Int) -> DHLink { return dh_link_new(a_val, alpha_val, d_val, theta_val, kind_val); }
+pub fn robot_mod_kin_arm2d_config_new(l1_val: Float, l2_val: Float) -> Arm2DConfig { return arm2d_config_new(l1_val, l2_val); }
+pub fn robot_mod_kin_arm2d_joints_new(t1_val: Float, t2_val: Float) -> Arm2DJoints { return arm2d_joints_new(t1_val, t2_val); }
+
+// Public kinematics mobile (diff-drive) surface: robot_mod_kin_mobile_*
+pub fn robot_mod_kin_mobile_diff_drive_config_new(radius: Float, width: Float) -> DiffDriveConfig { return diff_drive_config_new(radius, width); }
+pub fn robot_mod_kin_mobile_diff_drive_wheel_speeds_new(left_spd: Float, right_spd: Float) -> DiffDriveWheelSpeeds { return diff_drive_wheel_speeds_new(left_spd, right_spd); }
+pub fn robot_mod_kin_mobile_diff_drive_fk(cfg: DiffDriveConfig, wheels: DiffDriveWheelSpeeds) -> Twist2D { return diff_drive_fk(cfg, wheels); }
+
+// Public kinematics engine surface: robot_mod_kin_engine_*
+pub fn robot_mod_kin_engine_init(cap_handle: SysCap) -> KinematicsEngine { return kinematics_engine_init(cap_handle); }
+pub fn robot_mod_kin_engine_is_valid(engine_ref: KinematicsEngine) -> Int { return kinematics_engine_is_valid(engine_ref); }
+
+// Public kinematics ops surface: robot_mod_kin_ops_*
+pub fn robot_mod_kin_ops_vec2_new(x_val: Float, y_val: Float) -> Vec2 { return vec2_new(x_val, y_val); }
+pub fn robot_mod_kin_ops_vec2_zero() -> Vec2 { return vec2_zero(); }
+pub fn robot_mod_kin_ops_vec2_add(v1: Vec2, v2: Vec2) -> Vec2 { return vec2_add(v1, v2); }
+
+// Public locomotion engine surface: robot_mod_loco_*
+pub fn robot_mod_loco_init(cap: SysCap, config: LocomotionConfig) -> Locomotion { return locomotion_init(cap, config); }
+pub fn robot_mod_loco_start(loco: Locomotion) { return locomotion_start(loco); }
+pub fn robot_mod_loco_stop(loco: Locomotion) { return locomotion_stop(loco); }
+
+// Public locomotion ops (diff-drive) surface: robot_mod_diff_*
+pub fn robot_mod_diff_forward(w_left: Float, w_right: Float, wheel_radius: Float, track_width: Float) -> Twist { return diff_drive_forward(w_left, w_right, wheel_radius, track_width); }
+pub fn robot_mod_diff_inverse_left(vx: Float, wz: Float, wheel_radius: Float, track_width: Float) -> Float { return diff_drive_inverse_left(vx, wz, wheel_radius, track_width); }
+pub fn robot_mod_diff_inverse_right(vx: Float, wz: Float, wheel_radius: Float, track_width: Float) -> Float { return diff_drive_inverse_right(vx, wz, wheel_radius, track_width); }
+
+// Public motors DC surface: robot_mod_motor_dc_*
+pub fn robot_mod_motor_dc_init(id: Int, max_voltage: Float, max_rpm: Float, cpr: Float, gear_ratio: Float) -> DcMotor { return dc_motor_init(id, max_voltage, max_rpm, cpr, gear_ratio); }
+pub fn robot_mod_motor_dc_enable(dc: DcMotor) -> DcMotor { return dc_motor_enable(dc); }
+pub fn robot_mod_motor_dc_disable(dc: DcMotor) -> DcMotor { return dc_motor_disable(dc); }
+
+// Public motors stepper surface: robot_mod_motor_stepper_*
+pub fn robot_mod_motor_stepper_init(id: Int, steps_per_rev: Float, microsteps: Float, max_speed: Float, accel: Float) -> StepperState { return stepper_init(id, steps_per_rev, microsteps, max_speed, accel); }
+pub fn robot_mod_motor_stepper_enable(st: StepperState) -> StepperState { return stepper_enable(st); }
+pub fn robot_mod_motor_stepper_disable(st: StepperState) -> StepperState { return stepper_disable(st); }
+
+// Public motors bank surface: robot_mod_motor_bank_*
+pub fn robot_mod_motor_bank_new() -> MotorBank { return motor_bank_new(); }
+pub fn robot_mod_motor_bank_add_dc(bank_in: MotorBank, dc_item: DcMotor) -> MotorBank { return motor_bank_add_dc(bank_in, dc_item); }
+pub fn robot_mod_motor_bank_add_stepper(bank_in: MotorBank, st_item: StepperState) -> MotorBank { return motor_bank_add_stepper(bank_in, st_item); }
+
+// Public motors ops surface: robot_mod_motor_ops_*
+pub fn robot_mod_motor_ops_abs(x: Float) -> Float { return math_abs(x); }
+pub fn robot_mod_motor_ops_clamp(val: Float, min_v: Float, max_v: Float) -> Float { return clamp_float(val, min_v, max_v); }
+pub fn robot_mod_motor_ops_rad_to_deg(rad: Float) -> Float { return rad_to_deg(rad); }
+
+// Public safety surface: robot_mod_safety_*
+pub fn robot_mod_safety_geofence_contains(fence: Geofence2D, x: Int, y: Int) -> Bool { return geofence2d_contains(fence, x, y); }
+pub fn robot_mod_safety_clamp_speed(val: Int, max_val: Int) -> Int { return safety_clamp_speed(val, max_val); }
+pub fn robot_mod_safety_obstacle_proximity(prox: ObstacleProximity, measured_mm: Int) -> ObstacleProximity { return obstacle_proximity_evaluate(prox, measured_mm); }
+
+// Public safety engine surface: robot_mod_safety_engine_*
+pub fn robot_mod_safety_engine_init(cap: SysCap) -> SafetyMonitor { return safety_monitor_init(cap); }
+pub fn robot_mod_safety_engine_trigger_estop(mon: SafetyMonitor, reason_code: Int, timestamp_ms: Int) { return safety_monitor_trigger_estop(mon, reason_code, timestamp_ms); }
+pub fn robot_mod_safety_engine_reset_estop(mon: SafetyMonitor, sys: SysCap) -> Bool { return safety_monitor_reset_estop(mon, sys); }
+
+// Public SLAM engine surface: robot_mod_slam_engine_*
+pub fn robot_mod_slam_engine_new() -> SlamState { return slam_engine_new(); }
+pub fn robot_mod_slam_engine_start(state: SlamState) -> SlamState { return slam_engine_start(state); }
+pub fn robot_mod_slam_engine_stop(state: SlamState) -> SlamState { return slam_engine_stop(state); }
+
+// Public SLAM ops surface: robot_mod_slam_ops_*
+pub fn robot_mod_slam_ops_abs(val: Int) -> Int { return abs_val(val); }
+pub fn robot_mod_slam_ops_min(a: Int, b: Int) -> Int { return min_val(a, b); }
+pub fn robot_mod_slam_ops_max(a: Int, b: Int) -> Int { return max_val(a, b); }
+
+// Public ROS ops surface: robot_mod_ros_*
+pub fn robot_mod_ros_qos_default() -> QosProfile { return qos_profile_default(); }
+pub fn robot_mod_ros_qos_sensor_data() -> QosProfile { return qos_profile_sensor_data(); }
+pub fn robot_mod_ros_qos_services() -> QosProfile { return qos_profile_services(); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. coulomb_friction_law.oo, dh_kinematic_law.oo, mpc_tube_law.oo, newton_euler_dynamics_law.oo, trapezoidal_velocity_law.oo)
+//   _theory files (e.g. jacobian_transpose_theory.oo, kalman_filter_theory.oo, khatib_apf_theory.oo, pid_control_theory.oo, slam_ekf_consistency_theory.oo)
+//   _principle files (e.g. bounded_control_principle.oo, controllability_principle.oo, lie_observability_principle.oo, lyapunov_stability_principle.oo, separation_principle.oo)
+//   _invariants files (e.g. robot_invariants.oo)
+//   _kat files (e.g. robotics_kat.oo)
+//   _stubs files (e.g. motors_stubs.oo, ros_stubs.oo, safety_stubs.oo, slam_stubs.oo)
+//   _shim_marker files (stubs in kinematics/locomotion/motors/safety/slam/ros.oo used for type system placeholders; not real implementations)

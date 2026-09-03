@@ -1,0 +1,89 @@
+// # LAPACK Singular Value Decomposition
+//
+// Logline: 2x2 SVD from A^T A eigenvalues. Mock packing is a separate constructor.
+//
+// Setup: Pure math. lapack_svd_decompose takes row-major n*n. Only n=2 is computed.
+//
+// Beats:
+//   1. lapack_svd_decompose recovers singular values of a 2x2 matrix.
+//   2. n!=2 or length != n*n is Err. s_min<=0 condition is Err.
+//   3. lapack_svd_decompose_mock still packs integers and sets is_mock.
+//   4. Real fact sets is_mock false.
+
+type LapackSvdResult = struct {
+    matrix_rank: Int,
+    max_singular_value: Int,
+    min_singular_value: Int,
+    is_full_rank: Bool,
+    is_mock: Bool
+};
+
+type LapackSvdFact = struct {
+    s_max: Float,
+    s_min: Float,
+    is_singular: Bool,
+    is_mock: Bool
+};
+
+pub fn lapack_svd_decompose_mock(dim: Int, max_sv: Int, min_sv: Int) -> Result[LapackSvdResult, String] {
+    if dim < 1 { return Err("ERR\tsvd\tdim"); }
+    if min_sv < 0 { return Err("ERR\tsvd\tsv"); }
+    if max_sv < min_sv { return Err("ERR\tsvd\tsv"); }
+    let full: Bool = (min_sv > 0);
+    return Ok(LapackSvdResult {
+        matrix_rank: dim,
+        max_singular_value: max_sv,
+        min_singular_value: min_sv,
+        is_full_rank: full,
+        is_mock: true
+    });
+}
+
+pub fn lapack_svd_condition_number(result: LapackSvdResult) -> Result[Int, String] {
+    let min_sv: Int = result.min_singular_value;
+    if min_sv <= 0 {
+        return Err("ERR\tsvd\tsingular");
+    }
+    let max_sv: Int = result.max_singular_value;
+    return Ok(max_sv / min_sv);
+}
+
+pub fn lapack_svd_decompose(a: List[Float], n: Int) -> Result[LapackSvdFact, String] {
+    if n != 2 { return Err("ERR\tsvd\tdim"); }
+    if list_len(a) != 4 { return Err("ERR\tsvd\tshape"); }
+    let a11: Float = list_get(a, 0);
+    let a12: Float = list_get(a, 1);
+    let a21: Float = list_get(a, 2);
+    let a22: Float = list_get(a, 3);
+    let e: Float = a11 * a11 + a21 * a21;
+    let f: Float = a11 * a12 + a21 * a22;
+    let g: Float = a12 * a12 + a22 * a22;
+    let trace: Float = e + g;
+    let diff: Float = e - g;
+    let disc: Float = sqrt(diff * diff + 4.0 * f * f);
+    let mut l1: Float = 0.5 * (trace + disc);
+    let mut l2: Float = 0.5 * (trace - disc);
+    if l1 < 0.0 { l1 = 0.0; }
+    if l2 < 0.0 { l2 = 0.0; }
+    let mut s1: Float = sqrt(l1);
+    let mut s2: Float = sqrt(l2);
+    if s2 > s1 {
+        let t: Float = s1;
+        s1 = s2;
+        s2 = t;
+    }
+    let sing: Bool = (s2 <= 0.0);
+    return Ok(LapackSvdFact {
+        s_max: s1,
+        s_min: s2,
+        is_singular: sing,
+        is_mock: false
+    });
+}
+
+pub fn lapack_svd_fact_condition(fact: LapackSvdFact) -> Result[Float, String] {
+    let mn: Float = fact.s_min;
+    if mn <= 0.0 { return Err("ERR\tsvd\tsingular"); }
+    let mx: Float = fact.s_max;
+    return Ok(mx / mn);
+}

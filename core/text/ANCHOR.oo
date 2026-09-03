@@ -1,0 +1,135 @@
+// # Text Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard text domain library. Re-exports a stable text_mod_* surface for the most-used public API (regex, KMP, Levenshtein, Hamming, Jaro-Winkler, format/padding, string builder, rope, UTF-8, grapheme, diff, unicode normalization, case conversion, slug, hex dump, natural sort). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private text siblings; no caps required for pure string processing. All ops operate on owned String; no FS, net, or env.
+//
+// Beats:
+//   1. Re-export the regex and KMP pattern-matching surface as text_mod_regex_* and text_mod_kmp_*.
+//   2. Re-export the Levenshtein, Hamming, and Jaro-Winkler distance surface as text_mod_levenshtein_*, text_mod_hamming_*, text_mod_jaro_*.
+//   3. Re-export the format, string_builder, and rope surface as text_mod_format_*, text_mod_sb_*, text_mod_rope_*.
+//   4. Re-export the UTF-8 iterator, grapheme, unicode normalization, diff, case conversion, and slug surface as text_mod_utf8_*, text_mod_grapheme_*, text_mod_unicode_*, text_mod_diff_*, text_mod_case_*, text_mod_slug_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat files.
+
+import "regex.oo";
+import "regex_nfa.oo";
+import "regex_dfa.oo";
+import "regex_vm.oo";
+import "regex_parser.oo";
+import "regex_types.oo";
+import "regex_match.oo";
+import "regex_bytecode.oo";
+import "kmp.oo";
+import "levenshtein.oo";
+import "levenshtein_fast.oo";
+import "levenshtein_damerau.oo";
+import "hamming_distance.oo";
+import "jaro_winkler.oo";
+import "format.oo";
+import "string_builder.oo";
+import "string_builder_pool.oo";
+import "rope_string.oo";
+import "utf8_iterator.oo";
+import "utf8_validator.oo";
+import "utf8_stream.oo";
+import "grapheme.oo";
+import "unicode_norm.oo";
+import "diff_match.oo";
+import "diff_simple.oo";
+import "case_converter.oo";
+import "slug_generator.oo";
+import "hex_dump_format.oo";
+import "natural_sort.oo";
+import "line_counter.oo";
+import "indent_formatter.oo";
+import "word_wrap.oo";
+import "soundex.oo";
+import "soundex_dm.oo";
+import "metaphone.oo";
+import "caesar_rot13.oo";
+import "base32_hex.oo";
+import "base58_bitcoin.oo";
+import "fuzzy_match.oo";
+import "template.oo";
+import "template_interpolate.oo";
+import "num_buffer.oo";
+
+// Public regex surface: text_mod_regex_*
+pub fn text_mod_regex_compile(pattern: String) -> Result[Regex, String] { return regex_compile(pattern); }
+pub fn text_mod_regex_is_match(re: Regex, text: String) -> Bool { return regex_is_match(re, text); }
+pub fn text_mod_regex_find(re: Regex, text: String) -> Result[String, String] { return regex_find(re, text); }
+pub fn text_mod_regex_replace(re: Regex, text: String, replacement: String) -> String { return regex_replace(re, text, replacement); }
+pub fn text_mod_regex_replace_all(re: Regex, text: String, replacement: String) -> String { return regex_replace_all(re, text, replacement); }
+pub fn text_mod_regex_split(re: Regex, text: String) -> List[String] { return regex_split(re, text); }
+
+// Public KMP surface: text_mod_kmp_*
+pub fn text_mod_kmp_compile(pattern: String) -> KmpPattern { return kmp_compile(pattern); }
+pub fn text_mod_kmp_search_first(kmp: KmpPattern, text: String) -> Int { return kmp_search_first(kmp, text); }
+pub fn text_mod_kmp_count(kmp: KmpPattern, text: String) -> Int { return kmp_count(kmp, text); }
+
+// Public Levenshtein / Damerau surface: text_mod_levenshtein_*
+pub fn text_mod_levenshtein_distance(s1: String, s2: String) -> Int { return levenshtein_distance(s1, s2); }
+pub fn text_mod_levenshtein_within_distance(a: String, b: String, max_dist: Int) -> Bool { return levenshtein_within_distance(a, b, max_dist); }
+pub fn text_mod_levenshtein_similarity_ratio(a: String, b: String) -> Float { return levenshtein_similarity_ratio(a, b); }
+pub fn text_mod_levenshtein_damerau(s1: String, s2: String) -> Int { return damerau_levenshtein_distance(s1, s2); }
+
+// Public Hamming / Jaro-Winkler surface: text_mod_hamming_*, text_mod_jaro_*
+pub fn text_mod_hamming_distance_str(s1: String, s2: String) -> Result[Int, String] { return hamming_distance_str(s1, s2); }
+pub fn text_mod_jaro_similarity(s1: String, s2: String) -> Float { return jaro_similarity(s1, s2); }
+
+// Public format / padding surface: text_mod_format_*
+pub fn text_mod_format_pad_left(s: String, width: Int, pad_char: String) -> String { return format_pad_left(s, width, pad_char); }
+pub fn text_mod_format_pad_right(s: String, width: Int, pad_char: String) -> String { return format_pad_right(s, width, pad_char); }
+pub fn text_mod_format_pad_center(s: String, width: Int, pad_char: String) -> String { return format_pad_center(s, width, pad_char); }
+pub fn text_mod_format_truncate(s: String, max_width: Int, ellipsis: String) -> String { return format_truncate(s, max_width, ellipsis); }
+pub fn text_mod_format_thousands(val: Int, sep: String) -> String { return format_thousands_separator(val, sep); }
+
+// Public StringBuilder surface: text_mod_sb_*
+pub fn text_mod_sb_new() -> StringBuilder { return sb_new(); }
+pub fn text_mod_sb_with_capacity(initial_cap: Int) -> StringBuilder { return sb_with_capacity(initial_cap); }
+pub fn text_mod_sb_append(sb: StringBuilder, s: String) -> StringBuilder { return sb_append(sb, s); }
+pub fn text_mod_sb_to_string(sb: StringBuilder) -> String { return sb_to_string(sb); }
+
+// Public Rope surface: text_mod_rope_*
+pub fn text_mod_rope_new(text: String) -> Rope { return rope_new(text); }
+pub fn text_mod_rope_concat(a: Rope, b: Rope) -> Rope { return rope_concat(a, b); }
+pub fn text_mod_rope_to_string(r: Rope) -> String { return rope_to_string(r); }
+pub fn text_mod_rope_char_at(r: Rope, idx: Int) -> String { return rope_char_at(r, idx); }
+
+// Public UTF-8 / Grapheme surface: text_mod_utf8_*, text_mod_grapheme_*
+pub fn text_mod_utf8_iter_new(s: String) -> Utf8Iter { return utf8_iter_new(s); }
+pub fn text_mod_utf8_iter_next(it: Utf8Iter) -> Utf8Iter { return utf8_iter_next(it); }
+pub fn text_mod_grapheme_count(s: String) -> Int { return grapheme_count(s); }
+pub fn text_mod_grapheme_at(s: String, cluster_index: Int) -> String { return grapheme_at(s, cluster_index); }
+
+// Public Unicode normalization surface: text_mod_unicode_*
+pub fn text_mod_unicode_is_ascii(s: String) -> Bool { return unicode_is_ascii(s); }
+pub fn text_mod_unicode_strip_diacritics(s: String) -> String { return unicode_strip_diacritics(s); }
+pub fn text_mod_unicode_case_fold(s: String) -> String { return unicode_case_fold(s); }
+pub fn text_mod_unicode_normalize_whitespace(s: String) -> String { return unicode_normalize_whitespace(s); }
+
+// Public diff surface: text_mod_diff_*
+pub fn text_mod_diff_lcs_length(a: String, b: String) -> Int { return diff_lcs_length(a, b); }
+pub fn text_mod_diff_similarity_ratio(a: String, b: String) -> Int { return diff_similarity_ratio(a, b); }
+pub fn text_mod_diff_format_unified(a: String, b: String, filename: String) -> String { return diff_format_unified(a, b, filename); }
+
+// Public case / slug / sort surface: text_mod_case_*, text_mod_slug_*, text_mod_sort_*
+pub fn text_mod_case_to_snake(s: String) -> String { return to_snake_case(s); }
+pub fn text_mod_case_to_kebab(s: String) -> String { return to_kebab_case(s); }
+pub fn text_mod_slug_generate(input_text: String) -> String { return slug_generate(input_text); }
+pub fn text_mod_sort_natural_cmp(a: String, b: String) -> Int { return natural_cmp(a, b); }
+pub fn text_mod_sort_natural_list(xs: List[String]) -> List[String] { return natural_sort_list(xs); }
+
+// Public hex / line-count / wrap surface: text_mod_hex_*, text_mod_count_*, text_mod_wrap_*
+pub fn text_mod_hex_dump_byte(b: Int) -> String { return hex_dump_byte(b); }
+pub fn text_mod_line_count(s: String) -> Int { return text_line_count(s); }
+pub fn text_mod_word_count(s: String) -> Int { return text_word_count(s); }
+pub fn text_mod_wrap_lines(text: String, cfg: WrapConfig) -> List[String] { return word_wrap_lines(text, cfg); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. fm_index_search_law.oo, levenshtein_distance_law.oo)
+//   _theory files (e.g. regex_nfa_dfa_theory.oo)
+//   _principle files (e.g. icu_collation_principle.oo, peg_packrat_principle.oo, regex_match_deterministic_principle.oo, utf8_codepoint_length_law.oo, aho_corasick_automaton_theory.oo)
+//   _invariants files (e.g. text_invariants.oo)
+//   _kat files (e.g. text_kat.oo, literature_kat.oo)
+// External callers must import this mod.oo and use the text_mod_* surface.

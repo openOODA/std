@@ -1,0 +1,103 @@
+// # Full Market Depth Cost Curve and Sweeping Slippage
+//
+// Logline: Calculates multi-level order book depth aggregation, non-linear market impact cost curves, and volume-weighted execution slippage.
+//
+// Setup: Pure high-frequency algorithmic routing module evaluating complete price ladder sweeps.
+//
+// Beats:
+//   1. Define BookLevel, DepthLadder, and SweepExecutionResult structures.
+//   2. Walk multi-level order book ladder to compute cumulative filled shares and average execution price.
+//   3. Compute marginal cost, price slippage relative to midprice, and unfilled residual volume.
+
+type BookLevel = struct {
+    price: Float,
+    quantity: Float
+};
+
+type DepthLadder = struct {
+    is_buy_side: Bool,
+    levels: List[BookLevel]
+};
+
+type SweepExecutionResult = struct {
+    requested_shares: Float,
+    filled_shares: Float,
+    average_price: Float,
+    total_notional_usd: Float,
+    slippage_bps: Float,
+    levels_consumed: Int,
+    is_complete_fill: Bool
+};
+
+pub fn depth_ladder_new(is_buy: Bool) -> DepthLadder {
+    let empty_levels: List[BookLevel] = list_new();
+    return DepthLadder {
+        is_buy_side: is_buy,
+        levels: empty_levels
+    };
+}
+
+pub fn depth_ladder_add_level(ladder: DepthLadder, price: Float, qty: Float) -> DepthLadder {
+    let lvl: BookLevel = BookLevel {
+        price: price,
+        quantity: qty
+    };
+    return DepthLadder {
+        is_buy_side: ladder.is_buy_side,
+        levels: list_push(ladder.levels, lvl)
+    };
+}
+
+pub fn depth_sweep_ladder(
+    ladder: DepthLadder,
+    requested_shares: Float,
+    reference_mid: Float
+) -> SweepExecutionResult {
+    let n_lvls: Int = list_len(ladder.levels);
+    let mut rem_req: Float = requested_shares;
+    let mut total_notional: Float = 0.0;
+    let mut total_filled: Float = 0.0;
+    let mut lvls_hit: Int = 0;
+    let mut i: Int = 0;
+
+    while i < n_lvls && rem_req > 0.0 {
+        let lvl: BookLevel = list_get(ladder.levels, i);
+        let avail_q: Float = lvl.quantity;
+        let px: Float = lvl.price;
+
+        let mut fill_q: Float = avail_q;
+    if rem_req < avail_q {
+        fill_q = rem_req;
+    }
+        total_notional = total_notional + (fill_q * px);
+        total_filled = total_filled + fill_q;
+        rem_req = rem_req - fill_q;
+        lvls_hit = lvls_hit + 1;
+        i = i + 1;
+    }
+
+    let mut avg_px: Float = 0.0;
+    if total_filled > 0.0 {
+        avg_px = total_notional / total_filled;
+    }
+    let mut slip_bps: Float = 0.0;
+    if reference_mid > 0.0 && avg_px > 0.0 {
+        let mut px_diff: Float = reference_mid - avg_px;
+    if ladder.is_buy_side {
+        px_diff = avg_px - reference_mid;
+    }
+        slip_bps = (px_diff / reference_mid) * 10000.0;
+    }
+
+    let full: Bool = total_filled >= requested_shares;
+
+    return SweepExecutionResult {
+        requested_shares: requested_shares,
+        filled_shares: total_filled,
+        average_price: avg_px,
+        total_notional_usd: total_notional,
+        slippage_bps: slip_bps,
+        levels_consumed: lvls_hit,
+        is_complete_fill: full
+    };
+}

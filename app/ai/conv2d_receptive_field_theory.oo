@@ -1,0 +1,105 @@
+// # Conv2D Receptive Field Theory
+//
+// Logline: A stacked conv layer expands the receptive field by (k-1)*stride per layer, dilated kernel grows effective kernel by gaps.
+//
+// Setup: Pure Int. kernel >= 1, stride >= 1, dilation >= 1, r_prev >= 1. Out-of-range or empty lists return Err. No valid RF of 0. Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Single-layer receptive field: r = r_prev + (k - 1) * stride.
+//   2. Closed-form chain over depth: r_d = 1 + sum_i (k_i - 1) * prod_{j<i} stride_j.
+//   3. Dilated convolution: k_eff = k + (k - 1) * (d - 1).
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+
+fn crf_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Single-layer receptive field update: r = r_prev + (k - 1) * stride.
+// r_prev <= 0, k <= 0, or stride <= 0 return Err.
+pub fn crf_receptive_field(r_prev: Int, k: Int, stride: Int) -> Result[Int, String] {
+    if r_prev <= 0 { return Err("ERR\tcrf\trprev"); }
+    if k <= 0 { return Err("ERR\tcrf\tk"); }
+    if stride <= 0 { return Err("ERR\tcrf\tstride"); }
+    let diff: Int = k - 1;
+    return Ok(r_prev + (diff * stride));
+}
+
+// Closed-form receptive field over a depth chain: list of (k, stride) pairs.
+// r_prev starts at 1. Empty lists, length mismatch, or out-of-range k/stride return Err.
+pub fn crf_chain_rf(kernel_sizes: List[Int], strides: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(kernel_sizes);
+    let m: Int = list_len(strides);
+    if n <= 0 { return Err("ERR\tcrf\tempty"); }
+    if n != m { return Err("ERR\tcrf\tlen"); }
+    let mut r: Int = 1;
+    let mut i: Int = 0;
+    while i < n {
+        let k: Int = list_get(kernel_sizes, i);
+        let s: Int = list_get(strides, i);
+        let rr: Result[Int, String] = crf_receptive_field(r, k, s);
+        if rr.is_ok() == false { return Err("ERR\tcrf\tlayer"); }
+        r = crf_got(rr);
+        if r <= 0 { return Err("ERR\tcrf\trf"); }
+        i = i + 1;
+    }
+    return Ok(r);
+}
+
+// Effective kernel size for a dilated convolution: k_eff = k + (k - 1) * (d - 1).
+// k <= 0 or d <= 0 return Err.
+pub fn crf_dilated_kernel(k: Int, dilation: Int) -> Result[Int, String] {
+    if k <= 0 { return Err("ERR\tcrf\tk"); }
+    if dilation <= 0 { return Err("ERR\tcrf\tdil"); }
+    let diff: Int = k - 1;
+    let gaps: Int = dilation - 1;
+    return Ok(k + (diff * gaps));
+}
+
+// KAT and hostile cases for the conv2d receptive field theory.
+pub fn verify_conv2d_receptive_field_theory() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    if crf_got(crf_receptive_field(1, 3, 1)) != 3 { return false; }
+    if crf_got(crf_receptive_field(3, 3, 1)) != 5 { return false; }
+    if crf_got(crf_receptive_field(5, 3, 1)) != 7 { return false; }
+    if crf_got(crf_receptive_field(1, 3, 2)) != 5 { return false; }
+    if crf_got(crf_receptive_field(5, 3, 2)) != 9 { return false; }
+    if crf_receptive_field(0, 3, 1).is_ok() { return false; }
+    if crf_receptive_field(0 - 1, 3, 1).is_ok() { return false; }
+    if crf_receptive_field(1, 0, 1).is_ok() { return false; }
+    if crf_receptive_field(1, 0 - 1, 1).is_ok() { return false; }
+    if crf_receptive_field(1, 3, 0).is_ok() { return false; }
+    if crf_receptive_field(1, 3, 0 - 1).is_ok() { return false; }
+    let mut ks: List[Int] = list_new();
+    ks = list_push(ks, 3);
+    ks = list_push(ks, 3);
+    let mut ss: List[Int] = list_new();
+    ss = list_push(ss, 1);
+    ss = list_push(ss, 1);
+    if crf_got(crf_chain_rf(ks, ss)) != 5 { return false; }
+    let mut ks3: List[Int] = list_new();
+    ks3 = list_push(ks3, 3);
+    ks3 = list_push(ks3, 3);
+    ks3 = list_push(ks3, 3);
+    let mut ss3: List[Int] = list_new();
+    ss3 = list_push(ss3, 1);
+    ss3 = list_push(ss3, 1);
+    ss3 = list_push(ss3, 1);
+    if crf_got(crf_chain_rf(ks3, ss3)) != 7 { return false; }
+    let mut empty: List[Int] = list_new();
+    if crf_chain_rf(empty, empty).is_ok() { return false; }
+    let mut bad: List[Int] = list_new();
+    bad = list_push(bad, 3);
+    if crf_chain_rf(bad, empty).is_ok() { return false; }
+    if crf_got(crf_dilated_kernel(3, 2)) != 5 { return false; }
+    if crf_got(crf_dilated_kernel(3, 1)) != 3 { return false; }
+    if crf_got(crf_dilated_kernel(5, 2)) != 9 { return false; }
+    if crf_got(crf_dilated_kernel(7, 3)) != 19 { return false; }
+    if crf_dilated_kernel(0, 2).is_ok() { return false; }
+    if crf_dilated_kernel(0 - 1, 2).is_ok() { return false; }
+    if crf_dilated_kernel(3, 0).is_ok() { return false; }
+    if crf_dilated_kernel(3, 0 - 1).is_ok() { return false; }
+    return true;
+}

@@ -1,0 +1,68 @@
+// # Dead-Cas9 (dCas9) CRISPRi / CRISPRa Targeting Window Designer
+//
+// Logline: Optimizes targeting windows relative to transcription start sites (TSS) for CRISPR interference (KRAB) and activation (VPR).
+//
+// Setup: Transcriptional modulation engine positioning catalytically dead dCas9-repressors [-50 to +300 bp] and dCas9-activators [-400 to -50 bp].
+//
+// Beats:
+//   1. Define TranscriptionalModulationSpec and PerturbationScore structures.
+//   2. Map guide position relative to transcription start site (TSS).
+//   3. Compute predicted gene silencing (CRISPRi) or activation fold-change (CRISPRa).
+
+type TranscriptionalModulationSpec = struct {
+    mode: String,
+    distance_to_tss_bp: Int,
+    strand_relative_to_gene: String
+};
+
+type PerturbationScore = struct {
+    predicted_modulation_fold: Float,
+    target_window_status: String,
+    steric_blocking_efficiency: Float
+};
+
+pub fn transcriptional_modulation_spec_new(mode: String, dist: Int, strand: String) -> TranscriptionalModulationSpec {
+    let spec: TranscriptionalModulationSpec = TranscriptionalModulationSpec {
+        mode: mode,
+        distance_to_tss_bp: dist,
+        strand_relative_to_gene: strand
+    };
+    return spec;
+}
+
+pub fn dcas9_evaluate_position(mode: String, tss_dist: Int) -> PerturbationScore {
+    if mode == "CRISPRi" || mode == "crispri" {
+        // Optimal window: -50 to +300 bp from TSS
+        let in_win: Bool = (tss_dist >= -50 && tss_dist <= 300);
+        let mut fold: Float = 0.40;
+        if in_win {
+            fold = 0.05;
+        }
+        let mut status: String = "SUBOPTIMAL_WINDOW";
+        if in_win {
+            status = "OPTIMAL_SILENCING_WINDOW";
+        }
+        let res_i: PerturbationScore = PerturbationScore {
+            predicted_modulation_fold: fold,
+            target_window_status: status,
+            steric_blocking_efficiency: 0.95
+        };
+        return res_i;
+    }
+    // CRISPRa optimal window: -400 to -50 bp from TSS
+    let in_win_a: Bool = (tss_dist >= -400 && tss_dist <= -50);
+    let mut fold_a: Float = 3.2;
+    if in_win_a {
+        fold_a = 18.5;
+    }
+    let mut status_a: String = "SUBOPTIMAL_WINDOW";
+    if in_win_a {
+        status_a = "OPTIMAL_ACTIVATION_WINDOW";
+    }
+    let res_a: PerturbationScore = PerturbationScore {
+        predicted_modulation_fold: fold_a,
+        target_window_status: status_a,
+        steric_blocking_efficiency: 0.85
+    };
+    return res_a;
+}

@@ -1,0 +1,208 @@
+// # mTLS Certificate & Chain Operations
+//
+// Logline: Build MtlsCertificate and CertificateChain records; append intermediates and set leaf.
+//
+// Setup: Imports mtls_types.oo. RULES.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. mtls_certificate_empty: zeroed MtlsCertificate with is_valid=false.
+//   2. certificate_chain_empty: empty CertificateChain with placeholder leaf.
+//   3. certificate_chain_add_intermediate: append intermediate to chain.
+//   4. certificate_chain_set_root: bind root cert and refresh depth.
+//
+// residual: X.509 DER parse is process_exit in mtls_stubs.
+
+// RULES.oot 1.4: Default-deny for privileged effects.
+// CAP-G6: preferred &TcpCap for TLS/TCP session effects; &NetCap still works via supersede.
+// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+
+import "std/sec/net/mtls_types.oo";
+
+// -------------------------------------------------------------------
+// Default & Fallback Constructors
+// -------------------------------------------------------------------
+
+pub fn mtls_certificate_empty() -> MtlsCertificate {
+    let empty_sans: List[String] = list_new();
+    return MtlsCertificate {
+        cert_id: "",
+        subject_cn: "",
+        issuer_cn: "",
+        sans: empty_sans,
+        serial_number: "",
+        public_key_algorithm: "",
+        signature_algorithm: "",
+        not_before: 0,
+        not_after: 0,
+        is_ca: false,
+        is_self_signed: false,
+        raw_pem: "",
+        checksum: 0,
+        is_valid: false
+    };
+}
+
+pub fn certificate_chain_empty() -> CertificateChain {
+    let dummy_cert: MtlsCertificate = mtls_certificate_empty();
+    let empty_list: List[MtlsCertificate] = list_new();
+    return CertificateChain {
+        chain_id: "",
+        leaf: dummy_cert,
+        intermediates: empty_list,
+        root: dummy_cert,
+        depth: 0,
+        is_verified: false,
+        error_code: "EMPTY"
+    };
+}
+
+// -------------------------------------------------------------------
+// MtlsCertificate Operations
+// -------------------------------------------------------------------
+
+pub fn mtls_certificate_create(
+    cert_id: String,
+    subject_cn: String,
+    issuer_cn: String,
+    serial_number: String,
+    pk_alg: String,
+    sig_alg: String,
+    not_before: Int,
+    not_after: Int,
+    is_ca: Bool,
+    raw_pem: String
+) -> MtlsCertificate {
+    let id_len: Int = cert_id.len();
+    let cn_len: Int = subject_cn.len();
+    let mut valid: Bool = true;
+    if id_len == 0 || cn_len == 0 || not_before >= not_after {
+        valid = false;
+    }
+
+    let is_self_signed: Bool = str_eq(subject_cn, issuer_cn);
+    let chk: Int = checksum_calculate(raw_pem);
+    let empty_sans: List[String] = list_new();
+
+    return MtlsCertificate {
+        cert_id: cert_id,
+        subject_cn: subject_cn,
+        issuer_cn: issuer_cn,
+        sans: empty_sans,
+        serial_number: serial_number,
+        public_key_algorithm: pk_alg,
+        signature_algorithm: sig_alg,
+        not_before: not_before,
+        not_after: not_after,
+        is_ca: is_ca,
+        is_self_signed: is_self_signed,
+        raw_pem: raw_pem,
+        checksum: chk,
+        is_valid: valid
+    };
+}
+
+pub fn mtls_certificate_add_san(cert: MtlsCertificate, san: String) -> MtlsCertificate {
+    let cur_sans: List[String] = cert.sans;
+    let new_sans: List[String] = list_push(cur_sans, san);
+    return MtlsCertificate {
+        cert_id: cert.cert_id,
+        subject_cn: cert.subject_cn,
+        issuer_cn: cert.issuer_cn,
+        sans: new_sans,
+        serial_number: cert.serial_number,
+        public_key_algorithm: cert.public_key_algorithm,
+        signature_algorithm: cert.signature_algorithm,
+        not_before: cert.not_before,
+        not_after: cert.not_after,
+        is_ca: cert.is_ca,
+        is_self_signed: cert.is_self_signed,
+        raw_pem: cert.raw_pem,
+        checksum: cert.checksum,
+        is_valid: cert.is_valid
+    };
+}
+
+pub fn mtls_certificate_validate(cert_ref: MtlsCertificate, current_time: Int) -> Bool {
+    let is_valid: Bool = cert_ref.is_valid;
+    if is_valid == false {
+        return false;
+    }
+    let pem: String = cert_ref.raw_pem;
+    let expected_chk: Int = checksum_calculate(pem);
+    let chk: Int = cert_ref.checksum;
+    if chk != expected_chk {
+        return false;
+    }
+    let nb: Int = cert_ref.not_before;
+    if current_time < nb {
+        return false;
+    }
+    let na: Int = cert_ref.not_after;
+    if current_time > na {
+        return false;
+    }
+    return true;
+}
+
+// -------------------------------------------------------------------
+// CertificateChain Operations
+// -------------------------------------------------------------------
+
+pub fn certificate_chain_create(
+    chain_id: String,
+    leaf: MtlsCertificate,
+    root: MtlsCertificate
+) -> CertificateChain {
+    let empty_intermediates: List[MtlsCertificate] = list_new();
+    return CertificateChain {
+        chain_id: chain_id,
+        leaf: leaf,
+        intermediates: empty_intermediates,
+        root: root,
+        depth: 2,
+        is_verified: false,
+        error_code: "UNVERIFIED"
+    };
+}
+
+pub fn certificate_chain_add_intermediate(
+    chain: CertificateChain,
+    intermediate: MtlsCertificate
+) -> CertificateChain {
+    let cur_list: List[MtlsCertificate] = chain.intermediates;
+    let new_list: List[MtlsCertificate] = list_push(cur_list, intermediate);
+    let cur_depth: Int = chain.depth;
+    let new_depth: Int = cur_depth + 1;
+    return CertificateChain {
+        chain_id: chain.chain_id,
+        leaf: chain.leaf,
+        intermediates: new_list,
+        root: chain.root,
+        depth: new_depth,
+        is_verified: chain.is_verified,
+        error_code: chain.error_code
+    };
+}
+
+pub fn certificate_chain_verify(
+    chain_ref: CertificateChain,
+    current_time: Int,
+    max_depth: Int
+) -> Bool {
+    let leaf_val: MtlsCertificate = chain_ref.leaf;
+    let root_val: MtlsCertificate = chain_ref.root;
+    let l_ok: Bool = mtls_certificate_validate(leaf_val, current_time);
+    let r_ok: Bool = mtls_certificate_validate(root_val, current_time);
+    if l_ok == false || r_ok == false {
+        return false;
+    }
+    let c_depth: Int = chain_ref.depth;
+    if c_depth > max_depth {
+        return false;
+    }
+    return true;
+}
+
+pub fn __dummy_std_src_ooda_sec_net_mtls_cert_oo() -> Int {
+    return 0;
+}

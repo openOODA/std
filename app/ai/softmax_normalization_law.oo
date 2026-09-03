@@ -1,0 +1,195 @@
+// # Softmax Normalization Law
+//
+// Logline: Each softmax probability is the exponentiated logit divided by the sum of all exponentiated logits; the result sums to 1.
+//
+// Setup: Pure Float. Logits must be a non-empty list. Empty softmax and mismatched CE are Err. Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Numerically stable softmax: subtract max before exponentiating.
+//   2. Non-ideal large/small logit behavior: clamp overflow and underflow.
+//   3. Cross-entropy coupling: L = -sum y_i * log(sigma_i); sum of sigma_i must equal 1.
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+
+fn sm_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn sm_got_l(r: Result[List[Float], String]) -> List[Float] {
+    match r { Ok(v) => { return v; }, Err(_) => { return list_new(); } }
+}
+
+// Numerically stable softmax: subtract max before exp, then divide by sum.
+// Empty logits are undefined.
+pub fn sm_softmax(logits: List[Float]) -> Result[List[Float], String] {
+    let n: Int = list_len(logits);
+    if n <= 0 { return Err("ERR\tsm\tdomain"); }
+    let mut max_val: Float = list_get(logits, 0);
+    let mut i: Int = 1;
+    while i < n {
+        let v: Float = list_get(logits, i);
+        if v > max_val { max_val = v; }
+        i = i + 1;
+    }
+    let mut exps: List[Float] = list_new();
+    let mut sum_exp: Float = 0.0;
+    i = 0;
+    while i < n {
+        let shifted: Float = list_get(logits, i) - max_val;
+        let e: Float = exp_safe(shifted);
+        exps = list_push(exps, e);
+        sum_exp = sum_exp + e;
+        i = i + 1;
+    }
+    let mut out: List[Float] = list_new();
+    if sum_exp <= 0.0 {
+        let nf_r: Result[Float, String] = sm_int_to_float(n);
+        if nf_r.is_ok() == false { return Err("ERR\tsm\tdomain"); }
+        let nf: Float = sm_got(nf_r);
+        if nf <= 0.0 { return Err("ERR\tsm\tdomain"); }
+        let uniform: Float = 1.0 / nf;
+        i = 0;
+        while i < n {
+            out = list_push(out, uniform);
+            i = i + 1;
+        }
+        return Ok(out);
+    }
+    i = 0;
+    while i < n {
+        let p: Float = list_get(exps, i) / sum_exp;
+        out = list_push(out, p);
+        i = i + 1;
+    }
+    return Ok(out);
+}
+
+// Safe exp: clamp extreme arguments to avoid overflow/underflow.
+pub fn exp_safe(x: Float) -> Float {
+    if x > 60.0 { return exp(60.0); }
+    if x < 0.0 - 60.0 { return exp(0.0 - 60.0); }
+    return exp(x);
+}
+
+// Local int-to-float conversion. n == 0 is Ok(0.0). n < 0 returns Err.
+pub fn sm_int_to_float(n: Int) -> Result[Float, String] {
+    if n < 0 { return Err("ERR\tsm\tdomain"); }
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    return Ok(f);
+}
+
+// Cross-entropy loss: L = -sum y_i * log(sigma_i). Empty or length mismatch is Err.
+pub fn sm_cross_entropy(probs: List[Float], targets: List[Float]) -> Result[Float, String] {
+    let n: Int = list_len(probs);
+    let m: Int = list_len(targets);
+    if n <= 0 { return Err("ERR\tsm\tdomain"); }
+    if n != m { return Err("ERR\tsm\tdomain"); }
+    let mut loss: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p: Float = list_get(probs, i);
+        let y: Float = list_get(targets, i);
+        let mut p_safe: Float = p;
+        if p_safe < 0.0000001 { p_safe = 0.0000001; }
+        let log_p: Float = ln(p_safe);
+        loss = loss - (y * log_p);
+        i = i + 1;
+    }
+    return Ok(loss);
+}
+
+// Sum of probabilities (sanity check: must be 1). Empty sum is 0.
+pub fn sm_sum_probs(probs: List[Float]) -> Float {
+    let n: Int = list_len(probs);
+    if n <= 0 { return 0.0; }
+    let mut total: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        total = total + list_get(probs, i);
+        i = i + 1;
+    }
+    return total;
+}
+
+// KAT and hostile cases for the softmax normalization law.
+pub fn verify_softmax_normalization_law() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    let mut logits: List[Float] = list_new();
+    logits = list_push(logits, 1.0);
+    logits = list_push(logits, 2.0);
+    logits = list_push(logits, 3.0);
+    let probs: List[Float] = sm_got_l(sm_softmax(logits));
+    if list_len(probs) != 3 { return false; }
+    let p0: Float = list_get(probs, 0);
+    let p1: Float = list_get(probs, 1);
+    let p2: Float = list_get(probs, 2);
+    let mut d0: Float = p0 - 0.090030573170731;
+    if d0 < 0.0 { d0 = 0.0 - d0; }
+    if d0 > 0.001 { return false; }
+    let mut d1: Float = p1 - 0.244728471054798;
+    if d1 < 0.0 { d1 = 0.0 - d1; }
+    if d1 > 0.001 { return false; }
+    let mut d2: Float = p2 - 0.665240955774471;
+    if d2 < 0.0 { d2 = 0.0 - d2; }
+    if d2 > 0.001 { return false; }
+    let total: Float = sm_sum_probs(probs);
+    let mut dt: Float = total - 1.0;
+    if dt < 0.0 { dt = 0.0 - dt; }
+    if dt > 0.001 { return false; }
+    let mut empty: List[Float] = list_new();
+    if sm_softmax(empty).is_ok() { return false; }
+    if sm_sum_probs(empty) != 0.0 { return false; }
+    let mut zeros: List[Float] = list_new();
+    zeros = list_push(zeros, 0.0);
+    zeros = list_push(zeros, 0.0);
+    let probs_z: List[Float] = sm_got_l(sm_softmax(zeros));
+    if list_len(probs_z) != 2 { return false; }
+    let mut large: List[Float] = list_new();
+    large = list_push(large, 1000.0);
+    large = list_push(large, 1001.0);
+    let probs_large: List[Float] = sm_got_l(sm_softmax(large));
+    let pl0: Float = list_get(probs_large, 0);
+    let pl1: Float = list_get(probs_large, 1);
+    let total_large: Float = sm_sum_probs(probs_large);
+    let mut dtl: Float = total_large - 1.0;
+    if dtl < 0.0 { dtl = 0.0 - dtl; }
+    if dtl > 0.001 { return false; }
+    if pl0 <= 0.0 { return false; }
+    if pl1 <= 0.0 { return false; }
+    let mut small: List[Float] = list_new();
+    small = list_push(small, 0.0 - 1000.0);
+    small = list_push(small, 0.0 - 1001.0);
+    let probs_small: List[Float] = sm_got_l(sm_softmax(small));
+    let ps0: Float = list_get(probs_small, 0);
+    let ps1: Float = list_get(probs_small, 1);
+    let total_small: Float = sm_sum_probs(probs_small);
+    let mut dts: Float = total_small - 1.0;
+    if dts < 0.0 { dts = 0.0 - dts; }
+    if dts > 0.001 { return false; }
+    if ps0 <= 0.0 { return false; }
+    if ps1 <= 0.0 { return false; }
+    let mut onehot: List[Float] = list_new();
+    onehot = list_push(onehot, 0.0);
+    onehot = list_push(onehot, 1.0);
+    onehot = list_push(onehot, 0.0);
+    let ce: Float = sm_got(sm_cross_entropy(probs, onehot));
+    if ce <= 0.0 { return false; }
+    if ce >= 10.0 { return false; }
+    let mut bad_ce: List[Float] = list_new();
+    bad_ce = list_push(bad_ce, 0.5);
+    if sm_cross_entropy(probs, bad_ce).is_ok() { return false; }
+    if sm_cross_entropy(empty, empty).is_ok() { return false; }
+    let zsm: Result[Float, String] = sm_int_to_float(0);
+    if zsm.is_ok() == false { return false; }
+    if sm_got(zsm) != 0.0 { return false; }
+    if sm_int_to_float(0 - 5).is_ok() { return false; }
+    if sm_got(sm_int_to_float(1)) != 1.0 { return false; }
+    return true;
+}

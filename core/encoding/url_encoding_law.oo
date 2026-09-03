@@ -1,0 +1,119 @@
+// # URL Percent-Encoding Law
+//
+// Logline: RFC 3986 reserves A-Z a-z 0-9 - _ . ~ unencoded; every other byte escapes to %XX.
+//
+// Setup: Pure. Imports domain_cert.oo and std/encoding/url_encode.oo. Empty string is a degenerate closed case.
+//
+// Beats:
+//   1. url_unreserved_byte holds iff b is alpha, digit, '-', '_', '.', or '~'.
+//   2. url_encode_passes_unreserved holds iff encode(s) equals s for an all-unreserved string.
+//   3. url_round_trip_holds holds iff decode(encode(s)) equals s for a known-good input.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/encoding/url_encode.oo";
+import "std/core/primitives/result.oo";
+import "std/core/primitives/str.oo";
+import "std/core/primitives/byte.oo";
+
+pub fn url_unreserved_byte(b: Int) -> Int {
+    if b < 0 {
+        return 0;
+    }
+    if b > 255 {
+        return 0;
+    }
+    if (b >= 65 && b <= 90) || (b >= 97 && b <= 122) {
+        return 1;
+    }
+    if b >= 48 && b <= 57 {
+        return 1;
+    }
+    if b == 45 || b == 95 || b == 46 || b == 126 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn url_encode_passes_unreserved(s: String) -> Int {
+    let blen: Int = byte_len(s);
+    let mut i: Int = 0;
+    while i < blen {
+        let b: Int = byte_get(s, i);
+        if url_unreserved_byte(b) != 1 {
+            return 0;
+        }
+        i = i + 1;
+    }
+    let enc: String = url_encode(s);
+    if enc == s {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn url_round_trip_holds(s: String) -> Int {
+    if chars_len(s) == 0 {
+        return 0;
+    }
+    let enc: String = url_encode(s);
+    let r: Result[String, String] = url_decode(enc);
+    match r {
+        Ok(dec) => {
+            if dec == s {
+                return 1;
+            }
+            return 0;
+        }
+        Err(_) => {
+            return 0;
+        }
+    }
+}
+
+pub fn url_encoding_law(s: String) -> DomainCert {
+    return domain_cert("encoding", "url_encoding", url_round_trip_holds(s));
+}
+
+pub fn verify_url_encoding_law() -> Bool {
+    // Golden: alpha bytes are unreserved.
+    if url_unreserved_byte(65) != 1 { return false; } // 'A'
+    if url_unreserved_byte(90) != 1 { return false; } // 'Z'
+    if url_unreserved_byte(97) != 1 { return false; } // 'a'
+    if url_unreserved_byte(122) != 1 { return false; } // 'z'
+    if url_unreserved_byte(48) != 1 { return false; } // '0'
+    if url_unreserved_byte(57) != 1 { return false; } // '9'
+    // Golden: special unreserved chars.
+    if url_unreserved_byte(45) != 1 { return false; }  // '-'
+    if url_unreserved_byte(95) != 1 { return false; }  // '_'
+    if url_unreserved_byte(46) != 1 { return false; }  // '.'
+    if url_unreserved_byte(126) != 1 { return false; } // '~'
+    // Hostile: space is not unreserved.
+    if url_unreserved_byte(32) != 0 { return false; }
+    // Hostile: '/' is not unreserved.
+    if url_unreserved_byte(47) != 0 { return false; }
+    // Hostile: '!' is not unreserved.
+    if url_unreserved_byte(33) != 0 { return false; }
+    // Hostile: out-of-range bytes fail closed.
+    if url_unreserved_byte(-1) != 0 { return false; }
+    if url_unreserved_byte(256) != 0 { return false; }
+    // Golden: all-unreserved strings encode unchanged.
+    if url_encode_passes_unreserved("A-B_C.D~E") != 1 { return false; }
+    if url_encode_passes_unreserved("abc123") != 1 { return false; }
+    // Hostile: mixed string does not pass unchanged.
+    if url_encode_passes_unreserved("hello world") != 0 { return false; }
+    // Golden: known-good encode matches.
+    if url_encode("hello world") != "hello%20world" { return false; }
+    if url_encode("A-B_C.D~E") != "A-B_C.D~E" { return false; }
+    // Hostile: empty string is degenerate (rejected by round-trip).
+    if url_round_trip_holds("") != 0 { return false; }
+    // Coupled: round-trip of space.
+    if url_round_trip_holds("hello world") != 1 { return false; }
+    // Coupled: round-trip of special chars.
+    if url_round_trip_holds("A-B_C.D~E") != 1 { return false; }
+    // Coupled: round-trip of single char 'A'.
+    if url_round_trip_holds("A") != 1 { return false; }
+    // DomainCert holds matches the Int law.
+    if url_encoding_law("A-B_C.D~E").holds != 1 { return false; }
+    if url_encoding_law("").holds != 0 { return false; }
+    return true;
+}

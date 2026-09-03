@@ -1,0 +1,196 @@
+// # AArch64 Machine Code Disassembler
+//
+// Logline: Disassembles 32-bit AArch64 instruction words into genuine AAPCS64 GAS assembly syntax.
+//
+// Setup: Pure .oo disassembler. Takes instruction words and emits standard GNU assembler lines.
+//
+// Beats:
+//   1. Decode ALU, shift, and logic instructions (add, sub, mul, sdiv, and, orr, eor, cmp).
+//   2. Decode load/store and stack frame operations (ldr, str, stp, ldp, mov).
+//   3. Decode branch and control flow instructions (b, bl, b.cond, cbz, ret).
+//   4. Convert instruction streams to clean GAS assembly text.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+
+fn a64_cond_name(c: Int) -> String {
+    if c == 0 { return "eq"; }
+    if c == 1 { return "ne"; }
+    if c == 2 { return "cs"; }
+    if c == 3 { return "cc"; }
+    if c == 4 { return "mi"; }
+    if c == 5 { return "pl"; }
+    if c == 6 { return "vs"; }
+    if c == 7 { return "vc"; }
+    if c == 8 { return "hi"; }
+    if c == 9 { return "ls"; }
+    if c == 10 { return "ge"; }
+    if c == 11 { return "lt"; }
+    if c == 12 { return "gt"; }
+    if c == 13 { return "le"; }
+    return "al";
+}
+
+fn a64_disasm_alu(w: Int) -> String {
+    let top8: Int = (w >> 24) & 255;
+    let xd: Int = w & 31;
+    let xn: Int = (w >> 5) & 31;
+    let xm: Int = (w >> 16) & 31;
+    if top8 == 139 { return "    add x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+    if top8 == 203 {
+        if xn == 31 { return "    neg x" + xd.to_string() + ", x" + xm.to_string(); }
+        return "    sub x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string();
+    }
+    if top8 == 235 {
+        if xd == 31 { return "    cmp x" + xn.to_string() + ", x" + xm.to_string(); }
+        return "    subs x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string();
+    }
+    if top8 == 138 { return "    and x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+    if top8 == 170 {
+        if xn == 31 { return "    mov x" + xd.to_string() + ", x" + xm.to_string(); }
+        return "    orr x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string();
+    }
+    if top8 == 202 { return "    eor x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+    if top8 == 155 {
+        if ((w >> 8) & 255) == 124 { return "    mul x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+        let xa: Int = (w >> 10) & 31;
+        return "    msub x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string() + ", x" + xa.to_string();
+    }
+    if top8 == 154 {
+        let op6: Int = (w >> 10) & 63;
+        if op6 == 3 { return "    sdiv x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+        if op6 == 8 { return "    lsl x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+        if op6 == 9 { return "    lsr x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+        if op6 == 10 { return "    asr x" + xd.to_string() + ", x" + xn.to_string() + ", x" + xm.to_string(); }
+    }
+    return "";
+}
+
+fn a64_disasm_imm(w: Int) -> String {
+    let top8: Int = (w >> 24) & 255;
+    let rd: Int = w & 31;
+    let rn: Int = (w >> 5) & 31;
+    let imm12: Int = (w >> 10) & 4095;
+    if top8 == 145 {
+        if rd == 31 && rn == 31 { return "    add sp, sp, #" + imm12.to_string(); }
+        if rn == 31 && imm12 == 0 { return "    mov x" + rd.to_string() + ", sp"; }
+        if rn == 31 { return "    add x" + rd.to_string() + ", sp, #" + imm12.to_string(); }
+        if rd == 31 { return "    add sp, x" + rn.to_string() + ", #" + imm12.to_string(); }
+        return "    add x" + rd.to_string() + ", x" + rn.to_string() + ", #" + imm12.to_string();
+    }
+    if top8 == 209 {
+        if rd == 31 && rn == 31 { return "    sub sp, sp, #" + imm12.to_string(); }
+        if rn == 31 { return "    sub x" + rd.to_string() + ", sp, #" + imm12.to_string(); }
+        if rd == 31 { return "    sub sp, x" + rn.to_string() + ", #" + imm12.to_string(); }
+        return "    sub x" + rd.to_string() + ", x" + rn.to_string() + ", #" + imm12.to_string();
+    }
+    if top8 == 210 {
+        let imm16: Int = (w >> 5) & 65535;
+        let hw: Int = (w >> 21) & 3;
+        if hw == 0 { return "    mov x" + rd.to_string() + ", #" + imm16.to_string(); }
+        return "    movz x" + rd.to_string() + ", #" + imm16.to_string() + ", lsl #" + (hw * 16).to_string();
+    }
+    if top8 == 242 {
+        let imm16: Int = (w >> 5) & 65535;
+        let hw: Int = (w >> 21) & 3;
+        return "    movk x" + rd.to_string() + ", #" + imm16.to_string() + ", lsl #" + (hw * 16).to_string();
+    }
+    return "";
+}
+
+fn a64_disasm_mem(w: Int) -> String {
+    let top8: Int = (w >> 24) & 255;
+    let rt: Int = w & 31;
+    let rn: Int = (w >> 5) & 31;
+    if top8 == 249 {
+        let opc: Int = (w >> 22) & 3;
+        let byte_off: Int = ((w >> 10) & 4095) * 8;
+        if opc == 1 {
+            if rn == 31 { return "    ldr x" + rt.to_string() + ", [sp, #" + byte_off.to_string() + "]"; }
+            if byte_off == 0 { return "    ldr x" + rt.to_string() + ", [x" + rn.to_string() + "]"; }
+            return "    ldr x" + rt.to_string() + ", [x" + rn.to_string() + ", #" + byte_off.to_string() + "]";
+        }
+        if opc == 0 {
+            if rn == 31 { return "    str x" + rt.to_string() + ", [sp, #" + byte_off.to_string() + "]"; }
+            if byte_off == 0 { return "    str x" + rt.to_string() + ", [x" + rn.to_string() + "]"; }
+            return "    str x" + rt.to_string() + ", [x" + rn.to_string() + ", #" + byte_off.to_string() + "]";
+        }
+    }
+    if top8 == 169 {
+        let rt2: Int = (w >> 10) & 31;
+        let imm7: Int = (w >> 15) & 127;
+        let mut off: Int = imm7 * 8;
+        if imm7 >= 64 { off = (imm7 - 128) * 8; }
+        if rn == 31 { return "    stp x" + rt.to_string() + ", x" + rt2.to_string() + ", [sp, #" + off.to_string() + "]!"; }
+        return "    stp x" + rt.to_string() + ", x" + rt2.to_string() + ", [x" + rn.to_string() + ", #" + off.to_string() + "]!";
+    }
+    if top8 == 168 {
+        let rt2: Int = (w >> 10) & 31;
+        let imm7: Int = (w >> 15) & 127;
+        let mut off: Int = imm7 * 8;
+        if imm7 >= 64 { off = (imm7 - 128) * 8; }
+        if rn == 31 { return "    ldp x" + rt.to_string() + ", x" + rt2.to_string() + ", [sp], #" + off.to_string(); }
+        return "    ldp x" + rt.to_string() + ", x" + rt2.to_string() + ", [x" + rn.to_string() + "], #" + off.to_string();
+    }
+    let top11: Int = (w >> 21) & 2047;
+    let rm: Int = (w >> 16) & 31;
+    if top11 == 451 { return "    ldrb w" + rt.to_string() + ", [x" + rn.to_string() + ", x" + rm.to_string() + "]"; }
+    if top11 == 449 { return "    strb w" + rt.to_string() + ", [x" + rn.to_string() + ", x" + rm.to_string() + "]"; }
+    return "";
+}
+
+fn a64_disasm_branch(w: Int, cur_idx: Int) -> String {
+    let top8: Int = (w >> 24) & 255;
+    let top6: Int = (w >> 26) & 63;
+    if w == 3596551104 { return "    ret"; }
+    if top8 == 212 { return "    svc #" + ((w >> 5) & 65535).to_string(); }
+    if top8 == 84 {
+        let cond: Int = w & 15;
+        let mut imm19: Int = (w >> 5) & 524287;
+        if imm19 >= 262144 { imm19 = imm19 - 524288; }
+        return "    b." + a64_cond_name(cond) + " .Linst_" + (cur_idx + imm19).to_string();
+    }
+    if top6 == 5 {
+        let mut imm26: Int = w & 67108863;
+        if imm26 >= 33554432 { imm26 = imm26 - 67108864; }
+        return "    b .Linst_" + (cur_idx + imm26).to_string();
+    }
+    if top6 == 37 {
+        let mut imm26: Int = w & 67108863;
+        if imm26 >= 33554432 { imm26 = imm26 - 67108864; }
+        return "    bl .Linst_" + (cur_idx + imm26).to_string();
+    }
+    if ((w >> 24) & 31) == 16 {
+        let xd: Int = w & 31;
+        let lo: Int = (w >> 29) & 3;
+        let hi: Int = (w >> 5) & 524287;
+        let mut imm: Int = (hi << 2) | lo;
+        if imm >= 1048576 { imm = imm - 2097152; }
+        return "    adr x" + xd.to_string() + ", .Ltarget_" + (cur_idx * 4 + imm).to_string();
+    }
+    return "";
+}
+
+pub fn aarch64_disasm_inst(w: Int, cur_idx: Int) -> String {
+    let alu: String = a64_disasm_alu(w);
+    if bytes_len(alu) > 0 { return alu; }
+    let imm: String = a64_disasm_imm(w);
+    if bytes_len(imm) > 0 { return imm; }
+    let mem: String = a64_disasm_mem(w);
+    if bytes_len(mem) > 0 { return mem; }
+    let br: String = a64_disasm_branch(w, cur_idx);
+    if bytes_len(br) > 0 { return br; }
+    return "    .word 0x" + w.to_string();
+}
+
+pub fn aarch64_disasm_stream(words: List[Int]) -> List[String] {
+    let n: Int = list_len(words);
+    let mut out: List[String] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let w: Int = list_get(words, i);
+        out = list_push(out, aarch64_disasm_inst(w, i));
+        i = i + 1;
+    }
+    return out;
+}

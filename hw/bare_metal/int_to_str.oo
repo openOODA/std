@@ -1,0 +1,97 @@
+// # Decimal integer to ASCII string
+//
+// Logline: Converts a signed integer to decimal text without sprintf or host formatting.
+//
+// Setup: Pure module. No filesystem, network, capability tokens, or GNU as/ld.
+//
+// Beats:
+//   1. Map a single digit 0-9 to ASCII 48-57, else 0.
+//   2. Count decimal characters of |n| (zero is one digit) and add one for '-'.
+//   3. Write ASCII digits into a byte buffer then project to text.
+
+// ASCII code of one decimal digit, or 0 when n is outside 0..9.
+pub fn int_to_str_digit(n: Int) -> Int {
+    if n < 0 {
+        return 0;
+    }
+    if n > 9 {
+        return 0;
+    }
+    return 48 + n;
+}
+
+fn int_to_str_abs(n: Int) -> Int {
+    if n < 0 {
+        return 0 - n;
+    }
+    return n;
+}
+
+// Decimal character count of |n|. Zero is "0" (length 1). Negative values add 1 for '-'.
+pub fn int_to_str_len(n: Int) -> Int {
+    let mag: Int = int_to_str_abs(n);
+    if mag == 0 {
+        if n < 0 {
+            return 2;
+        }
+        return 1;
+    }
+    let mut len: Int = 0;
+    let mut v: Int = mag;
+    while v > 0 {
+        len = len + 1;
+        v = v / 10;
+    }
+    if n < 0 {
+        return len + 1;
+    }
+    return len;
+}
+
+pub fn int_to_str_fill(n: Int) -> List[Int] {
+    let mut buf: List[Int] = list_new();
+    if n == 0 {
+        buf = list_push(buf, 48);
+        return buf;
+    }
+    let mut mag: Int = int_to_str_abs(n);
+    let mut rev: List[Int] = list_new();
+    while mag > 0 {
+        let d: Int = mag % 10;
+        rev = list_push(rev, 48 + d);
+        mag = mag / 10;
+    }
+    if n < 0 {
+        buf = list_push(buf, 45);
+    }
+    let mut i: Int = list_len(rev);
+    while i > 0 {
+        i = i - 1;
+        buf = list_push(buf, list_get(rev, i) & 255);
+    }
+    return buf;
+}
+
+pub fn int_to_str(n: Int) -> String {
+    let buf: List[Int] = int_to_str_fill(n);
+    let digits: String = "0123456789";
+    let mut out: String = "";
+    let mut i: Int = 0;
+    let bn: Int = list_len(buf);
+    while i < bn {
+        let b: Int = list_get(buf, i) & 255;
+        if b == 45 {
+            out = out + "-";
+        }
+        if b != 45 {
+            let d: Int = b - 48;
+            if d >= 0 {
+                if d <= 9 {
+                    out = out + char_at(digits, d);
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}

@@ -1,0 +1,21 @@
+// # Occupancy Grid Facade
+//
+// Logline: implemented Int occ_op/occ_eng facade. Off Float shims and fail-closed stubs.
+//
+// Setup: Pure module shim importing companion occupancy submodules.
+//
+// Beats:
+//   1. Re-export occupancy operations and engine helpers.
+//   2. Provide unified entrypoints for downstream autonomous callers.
+// residual: types/stubs implemented to Int floor.
+
+import "./occupancy_ops.oo";
+import "./occupancy_engine.oo";
+
+pub fn occupancy_op_new(voxel_mm: Int, log_odds: Int) -> OccOp {
+    return occ_op_new(voxel_mm, log_odds);
+}
+
+pub fn occupancy_engine_new(dim_x: Int, dim_z: Int) -> OccEng {
+    return occ_eng_new(dim_x, dim_z);
+}

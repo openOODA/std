@@ -1,0 +1,150 @@
+// # HTTP Capability-Gated Request Builder
+//
+// Logline: Deterministic HTTP/1.1 request builder gated by HttpCap and TcpCap tokens.
+//
+// Setup: Pure serialization facade. Port range is validated. No live I/O is performed.
+//
+// Beats:
+//   1. Build a deterministic HTTP/1.1 request from host, port, method, path, headers, body.
+//   2. Validate the port and return Err when the port is out of range.
+//   3. Provide method, port, and header terminator constants for callers.
+//   4. Parse the status line and count headers and body length of a response.
+//
+// RULES.oot 1.4: Default-deny for network effects. &HttpCap and &TcpCap required.
+// RULES.oot 1.7: Under 256 lines.
+
+pub fn http_cap_method_get() -> String {
+    return "GET";
+}
+
+pub fn http_cap_method_post() -> String {
+    return "POST";
+}
+
+pub fn http_cap_default_port() -> Int {
+    return 80;
+}
+
+pub fn http_cap_header_term() -> String {
+    return "\r\n";
+}
+
+// Build a deterministic HTTP/1.1 wire request. Pure: no I/O.
+pub fn http_cap_build_request(host: String, port: Int, method: String, path: String, headers: List[String], body: String) -> String {
+    let h: String = host;
+    let pstr: String = port.to_string();
+    let m: String = method;
+    let u: String = path;
+    let mut req: String = m + " " + u + " HTTP/1.1\r\n";
+    req = req + "Host: " + h + ":" + pstr + "\r\n";
+    req = req + "User-Agent: openOODA-Net/1.0\r\n";
+    req = req + "Accept: */*\r\n";
+    req = req + "Connection: close\r\n";
+    let n: Int = list_len(headers);
+    let mut i: Int = 0;
+    while i < n {
+        let line: String = list_get(headers, i);
+        req = req + line + "\r\n";
+        i = i + 1;
+    }
+    let blen: Int = chars_len(body);
+    if blen > 0 {
+        let blen_str: String = blen.to_string();
+        req = req + "Content-Length: " + blen_str + "\r\n";
+    }
+    req = req + "\r\n";
+    if blen > 0 {
+        req = req + body;
+    }
+    return req;
+}
+
+// Capability-gated facade. The &HttpCap and &TcpCap tokens are required by the
+// signature so call sites must obtain both grants. The body validates the port
+// and returns the deterministic request as Ok or a fail-closed Err.
+pub fn http_cap_request(host: String, port: Int, method: String, path: String, headers: List[String], body: String, &hc: &HttpCap, &tc: &TcpCap) -> Result[String, String] {
+    if chars_len(host) == 0 {
+        return Err("HTTP_CAP_ERR: empty host");
+    }
+    if port < 1 {
+        return Err("HTTP_CAP_ERR: port out of range");
+    }
+    if port > 65535 {
+        return Err("HTTP_CAP_ERR: port out of range");
+    }
+    let payload: String = http_cap_build_request(host, port, method, path, headers, body);
+    return Ok(payload);
+}
+
+// Parse the status line "HTTP/1.1 200 OK" and return the integer status code.
+pub fn http_cap_status_line(s: String) -> Result[Int, String] {
+    let sp1: Int = str_index_of(s, " ");
+    if sp1 <= 0 {
+        return Err("HTTP_CAP_ERR: malformed status line");
+    }
+    let n: Int = chars_len(s);
+    let rem: String = str_slice(s, sp1 + 1, n);
+    let sp2: Int = str_index_of(rem, " ");
+    if sp2 < 0 {
+        return Err("HTTP_CAP_ERR: malformed status line");
+    }
+    let code_str: String = str_slice(rem, 0, sp2);
+    let cn: Int = chars_len(code_str);
+    if cn == 0 {
+        return Err("HTTP_CAP_ERR: missing status code");
+    }
+    if cn > 3 {
+        return Err("HTTP_CAP_ERR: status code too long");
+    }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < cn {
+        let ch: Int = byte_at(code_str, i);
+        if ch < 48 {
+            return Err("HTTP_CAP_ERR: non-digit in status code");
+        }
+        if ch > 57 {
+            return Err("HTTP_CAP_ERR: non-digit in status code");
+        }
+        acc = acc * 10 + (ch - 48);
+        i = i + 1;
+    }
+    return Ok(acc);
+}
+
+// Count the number of header lines in an HTTP response text.
+pub fn http_cap_headers_count(s: String) -> Int {
+    let dnl: Int = str_index_of(s, "\r\n\r\n");
+    let mut end: Int = 0;
+    if dnl < 0 {
+        end = chars_len(s);
+    } else {
+        end = dnl;
+    }
+    let mut count: Int = 0;
+    let mut off: Int = 0;
+    while off < end {
+        let rem: String = str_slice(s, off, end);
+        let nl: Int = str_index_of(rem, "\r\n");
+        if nl < 0 {
+            return count;
+        }
+        if nl == 0 {
+            return count;
+        }
+        count = count + 1;
+        off = off + nl + 2;
+    }
+    return count;
+}
+
+// Return the body length of an HTTP response text. Returns 0 when the
+// "\r\n\r\n" delimiter is missing or the body is empty.
+pub fn http_cap_body_len(s: String) -> Int {
+    let dnl: Int = str_index_of(s, "\r\n\r\n");
+    if dnl < 0 {
+        return 0;
+    }
+    let n: Int = chars_len(s);
+    return n - dnl - 4;
+}

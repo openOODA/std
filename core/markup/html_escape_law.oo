@@ -1,0 +1,106 @@
+// # HTML entity escape law
+//
+// Logline: The five HTML content-significant characters (<, >, &, ", ') must be entity-escaped in element text and attribute values; URL contexts escape only & safely.
+//
+// Setup: Pure String. ASCII '<' is 60, '>' is 62, '&' is 38, '"' is 34, '\'' is 39. Numeric character reference uses decimal digits 48-57.
+//
+// Beats:
+//   1. html_escape maps each of the five chars to its named entity; non-significant bytes pass through.
+//   2. html_unescape reverses each named entity back to its source char.
+//   3. html_escape_url only emits entities for '&' so that URL query strings stay URL-safe.
+//   4. Round-trip: unescape(escape(x)) equals x for any input without stray entities.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/primitives/str.oo";
+
+// 1 if b is one of the five HTML-significant bytes.
+pub fn html_unsafe(b: Int) -> Int {
+    if b == 60 { return 1; }
+    if b == 62 { return 1; }
+    if b == 38 { return 1; }
+    if b == 34 { return 1; }
+    if b == 39 { return 1; }
+    return 0;
+}
+
+// Append entity for b to out. Returns the updated out.
+pub fn html_emit(out: String, b: Int) -> String {
+    if b == 60 { return out + "&lt;"; }
+    if b == 62 { return out + "&gt;"; }
+    if b == 38 { return out + "&amp;"; }
+    if b == 34 { return out + "&quot;"; }
+    if b == 39 { return out + "&#39;"; }
+    return out + chr(b);
+}
+
+pub fn html_escape(s: String) -> String {
+    let n: Int = s.len();
+    if n <= 0 { return ""; }
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        out = html_emit(out, b);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn html_escape_url(s: String) -> String {
+    let n: Int = s.len();
+    if n <= 0 { return ""; }
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b == 38 {
+            out = out + "&amp;";
+        } else {
+            out = out + chr(b);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn html_unescape(s: String) -> String {
+    if s.len() <= 0 { return ""; }
+    let mut out: String = str_replace(s, "&lt;", "<");
+    out = str_replace(out, "&gt;", ">");
+    out = str_replace(out, "&quot;", "\"");
+    out = str_replace(out, "&#39;", "'");
+    out = str_replace(out, "&apos;", "'");
+    out = str_replace(out, "&amp;", "&");
+    return out;
+}
+
+pub fn html_escape_holds(s: String) -> DomainCert {
+    let h: Int = html_unsafe(byte_at(s, 0));
+    return domain_cert("markup", "html_escape", h);
+}
+
+pub fn verify_html_escape_law() -> Bool {
+    if html_escape("<") != "&lt;" { return false; }
+    if html_escape(">") != "&gt;" { return false; }
+    if html_escape("&") != "&amp;" { return false; }
+    if html_escape("\"") != "&quot;" { return false; }
+    if html_escape("'") != "&#39;" { return false; }
+    if html_escape("") != "" { return false; }
+    if html_escape("<a>") != "&lt;a&gt;" { return false; }
+    if html_escape("a&b") != "a&amp;b" { return false; }
+    if html_escape_url("a&b=c") != "a&amp;b=c" { return false; }
+    if html_escape_url("a<b>") != "a<b>" { return false; }
+    if html_unescape("&lt;a&gt;") != "<a>" { return false; }
+    if html_unescape("a&amp;b") != "a&b" { return false; }
+    if html_unescape("") != "" { return false; }
+    if html_unescape(html_escape("safe<>\"'& text")) != "safe<>\"'& text" { return false; }
+    if html_unescape(html_escape("hello world")) != "hello world" { return false; }
+    if html_unsafe(60) != 1 { return false; }
+    if html_unsafe(97) != 0 { return false; }
+    let c1: DomainCert = html_escape_holds("<x>");
+    if c1.holds != 1 { return false; }
+    if c1.domain != "markup" { return false; }
+    let c2: DomainCert = domain_cert("markup", "html_escape", 1);
+    if c2.holds != 1 { return false; }
+    return true;
+}

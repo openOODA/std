@@ -1,0 +1,246 @@
+// # TUI Screen Buffer & 2D Raster Grid
+//
+// Logline: Manages 2D rectangular screen buffers of cells, clipping bounds, and string writing.
+//
+// Setup: Double-buffering memory model and rasterization canvas for terminal layouts.
+//
+// Beats:
+//   1. Define BufferArea bounding rectangles and spatial clipping operations.
+//   2. Define TuiBuffer 2D character matrix and dirty tracking flags.
+//   3. Implement cell retrieval, mutation, rectangular filling, and string blitting.
+
+import "std/core/primitives/list.oo";
+import "std/app/ui/tui/tui_cell.oo";
+
+type BufferArea = struct {
+    x: Int,
+    y: Int,
+    width: Int,
+    height: Int
+};
+
+pub fn buffer_area_new(x: Int, y: Int, width: Int, height: Int) -> BufferArea {
+    return BufferArea {
+        x: x,
+        y: y,
+        width: width,
+        height: height
+    };
+}
+
+pub fn buffer_area_contains(area: BufferArea, px: Int, py: Int) -> Bool {
+    if px < area.x {
+        return false;
+    }
+    if py < area.y {
+        return false;
+    }
+    if px >= (area.x + area.width) {
+        return false;
+    }
+    if py >= (area.y + area.height) {
+        return false;
+    }
+    return true;
+}
+
+pub fn buffer_area_intersect(a: BufferArea, b: BufferArea) -> BufferArea {
+    let mut x1: Int = a.x;
+    if b.x > x1 {
+        x1 = b.x;
+    }
+    let mut y1: Int = a.y;
+    if b.y > y1 {
+        y1 = b.y;
+    }
+    let mut x2: Int = a.x + a.width;
+    if (b.x + b.width) < x2 {
+        x2 = b.x + b.width;
+    }
+    let mut y2: Int = a.y + a.height;
+    if (b.y + b.height) < y2 {
+        y2 = b.y + b.height;
+    }
+    let mut w: Int = x2 - x1;
+    if w < 0 {
+        w = 0;
+    }
+    let mut h: Int = y2 - y1;
+    if h < 0 {
+        h = 0;
+    }
+    return BufferArea {
+        x: x1,
+        y: y1,
+        width: w,
+        height: h
+    };
+}
+
+type TuiBuffer = struct {
+    width: Int,
+    height: Int,
+    chars: List[Int],
+    fgs: List[Int],
+    bgs: List[Int],
+    mods: List[Int],
+    is_dirty: Bool
+};
+
+pub fn tui_buffer_new(width: Int, height: Int) -> TuiBuffer {
+    let mut chars: List[Int] = list_new();
+    let mut fgs: List[Int] = list_new();
+    let mut bgs: List[Int] = list_new();
+    let mut mods: List[Int] = list_new();
+    let total: Int = width * height;
+    let mut i: Int = 0;
+    while i < total {
+        chars = list_push(chars, 32);
+        fgs = list_push(fgs, 7);
+        bgs = list_push(bgs, 0);
+        mods = list_push(mods, 0);
+        i = i + 1;
+    }
+    return TuiBuffer {
+        width: width,
+        height: height,
+        chars: chars,
+        fgs: fgs,
+        bgs: bgs,
+        mods: mods,
+        is_dirty: true
+    };
+}
+
+pub fn tui_buffer_get_cell(buf: TuiBuffer, x: Int, y: Int) -> TuiCell {
+    if x < 0 || x >= buf.width || y < 0 || y >= buf.height {
+        return tui_cell_empty();
+    }
+    let idx: Int = y * buf.width + x;
+    return TuiCell {
+        ch: list_get(buf.chars, idx),
+        fg: list_get(buf.fgs, idx),
+        bg: list_get(buf.bgs, idx),
+        modifier: list_get(buf.mods, idx),
+        is_dirty: 0
+    };
+}
+
+pub fn tui_buffer_set_cell(buf: TuiBuffer, x: Int, y: Int, cell: TuiCell) -> TuiBuffer {
+    if x < 0 || x >= buf.width || y < 0 || y >= buf.height {
+        return buf;
+    }
+    let idx: Int = y * buf.width + x;
+    return TuiBuffer {
+        width: buf.width,
+        height: buf.height,
+        chars: list_set(buf.chars, idx, cell.ch),
+        fgs: list_set(buf.fgs, idx, cell.fg),
+        bgs: list_set(buf.bgs, idx, cell.bg),
+        mods: list_set(buf.mods, idx, cell.modifier),
+        is_dirty: true
+    };
+}
+
+pub fn tui_buffer_clear(buf: TuiBuffer, bg_color: Int) -> TuiBuffer {
+    let mut chars: List[Int] = list_new();
+    let mut fgs: List[Int] = list_new();
+    let mut bgs: List[Int] = list_new();
+    let mut mods: List[Int] = list_new();
+    let total: Int = buf.width * buf.height;
+    let mut i: Int = 0;
+    while i < total {
+        chars = list_push(chars, 32);
+        fgs = list_push(fgs, 7);
+        bgs = list_push(bgs, bg_color);
+        mods = list_push(mods, 0);
+        i = i + 1;
+    }
+    return TuiBuffer {
+        width: buf.width,
+        height: buf.height,
+        chars: chars,
+        fgs: fgs,
+        bgs: bgs,
+        mods: mods,
+        is_dirty: true
+    };
+}
+
+pub fn tui_buffer_fill_rect(buf: TuiBuffer, area: BufferArea, cell: TuiCell) -> TuiBuffer {
+    let mut out: TuiBuffer = buf;
+    let mut cy: Int = area.y;
+    let max_y: Int = area.y + area.height;
+    let max_x: Int = area.x + area.width;
+    while cy < max_y {
+        let mut cx: Int = area.x;
+        while cx < max_x {
+            out = tui_buffer_set_cell(out, cx, cy, cell);
+            cx = cx + 1;
+        }
+        cy = cy + 1;
+    }
+    return out;
+}
+
+pub fn tui_buffer_write_string(
+    buf: TuiBuffer,
+    x: Int,
+    y: Int,
+    text: String,
+    fg: Int,
+    bg: Int,
+    modifier: Int
+) -> TuiBuffer {
+    if y < 0 || y >= buf.height {
+        return buf;
+    }
+    let mut out: TuiBuffer = buf;
+    let t_len: Int = text.len();
+    let mut i: Int = 0;
+    while i < t_len {
+        let cx: Int = x + i;
+        if cx >= 0 && cx < out.width {
+            let ch_int: Int = byte_at(text, i);
+            let cell: TuiCell = tui_cell_with_style(ch_int, fg, bg, modifier);
+            out = tui_buffer_set_cell(out, cx, y, cell);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn tui_buffer_resize(buf: TuiBuffer, new_width: Int, new_height: Int) -> TuiBuffer {
+    let mut new_chars: List[Int] = list_new();
+    let mut new_fgs: List[Int] = list_new();
+    let mut new_bgs: List[Int] = list_new();
+    let mut new_mods: List[Int] = list_new();
+    let total: Int = new_width * new_height;
+    let mut i: Int = 0;
+    while i < total {
+        let nx: Int = i % new_width;
+        let ny: Int = i / new_width;
+        if nx < buf.width && ny < buf.height {
+            let old_idx: Int = ny * buf.width + nx;
+            new_chars = list_push(new_chars, list_get(buf.chars, old_idx));
+            new_fgs = list_push(new_fgs, list_get(buf.fgs, old_idx));
+            new_bgs = list_push(new_bgs, list_get(buf.bgs, old_idx));
+            new_mods = list_push(new_mods, list_get(buf.mods, old_idx));
+        } else {
+            new_chars = list_push(new_chars, 32);
+            new_fgs = list_push(new_fgs, 7);
+            new_bgs = list_push(new_bgs, 0);
+            new_mods = list_push(new_mods, 0);
+        }
+        i = i + 1;
+    }
+    return TuiBuffer {
+        width: new_width,
+        height: new_height,
+        chars: new_chars,
+        fgs: new_fgs,
+        bgs: new_bgs,
+        mods: new_mods,
+        is_dirty: true
+    };
+}

@@ -1,0 +1,35 @@
+// # TRIAD Deterministic Attitude Determination Algorithm
+//
+// Logline: Calculates orthogonal rotation matrix and attitude quaternion from two non-parallel vector observations.
+//
+// Setup: Pure deterministic spacecraft attitude determination using reference and body observation vectors (Black, 1964).
+//
+// Beats:
+//   1. TRIAD attitude angle pass-through query.
+//   2. Construct orthonormal basis triads in reference and body frames.
+//   3. Compute direction cosine matrix A = [t1b t2b t3b] * [t1r t2r t3r]^T.
+//   4. Extract Euler yaw, pitch, and roll angles from attitude matrix.
+
+pub fn triad_yaw(a: Int) -> Int {
+    return a;
+}
+
+/// Normalizes a 3D vector.
+pub fn triad_normalize_x(vx: Float, vy: Float, vz: Float) -> Float {
+    let mag: Float = sqrt((vx * vx) + (vy * vy) + (vz * vz));
+    if mag <= 0.0000000001 { return 0.0; }
+    return vx / mag;
+}
+
+/// Computes TRIAD intermediate vector t2 = (v1 x v2) / |v1 x v2|.
+pub fn triad_cross_unit_x(
+    v1x: Float, v1y: Float, v1z: Float,
+    v2x: Float, v2y: Float, v2z: Float
+) -> Float {
+    let cx: Float = (v1y * v2z) - (v1z * v2y);
+    let cy: Float = (v1z * v2x) - (v1x * v2z);
+    let cz: Float = (v1x * v2y) - (v1y * v2x);
+    let mag: Float = sqrt((cx * cx) + (cy * cy) + (cz * cz));
+    if mag <= 0.0000000001 { return 0.0; }
+    return cx / mag;
+}

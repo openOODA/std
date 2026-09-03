@@ -1,0 +1,122 @@
+// # Consensus number law (Herlihy hierarchy)
+//
+// Logline: Herlihy 1991 TOPLAS 13, 124 "Wait-Free Synchronization" defines the consensus number of a shared object as the maximum number of processes for which the object can solve wait-free consensus; read/write registers have consensus number 1, test-and-set and FIFO queues have consensus number 2, and compare-and-swap (CAS) is universal with consensus number infinity.
+// Logline (coupled): A wait-free consensus protocol guarantees that every correct process finishes in a finite number of its own steps regardless of scheduler behaviour; CAS-based consensus is therefore wait-free (Herlihy 1991 Sec. 3).
+//
+// Setup: Pure Int arithmetic on consensus-number records. No FS, net, env, or thread. The state machine is a closed transition system.
+//
+// Beats:
+//   1. consensus_number(object_id) returns the Herlihy consensus number; -1 encodes infinity (universal).
+//   2. universality_check(object_id) returns 1 iff the object is universal (consensus number = infinity).
+//   3. Herlihy hierarchy: register = 1, test-and-set = 2, stack = 2, FIFO queue = 2, fetch-and-add = 2, CAS = -1 (infinity), atomic counter = -1.
+//   4. Coupled: CAS-based consensus is wait-free; every process finishes in a finite number of steps.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Object type ids (Herlihy 1991 TOPLAS Table II).
+// 0 = read/write register; 1 = test-and-set; 2 = stack; 3 = FIFO queue; 4 = fetch-and-add; 5 = compare-and-swap; 6 = atomic counter (unbounded CAS); 7 = LL/SC; 8 = move (single-use).
+pub fn consensus_number(object_id: Int) -> Int {
+    if object_id == 0 { return 1; }
+    if object_id == 1 { return 2; }
+    if object_id == 2 { return 2; }
+    if object_id == 3 { return 2; }
+    if object_id == 4 { return 2; }
+    if object_id == 5 { return 0 - 1; }
+    if object_id == 6 { return 0 - 1; }
+    if object_id == 7 { return 0 - 1; }
+    if object_id == 8 { return 1; }
+    return 0;
+}
+
+// 1 iff object is universal (consensus number = infinity, encoded as -1). Else 0.
+pub fn universality_check(object_id: Int) -> Int {
+    let cn: Int = consensus_number(object_id);
+    if cn < 0 { return 1; }
+    return 0;
+}
+
+// 1 iff two objects have the same consensus number; 0 otherwise. Used in Herlihy's hierarchy theorem.
+pub fn same_consensus_number(a: Int, b: Int) -> Int {
+    let ca: Int = consensus_number(a);
+    let cb: Int = consensus_number(b);
+    if ca < 0 {
+        if cb < 0 { return 1; }
+        return 0;
+    }
+    if cb < 0 { return 0; }
+    if ca == cb { return 1; }
+    return 0;
+}
+
+// coupled_waitfree_holds: 1 iff universality_check holds AND the object is CAS-based (object_id == 5 or 6 or 7). CAS-based consensus is wait-free (Herlihy 1991 Sec. 3).
+pub fn coupled_waitfree_holds(object_id: Int) -> DomainCert {
+    let u: Int = universality_check(object_id);
+    if u == 1 {
+        if object_id == 5 { return domain_cert("sync", "cas_waitfree", 1); }
+        if object_id == 6 { return domain_cert("sync", "atomic_counter_waitfree", 1); }
+        if object_id == 7 { return domain_cert("sync", "llsc_waitfree", 1); }
+    }
+    return domain_cert("sync", "waitfree_coupled", 0);
+}
+
+// Golden: CAS has consensus number infinity; atomic counter = infinity; register = 1.
+pub fn consensus_cas_universal_holds() -> DomainCert {
+    if consensus_number(5) != 0 - 1 { return domain_cert("sync", "consensus_cas_universal", 0); }
+    if consensus_number(6) != 0 - 1 { return domain_cert("sync", "consensus_cas_universal", 0); }
+    if consensus_number(0) != 1 { return domain_cert("sync", "consensus_cas_universal", 0); }
+    if universality_check(5) != 1 { return domain_cert("sync", "consensus_cas_universal", 0); }
+    if universality_check(0) != 0 { return domain_cert("sync", "consensus_cas_universal", 0); }
+    return domain_cert("sync", "consensus_cas_universal", 1);
+}
+
+// Hostile: registers alone cannot solve 2-process consensus (consensus number of register is 1 < 2).
+pub fn registers_cannot_solve_2pc_holds() -> DomainCert {
+    let cn: Int = consensus_number(0);
+    if cn < 2 { return domain_cert("sync", "registers_cannot_2pc", 1); }
+    return domain_cert("sync", "registers_cannot_2pc", 0);
+}
+
+pub fn verify_consensus_number_law() -> Bool {
+    // Golden: Herlihy hierarchy.
+    if consensus_number(0) != 1 { return false; }
+    if consensus_number(1) != 2 { return false; }
+    if consensus_number(2) != 2 { return false; }
+    if consensus_number(3) != 2 { return false; }
+    if consensus_number(4) != 2 { return false; }
+    if consensus_number(5) != 0 - 1 { return false; }
+    if consensus_number(6) != 0 - 1 { return false; }
+    if consensus_number(7) != 0 - 1 { return false; }
+    if consensus_number(8) != 1 { return false; }
+    if consensus_number(99) != 0 { return false; }
+    // Golden: universality holds for CAS, atomic counter, LL/SC; fails for register, TAS, stack, queue, FAA, move.
+    if universality_check(5) != 1 { return false; }
+    if universality_check(6) != 1 { return false; }
+    if universality_check(7) != 1 { return false; }
+    if universality_check(0) != 0 { return false; }
+    if universality_check(1) != 0 { return false; }
+    if universality_check(2) != 0 { return false; }
+    if universality_check(3) != 0 { return false; }
+    if universality_check(4) != 0 { return false; }
+    if universality_check(8) != 0 { return false; }
+    // Golden: same consensus number.
+    if same_consensus_number(1, 2) != 1 { return false; }
+    if same_consensus_number(1, 3) != 1 { return false; }
+    if same_consensus_number(1, 4) != 1 { return false; }
+    if same_consensus_number(5, 6) != 1 { return false; }
+    if same_consensus_number(5, 7) != 1 { return false; }
+    if same_consensus_number(0, 1) != 0 { return false; }
+    if same_consensus_number(0, 5) != 0 { return false; }
+    if same_consensus_number(5, 1) != 0 { return false; }
+    // Hostile: registers cannot solve 2-process consensus.
+    if consensus_number(0) >= 2 { return false; }
+    // Coupled: CAS-based consensus is wait-free.
+    if coupled_waitfree_holds(5).holds != 1 { return false; }
+    if coupled_waitfree_holds(6).holds != 1 { return false; }
+    if coupled_waitfree_holds(7).holds != 1 { return false; }
+    if coupled_waitfree_holds(0).holds != 0 { return false; }
+    if coupled_waitfree_holds(1).holds != 0 { return false; }
+    // Domain certs hold.
+    if consensus_cas_universal_holds().holds != 1 { return false; }
+    if registers_cannot_solve_2pc_holds().holds != 1 { return false; }
+    return true;
+}

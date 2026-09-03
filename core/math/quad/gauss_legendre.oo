@@ -1,0 +1,40 @@
+// # Gauss-Legendre Quadrature
+//
+// Logline: Integrates a polynomial on [-1, 1] with n-point Gauss-Legendre nodes and weights.
+//
+// Setup: Pure math. n is 1, 2, or 3. The sample integrand is x^2 (exact for n >= 2).
+//
+// Beats:
+//   1. Load classical nodes and weights for n = 1, 2, or 3.
+//   2. Evaluate the in-module integrand at each node.
+//   3. Return the weighted sum.
+//   4. Fail closed on an unsupported n.
+
+import "std/core/primitives/result.oo";
+
+pub fn gauss_legendre_x2(n: Int) -> Result[Float, String] {
+    if n < 1 { return Err("ERR\tgauss\tn"); }
+    if n > 3 { return Err("ERR\tgauss\tn"); }
+    if n == 1 {
+        return Ok(0.0);
+    }
+    if n == 2 {
+        let x: Float = 1.0 / sqrt(3.0);
+        let w: Float = 1.0;
+        return Ok(w * (x * x) + w * (x * x));
+    }
+    let x0: Float = 0.0;
+    let w0: Float = 8.0 / 9.0;
+    let x1: Float = sqrt(0.6);
+    let w1: Float = 5.0 / 9.0;
+    let s: Float = w0 * (x0 * x0) + w1 * (x1 * x1) + w1 * (x1 * x1);
+    return Ok(s);
+}
+
+pub fn gauss_legendre_one(n: Int) -> Result[Float, String] {
+    if n < 1 { return Err("ERR\tgauss\tn"); }
+    if n > 3 { return Err("ERR\tgauss\tn"); }
+    if n == 1 { return Ok(2.0); }
+    if n == 2 { return Ok(1.0 + 1.0); }
+    return Ok(8.0 / 9.0 + 5.0 / 9.0 + 5.0 / 9.0);
+}

@@ -1,0 +1,81 @@
+// # Shannon channel capacity bound
+//
+// Logline: Maximum error-free bit rate over a noisy channel is B * log2(1 + S/N); B<=0 or negative power return Err.
+//
+// Setup: Pure Float. B > 0, S >= 0, N > 0. SNR=0 (S=0, N>0) is Ok(0). Zero noise is non-physical Err.
+//
+// Beats:
+//   1. shannon_log2 computes log base 2 via ln(x) / ln(2) and fails closed for x <= 0.
+//   2. shannon_channel_capacity returns B * log2(1 + S/N) for valid inputs.
+//   3. shannon_required_snr inverts the bound: 2^(C/B) - 1. C=0 with B>0 is Ok(0).
+//   4. Hostile B<=0 or negative power return Err.
+
+fn shannon_ln2() -> Float {
+    return 0.6931471805599453;
+}
+
+fn scp_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn shannon_log2(x: Float) -> Result[Float, String] {
+    if x <= 0.0 { return Err("ERR\tscp\tlog"); }
+    return Ok(ln(x) / shannon_ln2());
+}
+
+pub fn shannon_channel_capacity(
+    bandwidth_hz: Float,
+    signal_power: Float,
+    noise_power: Float
+) -> Result[Float, String] {
+    if bandwidth_hz <= 0.0 { return Err("ERR\tscp\tb"); }
+    if signal_power < 0.0 { return Err("ERR\tscp\ts"); }
+    if noise_power <= 0.0 { return Err("ERR\tscp\tn"); }
+    let snr: Float = signal_power / noise_power;
+    let ratio: Float = 1.0 + snr;
+    match shannon_log2(ratio) {
+        Ok(lg) => { return Ok(bandwidth_hz * lg); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn shannon_required_snr(capacity: Float, bandwidth_hz: Float) -> Result[Float, String] {
+    if capacity < 0.0 { return Err("ERR\tscp\tc"); }
+    if bandwidth_hz <= 0.0 { return Err("ERR\tscp\tb"); }
+    let x: Float = capacity / bandwidth_hz;
+    let pow2: Float = pow(2.0, x);
+    let snr: Float = pow2 - 1.0;
+    if snr < 0.0 { return Ok(0.0); }
+    return Ok(snr);
+}
+
+pub fn verify_shannon_channel_capacity_principle() -> Bool {
+    let c1: Float = scp_got(shannon_channel_capacity(1.0, 1.0, 1.0));
+    if c1 < 0.999 { return false; }
+    if c1 > 1.001 { return false; }
+    let c2: Float = scp_got(shannon_channel_capacity(1000.0, 4.0, 1.0));
+    if c2 < 2320.0 { return false; }
+    if c2 > 2325.0 { return false; }
+    let c3: Float = scp_got(shannon_channel_capacity(3000.0, 1000.0, 10.0));
+    if c3 < 19970.0 { return false; }
+    if c3 > 19990.0 { return false; }
+    let c4: Float = scp_got(shannon_channel_capacity(1000.0, 0.0, 1.0));
+    if c4 < 0.0 - 0.001 { return false; }
+    if c4 > 0.001 { return false; }
+    if shannon_channel_capacity(0.0 - 1.0, 1.0, 1.0).is_ok() { return false; }
+    if shannon_channel_capacity(1.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    if shannon_channel_capacity(1.0, 1.0, 0.0 - 1.0).is_ok() { return false; }
+    if shannon_channel_capacity(1.0, 1.0, 0.0).is_ok() { return false; }
+    if shannon_channel_capacity(0.0, 1.0, 1.0).is_ok() { return false; }
+    let s1: Float = scp_got(shannon_required_snr(1.0, 1.0));
+    if s1 < 0.999 { return false; }
+    if s1 > 1.001 { return false; }
+    let s2: Float = scp_got(shannon_required_snr(2.0, 1.0));
+    if s2 < 2.999 { return false; }
+    if s2 > 3.001 { return false; }
+    if scp_got(shannon_required_snr(0.0, 1.0)) != 0.0 { return false; }
+    if shannon_required_snr(0.0 - 1.0, 1.0).is_ok() { return false; }
+    if shannon_required_snr(1.0, 0.0).is_ok() { return false; }
+    if shannon_required_snr(1.0, 0.0 - 1.0).is_ok() { return false; }
+    return true;
+}

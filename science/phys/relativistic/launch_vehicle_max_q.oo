@@ -1,0 +1,30 @@
+// # Launch Vehicle Maximum Dynamic Pressure (Max-Q)
+//
+// Logline: Calculates peak atmospheric dynamic pressure (Max-Q), aerodynamic loads, and structural throttling schedules.
+//
+// Setup: Pure aero-structural flight dynamics tracking q = 0.5 * rho(h) * v(h)^2 across transonic flight.
+//
+// Beats:
+//   1. Nominal Max-Q pressure query in Pascals (~33,000 Pa / 33 kPa).
+//   2. Calculate dynamic pressure from altitude-dependent density and Mach number.
+//   3. Compute engine throttling ratio to maintain dynamic pressure below structural limit.
+//   4. Evaluate aerodynamic bending moment q * alpha.
+
+pub fn max_q_pa() -> Int {
+    return 33000;
+}
+
+pub fn max_q_dynamic_pressure(rho: Float, v: Float) -> Float {
+    return 0.5 * rho * v * v;
+}
+
+/// Computes engine throttling percentage to clamp dynamic pressure below q_max_limit (Pa).
+pub fn max_q_throttle_ratio(
+    current_q_pa: Float,
+    q_max_limit_pa: Float
+) -> Float {
+    if current_q_pa <= q_max_limit_pa { return 1.0; } // 100% full thrust
+    let ratio: Float = q_max_limit_pa / current_q_pa;
+    if ratio < 0.65 { return 0.65; } // 65% minimum deep-throttle floor
+    return ratio;
+}

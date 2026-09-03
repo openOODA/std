@@ -1,0 +1,62 @@
+// # Data K8s
+//
+// Logline: Storage, db, query, and graph data for std/k8s.
+//
+// Setup: Domain module of 51 files under std/k8s. Pure compute, no caps.
+//
+// Beats:
+//   1. Cloud k family (2 files).
+//   2. Crdt rga sequence family (2 files).
+//   3. Chaos mesh fault injector family (1 file).
+
+import "chaos_mesh_fault_injector.oo";
+import "circuit_breaker_hysteretic.oo";
+import "cloud_k8s.oo";
+import "cloud_k8s_stubs.oo";
+import "consistent_hash_ring.oo";
+import "containerd_oci_runtime.oo";
+import "crdt_g_set.oo";
+import "crdt_lww_element_set.oo";
+import "crdt_mv_register.oo";
+import "crdt_or_set.oo";
+import "crdt_pn_counter.oo";
+import "crdt_rga_sequence.oo";
+import "crdt_rga_sequence_ops.oo";
+import "distributed_lock_chubby.oo";
+import "etcd_raft_storage.oo";
+import "gossip_swim_membership.oo";
+import "grpc_proto_framing.oo";
+import "grpc_status_codes.oo";
+import "k8s_admission_webhook.oo";
+import "k8s_configmap_secret.oo";
+import "k8s_crd_validator.oo";
+import "k8s_daemonset_scheduler.oo";
+import "k8s_deployment_spec.oo";
+import "k8s_hpa_autoscaler.oo";
+import "k8s_ingress_routing.oo";
+import "k8s_leader_election_lease.oo";
+import "k8s_pod_manifest.oo";
+import "k8s_rbac_authorizer.oo";
+import "k8s_service_endpoint.oo";
+import "k8s_statefulset_controller.oo";
+import "lamport_timestamp.oo";
+import "load_balancer_p2c.oo";
+import "load_balancer_round_robin.oo";
+import "load_balancer_weighted_random.oo";
+import "oci_image_manifest.oo";
+import "otel_metric_counter.oo";
+import "otel_otlp_json_exporter.oo";
+import "otel_span_context.oo";
+import "otel_trace_sampler.oo";
+import "paxos_multipaxos_acceptor.oo";
+import "paxos_synod_proposer.oo";
+import "prom_metric_histogram.oo";
+import "raft_leader_election.oo";
+import "raft_log_compaction.oo";
+import "raft_log_replication.oo";
+import "rate_limiter_k8s_leaky_bucket.oo";
+import "rate_limiter_sliding_window.oo";
+import "rate_limiter_k8s_token_bucket.oo";
+import "s3_sigv4_signer.oo";
+import "service_mesh_envoy_filter.oo";
+import "vector_clock_causality.oo";

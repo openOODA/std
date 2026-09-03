@@ -1,0 +1,71 @@
+// # Raoult vapor pressure law
+//
+// Logline: Partial vapor pressure is mole fraction times pure-component pressure. P_i = x_i * P_i*.
+//
+// Setup: Pure Float. Mole fractions are caller-supplied; identity is unit-agnostic.
+//
+// Beats:
+//   1. Partial pressure P_i = x_i * P_i_star when 0 <= x_i <= 1 and P_i_star > 0.
+//   2. Total pressure is sum of partial pressures across all components.
+//   3. Hostile x_i < 0, x_i > 1, or P_i_star <= 0 return Err. Zero mole fraction is Ok(0).
+
+fn rl_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn rl_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn raoult_partial_pressure(mole_fraction: Float, pure_pressure_pa: Float) -> Result[Float, String] {
+    if mole_fraction < 0.0 { return Err("ERR\traoult\tx"); }
+    if mole_fraction > 1.0 { return Err("ERR\traoult\tx"); }
+    if pure_pressure_pa <= 0.0 { return Err("ERR\traoult\tp"); }
+    return Ok(mole_fraction * pure_pressure_pa);
+}
+
+pub fn raoult_total_pressure(
+    frac_a: Float,
+    press_a_pa: Float,
+    frac_b: Float,
+    press_b_pa: Float
+) -> Result[Float, String] {
+    let pa_r: Result[Float, String] = raoult_partial_pressure(frac_a, press_a_pa);
+    match pa_r {
+        Ok(pa)         => {
+            let pb_r: Result[Float, String] = raoult_partial_pressure(frac_b, press_b_pa);
+            match pb_r {
+                Ok(pb) => { return Ok(pa + pb); },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn raoult_mole_fraction(partial_pressure_pa: Float, pure_pressure_pa: Float) -> Result[Float, String] {
+    if partial_pressure_pa < 0.0 { return Err("ERR\traoult\tpi"); }
+    if pure_pressure_pa <= 0.0 { return Err("ERR\traoult\tp"); }
+    let x: Float = partial_pressure_pa / pure_pressure_pa;
+    if x > 1.0 { return Err("ERR\traoult\tx"); }
+    return Ok(x);
+}
+
+pub fn verify_raoult_law() -> Bool {
+    let p: Float = rl_got(raoult_partial_pressure(0.4, 50000.0));
+    if rl_eabs(p - 20000.0) > 0.0000001 { return false; }
+    let total: Float = rl_got(raoult_total_pressure(0.5, 40000.0, 0.5, 60000.0));
+    if rl_eabs(total - 50000.0) > 0.0000001 { return false; }
+    let x: Float = rl_got(raoult_mole_fraction(20000.0, 50000.0));
+    if rl_eabs(x - 0.4) > 0.0000001 { return false; }
+    let pure: Float = rl_got(raoult_partial_pressure(1.0, 12345.0));
+    if rl_eabs(pure - 12345.0) > 0.0000001 { return false; }
+    if rl_got(raoult_partial_pressure(0.0, 50000.0)) != 0.0 { return false; }
+    if raoult_partial_pressure(0.0 - 0.1, 50000.0).is_ok() { return false; }
+    if raoult_partial_pressure(1.5, 50000.0).is_ok() { return false; }
+    if raoult_partial_pressure(0.5, 0.0).is_ok() { return false; }
+    if raoult_mole_fraction(0.0 - 1.0, 50000.0).is_ok() { return false; }
+    if raoult_mole_fraction(60000.0, 50000.0).is_ok() { return false; }
+    return true;
+}

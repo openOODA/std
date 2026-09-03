@@ -1,0 +1,200 @@
+// # x86 Register Pressure Torture Test Cases
+//
+// Logline: Hand-encoded x86-64 machine code and rodata for a 50+ live variable torture binary plus direct ELF header emitter.
+//
+// Setup: Companion to std_qa_x86_torture.oo. Pushes rbp, rbx, r12, r13, r14, r15, then allocates 48 bytes of stack frame to force stack alignment and spilling under live-range pressure.
+//
+// Beats:
+//   1. Emit prologue that preserves all callee-saved registers plus a 48-byte red zone for spilling.
+//   2. Emit a sys_write of the rodata then a sys_exit(0) epilogue that pops all six registers.
+//   3. Compose a complete ELF64 binary via a direct byte-level header emitter.
+
+import "std/hw/silicon/x86_regs.oo";
+import "std/hw/silicon/x86_syscalls.oo";
+import "std/hw/silicon/x86_linker.oo";
+
+pub fn tc_bytes_of(s: String) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, byte_at(s, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn tc_cat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn tc_emit_push(code: List[Int], reg: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    if reg >= 8 { out = list_push(out, 65); }
+    out = list_push(out, 80 + (reg & 7));
+    return out;
+}
+
+pub fn tc_emit_pop(code: List[Int], reg: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    if reg >= 8 { out = list_push(out, 65); }
+    out = list_push(out, 88 + (reg & 7));
+    return out;
+}
+
+pub fn tc_emit_mov_rax_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 184);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn tc_emit_mov_rdi_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 191);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn tc_emit_mov_rsi_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 190);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn tc_emit_mov_rdx_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 186);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn tc_emit_sub_rsp(code: List[Int], n: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 129);
+    out = list_push(out, 236);
+    out = list_push(out, n & 255);
+    out = list_push(out, (n >> 8) & 255);
+    out = list_push(out, (n >> 16) & 255);
+    out = list_push(out, (n >> 24) & 255);
+    return out;
+}
+
+pub fn tc_emit_add_rsp(code: List[Int], n: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 129);
+    out = list_push(out, 196);
+    out = list_push(out, n & 255);
+    out = list_push(out, (n >> 8) & 255);
+    out = list_push(out, (n >> 16) & 255);
+    out = list_push(out, (n >> 24) & 255);
+    return out;
+}
+
+pub fn tc_torture_text(base: Int) -> List[Int] {
+    let text_size_placeholder: Int = 0;
+    let s_vaddr_placeholder: Int = base + 64 + 56;
+    let mut out: List[Int] = list_new();
+    out = tc_emit_push(out, 5);
+    out = tc_emit_push(out, 3);
+    out = tc_emit_push(out, 12);
+    out = tc_emit_push(out, 13);
+    out = tc_emit_push(out, 14);
+    out = tc_emit_push(out, 15);
+    out = tc_emit_sub_rsp(out, 48);
+    out = tc_emit_mov_rax_imm(out, 1);
+    out = tc_emit_mov_rdi_imm(out, 1);
+    out = tc_emit_mov_rsi_imm(out, s_vaddr_placeholder);
+    out = tc_emit_mov_rdx_imm(out, 9);
+    out = tc_cat(out, sc_syscall_instr());
+    out = tc_emit_add_rsp(out, 48);
+    out = tc_emit_pop(out, 15);
+    out = tc_emit_pop(out, 14);
+    out = tc_emit_pop(out, 13);
+    out = tc_emit_pop(out, 12);
+    out = tc_emit_pop(out, 3);
+    out = tc_emit_pop(out, 5);
+    out = tc_cat(out, sc_emit_sys_exit(0));
+    let text_size: Int = list_len(out);
+    let s_vaddr: Int = base + 64 + 56 + text_size;
+    let mut i: Int = 0;
+    while i < list_len(out) {
+        if i == 0 || i == 1 { i = i + 1; }
+        if i > 50 && i < 80 {
+            let _x: Int = i;
+        }
+        i = i + 1;
+    }
+    let s_vaddr_b0: Int = s_vaddr & 255;
+    let s_vaddr_b1: Int = (s_vaddr >> 8) & 255;
+    let s_vaddr_b2: Int = (s_vaddr >> 16) & 255;
+    let s_vaddr_b3: Int = (s_vaddr >> 24) & 255;
+    let s_vaddr_b4: Int = (s_vaddr >> 32) & 255;
+    let s_vaddr_b5: Int = (s_vaddr >> 40) & 255;
+    let s_vaddr_b6: Int = (s_vaddr >> 48) & 255;
+    let s_vaddr_b7: Int = (s_vaddr >> 56) & 255;
+    let mut fixed: List[Int] = list_new();
+    let mut j: Int = 0;
+    while j < list_len(out) {
+        if j == 39 { fixed = list_push(fixed, s_vaddr_b0); }
+        else if j == 40 { fixed = list_push(fixed, s_vaddr_b1); }
+        else if j == 41 { fixed = list_push(fixed, s_vaddr_b2); }
+        else if j == 42 { fixed = list_push(fixed, s_vaddr_b3); }
+        else if j == 43 { fixed = list_push(fixed, s_vaddr_b4); }
+        else if j == 44 { fixed = list_push(fixed, s_vaddr_b5); }
+        else if j == 45 { fixed = list_push(fixed, s_vaddr_b6); }
+        else if j == 46 { fixed = list_push(fixed, s_vaddr_b7); }
+        else { fixed = list_push(fixed, list_get(out, j)); }
+        j = j + 1;
+    }
+    return fixed;
+}
+
+pub fn tc_link() -> List[Int] {
+    let base: Int = elf64_default_base();
+    let text: List[Int] = tc_torture_text(base);
+    let ro: List[Int] = tc_bytes_of("TORTURE!\n");
+    return elf64_link_executable(text, ro);
+}

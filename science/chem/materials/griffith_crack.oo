@@ -1,0 +1,132 @@
+// # Griffith Crack Propagation and Fracture Mechanics
+//
+// Logline: Evaluates Griffith energy release rates, critical fracture stress, Mode I stress intensity factors, and propagation thresholds.
+//
+// Setup: Pure floating-point linear elastic fracture mechanics equations based on crack length, surface energy, and elasticity.
+//
+// Beats:
+//   1. Effective elastic modulus for plane stress versus plane strain conditions.
+//   2. Strain energy release rate G = pi * sigma^2 * a / E' and critical release rate Gc = 2 * gamma.
+//   3. Critical fracture stress sigma_c = sqrt(2 * E' * gamma / (pi * a)).
+//   4. Mode I stress intensity factor K_I, fracture toughness K_Ic, and crack propagation safety factor.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_chem_materials_griffith_crack() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type GriffithCrack = struct {
+    crack_half_length_a: Float,
+    applied_stress_sigma: Float,
+    youngs_modulus_e: Float,
+    poissons_ratio_nu: Float,
+    surface_energy_gamma: Float,
+    is_plane_strain: Bool,
+    energy_release_rate_g: Float,
+    critical_energy_gc: Float,
+    stress_intensity_k1: Float,
+    fracture_toughness_k1c: Float,
+    critical_stress_sigma_c: Float,
+    safety_factor: Float,
+    will_propagate: Bool
+};
+
+// Compute effective elastic modulus E': E for plane stress, E / (1 - nu^2) for plane strain.
+pub fn griffith_effective_modulus(youngs_modulus_e: Float, poissons_ratio_nu: Float, is_plane_strain: Bool) -> Float {
+    if youngs_modulus_e <= 0.0 { return 0.0; }
+    if !is_plane_strain {
+        return youngs_modulus_e;
+    }
+    let nu_sq: Float = poissons_ratio_nu * poissons_ratio_nu;
+    let denom: Float = 1.0 - nu_sq;
+    if denom <= 0.000001 { return youngs_modulus_e; }
+    return youngs_modulus_e / denom;
+}
+
+// Critical energy release rate Gc = 2 * gamma_s (J / m^2).
+pub fn griffith_critical_energy(surface_energy_gamma: Float) -> Float {
+    if surface_energy_gamma < 0.0 { return 0.0; }
+    return 2.0 * surface_energy_gamma;
+}
+
+// Energy release rate G = pi * sigma^2 * a / E' (J / m^2).
+pub fn griffith_energy_release_rate(stress_pa: Float, crack_half_length_m: Float, effective_modulus_e: Float) -> Float {
+    if crack_half_length_m <= 0.0 || effective_modulus_e <= 0.000001 {
+        return 0.0;
+    }
+    let pi: Float = circ_pi_std_chem_materials_griffith_crack();
+    let sig_sq: Float = stress_pa * stress_pa;
+    let num: Float = pi * sig_sq * crack_half_length_m;
+    return num / effective_modulus_e;
+}
+
+// Critical fracture stress sigma_c = sqrt(2 * E' * gamma / (pi * a)) (Pascals).
+pub fn griffith_critical_stress(effective_modulus_e: Float, surface_energy_gamma: Float, crack_half_length_m: Float) -> Float {
+    if effective_modulus_e <= 0.0 || surface_energy_gamma <= 0.0 || crack_half_length_m <= 0.0 {
+        return 0.0;
+    }
+    let pi: Float = circ_pi_std_chem_materials_griffith_crack();
+    let gc: Float = 2.0 * surface_energy_gamma;
+    let num: Float = effective_modulus_e * gc;
+    let den: Float = pi * crack_half_length_m;
+    return sqrt(num / den);
+}
+
+// Mode I stress intensity factor K_I = Y * sigma * sqrt(pi * a) (Pa * sqrt(m)).
+pub fn griffith_stress_intensity_k1(stress_pa: Float, crack_half_length_m: Float, geometry_y: Float) -> Float {
+    if crack_half_length_m <= 0.0 || stress_pa <= 0.0 {
+        return 0.0;
+    }
+    let pi: Float = circ_pi_std_chem_materials_griffith_crack();
+    let sqrt_pi_a: Float = sqrt(pi * crack_half_length_m);
+    return geometry_y * stress_pa * sqrt_pi_a;
+}
+
+// Critical fracture toughness K_Ic = sqrt(E' * Gc) = sqrt(2 * E' * gamma) (Pa * sqrt(m)).
+pub fn griffith_fracture_toughness_k1c(effective_modulus_e: Float, surface_energy_gamma: Float) -> Float {
+    if effective_modulus_e <= 0.0 || surface_energy_gamma <= 0.0 {
+        return 0.0;
+    }
+    let gc: Float = 2.0 * surface_energy_gamma;
+    return sqrt(effective_modulus_e * gc);
+}
+
+// Complete evaluation of Griffith crack state, fracture risk, and safety margin.
+pub fn griffith_crack_eval(
+    crack_half_len_m: Float,
+    stress_pa: Float,
+    e_pa: Float,
+    nu: Float,
+    gamma_s: Float,
+    is_plane_strain: Bool
+) -> GriffithCrack {
+    let e_prime: Float = griffith_effective_modulus(e_pa, nu, is_plane_strain);
+    let g: Float = griffith_energy_release_rate(stress_pa, crack_half_len_m, e_prime);
+    let gc: Float = griffith_critical_energy(gamma_s);
+    let k1: Float = griffith_stress_intensity_k1(stress_pa, crack_half_len_m, 1.0);
+    let k1c: Float = griffith_fracture_toughness_k1c(e_prime, gamma_s);
+    let sig_c: Float = griffith_critical_stress(e_prime, gamma_s, crack_half_len_m);
+
+    let mut sf: Float = 999999.0;
+    if stress_pa > 0.0 && sig_c > 0.0 {
+        sf = sig_c / stress_pa;
+    }
+
+    let mut propagates: Bool = false;
+    if g >= gc && gc > 0.0 {
+        propagates = true;
+    }
+
+    return GriffithCrack {
+        crack_half_length_a: crack_half_len_m,
+        applied_stress_sigma: stress_pa,
+        youngs_modulus_e: e_pa,
+        poissons_ratio_nu: nu,
+        surface_energy_gamma: gamma_s,
+        is_plane_strain: is_plane_strain,
+        energy_release_rate_g: g,
+        critical_energy_gc: gc,
+        stress_intensity_k1: k1,
+        fracture_toughness_k1c: k1c,
+        critical_stress_sigma_c: sig_c,
+        safety_factor: sf,
+        will_propagate: propagates
+    };
+}

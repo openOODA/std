@@ -1,0 +1,152 @@
+// # TrueTime principle
+//
+// Logline: TrueTime (Corbett, Dean, Epstein, Fikes, Frost, Furman, Ghemawat, Gubarev, Heiser, Hochschild, Hsieh, Kanthak, Kogan, Li, Lloyd, Melnik, Mwaura, Nagle, Quinlan, Rao, Rolig, Saito, Szymaniak, Taylor, Wang, Woodford; OSDI 2012, "Spanner: Google's Globally Distributed Database") returns wall-clock time as a bounded interval [earliest, latest] with explicit uncertainty; t is within TrueTime iff earliest <= t <= latest; negative uncertainty fails closed.
+// Setup: Pure Int. Time unit is microseconds (us). 1 ms = 1,000 us. now is a wall-clock reading in us; error_us is the bounded uncertainty in us. earliest = now - error_us; latest = now + error_us.
+// Beats:
+//   1. true_time_interval(now, error_us) returns TrueTimeInterval { earliest: now - error_us, latest: now + error_us }.
+//   2. true_time_within(earliest, latest, target) returns 1 if earliest <= target <= latest; 0 otherwise.
+//   3. Hostile: negative error_us fails closed (returns an inverted sentinel interval where latest < earliest).
+//   4. Golden: now=1e9 us, error=1 ms=1e3 us -> interval = [1e9-1e3, 1e9+1e3]; target=1e9 within -> 1.
+//   5. Coupled: TrueTime in production uses GPS receivers + atomic clocks (Corbett 2012 Sec 3 "TrueTime API"); typical uncertainty 1-7 ms.
+
+import "std/core/primitives/domain_cert.oo";
+
+// TrueTimeInterval: the bounded wall-clock interval [earliest, latest] returned
+// by the TrueTime API. earliest <= latest for a valid interval; an inverted
+// (earliest > latest) interval is the fail-closed sentinel for negative error.
+pub type TrueTimeInterval = struct {
+    earliest: Int,
+    latest: Int
+};
+
+// Sentinel low for a fail-closed interval: latest < earliest. 0 - 1 = -1.
+pub fn tt_sentinel_earliest() -> Int {
+    return 0 - 1;
+}
+
+pub fn tt_sentinel_latest() -> Int {
+    return 0 - 2;
+}
+
+// Microseconds per millisecond (NIST / SI definition).
+pub fn tt_us_per_ms() -> Int {
+    return 1000;
+}
+
+// TrueTime uncertainty lower bound in us (Corbett 2012, Sec 3: typical 1-7 ms).
+pub fn tt_min_uncertainty_us() -> Int {
+    return 1000;
+}
+
+// TrueTime uncertainty upper bound in us (Corbett 2012, Sec 3: typical 1-7 ms).
+pub fn tt_max_uncertainty_us() -> Int {
+    return 7000;
+}
+
+// Build a TrueTime interval [earliest, latest] from a wall-clock reading `now`
+// and a bounded uncertainty `error_us`. Negative error_us fails closed: the
+// returned interval has latest < earliest (inverted sentinel). error_us=0
+// collapses to a single point [now, now].
+pub fn true_time_interval(now: Int, error_us: Int) -> TrueTimeInterval {
+    if error_us < 0 {
+        return TrueTimeInterval { earliest: tt_sentinel_earliest(), latest: tt_sentinel_latest() };
+    }
+    return TrueTimeInterval { earliest: now - error_us, latest: now + error_us };
+}
+
+// 1 if target is within the closed interval [earliest, latest]; 0 otherwise.
+// A sentinel (latest < earliest) interval is treated as empty -> 0 for any
+// target. This is the canonical TrueTime "happens-before" check (Corbett 2012
+// Sec 3, "happens-before" relation).
+pub fn true_time_within(earliest: Int, latest: Int, target: Int) -> Int {
+    if latest < earliest { return 0; }
+    if target < earliest { return 0; }
+    if target > latest { return 0; }
+    return 1;
+}
+
+// 1 if the interval is a valid TrueTime interval (earliest <= latest).
+pub fn true_time_valid(earliest: Int, latest: Int) -> Int {
+    if latest < earliest { return 0; }
+    return 1;
+}
+
+// 1 if the interval was produced with a non-negative error bound.
+pub fn true_time_error_nonneg(error_us: Int) -> Int {
+    if error_us < 0 { return 0; }
+    return 1;
+}
+
+// Width of a TrueTime interval in us (latest - earliest). For a valid
+// interval with error_us=e, this is exactly 2*e.
+pub fn true_time_width(earliest: Int, latest: Int) -> Result[Int, String] {
+    if latest < earliest { return Err("ERR\ttt\tsentinel"); }
+    return Ok(latest - earliest);
+}
+
+// Unwrap a Result[Int, String] for the TrueTime width helper; -1 on Err.
+fn tt_width_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn true_time_principle_holds(now: Int, error_us: Int, target: Int) -> DomainCert {
+    let mut holds: Int = 0;
+    if error_us >= 0 {
+        let iv: TrueTimeInterval = true_time_interval(now, error_us);
+        let w: Int = true_time_within(iv.earliest, iv.latest, target);
+        if w == 1 { holds = 1; }
+    }
+    return domain_cert("time", "true_time_principle", holds);
+}
+
+pub fn verify_true_time_principle() -> Bool {
+    // Golden: now=1e9 us, error=1 ms = 1e3 us -> [1e9-1e3, 1e9+1e3] = [999999000, 1000001000].
+    let iv1: TrueTimeInterval = true_time_interval(1000000000, tt_us_per_ms());
+    if iv1.earliest != 1000000000 - 1000 { return false; }
+    if iv1.latest != 1000000000 + 1000 { return false; }
+    if iv1.earliest != 999999000 { return false; }
+    if iv1.latest != 1000001000 { return false; }
+    // Golden: target = 1e9 is within [999999000, 1000001000] -> 1.
+    if true_time_within(iv1.earliest, iv1.latest, 1000000000) != 1 { return false; }
+    // Golden: target = earliest-1 is outside -> 0.
+    if true_time_within(iv1.earliest, iv1.latest, iv1.earliest - 1) != 0 { return false; }
+    // Golden: target = latest+1 is outside -> 0.
+    if true_time_within(iv1.earliest, iv1.latest, iv1.latest + 1) != 0 { return false; }
+    // Golden: target at closed interval boundaries is within -> 1.
+    if true_time_within(iv1.earliest, iv1.latest, iv1.earliest) != 1 { return false; }
+    if true_time_within(iv1.earliest, iv1.latest, iv1.latest) != 1 { return false; }
+    // Golden: width = 2 * error_us for a valid interval.
+    let w1: Int = tt_width_got(true_time_width(iv1.earliest, iv1.latest));
+    if w1 != 2 * 1000 { return false; }
+    // Hostile: negative error fails closed to sentinel (latest < earliest).
+    let iv2: TrueTimeInterval = true_time_interval(1000000000, 0 - 1);
+    if true_time_valid(iv2.earliest, iv2.latest) != 0 { return false; }
+    if true_time_error_nonneg(0 - 1) != 0 { return false; }
+    // Hostile: any target in a sentinel interval returns 0.
+    if true_time_within(iv2.earliest, iv2.latest, 1000000000) != 0 { return false; }
+    if true_time_within(iv2.earliest, iv2.latest, 0) != 0 { return false; }
+    // Golden: error_us=0 collapses to a single-point interval [now, now].
+    let iv3: TrueTimeInterval = true_time_interval(500, 0);
+    if iv3.earliest != 500 { return false; }
+    if iv3.latest != 500 { return false; }
+    if true_time_within(iv3.earliest, iv3.latest, 500) != 1 { return false; }
+    if true_time_within(iv3.earliest, iv3.latest, 499) != 0 { return false; }
+    if true_time_within(iv3.earliest, iv3.latest, 501) != 0 { return false; }
+    // Golden: typical uncertainty bound 1-7 ms is in valid range (Corbett 2012).
+    if tt_min_uncertainty_us() != 1000 { return false; }
+    if tt_max_uncertainty_us() != 7000 { return false; }
+    // Coupled: a 4 ms uncertainty (mid-range) yields interval of width 8 ms.
+    let iv4: TrueTimeInterval = true_time_interval(2000000, 4000);
+    if iv4.earliest != 1996000 { return false; }
+    if iv4.latest != 2004000 { return false; }
+    if true_time_within(iv4.earliest, iv4.latest, 2000000) != 1 { return false; }
+    // Golden: domain_cert wrapper holds=1 for valid case.
+    let c1: DomainCert = true_time_principle_holds(1000000000, 1000, 1000000000);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "time" { return false; }
+    if c1.law_name != "true_time_principle" { return false; }
+    // Golden: domain_cert wrapper holds=0 for hostile case.
+    let c2: DomainCert = true_time_principle_holds(1000000000, 0 - 1, 1000000000);
+    if c2.holds != 0 { return false; }
+    return true;
+}

@@ -1,0 +1,62 @@
+// # AArch64 SHA-256 Block Loop And Pack
+//
+// Logline: Fills and extends W, copies H into work, runs rounds, and packs H to 32 bytes.
+//
+// Setup: Args are msg, len, K, H, W. Work array is 64 bump-heap bytes.
+//
+// Beats:
+//   1. Load 16 BE words then extend to 64 using sigma0/sigma1.
+//   2. Copy H into work and BL __sha_rounds.
+//   3. Add work back into H with a 32-bit mask.
+//   4. __sha_pack writes eight BE words as 32 bytes.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_sha256g.oo";
+
+fn a64rt_pack(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_pack");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 28));
+    x = a64x_emit(x, arm64_word_movz(0, 32, 0));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 0));
+    x = a64x_emit(x, arm64_word_movz(11, 0, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 8, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(11, 0));
+    let bd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_movz(4, 2, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(2, 11, 4));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 0));
+    x = a64x_emit(x, arm64_word_add_imm(9, 9, 8));
+    x = a64x_emit(x, arm64_word_movz(4, 24, 0));
+    x = a64x_emit(x, arm64_word_lsr_reg(5, 3, 4));
+    x = a64x_emit(x, arm64_word_strb_reg(5, 10, 2));
+    x = a64x_emit(x, arm64_word_add_imm(2, 2, 1));
+    x = a64x_emit(x, arm64_word_movz(4, 16, 0));
+    x = a64x_emit(x, arm64_word_lsr_reg(5, 3, 4));
+    x = a64x_emit(x, arm64_word_strb_reg(5, 10, 2));
+    x = a64x_emit(x, arm64_word_add_imm(2, 2, 1));
+    x = a64x_emit(x, arm64_word_movz(4, 8, 0));
+    x = a64x_emit(x, arm64_word_lsr_reg(5, 3, 4));
+    x = a64x_emit(x, arm64_word_strb_reg(5, 10, 2));
+    x = a64x_emit(x, arm64_word_add_imm(2, 2, 1));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 10, 2));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bd, arm64_word_b_cond(arm64_cond_eq(), done - bd)));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 10));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_sha256f(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_pack(r0);
+    return a64rt_sha256g(r);
+}

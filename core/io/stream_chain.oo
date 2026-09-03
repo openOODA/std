@@ -1,0 +1,62 @@
+// # Stream Chain Concatenator Module
+//
+// Logline: Sequential stream chaining concatenating two ordered streams end-to-end into a single continuous stream.
+//
+// Setup: Pure sequential stream combiner with List[Int] sequences.
+//
+// Beats:
+//   1. Construct StreamChain from first and second stream lists.
+//   2. Chain-iterate elements continuously across both sequences.
+//   3. Compute total combined stream length.
+// Technical Note: Sequential stream concatenator. This module links two ordered integer sequences into a single continuous stream.
+
+type StreamChain = struct {
+    first: List[Int],
+    second: List[Int],
+    cursor: Int
+};
+
+pub fn stream_chain_new(first: List[Int], second: List[Int]) -> StreamChain {
+    return StreamChain {
+        first: first,
+        second: second,
+        cursor: 0
+    };
+}
+
+pub fn stream_chain_len(sc: StreamChain) -> Int {
+    let n1: Int = list_len(sc.first);
+    let n2: Int = list_len(sc.second);
+    return n1 + n2;
+}
+
+pub fn stream_chain_has_next(sc: StreamChain) -> Bool {
+    let cur: Int = sc.cursor;
+    let total: Int = stream_chain_len(sc);
+    return cur < total;
+}
+
+pub fn stream_chain_peek(sc: StreamChain) -> Int {
+    if stream_chain_has_next(sc) == false {
+        return 0;
+    }
+    let cur: Int = sc.cursor;
+    let n1: Int = list_len(sc.first);
+    if cur < n1 {
+        return list_get(sc.first, cur);
+    }
+    return list_get(sc.second, cur - n1);
+}
+
+pub fn stream_chain_next(sc: StreamChain) -> StreamChain {
+    let cur: Int = sc.cursor;
+    let total: Int = stream_chain_len(sc);
+    if cur >= total {
+        return sc;
+    }
+    return StreamChain {
+        first: sc.first,
+        second: sc.second,
+        cursor: cur + 1
+    };
+}

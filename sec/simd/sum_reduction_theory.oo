@@ -1,0 +1,147 @@
+// # SIMD horizontal sum reduction theory
+//
+// Logline: The sum of N lanes equals the elementary sum over each lane; for non-negative inputs the result is bounded above by lane_count * max_lane and below by lane_count * min_lane.
+//
+// Setup: Pure Int lanes. Lane values are Floats. Lane count must be in 1..8; out-of-range or negative addresses fail closed. Uses std/core/domain_cert.oo for holds boxes.
+//
+// Beats:
+//   1. simd_sum_reduce sums a fixed 4-lane vector.
+//   2. simd_sum_8 reduces a fixed 8-lane vector.
+//   3. simd_hmax and simd_hmin return the horizontal max/min of 4 lanes.
+//   4. simd_sum_bounded_max returns 1 iff sum <= lane_count * max_lane for non-negative inputs.
+//   5. Hostile: lane_count out of 1..8 returns Err; max_lane < 0 returns 0 (non-negativity gate).
+//   6. simd_sum_reduction_holds boxes the closed + coupled certificate.
+
+import "std/core/primitives/domain_cert.oo";
+
+// 4-lane float vector (re-declared to keep this module self-contained).
+type SumVec4f = struct {
+    v0: Float,
+    v1: Float,
+    v2: Float,
+    v3: Float
+};
+
+fn sr_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn sum_vec4f_new(a: Float, b: Float, c: Float, d: Float) -> SumVec4f {
+    return SumVec4f { v0: a, v1: b, v2: c, v3: d };
+}
+
+pub fn sum_vec4f_get(v: SumVec4f, idx: Int) -> Float {
+    if idx == 0 { return v.v0; }
+    if idx == 1 { return v.v1; }
+    if idx == 2 { return v.v2; }
+    return v.v3;
+}
+
+// Closed (single vector): sum of 4 lanes.
+pub fn simd_sum_reduce(v: SumVec4f) -> Float {
+    return v.v0 + v.v1 + v.v2 + v.v3;
+}
+
+// Horizontal max of 4 lanes.
+pub fn simd_hmax(v: SumVec4f) -> Float {
+    let mut m: Float = v.v0;
+    if v.v1 > m { m = v.v1; }
+    if v.v2 > m { m = v.v2; }
+    if v.v3 > m { m = v.v3; }
+    return m;
+}
+
+// Horizontal min of 4 lanes.
+pub fn simd_hmin(v: SumVec4f) -> Float {
+    let mut m: Float = v.v0;
+    if v.v1 < m { m = v.v1; }
+    if v.v2 < m { m = v.v2; }
+    if v.v3 < m { m = v.v3; }
+    return m;
+}
+
+// 8-lane sum: closed form. Hostile lane_count out of 1..8 returns Err.
+pub fn simd_sum_8(v0: Float, v1: Float, v2: Float, v3: Float, v4: Float, v5: Float, v6: Float, v7: Float, lane_count: Int) -> Result[Float, String] {
+    if lane_count < 1 { return Err("ERR\tsimd\tlanes"); }
+    if lane_count > 8 { return Err("ERR\tsimd\tlanes"); }
+    return Ok(v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7);
+}
+
+// Convert a small non-negative Int to Float by repeated addition (lane_count in [0, 32]).
+fn int_to_f_small(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        f = f + 1.0;
+        i = i + 1;
+    }
+    return f;
+}
+
+// Coupled: for non-negative lanes, sum <= lane_count * max_lane. 1 iff holds; 0 if any gate fails.
+pub fn simd_sum_bounded_max(sum: Float, max_lane: Float, lane_count: Int) -> Int {
+    if lane_count < 1 { return 0; }
+    if lane_count > 8 { return 0; }
+    if max_lane < 0.0 { return 0; }
+    let lc: Float = int_to_f_small(lane_count);
+    let bound: Float = lc * max_lane;
+    if sum <= bound { return 1; }
+    return 0;
+}
+
+// Coupled: for non-negative lanes, sum >= lane_count * min_lane.
+pub fn simd_sum_bounded_min(sum: Float, min_lane: Float, lane_count: Int) -> Int {
+    if lane_count < 1 { return 0; }
+    if lane_count > 8 { return 0; }
+    if min_lane < 0.0 { return 0; }
+    let lc: Float = int_to_f_small(lane_count);
+    let bound: Float = lc * min_lane;
+    if sum >= bound { return 1; }
+    return 0;
+}
+
+pub fn simd_sum_reduction_holds(sum: Float, max_lane: Float, lane_count: Int) -> DomainCert {
+    let ok: Int = simd_sum_bounded_max(sum, max_lane, lane_count);
+    return domain_cert("simd", "sum_reduction", ok);
+}
+
+pub fn verify_sum_reduction_theory() -> Bool {
+    // Golden: 8 lanes of 1.0 sum to 8.0.
+    let g8: Float = sr_got(simd_sum_8(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 8));
+    if g8 != 8.0 { return false; }
+    // Golden: 4-lane reduce of [1,2,3,4] = 10.
+    let v: SumVec4f = sum_vec4f_new(1.0, 2.0, 3.0, 4.0);
+    if simd_sum_reduce(v) != 10.0 { return false; }
+    // Golden: hmax([1,2,3,4]) = 4; hmin = 1.
+    if simd_hmax(v) != 4.0 { return false; }
+    if simd_hmin(v) != 1.0 { return false; }
+    // Golden: 8 lanes of 0.5 sum to 4.0.
+    let g8b: Float = sr_got(simd_sum_8(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 8));
+    if g8b != 4.0 { return false; }
+    // Coupled: sum=8, max_lane=1, lane_count=8 -> bounded_max=1.
+    if simd_sum_bounded_max(8.0, 1.0, 8) != 1 { return false; }
+    // Coupled: sum=10, max_lane=4, lane_count=4 -> 10 <= 16 -> 1.
+    if simd_sum_bounded_max(10.0, 4.0, 4) != 1 { return false; }
+    // Coupled: sum=100, max_lane=4, lane_count=4 -> 100 > 16 -> 0.
+    if simd_sum_bounded_max(100.0, 4.0, 4) != 0 { return false; }
+    // Coupled: min bound for [1,2,3,4] -> 10 >= 4 -> 1.
+    if simd_sum_bounded_min(10.0, 1.0, 4) != 1 { return false; }
+    // Hostile: lane_count = 0 fails closed (sum gate returns 0).
+    if simd_sum_bounded_max(0.0, 0.0, 0) != 0 { return false; }
+    // Hostile: simd_sum_8 with lane_count out of 1..8 returns Err.
+    if simd_sum_8(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0).is_ok() { return false; }
+    if simd_sum_8(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 9).is_ok() { return false; }
+    if simd_sum_8(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0 - 1).is_ok() { return false; }
+    // Hostile: max_lane < 0 fails closed.
+    if simd_sum_bounded_max(8.0, 0.0 - 1.0, 8) != 0 { return false; }
+    if simd_sum_bounded_max(8.0, 1.0, 9) != 0 { return false; }
+    // DomainCert boxes the holds bit from caller params.
+    let c1: DomainCert = simd_sum_reduction_holds(8.0, 1.0, 8);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "simd" { return false; }
+    let c2: DomainCert = simd_sum_reduction_holds(100.0, 1.0, 8);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = simd_sum_reduction_holds(8.0, 1.0, 0);
+    if c3.holds != 0 { return false; }
+    return true;
+}

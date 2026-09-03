@@ -1,0 +1,110 @@
+// # Kepler Equation Solver & Anomaly Transformations
+//
+// Logline: Solves Kepler's equation for elliptic orbits and converts between mean, eccentric, and true anomalies using fail-closed numerical iteration.
+//
+// Setup: Pure orbital mechanics. No capability tokens. Uses std/math/fast_trig.oo for quadrant-resolved arc tangents.
+//
+// Beats:
+//   1. Newton-Raphson solver with domain validation and convergence guard.
+//   2. Eccentric to mean anomaly and true anomaly transformations.
+//   3. True anomaly back to eccentric anomaly.
+//   4. Direct mean to true anomaly pipeline.
+// residual: Barker solver for parabolic orbits and universal-variable formulation are residual.
+
+import "std/core/math/constants.oo";
+import "std/core/math/fast_trig.oo";
+
+fn kepler_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn kepler_solve_eccentric_anomaly(
+    mean_anomaly: Float,
+    eccentricity: Float,
+    tolerance: Float,
+    max_iter: Int
+) -> Result[Float, String] {
+    if eccentricity < 0.0 || eccentricity >= 1.0 {
+        return Err("ERR\tkepler_solve_eccentric_anomaly\tinvalid_eccentricity");
+    }
+    if tolerance <= 0.0 || max_iter <= 0 {
+        return Err("ERR\tkepler_solve_eccentric_anomaly\tinvalid_solver_params");
+    }
+    let pi: Float = math_pi();
+    let two_pi: Float = 2.0 * pi;
+    let mut m: Float = mean_anomaly;
+    while m > pi { m = m - two_pi; }
+    while m < (0.0 - pi) { m = m + two_pi; }
+
+    let mut e_curr: Float = if eccentricity < 0.8 { m } else { pi };
+    let mut i: Int = 0;
+    while i < max_iter {
+        let f: Float = e_curr - (eccentricity * sin(e_curr)) - m;
+        let f_prime: Float = 1.0 - (eccentricity * cos(e_curr));
+        if kepler_abs(f_prime) < 0.000000000000001 {
+            return Err("ERR\tkepler_solve_eccentric_anomaly\tstationary_derivative");
+        }
+        let delta: Float = f / f_prime;
+        e_curr = e_curr - delta;
+        if kepler_abs(f) < tolerance || kepler_abs(delta) < tolerance {
+            return Ok(e_curr);
+        }
+        i = i + 1;
+    }
+    return Err("ERR\tkepler_solve_eccentric_anomaly\tno_convergence");
+}
+
+pub fn kepler_eccentric_to_mean(eccentric_anomaly: Float, eccentricity: Float) -> Result[Float, String] {
+    if eccentricity < 0.0 || eccentricity >= 1.0 {
+        return Err("ERR\tkepler_eccentric_to_mean\tinvalid_eccentricity");
+    }
+    return Ok(eccentric_anomaly - (eccentricity * sin(eccentric_anomaly)));
+}
+
+pub fn kepler_eccentric_to_true(eccentric_anomaly: Float, eccentricity: Float) -> Result[Float, String] {
+    if eccentricity < 0.0 || eccentricity >= 1.0 {
+        return Err("ERR\tkepler_eccentric_to_true\tinvalid_eccentricity");
+    }
+    let s_e: Float = sin(eccentric_anomaly);
+    let c_e: Float = cos(eccentric_anomaly);
+    let denom: Float = 1.0 - (eccentricity * c_e);
+    if denom <= 0.0 {
+        return Err("ERR\tkepler_eccentric_to_true\tdenominator_non_positive");
+    }
+    let sin_nu: Float = sqrt(1.0 - (eccentricity * eccentricity)) * s_e / denom;
+    let cos_nu: Float = (c_e - eccentricity) / denom;
+    return Ok(fast_atan2(sin_nu, cos_nu));
+}
+
+pub fn kepler_true_to_eccentric(true_anomaly: Float, eccentricity: Float) -> Result[Float, String] {
+    if eccentricity < 0.0 || eccentricity >= 1.0 {
+        return Err("ERR\tkepler_true_to_eccentric\tinvalid_eccentricity");
+    }
+    let s_nu: Float = sin(true_anomaly);
+    let c_nu: Float = cos(true_anomaly);
+    let denom: Float = 1.0 + (eccentricity * c_nu);
+    if denom <= 0.0 {
+        return Err("ERR\tkepler_true_to_eccentric\tdenominator_non_positive");
+    }
+    let sin_e: Float = sqrt(1.0 - (eccentricity * eccentricity)) * s_nu / denom;
+    let cos_e: Float = (eccentricity + c_nu) / denom;
+    return Ok(fast_atan2(sin_e, cos_e));
+}
+
+pub fn kepler_mean_to_true(
+    mean_anomaly: Float,
+    eccentricity: Float,
+    tolerance: Float,
+    max_iter: Int
+) -> Result[Float, String] {
+    let e_res: Result[Float, String] = kepler_solve_eccentric_anomaly(mean_anomaly, eccentricity, tolerance, max_iter);
+    if e_res.is_err() {
+        return e_res;
+    }
+    let e_anom: Float = match e_res {
+        Ok(x)  => x,
+        Err(_) => 0.0
+    };
+    return kepler_eccentric_to_true(e_anom, eccentricity);
+}

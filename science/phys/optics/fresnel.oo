@@ -1,0 +1,192 @@
+// # Fresnel Reflection and Transmission Coefficients
+//
+// Logline: Computes s-wave and p-wave amplitude and power coefficients across dielectric interfaces.
+//
+// Setup: Solves Maxwell interface equations for transverse electric and transverse magnetic waves.
+//
+// Beats:
+//   1. Compute s-polarized amplitude reflection r_s and transmission t_s.
+//   2. Compute p-polarized amplitude reflection r_p and transmission t_p.
+//   3. Compute power reflectance R and transmittance T for polarized and unpolarized light.
+//   4. Enforce energy conservation R + T = 1 and handle total internal reflection.
+
+type FresnelCoefficients = struct {
+    r_s: Float,
+    t_s: Float,
+    r_p: Float,
+    t_p: Float,
+    reflectance_s: Float,
+    transmittance_s: Float,
+    reflectance_p: Float,
+    transmittance_p: Float,
+    reflectance_unpolarized: Float,
+    transmittance_unpolarized: Float
+};
+
+// Amplitude reflection coefficient for s-polarization (TE)
+pub fn fresnel_reflection_s(n1: Float, n2: Float, theta_i_rad: Float, theta_t_rad: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let cos_i: Float = cos(theta_i_rad);
+    let cos_t: Float = cos(theta_t_rad);
+    let num: Float = (n1 * cos_i) - (n2 * cos_t);
+    let den: Float = (n1 * cos_i) + (n2 * cos_t);
+    if den == 0.0 { return 0.0; }
+    return num / den;
+}
+
+// Amplitude transmission coefficient for s-polarization (TE)
+pub fn fresnel_transmission_s(n1: Float, n2: Float, theta_i_rad: Float, theta_t_rad: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let cos_i: Float = cos(theta_i_rad);
+    let cos_t: Float = cos(theta_t_rad);
+    let num: Float = 2.0 * n1 * cos_i;
+    let den: Float = (n1 * cos_i) + (n2 * cos_t);
+    if den == 0.0 { return 0.0; }
+    return num / den;
+}
+
+// Amplitude reflection coefficient for p-polarization (TM)
+pub fn fresnel_reflection_p(n1: Float, n2: Float, theta_i_rad: Float, theta_t_rad: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let cos_i: Float = cos(theta_i_rad);
+    let cos_t: Float = cos(theta_t_rad);
+    let num: Float = (n2 * cos_i) - (n1 * cos_t);
+    let den: Float = (n2 * cos_i) + (n1 * cos_t);
+    if den == 0.0 { return 0.0; }
+    return num / den;
+}
+
+// Amplitude transmission coefficient for p-polarization (TM)
+pub fn fresnel_transmission_p(n1: Float, n2: Float, theta_i_rad: Float, theta_t_rad: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let cos_i: Float = cos(theta_i_rad);
+    let cos_t: Float = cos(theta_t_rad);
+    let num: Float = 2.0 * n1 * cos_i;
+    let den: Float = (n2 * cos_i) + (n1 * cos_t);
+    if den == 0.0 { return 0.0; }
+    return num / den;
+}
+
+// Normal incidence reflectance R0 = ((n1 - n2) / (n1 + n2))^2
+pub fn fresnel_normal_reflectance(n1: Float, n2: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let sum: Float = n1 + n2;
+    if sum == 0.0 { return 0.0; }
+    let diff: Float = n1 - n2;
+    let r: Float = diff / sum;
+    return r * r;
+}
+
+// Normal incidence transmittance T0 = 4 * n1 * n2 / (n1 + n2)^2
+pub fn fresnel_normal_transmittance(n1: Float, n2: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let sum: Float = n1 + n2;
+    if sum == 0.0 { return 0.0; }
+    return (4.0 * n1 * n2) / (sum * sum);
+}
+
+// Power reflectance for s-polarization given incident angle
+pub fn fresnel_power_reflectance_s(n1: Float, n2: Float, theta_i_rad: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let sin_i: Float = sin(theta_i_rad);
+    let sin_t_sq: Float = ((n1 * n1) / (n2 * n2)) * (sin_i * sin_i);
+    if sin_t_sq >= 1.0 {
+        return 1.0; // Total internal reflection
+    }
+    let cos_i: Float = cos(theta_i_rad);
+    let cos_t: Float = sqrt(1.0 - sin_t_sq);
+    let rs: Float = ((n1 * cos_i) - (n2 * cos_t)) / ((n1 * cos_i) + (n2 * cos_t));
+    return rs * rs;
+}
+
+// Power reflectance for p-polarization given incident angle
+pub fn fresnel_power_reflectance_p(n1: Float, n2: Float, theta_i_rad: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let sin_i: Float = sin(theta_i_rad);
+    let sin_t_sq: Float = ((n1 * n1) / (n2 * n2)) * (sin_i * sin_i);
+    if sin_t_sq >= 1.0 {
+        return 1.0; // Total internal reflection
+    }
+    let cos_i: Float = cos(theta_i_rad);
+    let cos_t: Float = sqrt(1.0 - sin_t_sq);
+    let rp: Float = ((n2 * cos_i) - (n1 * cos_t)) / ((n2 * cos_i) + (n1 * cos_t));
+    return rp * rp;
+}
+
+// Full evaluation of Fresnel coefficients and power distributions
+pub fn fresnel_eval(n1: Float, n2: Float, theta_i_rad: Float) -> FresnelCoefficients {
+    if n1 <= 0.0 || n2 <= 0.0 {
+        return FresnelCoefficients {
+            r_s: 0.0,
+            t_s: 0.0,
+            r_p: 0.0,
+            t_p: 0.0,
+            reflectance_s: 0.0,
+            transmittance_s: 0.0,
+            reflectance_p: 0.0,
+            transmittance_p: 0.0,
+            reflectance_unpolarized: 0.0,
+            transmittance_unpolarized: 0.0
+        };
+    }
+    let sin_i: Float = sin(theta_i_rad);
+    let sin_t_sq: Float = ((n1 * n1) / (n2 * n2)) * (sin_i * sin_i);
+    if sin_t_sq >= 1.0 {
+        // Total internal reflection (TIR)
+        return FresnelCoefficients {
+            r_s: 1.0,
+            t_s: 0.0,
+            r_p: 1.0,
+            t_p: 0.0,
+            reflectance_s: 1.0,
+            transmittance_s: 0.0,
+            reflectance_p: 1.0,
+            transmittance_p: 0.0,
+            reflectance_unpolarized: 1.0,
+            transmittance_unpolarized: 0.0
+        };
+    }
+    let cos_i: Float = cos(theta_i_rad);
+    let cos_t: Float = sqrt(1.0 - sin_t_sq);
+
+    let den_s: Float = (n1 * cos_i) + (n2 * cos_t);
+    let den_p: Float = (n2 * cos_i) + (n1 * cos_t);
+    if den_s == 0.0 || den_p == 0.0 {
+        return FresnelCoefficients {
+            r_s: 0.0,
+            t_s: 0.0,
+            r_p: 0.0,
+            t_p: 0.0,
+            reflectance_s: 0.0,
+            transmittance_s: 0.0,
+            reflectance_p: 0.0,
+            transmittance_p: 0.0,
+            reflectance_unpolarized: 0.0,
+            transmittance_unpolarized: 0.0
+        };
+    }
+    let rs: Float = ((n1 * cos_i) - (n2 * cos_t)) / den_s;
+    let ts: Float = (2.0 * n1 * cos_i) / den_s;
+    let rp: Float = ((n2 * cos_i) - (n1 * cos_t)) / den_p;
+    let tp: Float = (2.0 * n1 * cos_i) / den_p;
+
+    let big_rs: Float = rs * rs;
+    let big_ts: Float = 1.0 - big_rs;
+    let big_rp: Float = rp * rp;
+    let big_tp: Float = 1.0 - big_rp;
+    let big_r_unpol: Float = (big_rs + big_rp) / 2.0;
+    let big_t_unpol: Float = (big_ts + big_tp) / 2.0;
+
+    return FresnelCoefficients {
+        r_s: rs,
+        t_s: ts,
+        r_p: rp,
+        t_p: tp,
+        reflectance_s: big_rs,
+        transmittance_s: big_ts,
+        reflectance_p: big_rp,
+        transmittance_p: big_tp,
+        reflectance_unpolarized: big_r_unpol,
+        transmittance_unpolarized: big_t_unpol
+    };
+}

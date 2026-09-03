@@ -1,0 +1,107 @@
+// # CRISPR SaCas9 5'-NNGRRT-3' PAM Selector
+//
+// Logline: Scans genomes for Staphylococcus aureus Cas9 NNGRRT PAM sites and evaluates 21-23 nt spacer efficacy for single-AAV in vivo therapy.
+//
+// Setup: Compact Type II-A Cas9 targeting engine with extended 6-nt PAM recognition and high in vivo cleavage fidelity.
+//
+// Beats:
+//   1. Define SaCas9TargetSite and SaCas9ScanConfig structures.
+//   2. Scan DNA sequences for 5'-NNGRRT-3' (R = A/G) hexanucleotide PAM motifs.
+//   3. Calculate spacer GC-content and AAV vector payload clearance.
+
+type SaCas9TargetSite = struct {
+    pam_motif: String,
+    spacer_seq: String,
+    strand: String,
+    cut_offset: Int,
+    gc_percent: Float,
+    is_canonical: Bool
+};
+
+type SaCas9ScanConfig = struct {
+    spacer_length: Int,
+    allow_non_canonical: Bool
+};
+
+pub fn sacas9_is_r(c: String) -> Bool {
+    return c == "A" || c == "a" || c == "G" || c == "g";
+}
+
+pub fn sacas9_match_pam(pam: String) -> Bool {
+    if chars_len(pam) != 6 { return false; }
+    let c2: String = char_at(pam, 2);    let c3: String = char_at(pam, 3);    let c4: String = char_at(pam, 4);    let c5: String = char_at(pam, 5);    let is_g2: Bool = (c2 == "G" || c2 == "g");    let is_r3 = sacas9_is_r(c3);
+    let is_r4: Bool = sacas9_is_r(c4);    let is_t5: Bool = (c5 == "T" || c5 == "t");    return is_g2 && is_r3 && is_r4 && is_t5;
+}
+
+pub fn sacas9_calc_gc(seq: String) -> Float {
+    let n: Int = chars_len(seq);    if n == 0 { return 0.0; }
+    let mut gc: Int = 0;    let mut i: Int = 0;    while i < n {
+        let c: String = char_at(seq, i);        if c == "G" || c == "g" || c == "C" || c == "c" {
+            gc = gc + 1;
+        }
+        i = i + 1;
+    }
+    return crispr_sacas9_nngrrt_pam_to_f((gc) / crispr_sacas9_nngrrt_pam_to_f(n)) * 100.0;
+}
+
+pub fn sacas9_slice(seq: String, start: Int, length: Int) -> String {
+    let n: Int = chars_len(seq);    let mut out: String = "";    let mut i: Int = 0;    while i < length && (start + i) < n {
+        out = out + char_at(seq, start + i);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn sacas9_find_targets(seq: String, cfg: SaCas9ScanConfig) -> List[SaCas9TargetSite] {
+    let mut list: List[SaCas9TargetSite] = list_new();
+    let n: Int = chars_len(seq);    let s_len = cfg.spacer_length;
+    let total_len: Int = s_len + 6;    if n < total_len { return list; }
+
+    let mut i: Int = s_len;    while i <= n - 6 {
+        let pam_sub: String = sacas9_slice(seq, i, 6);        if sacas9_match_pam(pam_sub) {
+            let spacer: String = sacas9_slice(seq, i - s_len, s_len);            let gc: Float = sacas9_calc_gc(spacer);            let site: SaCas9TargetSite = SaCas9TargetSite {                pam_motif: pam_sub,
+                spacer_seq: spacer,
+                strand: "+",
+                cut_offset: i - 3,
+                gc_percent: gc,
+                is_canonical: true
+            };
+            list_push(list, site);
+        }
+        i = i + 1;
+    }
+    return list;
+}
+
+
+fn crispr_sacas9_nngrrt_pam_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

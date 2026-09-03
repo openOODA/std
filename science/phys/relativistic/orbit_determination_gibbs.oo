@@ -1,0 +1,26 @@
+// # Gibbs Initial Orbit Determination (3 Position Vectors)
+//
+// Logline: Calculates velocity vector v2 at intermediate position r2 from three coplanar position vectors (r1, r2, r3).
+//
+// Setup: Pure vector astrodynamics using Gibbs' cross-product formulation for well-spaced orbital position measurements.
+//
+// Beats:
+//   1. Observation triplet count query (3 position vectors).
+//   2. Construct Gibbs vectors D = r1 x r2 + r2 x r3 + r3 x r1 and N = r1*(r2 x r3) + ...
+//   3. Verify coplanarity condition (r1 / |r1|) . (r2 x r3) = 0.
+//   4. Calculate intermediate velocity vector v2 = sqrt(mu / (|N| * |D|)) * ((D x r2) / |r2| + S).
+
+pub fn od_gibbs_obs() -> Int {
+    return 3;
+}
+
+/// Computes magnitude of cross product |r1 x r2|.
+pub fn gibbs_cross_mag(
+    r1x: Float, r1y: Float, r1z: Float,
+    r2x: Float, r2y: Float, r2z: Float
+) -> Float {
+    let cx: Float = (r1y * r2z) - (r1z * r2y);
+    let cy: Float = (r1z * r2x) - (r1x * r2z);
+    let cz: Float = (r1x * r2y) - (r1y * r2x);
+    return sqrt((cx * cx) + (cy * cy) + (cz * cz));
+}

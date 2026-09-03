@@ -1,0 +1,18 @@
+// # SIMD Vector Operations Module
+//
+// Logline: Pure vector operations, arithmetic intrinsics, and cross-platform hardware acceleration primitives for AVX2 and ARM NEON.
+//
+// Setup: Vector operations on Vec4f, Vec8f, Vec4i, Vec8i, and Vec16b types.
+//
+// Beats:
+//   1. Pure float arithmetic (fadd, fsub, fmul, fdiv, scale, fma) for 4-wide and 8-wide vectors.
+//   2. Pure integer arithmetic and bitwise ops for 4-wide and 8-wide int vectors.
+//   3. Pure byte vector operations (add, sub, bitwise and/or/xor) for 16-wide byte vectors.
+//   4. Intrinsic operations: insertelement, extractelement, shufflevector, and reductions for AVX2 and NEON.
+// RULES.oot 1.7: Under 256 lines.
+//
+// emit-llvm of this parent must finish in 12s. Wide struct-literal bodies live in
+// simd_ops_body.oo (concat for C/run; fntab declares for no_concat llvm).
+
+import "std/sec/simd/simd_types.oo";
+import "./simd_ops_body.oo";

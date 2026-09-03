@@ -1,0 +1,82 @@
+// # Postel's Robustness Principle
+//
+// Logline: Be liberal in what you accept and conservative in what you send.
+//
+// Setup: Pure Int. Acceptance and emission thresholds are caller-supplied. Out-of-range fails closed. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. Acceptance policy: accept if input parses AND len <= accept_max.
+//   2. Emission policy: trim/truncate to send_max before emit.
+//   3. Combined robustness: 1 only if acceptance and emission both pass.
+//   4. Hosts net_invariants.oo stem for cross-law correlation.
+
+import "std/net/net_invariants.oo";
+
+// Acceptance decision: 1 if (parses == 1) AND (length <= accept_max). Out-of-range returns 0.
+pub fn postel_accept(parses: Int, length: Int, accept_max: Int) -> Int {
+    if parses != 1 { return 0; }
+    if length < 0 { return 0; }
+    if accept_max <= 0 { return 0; }
+    if length > accept_max { return 0; }
+    return 1;
+}
+
+// Emission decision: 1 if length <= send_max; trim length to send_max.
+pub fn postel_emit(length: Int, send_max: Int) -> Int {
+    if length < 0 { return 0; }
+    if send_max <= 0 { return 0; }
+    if length > send_max { return 0; }
+    return 1;
+}
+
+fn pos_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Trim length to send_max. length=0 is Ok(0). Negative length or send_max<=0 is Err.
+pub fn postel_trim(length: Int, send_max: Int) -> Result[Int, String] {
+    if length < 0 { return Err("ERR\tpos\tdomain"); }
+    if send_max <= 0 { return Err("ERR\tpos\tdomain"); }
+    if length <= send_max { return Ok(length); }
+    return Ok(send_max);
+}
+
+// Combined robustness: 1 only if acceptance and emission both pass.
+pub fn postel_robust(accept: Int, emit: Int) -> Int {
+    if accept != 1 { return 0; }
+    if emit != 1 { return 0; }
+    return 1;
+}
+
+// KAT and hostile cases for Postel's principle.
+pub fn verify_postel_principle() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    if postel_accept(1, 100, 200) != 1 { return false; }
+    if postel_accept(1, 200, 200) != 1 { return false; }
+    if postel_accept(1, 201, 200) != 0 { return false; }
+    if postel_accept(0, 100, 200) != 0 { return false; }
+    if postel_accept(1, 0 - 1, 200) != 0 { return false; }
+    if postel_accept(1, 100, 0) != 0 { return false; }
+    if postel_accept(1, 100, 0 - 1) != 0 { return false; }
+    if postel_accept(2, 100, 200) != 0 { return false; }
+    if postel_emit(100, 200) != 1 { return false; }
+    if postel_emit(200, 200) != 1 { return false; }
+    if postel_emit(201, 200) != 0 { return false; }
+    if postel_emit(0 - 1, 200) != 0 { return false; }
+    if postel_emit(100, 0) != 0 { return false; }
+    if postel_emit(100, 0 - 1) != 0 { return false; }
+    if pos_got(postel_trim(100, 200)) != 100 { return false; }
+    if pos_got(postel_trim(200, 200)) != 200 { return false; }
+    if pos_got(postel_trim(250, 200)) != 200 { return false; }
+    let ztr: Result[Int, String] = postel_trim(0, 200);
+    if ztr.is_ok() == false { return false; }
+    if pos_got(ztr) != 0 { return false; }
+    if postel_trim(0 - 1, 200).is_ok() { return false; }
+    if postel_trim(100, 0).is_ok() { return false; }
+    if postel_robust(1, 1) != 1 { return false; }
+    if postel_robust(0, 1) != 0 { return false; }
+    if postel_robust(1, 0) != 0 { return false; }
+    if postel_robust(0, 0) != 0 { return false; }
+    return true;
+}

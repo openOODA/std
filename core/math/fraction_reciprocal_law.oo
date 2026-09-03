@@ -1,0 +1,80 @@
+// # Rational reciprocal law
+//
+// Logline: For nonzero q, q * (1/q) is 1. Zero is not a unit.
+//
+// Setup: Self-contained GCD fractions. Product fraction.oo cannot be imported (Result C clash).
+//
+// Beats:
+//   1. 3/4 times 4/3 is 1/1.
+//   2. Zero numerator is not a unit.
+//   3. domain_cert boxes both.
+
+import "std/core/primitives/domain_cert.oo";
+
+type Frac = struct {
+    num: Int,
+    den: Int
+};
+
+fn fr_gcd(a: Int, b: Int) -> Int {
+    let mut x: Int = a;
+    let mut y: Int = b;
+    if x < 0 { x = 0 - x; }
+    if y < 0 { y = 0 - y; }
+    while y != 0 {
+        let t: Int = y;
+        y = x % y;
+        x = t;
+    }
+    return x;
+}
+
+fn fr_new(num: Int, den: Int) -> Frac {
+    let mut n: Int = num;
+    let mut d: Int = den;
+    if d == 0 {
+        return Frac { num: 0, den: 1 };
+    }
+    if d < 0 {
+        n = 0 - n;
+        d = 0 - d;
+    }
+    let g: Int = fr_gcd(n, d);
+    if g > 1 {
+        n = n / g;
+        d = d / g;
+    }
+    return Frac { num: n, den: d };
+}
+
+fn fr_mul(a: Frac, b: Frac) -> Frac {
+    return fr_new(a.num * b.num, a.den * b.den);
+}
+
+fn fr_recip(q: Frac) -> Frac {
+    return fr_new(q.den, q.num);
+}
+
+pub fn math_fraction_reciprocal_law(num: Int, den: Int) -> DomainCert {
+    let q: Frac = fr_new(num, den);
+    if q.num == 0 {
+        return domain_cert("math", "fraction_reciprocal", 0);
+    }
+    let p: Frac = fr_mul(q, fr_recip(q));
+    let mut h: Int = 0;
+    if p.num == 1 {
+        if p.den == 1 {
+            h = 1;
+        }
+    }
+    return domain_cert("math", "fraction_reciprocal", h);
+}
+
+pub fn math_fraction_zero_not_unit() -> DomainCert {
+    let z: Frac = fr_new(0, 1);
+    let mut h: Int = 0;
+    if z.num == 0 {
+        h = 1;
+    }
+    return domain_cert("math", "fraction_zero_not_unit", h);
+}

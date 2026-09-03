@@ -1,0 +1,89 @@
+// # ACPI System Tables & MADT Hardware Discovery
+//
+// Logline: ACPI RSDP, XSDT traversal, Multiple APIC Description Table (MADT) parsing, and Device Tree Blob (DTB) hardware discovery.
+//
+// Setup: Declared capability: None. Direct hardware discovery, system description tables, and interrupt routing records.
+//
+// Beats:
+//   1. Declare ACPI RSDP, MADT header, and APIC record entry structures.
+//   2. Implement RSDP signature and 64-bit XSDT pointer validation.
+//   3. Implement MADT Local APIC and IO-APIC entry decoders.
+//   4. Implement Device Tree Blob (DTB) node discovery helper.
+
+type RsdpDescriptor = struct {
+    signature_high: Int,
+    signature_low: Int,
+    checksum: Int,
+    oem_id_hash: Int,
+    revision: Int,
+    xsdt_address: Int
+};
+
+type MadtHeader = struct {
+    table_address: Int,
+    table_length: Int,
+    lapic_address: Int,
+    flags: Int,
+    record_count: Int
+};
+
+type MadtApicEntry = struct {
+    entry_type: Int,
+    entry_length: Int,
+    processor_id: Int,
+    apic_id: Int,
+    flags: Int
+};
+
+pub fn acpi_rsdp_init(xsdt_addr: Int, rev: Int) -> RsdpDescriptor {
+    let safe_xsdt: Int = if xsdt_addr < 0 { 0 } else { xsdt_addr };
+    let safe_rev: Int = if rev < 0 { 2 } else { rev };
+    return RsdpDescriptor {
+        signature_high: 1380926288,
+        signature_low: 1347637328,
+        checksum: 0,
+        oem_id_hash: 42,
+        revision: safe_rev,
+        xsdt_address: safe_xsdt
+    };
+}
+
+pub fn acpi_madt_header_new(tbl_addr: Int, lapic_addr: Int, records: Int) -> MadtHeader {
+    let safe_tbl: Int = if tbl_addr < 0 { 0 } else { tbl_addr };
+    let safe_lapic: Int = if lapic_addr <= 0 { 4276092928 } else { lapic_addr };
+    let safe_cnt: Int = if records < 0 { 0 } else { records };
+    return MadtHeader {
+        table_address: safe_tbl,
+        table_length: 44 + (safe_cnt * 8),
+        lapic_address: safe_lapic,
+        flags: 1,
+        record_count: safe_cnt
+    };
+}
+
+pub fn acpi_madt_entry_new(etype: Int, proc_id: Int, apic_id: Int) -> MadtApicEntry {
+    let safe_type: Int = if etype < 0 { 0 } else { etype };
+    let safe_proc: Int = if proc_id < 0 { 0 } else { proc_id };
+    let safe_apic: Int = if apic_id < 0 { 0 } else { apic_id };
+    return MadtApicEntry {
+        entry_type: safe_type,
+        entry_length: 8,
+        processor_id: safe_proc,
+        apic_id: safe_apic,
+        flags: 1
+    };
+}
+
+pub fn acpi_madt_is_entry_enabled(entry: MadtApicEntry) -> Bool {
+    let flg: Int = entry.flags;
+    let enabled: Int = flg % 2;
+    return enabled == 1;
+}
+
+pub fn dtb_lookup_node_offset(dtb_base: Int, node_hash: Int) -> Int {
+    if dtb_base <= 0 {
+        return 0;
+    }
+    let safe_hash: Int = if node_hash < 0 { 0 } else { node_hash };
+    return dtb_base + (safe_hash % 65536);
+}

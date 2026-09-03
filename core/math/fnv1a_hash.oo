@@ -1,0 +1,52 @@
+// # FNV-1a 32-bit hash (real octets)
+//
+// Logline: FNV-1a 32-bit hash of a byte sequence. Offset 2166136261, prime 16777619.
+//
+// Setup: Pure Int. Empty input returns the offset basis. Each character is ord(ch) & 255, not a dummy 0.
+//
+// Beats:
+//   1. fnv1a32_step is xor then multiply by 16777619, masked to 32 bits.
+//   2. fnv1a32_string hashes every octet via ord. Empty string is the offset.
+//   3. fnv1a_backend_signature is fnv1a32_string of the backend name.
+
+import "std/core/primitives/str.oo";
+
+pub fn fnv1a32_offset() -> Int {
+    return 2166136261;
+}
+
+pub fn fnv1a32_prime() -> Int {
+    return 16777619;
+}
+
+pub fn fnv1a32_step(h: Int, b: Int) -> Int {
+    let mut x: Int = h;
+    x = (x ^ (b & 255));
+    let lo: Int = (x * 16777619) & 4294967295;
+    return lo;
+}
+
+fn fnv1a_char_code(ch: String) -> Int {
+    return ord(ch) & 255;
+}
+
+pub fn fnv1a32_string(s: String) -> Int {
+    let mut h: Int = fnv1a32_offset();
+    let n: Int = str_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        let ch_str: String = str_char_at(s, i);
+        let code: Int = fnv1a_char_code(ch_str);
+        h = fnv1a32_step(h, code);
+        i = i + 1;
+    }
+    return h;
+}
+
+pub fn fnv1a_backend_signature(backend_name: String) -> Int {
+    return fnv1a32_string(backend_name);
+}
+
+pub fn fnv1a_signature_distinct(sig_a: Int, sig_b: Int) -> Bool {
+    return sig_a != sig_b;
+}

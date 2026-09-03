@@ -1,0 +1,99 @@
+// # Access Control Matrix and HRU Safety Theory
+//
+// Logline: Lampson's access control matrix with the HRU result: safety is undecidable in general.
+//
+// Setup: Pure Int subject, object, right counts. Bounds check on matrix size; out-of-range fails closed.
+//
+// Beats:
+//   1. Access matrix entry indexing: rights(subject, object) -> Int bitmask.
+//   2. Command schema: enter, delete, create subject/object, destroy subject/object.
+//   3. Safety question: is right r ever granted in cell (s, o)? Undecidable in HRU.
+//   4. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+
+// Rights bitmask values: 0 NONE, 1 READ, 2 WRITE, 4 EXEC, 8 OWN.
+pub fn acm_right_none() -> Int {
+    return 0;
+}
+
+pub fn acm_right_read() -> Int {
+    return 1;
+}
+
+pub fn acm_right_write() -> Int {
+    return 2;
+}
+
+pub fn acm_right_own() -> Int {
+    return 8;
+}
+
+// Maximum subjects and objects supported by the matrix.
+pub fn acm_max_subjects() -> Int {
+    return 64;
+}
+
+pub fn acm_max_objects() -> Int {
+    return 64;
+}
+
+// True if (s, o) is within the matrix bounds.
+pub fn acm_in_bounds(s: Int, o: Int) -> Bool {
+    if s < 0 { return false; }
+    if o < 0 { return false; }
+    if s >= acm_max_subjects() { return false; }
+    if o >= acm_max_objects() { return false; }
+    return true;
+}
+
+// Test whether a rights bitmask contains the right r.
+pub fn acm_has_right(rights: Int, r: Int) -> Bool {
+    if r < 0 { return false; }
+    let masked: Int = rights & r;
+    if masked == 0 { return false; }
+    return true;
+}
+
+// HRU safety question: can the right r be granted to (s, o)?
+// In the general HRU model this is undecidable. Here we return 0 (no) to fail closed
+// unless the matrix already contains r for that cell (returned as 1 by the caller).
+pub fn acm_hru_safety_default(granted_already: Int) -> Int {
+    if granted_already == 1 { return 1; }
+    return 0;
+}
+
+// Schema for the create_object HRU command: returns 1 when input triple is valid.
+pub fn acm_hru_create_object_valid(actor: Int, new_object: Int, parent: Int) -> Int {
+    if acm_in_bounds(actor, parent) == false { return 0; }
+    if new_object < 0 { return 0; }
+    if new_object >= acm_max_objects() { return 0; }
+    return 1;
+}
+
+// KAT and hostile cases for the access control theory.
+pub fn verify_access_control_theory() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if acm_in_bounds(0, 0) == false { return false; }
+    if acm_in_bounds(63, 63) == false { return false; }
+    if acm_in_bounds(64, 0) == true { return false; }
+    if acm_in_bounds(0, 64) == true { return false; }
+    if acm_in_bounds(0 - 1, 0) == true { return false; }
+    if acm_in_bounds(0, 0 - 1) == true { return false; }
+    if acm_has_right(1, acm_right_read()) == false { return false; }
+    if acm_has_right(2, acm_right_read()) == true { return false; }
+    if acm_has_right(3, acm_right_read()) == false { return false; }
+    if acm_has_right(3, acm_right_write()) == false { return false; }
+    if acm_has_right(8, acm_right_own()) == false { return false; }
+    if acm_has_right(0, acm_right_read()) == true { return false; }
+    if acm_has_right(0, acm_right_none()) == true { return false; }
+    if acm_has_right(1, 0 - 1) == true { return false; }
+    if acm_hru_safety_default(1) != 1 { return false; }
+    if acm_hru_safety_default(0) != 0 { return false; }
+    if acm_hru_create_object_valid(0, 1, 0) != 1 { return false; }
+    if acm_hru_create_object_valid(0, 64, 0) != 0 { return false; }
+    if acm_hru_create_object_valid(0, 0 - 1, 0) != 0 { return false; }
+    if acm_hru_create_object_valid(64, 1, 0) != 0 { return false; }
+    return true;
+}

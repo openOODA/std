@@ -1,0 +1,72 @@
+// # Information Scent Theory (Pirolli & Card)
+//
+// Logline: Users follow information scent: cues on a label predict the probability of finding target content.
+//
+// Setup: Pure Int. Scent score in [0, 100]. Probability in [0, 100]. Out-of-range returns 0. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. Scent strength: cue_match * relevance * label_clarity, normalized to 0..100.
+//   2. Scent-following probability: f(scent_strength).
+//   3. Scent threshold: probability above which user follows the cue.
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+
+fn ist_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Component scores: each in [0, 100]. Zero cue is Ok(0). Out of range is Err.
+pub fn ist_cue_match_components(cue_match: Int, relevance: Int, label_clarity: Int) -> Result[Int, String] {
+    if cue_match < 0 { return Err("ERR\tist\tdomain"); }
+    if cue_match > 100 { return Err("ERR\tist\tdomain"); }
+    if relevance < 0 { return Err("ERR\tist\tdomain"); }
+    if relevance > 100 { return Err("ERR\tist\tdomain"); }
+    if label_clarity < 0 { return Err("ERR\tist\tdomain"); }
+    if label_clarity > 100 { return Err("ERR\tist\tdomain"); }
+    let product: Int = cue_match * relevance * label_clarity;
+    return Ok(product / 10000);
+}
+
+// Scent-following probability in [0, 100]. Zero scent is Ok(0). Out of range is Err.
+pub fn ist_following_probability(scent_strength: Int) -> Result[Int, String] {
+    if scent_strength < 0 { return Err("ERR\tist\tdomain"); }
+    if scent_strength > 100 { return Err("ERR\tist\tdomain"); }
+    return Ok(scent_strength);
+}
+
+// Scent threshold witness: 1 if probability >= 50 (user likely follows).
+pub fn ist_above_threshold(probability: Int) -> Int {
+    if probability < 0 { return 0; }
+    if probability > 100 { return 0; }
+    if probability >= 50 { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for the information scent theory.
+pub fn verify_information_scent_theory() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    if ist_got(ist_cue_match_components(100, 100, 100)) != 100 { return false; }
+    if ist_got(ist_cue_match_components(50, 50, 50)) != 12 { return false; }
+    let zcue: Result[Int, String] = ist_cue_match_components(0, 100, 100);
+    if zcue.is_ok() == false { return false; }
+    if ist_got(zcue) != 0 { return false; }
+    if ist_cue_match_components(101, 50, 50).is_ok() { return false; }
+    if ist_cue_match_components(50, 0 - 1, 50).is_ok() { return false; }
+    if ist_cue_match_components(50, 50, 101).is_ok() { return false; }
+    if ist_got(ist_following_probability(50)) != 50 { return false; }
+    let zprob: Result[Int, String] = ist_following_probability(0);
+    if zprob.is_ok() == false { return false; }
+    if ist_got(zprob) != 0 { return false; }
+    if ist_got(ist_following_probability(100)) != 100 { return false; }
+    if ist_following_probability(0 - 1).is_ok() { return false; }
+    if ist_following_probability(101).is_ok() { return false; }
+    if ist_above_threshold(50) != 1 { return false; }
+    if ist_above_threshold(100) != 1 { return false; }
+    if ist_above_threshold(49) != 0 { return false; }
+    if ist_above_threshold(0) != 0 { return false; }
+    if ist_above_threshold(0 - 1) != 0 { return false; }
+    if ist_above_threshold(101) != 0 { return false; }
+    return true;
+}

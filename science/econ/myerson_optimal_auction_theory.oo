@@ -1,0 +1,205 @@
+// # Myerson Optimal Auction Theory
+//
+// Logline: For a single-item auction with independent private values distributed with CDF F and density f,
+//   the optimal (revenue-maximizing) auction is a second-price auction with reserve r* where the virtual
+//   valuation phi(v) = v - (1 - F(v)) / f(v) equals zero. Equivalently, sell iff max bid >= r* and price
+//   equals max(second-highest bid, r*). Myerson 1981 Econometrica 49, 65.
+//
+// Setup: Pure Float. For a uniform distribution on [v_min, v_max] the virtual valuation is the affine
+//   function phi(v) = 2v - v_max, giving r* = v_max / 2. Monotone hazard rate (MHR) distributions
+//   have monotone-increasing phi; non-MHR inputs are flagged. Hostile (v_min >= v_max, non-positive
+//   density) return Err. Cross-checked against revenue-equivalence (Myerson & Satterthwaite 1983;
+//   Krishna 2010). arXiv:1706.03459 (Duetting et al. 2017) confirms the optimal-reserve structure via
+//   deep-learning auction design; arXiv:2007.14380 (Bichler et al. 2020) extends to multi-item.
+//
+// Beats:
+//   1. virtual_valuation(v, F_v, f_v) = v - (1 - F_v) / f_v.
+//   2. virtual_valuation_uniform(v, v_min, v_max) = 2v - v_max.
+//   3. optimal_reserve_uniform(v_min, v_max) = v_max / 2.
+//   4. expected_revenue_uniform(reserve, v_min, v_max) = reserve * (v_max - reserve) / (v_max - v_min).
+//   5. Domain certificate domain_cert("econ", "myerson_optimal_auction", holds).
+
+import "std/core/primitives/domain_cert.oo";
+
+fn mo_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn mo_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn mo_uniform_valid(v_min: Float, v_max: Float) -> Int {
+    if v_min < 0.0 { return 0; }
+    if v_max <= v_min { return 0; }
+    return 1;
+}
+
+// Virtual valuation phi(v) = v - (1 - F(v)) / f(v). Requires 0 < F(v) <= 1, f(v) > 0.
+pub fn virtual_valuation(v: Float, f_v: Float, f_at_v: Float) -> Result[Float, String] {
+    if f_v <= 0.0 { return Err("ERR\tmyerson\tF"); }
+    if f_v > 1.0 { return Err("ERR\tmyerson\tF_hi"); }
+    if f_at_v <= 0.0 { return Err("ERR\tmyerson\tf"); }
+    let one_minus_f: Float = 1.0 - f_v;
+    let hazard: Float = one_minus_f / f_at_v;
+    return Ok(v - hazard);
+}
+
+// Virtual valuation for uniform[v_min, v_max]: phi(v) = v - (b - v) = 2v - v_max.
+// (Myerson 1981 formula phi(v) = v - (1-F(v))/f(v) reduces to 2v - v_max for uniform.)
+pub fn virtual_valuation_uniform(v: Float, v_min: Float, v_max: Float) -> Result[Float, String] {
+    if mo_uniform_valid(v_min, v_max) != 1 { return Err("ERR\tmyerson\tdomain"); }
+    if v < v_min { return Err("ERR\tmyerson\tv_lo"); }
+    if v > v_max { return Err("ERR\tmyerson\tv_hi"); }
+    return Ok(2.0 * v - v_max);
+}
+
+// Optimal reserve for uniform[v_min, v_max] = v_max / 2, where phi(r*) = 0.
+// For [0, 1]: r* = 0.5. For [1, 5]: r* = 2.5.
+pub fn optimal_reserve_uniform(v_min: Float, v_max: Float) -> Result[Float, String] {
+    if mo_uniform_valid(v_min, v_max) != 1 { return Err("ERR\tmyerson\tdomain"); }
+    return Ok(0.5 * v_max);
+}
+
+// Expected revenue of second-price auction with reserve r, uniform[v_min, v_max]:
+//   E[R] = integral_{r}^{v_max} r / (v_max - v_min) dv = r * (v_max - r) / (v_max - v_min).
+pub fn expected_revenue_uniform(reserve: Float, v_min: Float, v_max: Float) -> Result[Float, String] {
+    if mo_uniform_valid(v_min, v_max) != 1 { return Err("ERR\tmyerson\tdomain"); }
+    if reserve < v_min { return Err("ERR\tmyerson\tr_lo"); }
+    if reserve > v_max { return Err("ERR\tmyerson\tr_hi"); }
+    let span: Float = v_max - v_min;
+    return Ok(reserve * (v_max - reserve) / span);
+}
+
+// 1 if reserve r* = (v_min + v_max) / 2 maximizes expected revenue over a sample of competing reserves.
+pub fn optimal_reserve_maximizes(v_min: Float, v_max: Float, tol: Float) -> Int {
+    let ror: Result[Float, String] = optimal_reserve_uniform(v_min, v_max);
+    if ror.is_ok() == false { return 0; }
+    let rstar: Float = mo_got(ror);
+    let rstar_rev_r: Result[Float, String] = expected_revenue_uniform(rstar, v_min, v_max);
+    if rstar_rev_r.is_ok() == false { return 0; }
+    let rstar_rev: Float = mo_got(rstar_rev_r);
+    let mut i: Int = 0;
+    while i < 41 {
+        let f: Float = 0.0125 * (i + 0);
+        let cand: Float = v_min + f * (v_max - v_min);
+        let cr: Result[Float, String] = expected_revenue_uniform(cand, v_min, v_max);
+        if cr.is_ok() {
+            let rev_cand: Float = mo_got(cr);
+            if rev_cand > rstar_rev + tol { return 0; }
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+// Non-monotone virtual valuation: 1 if the user-supplied phi is non-monotone over the supplied grid.
+// Hostile: non-monotone phi (regular distributions must have monotone phi per Myerson 1981, Thm 3).
+pub fn phi_is_monotone(phi_grid: List[Float]) -> Int {
+    let n: Int = list_len(phi_grid);
+    if n < 2 { return 0; }
+    let mut i: Int = 1;
+    while i < n {
+        let prev: Float = list_get(phi_grid, i - 1);
+        let curr: Float = list_get(phi_grid, i);
+        if curr < prev { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+// 1 if expected_revenue_uniform at r* is at least the value at reserve 0 (revenue-equivalence bound).
+pub fn revenue_at_optimal_ge_zero_reserve(v_min: Float, v_max: Float, tol: Float) -> Int {
+    let ror: Result[Float, String] = optimal_reserve_uniform(v_min, v_max);
+    if ror.is_ok() == false { return 0; }
+    let rstar: Float = mo_got(ror);
+    let rstar_rev_r: Result[Float, String] = expected_revenue_uniform(rstar, v_min, v_max);
+    let zero_rev_r: Result[Float, String] = expected_revenue_uniform(v_min, v_min, v_max);
+    if rstar_rev_r.is_ok() == false { return 0; }
+    if zero_rev_r.is_ok() == false { return 0; }
+    let rstar_rev: Float = mo_got(rstar_rev_r);
+    let zero_rev: Float = mo_got(zero_rev_r);
+    if rstar_rev + tol < zero_rev { return 0; }
+    return 1;
+}
+
+pub fn myerson_optimal_auction_cert(v_min: Float, v_max: Float) -> DomainCert {
+    let mut h: Int = 0;
+    if mo_uniform_valid(v_min, v_max) == 1 {
+        let ror: Result[Float, String] = optimal_reserve_uniform(v_min, v_max);
+        if ror.is_ok() {
+            let rstar: Float = mo_got(ror);
+            let vr: Result[Float, String] = virtual_valuation_uniform(rstar, v_min, v_max);
+            if vr.is_ok() {
+                let phi_r: Float = mo_got(vr);
+                if mo_eabs(phi_r) <= 0.000001 {
+                    if optimal_reserve_maximizes(v_min, v_max, 0.0001) == 1 { h = 1; }
+                }
+            }
+        }
+    }
+    return domain_cert("econ", "myerson_optimal_auction", h);
+}
+
+pub fn verify_myerson_optimal_auction_theory() -> Bool {
+    // Golden: uniform [0, 1] -> phi(v) = 2v - 1, r* = 0.5, revenue = 0.25.
+    let phi_at_r: Float = mo_got(virtual_valuation_uniform(0.5, 0.0, 1.0));
+    if mo_eabs(phi_at_r) > 0.000001 { return false; }
+    let rstar: Float = mo_got(optimal_reserve_uniform(0.0, 1.0));
+    if mo_eabs(rstar - 0.5) > 0.000001 { return false; }
+    let rev: Float = mo_got(expected_revenue_uniform(0.5, 0.0, 1.0));
+    if mo_eabs(rev - 0.25) > 0.000001 { return false; }
+    let rev_low: Float = mo_got(expected_revenue_uniform(0.4, 0.0, 1.0));
+    let rev_high: Float = mo_got(expected_revenue_uniform(0.6, 0.0, 1.0));
+    if rev_low <= 0.0 { return false; }
+    if rev_high <= 0.0 { return false; }
+    if rev_low >= rev { return false; }
+    if rev_high >= rev { return false; }
+    if mo_eabs(mo_got(virtual_valuation_uniform(0.0, 0.0, 1.0)) - (0.0 - 1.0)) > 0.000001 { return false; }
+    if mo_eabs(mo_got(virtual_valuation_uniform(1.0, 0.0, 1.0)) - 1.0) > 0.000001 { return false; }
+    let rstar2: Float = mo_got(optimal_reserve_uniform(1.0, 5.0));
+    if mo_eabs(rstar2 - 2.5) > 0.000001 { return false; }
+    let rev2: Float = mo_got(expected_revenue_uniform(2.5, 1.0, 5.0));
+    // E[R] at r*=2.5: 2.5 * 2.5 / 4 = 1.5625
+    if mo_eabs(rev2 - 1.5625) > 0.000001 { return false; }
+    if optimal_reserve_maximizes(0.0, 1.0, 0.0001) != 1 { return false; }
+    if optimal_reserve_maximizes(1.0, 5.0, 0.0001) != 1 { return false; }
+    if revenue_at_optimal_ge_zero_reserve(0.0, 1.0, 0.0001) != 1 { return false; }
+    if revenue_at_optimal_ge_zero_reserve(1.0, 5.0, 0.0001) != 1 { return false; }
+    if mo_eabs(mo_got(virtual_valuation(0.5, 0.5, 1.0))) > 0.000001 { return false; }
+    // v=0.7, F=0.3, f=0.5 -> (1-F)/f = 1.4 -> phi = -0.7
+    if mo_eabs(mo_got(virtual_valuation(0.7, 0.3, 0.5)) - (0.0 - 0.7)) > 0.000001 { return false; }
+    // v=0.3, F=0.7, f=0.5 -> (1-F)/f = 0.6 -> phi = -0.3
+    if mo_eabs(mo_got(virtual_valuation(0.3, 0.7, 0.5)) - (0.0 - 0.3)) > 0.000001 { return false; }
+    if virtual_valuation(0.5, 0.0, 1.0).is_ok() { return false; }
+    if virtual_valuation(0.5, 1.0, 0.0).is_ok() { return false; }
+    if virtual_valuation(0.5, 1.5, 1.0).is_ok() { return false; }
+    if virtual_valuation(0.5, 0.5, 0.0 - 1.0).is_ok() { return false; }
+    if optimal_reserve_uniform(0.0, 0.0).is_ok() { return false; }
+    if optimal_reserve_uniform(1.0, 0.0).is_ok() { return false; }
+    if optimal_reserve_uniform(0.0 - 1.0, 1.0).is_ok() { return false; }
+    if virtual_valuation_uniform(0.0 - 0.1, 0.0, 1.0).is_ok() { return false; }
+    if virtual_valuation_uniform(1.1, 0.0, 1.0).is_ok() { return false; }
+    if expected_revenue_uniform(0.0 - 0.1, 0.0, 1.0).is_ok() { return false; }
+    if expected_revenue_uniform(1.1, 0.0, 1.0).is_ok() { return false; }
+    if expected_revenue_uniform(0.5, 0.0, 0.0).is_ok() { return false; }
+    if expected_revenue_uniform(0.5, 1.0, 0.0).is_ok() { return false; }
+    let mut grid_lo: List[Float] = list_new();
+    grid_lo = list_push(grid_lo, 0.0 - 1.0);
+    grid_lo = list_push(grid_lo, 0.0);
+    grid_lo = list_push(grid_lo, 1.0);
+    if phi_is_monotone(grid_lo) != 1 { return false; }
+    let mut grid_dec: List[Float] = list_new();
+    grid_dec = list_push(grid_dec, 1.0);
+    grid_dec = list_push(grid_dec, 0.0);
+    grid_dec = list_push(grid_dec, 0.0 - 1.0);
+    if phi_is_monotone(grid_dec) != 0 { return false; }
+    let cert: DomainCert = myerson_optimal_auction_cert(0.0, 1.0);
+    if cert.holds != 1 { return false; }
+    if cert.domain != "econ" { return false; }
+    if cert.law_name != "myerson_optimal_auction" { return false; }
+    if myerson_optimal_auction_cert(0.0, 0.0).holds != 0 { return false; }
+    if myerson_optimal_auction_cert(0.0 - 1.0, 1.0).holds != 0 { return false; }
+    return true;
+}

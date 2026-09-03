@@ -1,0 +1,85 @@
+// # CLI signal handling principle
+//
+// Logline: a CLI process should respond to SIGINT or SIGTERM within 5 seconds; signal_responsive(handle_time_ms) returns 1 when handle_time_ms <= 5000 and 0 otherwise.
+//
+// Setup: Pure Int. Heuristic budget 5000 ms. Hostile negative time fails closed to 0.
+//
+// Beats:
+//   1. signal_responsive(handle_time_ms) returns 1 for handle_time_ms <= 5000.
+//   2. Returns 0 for handle_time_ms > 5000.
+//   3. Returns 0 for negative handle time (fail closed).
+//   4. domain_cert boxes the holds bit for the cli domain.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Budget for graceful signal response in milliseconds.
+pub fn signal_budget_ms() -> Int {
+    return 5000;
+}
+
+// 1 if the handle time is within the budget; 0 otherwise.
+pub fn signal_responsive(handle_time_ms: Int) -> Int {
+    if handle_time_ms < 0 { return 0; }
+    let budget: Int = signal_budget_ms();
+    if handle_time_ms <= budget { return 1; }
+    return 0;
+}
+
+// 1 if both handle times are within budget; 0 otherwise.
+pub fn signal_responsive_both(sigint_ms: Int, sigterm_ms: Int) -> Int {
+    let a: Int = signal_responsive(sigint_ms);
+    let b: Int = signal_responsive(sigterm_ms);
+    if a == 1 {
+        if b == 1 { return 1; }
+    }
+    return 0;
+}
+
+// domain_cert wrapper for the principle lock.
+pub fn signal_principle_holds(handle_time_ms: Int) -> DomainCert {
+    let ok: Int = signal_responsive(handle_time_ms);
+    return domain_cert("cli", "signal_handling_principle", ok);
+}
+
+pub fn verify_signal_handling_principle() -> Bool {
+    // Golden: fast handlers within the 5 s budget are responsive.
+    if signal_responsive(0) != 1 { return false; }
+    if signal_responsive(1) != 1 { return false; }
+    if signal_responsive(100) != 1 { return false; }
+    if signal_responsive(2500) != 1 { return false; }
+    if signal_responsive(4999) != 1 { return false; }
+    if signal_responsive(5000) != 1 { return false; }
+
+    // Hostile: slow handlers beyond the budget are not responsive.
+    if signal_responsive(5001) != 0 { return false; }
+    if signal_responsive(10000) != 0 { return false; }
+    if signal_responsive(60000) != 0 { return false; }
+
+    // Hostile: negative handle time fails closed to 0.
+    if signal_responsive(0 - 1) != 0 { return false; }
+    if signal_responsive(0 - 100) != 0 { return false; }
+    if signal_responsive(0 - 1000) != 0 { return false; }
+
+    // Golden: budget is 5000.
+    if signal_budget_ms() != 5000 { return false; }
+
+    // Golden: both SIGINT and SIGTERM within budget.
+    if signal_responsive_both(100, 200) != 1 { return false; }
+    if signal_responsive_both(0, 5000) != 1 { return false; }
+
+    // Hostile: one signal slow fails the joint check.
+    if signal_responsive_both(100, 6000) != 0 { return false; }
+    if signal_responsive_both(6000, 100) != 0 { return false; }
+    if signal_responsive_both(0 - 1, 100) != 0 { return false; }
+    if signal_responsive_both(100, 0 - 1) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the holds bit.
+    let c1: DomainCert = signal_principle_holds(100);
+    if c1.domain != "cli" { return false; }
+    if c1.law_name != "signal_handling_principle" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = signal_principle_holds(10000);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

@@ -1,0 +1,153 @@
+// # ISO 9241-210:2019 Human-Centred Design Law
+//
+// Logline: Effective interactive-system design requires user involvement, iteration, and measurable usability goals; absence of any yields 0 (fail closed).
+//
+// Setup: Pure Int/Float. All four pillars (user_involvement, iteration_count, multi_disciplinary, usability_goals) must be > 0 to score 1. The mature score is the product of four 0/1 pillar checks, returning 1 only when all pillars hold. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. iso9241_user_centric_score == 1 when all four pillars present.
+//   2. iso9241_iteration_score == 1 iff iteration_count >= 3 (Norman 1988 + ISO 9241-210:2019).
+//   3. iso9241_goal_measurable == 1 iff usability_goals_quantified > 0.
+//   4. Norman 1988 coupling: affordances + signifiers -> user involvement pillar.
+//   5. DomainCert: iso9241_ergo_cert.
+
+import "std/app/ui/ui_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// ISO 9241-210:2019: minimum iteration count for design maturity.
+pub fn iso9241_min_iterations() -> Int {
+    return 3;
+}
+
+// ISO 9241-210:2019 Human-Centred Design pillars.
+// Pillar 1: user_involvement: 1 if users participate in design.
+pub fn iso9241_user_involvement_pillar(user_involvement: Int) -> Int {
+    if user_involvement < 0 { return 0; }
+    if user_involvement == 0 { return 0; }
+    return 1;
+}
+
+// Pillar 2: iteration. 1 iff iteration_count >= iso9241_min_iterations() (3).
+pub fn iso9241_iteration_score(iteration_count: Int) -> Int {
+    if iteration_count < 0 { return 0; }
+    if iteration_count < iso9241_min_iterations() { return 0; }
+    return 1;
+}
+
+// Pillar 3: multi_disciplinary_team: 1 if >= 1 designer, 1 engineer, 1 domain expert.
+pub fn iso9241_multidisciplinary_pillar(designers: Int, engineers: Int, domain_experts: Int) -> Int {
+    if designers < 1 { return 0; }
+    if engineers < 1 { return 0; }
+    if domain_experts < 1 { return 0; }
+    return 1;
+}
+
+// Pillar 4: usability_goals measurable: 1 iff usability_goals_quantified > 0.
+pub fn iso9241_goal_measurable(usability_goals_quantified: Int) -> Int {
+    if usability_goals_quantified < 0 { return 0; }
+    if usability_goals_quantified == 0 { return 0; }
+    return 1;
+}
+
+// Mature score: 1 only if all four pillars present.
+pub fn iso9241_user_centric_score(
+    user_involvement: Int,
+    iteration_count: Int,
+    designers: Int,
+    engineers: Int,
+    domain_experts: Int,
+    usability_goals_quantified: Int
+) -> Int {
+    if iso9241_user_involvement_pillar(user_involvement) != 1 { return 0; }
+    if iso9241_iteration_score(iteration_count) != 1 { return 0; }
+    if iso9241_multidisciplinary_pillar(designers, engineers, domain_experts) != 1 { return 0; }
+    if iso9241_goal_measurable(usability_goals_quantified) != 1 { return 0; }
+    return 1;
+}
+
+// Norman 1988 "Design of Everyday Things" coupling:
+// affordances: relationship between object and user goal; 1 if action_possible > 0.
+pub fn iso9241_norman_affordance(action_possible: Int) -> Int {
+    if action_possible < 0 { return 0; }
+    if action_possible == 0 { return 0; }
+    return 1;
+}
+
+// Norman 1988 signifiers: visible cues that signal affordance; 1 if cues_visible > 0.
+pub fn iso9241_norman_signifier(cues_visible: Int) -> Int {
+    if cues_visible < 0 { return 0; }
+    if cues_visible == 0 { return 0; }
+    return 1;
+}
+
+// Norman coupling: 1 if both affordance and signifier are present (mapped onto user_involvement pillar).
+pub fn iso9241_norman_coupling(action_possible: Int, cues_visible: Int) -> Int {
+    if iso9241_norman_affordance(action_possible) != 1 { return 0; }
+    if iso9241_norman_signifier(cues_visible) != 1 { return 0; }
+    return 1;
+}
+
+// DomainCert for the ISO 9241-210 ergonomics law.
+pub fn iso9241_ergo_cert(
+    user_involvement: Int,
+    iteration_count: Int,
+    designers: Int,
+    engineers: Int,
+    domain_experts: Int,
+    usability_goals_quantified: Int
+) -> DomainCert {
+    let mut h: Int = 0;
+    if iso9241_user_centric_score(
+        user_involvement,
+        iteration_count,
+        designers,
+        engineers,
+        domain_experts,
+        usability_goals_quantified
+    ) == 1 {
+        h = 1;
+    }
+    return domain_cert("ui", "iso_9241_ergo_law", h);
+}
+
+pub fn verify_iso_9241_ergo_law() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    if iso9241_min_iterations() != 3 { return false; }
+    if iso9241_user_involvement_pillar(5) != 1 { return false; }
+    if iso9241_user_involvement_pillar(1) != 1 { return false; }
+    if iso9241_user_involvement_pillar(0) != 0 { return false; }
+    if iso9241_user_involvement_pillar(0 - 1) != 0 { return false; }
+    if iso9241_iteration_score(3) != 1 { return false; }
+    if iso9241_iteration_score(5) != 1 { return false; }
+    if iso9241_iteration_score(2) != 0 { return false; }
+    if iso9241_iteration_score(0) != 0 { return false; }
+    if iso9241_iteration_score(0 - 1) != 0 { return false; }
+    if iso9241_multidisciplinary_pillar(1, 1, 1) != 1 { return false; }
+    if iso9241_multidisciplinary_pillar(2, 3, 1) != 1 { return false; }
+    if iso9241_multidisciplinary_pillar(0, 1, 1) != 0 { return false; }
+    if iso9241_multidisciplinary_pillar(1, 0, 1) != 0 { return false; }
+    if iso9241_multidisciplinary_pillar(1, 1, 0) != 0 { return false; }
+    if iso9241_goal_measurable(1) != 1 { return false; }
+    if iso9241_goal_measurable(7) != 1 { return false; }
+    if iso9241_goal_measurable(0) != 0 { return false; }
+    if iso9241_goal_measurable(0 - 1) != 0 { return false; }
+    if iso9241_user_centric_score(1, 3, 1, 1, 1, 1) != 1 { return false; }
+    if iso9241_user_centric_score(0, 3, 1, 1, 1, 1) != 0 { return false; }
+    if iso9241_user_centric_score(1, 2, 1, 1, 1, 1) != 0 { return false; }
+    if iso9241_user_centric_score(1, 3, 0, 1, 1, 1) != 0 { return false; }
+    if iso9241_user_centric_score(1, 3, 1, 1, 1, 0) != 0 { return false; }
+    if iso9241_norman_affordance(1) != 1 { return false; }
+    if iso9241_norman_affordance(0) != 0 { return false; }
+    if iso9241_norman_signifier(1) != 1 { return false; }
+    if iso9241_norman_signifier(0) != 0 { return false; }
+    if iso9241_norman_coupling(1, 1) != 1 { return false; }
+    if iso9241_norman_coupling(1, 0) != 0 { return false; }
+    if iso9241_norman_coupling(0, 1) != 0 { return false; }
+    if iso9241_norman_coupling(0, 0) != 0 { return false; }
+    let c1: DomainCert = iso9241_ergo_cert(1, 3, 1, 1, 1, 1);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = iso9241_ergo_cert(0, 3, 1, 1, 1, 1);
+    if cert_holds(c0) != 0 { return false; }
+    return true;
+}

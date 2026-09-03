@@ -1,0 +1,155 @@
+// # Functor composition law
+//
+// Logline: for a list functor, map(f ∘ g) equals map(f) ∘ map(g) element-wise; identity is preserved and empty lists return empty.
+//
+// Setup: Pure Int. Functions encoded by id: 0 = add_one (x+1), 1 = double (x*2), 2 = triple (x*3), 3 = identity. The "list" is a List[Int] produced by list_new/list_push. Equality is exact Int equality, well within 0.001% tolerance.
+//
+// Beats:
+//   1. apply_fn(fn_id, x) applies the function to a single element.
+//   2. functor_compose_law(f, g, xs) returns 1 if map(f∘g)(xs) == map(f)(map(g)(xs)) element-wise.
+//   3. Empty list: both sides are empty and equal (return 1).
+//   4. Coupled: with g = identity, map(f∘id) == map(f) holds (map(id) = id).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Function ids: 0 = add_one, 1 = double, 2 = triple, 3 = identity.
+pub fn apply_fn(fn_id: Int, x: Int) -> Int {
+    if fn_id == 0 { return x + 1; }
+    if fn_id == 1 { return x * 2; }
+    if fn_id == 2 { return x * 3; }
+    if fn_id == 3 { return x; }
+    return x;
+}
+
+// 1 if fn_id is a known function id 0..3.
+pub fn is_fn_known(fn_id: Int) -> Int {
+    if fn_id < 0 { return 0; }
+    if fn_id > 3 { return 0; }
+    return 1;
+}
+
+// 1 if two lists are element-wise equal; 0 otherwise.
+pub fn list_eq_int(a: List[Int], b: List[Int]) -> Int {
+    let na: Int = list_len(a);
+    let nb: Int = list_len(b);
+    if na != nb { return 0; }
+    if na == 0 { return 1; }
+    let mut i: Int = 0;
+    let mut eq: Int = 1;
+    while i < na {
+        if list_get(a, i) != list_get(b, i) { eq = 0; }
+        i = i + 1;
+    }
+    return eq;
+}
+
+// 1 if map(f∘g)(xs) == map(f)(map(g)(xs)) element-wise.
+// Hostile: unknown function id returns 0.
+pub fn functor_compose_law(f: Int, g: Int, xs: List[Int]) -> Int {
+    if is_fn_known(f) == 0 { return 0; }
+    if is_fn_known(g) == 0 { return 0; }
+    let n: Int = list_len(xs);
+    if n == 0 { return 1; }
+    let mut i: Int = 0;
+    let mut lhs: List[Int] = list_new();
+    let mut rhs: List[Int] = list_new();
+    while i < n {
+        let x: Int = list_get(xs, i);
+        let yg: Int = apply_fn(g, x);
+        let lhs_x: Int = apply_fn(f, yg);
+        let rhs_x: Int = apply_fn(f, yg);
+        lhs = list_push(lhs, lhs_x);
+        rhs = list_push(rhs, rhs_x);
+        i = i + 1;
+    }
+    return list_eq_int(lhs, rhs);
+}
+
+// 1 if map(id)(xs) == xs element-wise.
+pub fn identity_preserved(xs: List[Int]) -> Int {
+    let n: Int = list_len(xs);
+    if n == 0 { return 1; }
+    let mut i: Int = 0;
+    let mut out: List[Int] = list_new();
+    while i < n {
+        out = list_push(out, apply_fn(3, list_get(xs, i)));
+        i = i + 1;
+    }
+    return list_eq_int(out, xs);
+}
+
+// domain_cert wrapper for the functor composition law lock.
+pub fn functor_law_holds(f: Int, g: Int, xs: List[Int]) -> DomainCert {
+    let v: Int = functor_compose_law(f, g, xs);
+    return domain_cert("core", "functor_composition_law", v);
+}
+
+pub fn verify_functor_composition_law() -> Bool {
+    // Golden: apply_fn is the documented function.
+    if apply_fn(0, 5) != 6 { return false; }
+    if apply_fn(1, 5) != 10 { return false; }
+    if apply_fn(2, 5) != 15 { return false; }
+    if apply_fn(3, 5) != 5 { return false; }
+    if apply_fn(0, 0) != 1 { return false; }
+    if apply_fn(1, 0) != 0 { return false; }
+    if apply_fn(2, 0) != 0 { return false; }
+    if apply_fn(3, 0) != 0 { return false; }
+
+    // Golden: is_fn_known accepts 0..3 and rejects the rest.
+    if is_fn_known(0) != 1 { return false; }
+    if is_fn_known(3) != 1 { return false; }
+    if is_fn_known(4) != 0 { return false; }
+    if is_fn_known(0 - 1) != 0 { return false; }
+
+    // Golden: map(double∘add_one)(xs) == map(double)(map(add_one)(xs)).
+    let xs1: List[Int] = list_new();
+    let xs2: List[Int] = list_push(xs1, 1);
+    let xs3: List[Int] = list_push(xs2, 2);
+    let xs4: List[Int] = list_push(xs3, 3);
+    if functor_compose_law(1, 0, xs4) != 1 { return false; }
+
+    // Golden: map(triple∘double) == map(triple)∘map(double).
+    if functor_compose_law(2, 1, xs4) != 1 { return false; }
+    let xs5: List[Int] = list_new();
+    let xs6: List[Int] = list_push(xs5, 7);
+    if functor_compose_law(1, 0, xs6) != 1 { return false; }
+
+    // Golden: with negative inputs the law still holds.
+    let ny: List[Int] = list_new();
+    let ny2: List[Int] = list_push(ny, 0 - 5);
+    let ny3: List[Int] = list_push(ny2, 0);
+    let ny4: List[Int] = list_push(ny3, 10);
+    if functor_compose_law(1, 0, ny4) != 1 { return false; }
+    if functor_compose_law(2, 3, ny4) != 1 { return false; }
+
+    // Hostile: empty lists return empty on both sides and the law holds.
+    let empty: List[Int] = list_new();
+    if functor_compose_law(1, 0, empty) != 1 { return false; }
+    if functor_compose_law(2, 1, empty) != 1 { return false; }
+
+    // Hostile: unknown function ids fail closed.
+    if functor_compose_law(4, 0, xs4) != 0 { return false; }
+    if functor_compose_law(1, 4, xs4) != 0 { return false; }
+    if functor_compose_law(0 - 1, 0, xs4) != 0 { return false; }
+    if functor_compose_law(1, 0 - 1, xs4) != 0 { return false; }
+
+    // Coupled: with identity, map(f∘id)(xs) == map(f)(xs) (map(id) = id).
+    if functor_compose_law(1, 3, xs4) != 1 { return false; }
+    if functor_compose_law(2, 3, xs4) != 1 { return false; }
+    if functor_compose_law(0, 3, xs4) != 1 { return false; }
+
+    // Coupled: identity_preserved holds for a non-empty list.
+    if identity_preserved(xs4) != 1 { return false; }
+    if identity_preserved(ny4) != 1 { return false; }
+    if identity_preserved(empty) != 1 { return false; }
+
+    // Coupled: domain_cert boxes the value.
+    let c1: DomainCert = functor_law_holds(1, 0, xs4);
+    if c1.domain != "core" { return false; }
+    if c1.law_name != "functor_composition_law" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = functor_law_holds(4, 0, xs4);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

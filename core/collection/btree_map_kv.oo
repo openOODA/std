@@ -1,0 +1,252 @@
+// # B-Tree Map of Int Keys and Int Values
+//
+// Logline: Generic B-Tree associative map for Int keys and Int values with split-on-overflow child rebalancing and configurable node degree.
+//
+// Setup: Pure ordered associative map. Each node holds up to 2*degree-1 key-value pairs and 2*degree child pointers. Default degree is 32 for cache-friendly fanout. Leaves have zero children.
+//
+// Beats:
+//   1. Build a B-tree with a chosen degree and node-offset parallel arrays.
+//   2. Insert a key-value pair with leaf traversal and child split on overflow.
+//   3. Lookup a key, query minimum and maximum keys, report length and height.
+//   4. Walk the tree in key order returning a flat alternating key, value list.
+//   5. Remove a key by leaf rebalancing and report size changes.
+
+import "std/core/primitives/result.oo";
+
+type BTree = struct {
+    keys: List[Int],
+    values: List[Int],
+    k_off: List[Int],
+    k_len: List[Int],
+    c_off: List[Int],
+    c_len: List[Int],
+    children: List[Int],
+    n_nodes: Int,
+    root: Int,
+    size: Int,
+    degree: Int,
+    max_keys: Int
+};
+
+pub fn bt_new(degree: Int) -> BTree {
+    let mut d: Int = degree;
+    if d < 2 { d = 2; }
+    return BTree {
+        keys: list_new(), values: list_new(), k_off: list_new(),
+        k_len: list_new(), c_off: list_new(), c_len: list_new(),
+        children: list_new(),
+        n_nodes: 0, root: 0, size: 0, degree: d, max_keys: 2 * d - 1
+    };
+}
+fn bt_add_node(t: BTree, c0: Int) -> BTree {
+    let mut w: BTree = t;
+    w.k_off = list_push(w.k_off, list_len(w.keys));
+    w.k_len = list_push(w.k_len, 0);
+    w.c_off = list_push(w.c_off, list_len(w.children));
+    w.c_len = list_push(w.c_len, c0);
+    w.n_nodes = w.n_nodes + 1;
+    return w;
+}
+fn bt_is_leaf(t: BTree, n: Int) -> Int { return 0 - list_get(t.c_len, n); }
+fn bt_ke(t: BTree, n: Int, i: Int) -> Int { return list_get(t.keys, list_get(t.k_off, n) + i); }
+fn bt_ve(t: BTree, n: Int, i: Int) -> Int { return list_get(t.values, list_get(t.k_off, n) + i); }
+fn bt_ch(t: BTree, n: Int, i: Int) -> Int { return list_get(t.children, list_get(t.c_off, n) + i); }
+fn bt_skv(t: BTree, n: Int, i: Int, k: Int, v: Int) -> BTree { let o: Int = list_get(t.k_off, n); return BTree { keys: list_set(t.keys, o + i, k), values: list_set(t.values, o + i, v), k_off: t.k_off, k_len: t.k_len, c_off: t.c_off, c_len: t.c_len, children: t.children, n_nodes: t.n_nodes, root: t.root, size: t.size, degree: t.degree, max_keys: t.max_keys }; }
+fn bt_sch(t: BTree, n: Int, i: Int, v: Int) -> BTree { return BTree { keys: t.keys, values: t.values, k_off: t.k_off, k_len: t.k_len, c_off: t.c_off, c_len: t.c_len, children: list_set(t.children, list_get(t.c_off, n) + i, v), n_nodes: t.n_nodes, root: t.root, size: t.size, degree: t.degree, max_keys: t.max_keys }; }
+fn bt_skl(t: BTree, n: Int, v: Int) -> BTree { return BTree { keys: t.keys, values: t.values, k_off: t.k_off, k_len: list_set(t.k_len, n, v), c_off: t.c_off, c_len: t.c_len, children: t.children, n_nodes: t.n_nodes, root: t.root, size: t.size, degree: t.degree, max_keys: t.max_keys }; }
+fn bt_scl(t: BTree, n: Int, v: Int) -> BTree { return BTree { keys: t.keys, values: t.values, k_off: t.k_off, k_len: t.k_len, c_off: t.c_off, c_len: list_set(t.c_len, n, v), children: t.children, n_nodes: t.n_nodes, root: t.root, size: t.size, degree: t.degree, max_keys: t.max_keys }; }
+pub fn bt_len(t: BTree) -> Int { return t.size; }
+pub fn bt_contains(t: BTree, k: Int) -> Bool { return bt_get(t, k).is_ok(); }
+pub fn bt_get(t: BTree, k: Int) -> Result[Int, String] { return bt_get_node(t, t.root, k); }
+fn bt_get_node(t: BTree, node: Int, k: Int) -> Result[Int, String] {
+    let nk: Int = list_get(t.k_len, node);
+    let mut lo: Int = 0;
+    let mut hi: Int = nk;
+    while lo < hi {
+        let mid: Int = (lo + hi) / 2;
+        let mk: Int = bt_ke(t, node, mid);
+        if mk == k { return Ok(bt_ve(t, node, mid)); }
+        if mk < k { lo = mid + 1; } else { hi = mid; }
+    }
+    if bt_is_leaf(t, node) == 1 { return Err("ERR\tbt_get\tkey_not_found"); }
+    return bt_get_node(t, bt_ch(t, node, lo), k);
+}
+pub fn bt_min(t: BTree) -> Result[Int, String] {
+    if t.size == 0 { return Err("ERR\tbt_min\tempty"); }
+    let mut node: Int = t.root;
+    while bt_is_leaf(t, node) == 0 { node = bt_ch(t, node, 0); }
+    return Ok(bt_ke(t, node, 0));
+}
+pub fn bt_max(t: BTree) -> Result[Int, String] {
+    if t.size == 0 { return Err("ERR\tbt_max\tempty"); }
+    let mut node: Int = t.root;
+    while bt_is_leaf(t, node) == 0 { node = bt_ch(t, node, list_get(t.c_len, node) - 1); }
+    return Ok(bt_ke(t, node, list_get(t.k_len, node) - 1));
+}
+pub fn bt_height(t: BTree) -> Int {
+    if t.n_nodes == 0 { return 0; }
+    let mut h: Int = 1;
+    let mut node: Int = t.root;
+    while bt_is_leaf(t, node) == 0 { node = bt_ch(t, node, 0); h = h + 1; }
+    return h;
+}
+pub fn bt_walk_inorder(t: BTree) -> List[Int] {
+    if t.n_nodes == 0 { return list_new(); }
+    return bt_walk_node(t, t.root, list_new());
+}
+pub fn bt_to_list(t: BTree) -> List[Int] { return bt_walk_inorder(t); }
+fn bt_walk_node(t: BTree, node: Int, acc: List[Int]) -> List[Int] {
+    let nk: Int = list_get(t.k_len, node);
+    let leaf: Int = bt_is_leaf(t, node);
+    let mut out: List[Int] = acc;
+    let mut i: Int = 0;
+    while i < nk {
+        if leaf == 0 { out = bt_walk_node(t, bt_ch(t, node, i), out); }
+        out = list_push(out, bt_ke(t, node, i));
+        out = list_push(out, bt_ve(t, node, i));
+        i = i + 1;
+    }
+    if leaf == 0 { out = bt_walk_node(t, bt_ch(t, node, nk), out); }
+    return out;
+}
+pub fn bt_insert(t: BTree, k: Int, v: Int) -> BTree {
+    let mut w: BTree = t;
+    if w.n_nodes == 0 { w = bt_add_node(w, 0); w.root = 0; }
+    if list_get(w.k_len, w.root) >= w.max_keys {
+        w = bt_add_node(w, 1);
+        let nr: Int = w.n_nodes - 1;
+        w = bt_sch(w, nr, 0, w.root);
+        w = bt_scl(w, nr, 1);
+        w.root = nr;
+        w = bt_split_child(w, nr, 0);
+    }
+    return bt_insert_nonfull(w, w.root, k, v);
+}
+fn bt_split_child(t: BTree, parent: Int, idx: Int) -> BTree {
+    let mut w: BTree = t;
+    let child: Int = bt_ch(w, parent, idx);
+    let cnk: Int = list_get(w.k_len, child);
+    let mid: Int = cnk / 2;
+    let leaf: Int = bt_is_leaf(w, child);
+    w = bt_add_node(w, leaf);
+    let nx: Int = w.n_nodes - 1;
+    let mut i: Int = 0;
+    let mut j: Int = mid + 1;
+    while i < mid {
+        w = bt_skv(w, nx, i, bt_ke(w, child, j), bt_ve(w, child, j));
+        if leaf == 0 { w = bt_sch(w, nx, i, bt_ch(w, child, j)); }
+        i = i + 1; j = j + 1;
+    }
+    if leaf == 0 {
+        w = bt_sch(w, nx, mid, bt_ch(w, child, cnk));
+        w = bt_scl(w, nx, mid + 1);
+    }
+    w = bt_skl(w, nx, mid);
+    if leaf == 0 { w = bt_scl(w, child, cnk - mid); }
+    w = bt_skl(w, child, mid);
+    let pnk: Int = list_get(w.k_len, parent);
+    let mut ii: Int = pnk;
+    while ii > idx {
+        w = bt_skv(w, parent, ii, bt_ke(w, parent, ii - 1), bt_ve(w, parent, ii - 1));
+        w = bt_sch(w, parent, ii + 1, bt_ch(w, parent, ii));
+        ii = ii - 1;
+    }
+    w = bt_skv(w, parent, idx, bt_ke(w, child, mid), bt_ve(w, child, mid));
+    w = bt_sch(w, parent, idx + 1, nx);
+    w = bt_skl(w, parent, pnk + 1);
+    w = bt_scl(w, parent, list_get(w.c_len, parent) + 1);
+    return w;
+}
+fn bt_insert_nonfull(t: BTree, node: Int, k: Int, v: Int) -> BTree {
+    let mut w: BTree = t;
+    let mk: Int = w.max_keys;
+    let nk: Int = list_get(w.k_len, node);
+    let mut lo: Int = 0;
+    let mut hi: Int = nk;
+    while lo < hi {
+        let mid: Int = (lo + hi) / 2;
+        let mkv: Int = bt_ke(w, node, mid);
+        if mkv == k { w = bt_skv(w, node, mid, k, v); return w; }
+        if mkv < k { lo = mid + 1; } else { hi = mid; }
+    }
+    let i: Int = lo;
+    if bt_is_leaf(w, node) == 1 {
+        let mut j: Int = nk;
+        while j > i {
+            w = bt_skv(w, node, j, bt_ke(w, node, j - 1), bt_ve(w, node, j - 1));
+            j = j - 1;
+        }
+        w = bt_skv(w, node, i, k, v);
+        w = bt_skl(w, node, nk + 1);
+        w.size = w.size + 1;
+        return w;
+    }
+    let child: Int = bt_ch(w, node, i);
+    if list_get(w.k_len, child) >= mk {
+        w = bt_split_child(w, node, i);
+        let pk: Int = bt_ke(w, node, i);
+        if k > pk { return bt_insert_nonfull(w, bt_ch(w, node, i + 1), k, v); }
+        if k == pk { w = bt_skv(w, node, i, k, v); return w; }
+    }
+    return bt_insert_nonfull(w, bt_ch(w, node, i), k, v);
+}
+pub fn bt_remove(t: BTree, k: Int) -> BTree {
+    if t.n_nodes == 0 { return t; }
+    if bt_contains(t, k) == false { return t; }
+    let mut w: BTree = bt_remove_node(t, t.root, k);
+    let rn: Int = list_get(w.k_len, w.root);
+    if rn == 0 && w.n_nodes > 1 && bt_is_leaf(w, w.root) == 0 {
+        w.root = bt_ch(w, w.root, 0);
+    }
+    w.size = w.size - 1;
+    return w;
+}
+fn bt_remove_node(t: BTree, node: Int, k: Int) -> BTree {
+    let mut w: BTree = t;
+    let nk: Int = list_get(w.k_len, node);
+    let mut i: Int = 0;
+    while i < nk {
+        if bt_ke(w, node, i) == k {
+            if bt_is_leaf(w, node) == 1 { return bt_remove_from_leaf(w, node, i); }
+            return bt_remove_from_internal(w, node, i);
+        }
+        i = i + 1;
+    }
+    if bt_is_leaf(w, node) == 1 { return w; }
+    let mut idx: Int = nk;
+    i = 0;
+    while i < nk {
+        if bt_ke(w, node, i) < k { idx = i + 1; }
+        i = i + 1;
+    }
+    return bt_remove_node(w, bt_ch(w, node, idx), k);
+}
+fn bt_remove_from_leaf(t: BTree, node: Int, idx: Int) -> BTree {
+    let mut w: BTree = t;
+    let nk: Int = list_get(w.k_len, node);
+    let mut i: Int = idx;
+    while i < nk - 1 {
+        w = bt_skv(w, node, i, bt_ke(w, node, i + 1), bt_ve(w, node, i + 1));
+        i = i + 1;
+    }
+    w = bt_skl(w, node, nk - 1);
+    return w;
+}
+fn bt_remove_from_internal(t: BTree, node: Int, idx: Int) -> BTree {
+    let mut w: BTree = t;
+    let d: Int = w.degree;
+    let left: Int = bt_ch(w, node, idx);
+    let right: Int = bt_ch(w, node, idx + 1);
+    if list_get(w.k_len, left) >= d {
+        let lnk: Int = list_get(w.k_len, left);
+        let pk: Int = bt_ke(w, left, lnk - 1);
+        w = bt_skv(w, node, idx, pk, bt_ve(w, left, lnk - 1));
+        return bt_remove_node(w, left, pk);
+    }
+    if list_get(w.k_len, right) >= d {
+        let sk: Int = bt_ke(w, right, 0);
+        w = bt_skv(w, node, idx, sk, bt_ve(w, right, 0));
+        return bt_remove_node(w, right, sk);
+    }
+    return w;
+}

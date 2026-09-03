@@ -1,0 +1,49 @@
+// # Hash determinism law
+//
+// Logline: Empty-string hashes are equal; distinct short literals do not hash equal.
+//
+// Setup: Pure tiny djb2 over String bytes. Hash lives in this product module.
+//
+// Beats:
+//   1. hash_djb2 mixes length and each byte from 5381 with *33.
+//   2. hash_eq_empty holds=1: two hashes of "" are equal.
+//   3. hash_eq_claim("a","b") holds=0: different short literals do not collide.
+//
+// residual: not a cryptographic hash; 32-bit mix only
+
+import "std/core/primitives/domain_cert.oo";
+pub fn hash_djb2(s: String) -> Int {
+    let n: Int = s.len();
+    let mut h: Int = 5381;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        h = (h * 33) + b;
+        i = i + 1;
+    }
+    return h;
+}
+
+pub fn hash_eq_empty() -> Int {
+    let a: Int = hash_djb2("");
+    let b: Int = hash_djb2("");
+    if a == b {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn hash_eq_claim(left: String, right: String) -> Int {
+    if hash_djb2(left) == hash_djb2(right) {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn hash_empty_law() -> DomainCert {
+    return domain_cert("hash", "eq_empty", hash_eq_empty());
+}
+
+pub fn hash_ab_law() -> DomainCert {
+    return domain_cert("hash", "eq_ab", hash_eq_claim("a", "b"));
+}

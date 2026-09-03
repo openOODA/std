@@ -1,0 +1,118 @@
+// # Unix Domain Socket Transport
+//
+// Logline: Capability-gated bind, accept, read, write, close for AF_UNIX streams under BindCap+FsCap.
+//
+// Setup: Builtins (unix_bind, unix_accept, unix_read, unix_write, unix_close) are exposed by the runtime; this file is the sovereign .oo facade.
+//
+// Beats:
+//   1. Bind a listening Unix socket under BindCap+FsWriteCap.
+//   2. Accept one client connection.
+//   3. Read a request and write a response under FsCap.
+//   4. Close the listener and connection deterministically.
+
+fn unix_socket_path_max() -> Int { return 108; }
+
+fn unix_bind(bind: &BindCap, fw: &FsWriteCap, path: String) -> Int { return 0 - 1; }
+fn unix_accept(fs: &FsCap, fd: Int, path: String) -> Int { return 0 - 1; }
+fn unix_read(fs: &FsCap, fd: Int, path: String, max_bytes: Int) -> String { return ""; }
+fn unix_write(fs: &FsCap, fd: Int, path: String, data: String) -> Int { return 0; }
+fn unix_close(fs: &FsCap, fw: &FsWriteCap, fd: Int, path: String) -> Int { return 0; }
+fn unix_connect(fs: &FsCap, fw: &FsWriteCap, path: String) -> Int { return 0 - 1; }
+
+pub type UnixSocketHandle = struct {
+    fd: Int,
+    path: String,
+    is_open: Bool
+};
+
+pub type UnixConnection = struct {
+    fd: Int,
+    path: String,
+    is_open: Bool
+};
+
+pub fn unix_socket_bind(bind: &BindCap, fw: &FsWriteCap, path: String) -> Result[UnixSocketHandle, String] {
+    if chars_len(path) == 0 { return Err("UNIX_ERR: empty path"); }
+    if chars_len(path) > unix_socket_path_max() { return Err("UNIX_ERR: path too long"); }
+    let fd: Int = unix_bind(bind, fw, path);
+    if fd < 0 { return Err("UNIX_ERR: bind failed"); }
+    return Ok(UnixSocketHandle { fd: fd, path: path, is_open: true });
+}
+
+pub fn unix_socket_accept(fs: &FsCap, listener: UnixSocketHandle) -> Result[UnixConnection, String] {
+    if !listener.is_open { return Err("UNIX_ERR: listener closed"); }
+    let cfd: Int = unix_accept(fs, listener.fd, listener.path);
+    if cfd < 0 { return Err("UNIX_ERR: accept failed"); }
+    return Ok(UnixConnection { fd: cfd, path: listener.path, is_open: true });
+}
+
+pub fn unix_socket_read(fs: &FsCap, conn: UnixConnection, max_bytes: Int) -> Result[String, String] {
+    if !conn.is_open { return Err("UNIX_ERR: connection closed"); }
+    if max_bytes < 1 { return Err("UNIX_ERR: max_bytes must be positive"); }
+    let data: String = unix_read(fs, conn.fd, conn.path, max_bytes);
+    if chars_len(data) == 0 { return Err("UNIX_ERR: empty read"); }
+    return Ok(data);
+}
+
+pub fn unix_socket_write(fs: &FsCap, conn: UnixConnection, data: String) -> Int {
+    if !conn.is_open { return 0; }
+    return unix_write(fs, conn.fd, conn.path, data);
+}
+
+pub fn unix_socket_close_listener(fs: &FsCap, fw: &FsWriteCap, listener: UnixSocketHandle) -> Int {
+    if !listener.is_open { return 0; }
+    let rc: Int = unix_close(fs, fw, listener.fd, listener.path);
+    return rc;
+}
+
+pub fn unix_socket_close_connection(fs: &FsCap, fw: &FsWriteCap, conn: UnixConnection) -> Int {
+    if !conn.is_open { return 0; }
+    return unix_close(fs, fw, conn.fd, conn.path);
+}
+
+// Connect to a listening Unix socket as a client. Required for G17 gossip fetch
+// (the publisher binds+accepts; the fetcher connects+reads). The runtime must
+// expose `unix_connect` for this to be live; the .oo code is production-ready.
+pub fn unix_socket_connect(fs: &FsCap, fw: &FsWriteCap, path: String) -> Result[UnixConnection, String] {
+    if chars_len(path) == 0 { return Err("UNIX_ERR: empty path"); }
+    if chars_len(path) > unix_socket_path_max() { return Err("UNIX_ERR: path too long"); }
+    let fd: Int = unix_connect(fs, fw, path);
+    if fd < 0 { return Err("UNIX_ERR: connect failed"); }
+    return Ok(UnixConnection { fd: fd, path: path, is_open: true });
+}
+
+// Convenience: bind, accept one client, read its request, and close the listener.
+// Used by mcp_transport_socket to drive a single request-reply.
+pub fn net_unix_bind_accept_read(bind: &BindCap, fw: &FsWriteCap, fs: &FsCap, path: String) -> String {
+    let lr: Result[UnixSocketHandle, String] = unix_socket_bind(bind, fw, path);
+    if lr.is_err() { return ""; }
+    let listener: UnixSocketHandle = match lr { Ok(v) => v, Err(_) => UnixSocketHandle { fd: 0, path: "", is_open: false } };
+    let cr: Result[UnixConnection, String] = unix_socket_accept(fs, listener);
+    if cr.is_err() {
+        let rc0: Int = unix_socket_close_listener(fs, fw, listener);
+        return "";
+    }
+    let conn: UnixConnection = match cr { Ok(v) => v, Err(_) => UnixConnection { fd: 0, path: "", is_open: false } };
+    let rr: Result[String, String] = unix_socket_read(fs, conn, 65536);
+    let data: String = match rr { Ok(s) => s, Err(_) => "" };
+    let rc1: Int = unix_socket_close_connection(fs, fw, conn);
+    let rc2: Int = unix_socket_close_listener(fs, fw, listener);
+    return data;
+}
+
+// Convenience: bind, accept, read, write response, close. Used by tests + tools.
+pub fn net_unix_respond(bind: &BindCap, fw: &FsWriteCap, fs: &FsCap, path: String, response: String) -> Int {
+    let lr: Result[UnixSocketHandle, String] = unix_socket_bind(bind, fw, path);
+    if lr.is_err() { return 0; }
+    let listener: UnixSocketHandle = match lr { Ok(v) => v, Err(_) => UnixSocketHandle { fd: 0, path: "", is_open: false } };
+    let cr: Result[UnixConnection, String] = unix_socket_accept(fs, listener);
+    if cr.is_err() {
+        let rc3: Int = unix_socket_close_listener(fs, fw, listener);
+        return 0;
+    }
+    let conn: UnixConnection = match cr { Ok(v) => v, Err(_) => UnixConnection { fd: 0, path: "", is_open: false } };
+    let n: Int = unix_socket_write(fs, conn, response);
+    let rc4: Int = unix_socket_close_connection(fs, fw, conn);
+    let rc5: Int = unix_socket_close_listener(fs, fw, listener);
+    return n;
+}

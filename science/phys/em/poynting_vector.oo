@@ -1,0 +1,119 @@
+// # Poynting Vector Flux and Electromagnetic Power Flow
+//
+// Logline: Calculates instantaneous Poynting vector flux, time-averaged EM wave intensity, and energy flow.
+//
+// Setup: Evaluates S = (1/mu0) * (E x B) and plane wave irradiance relations.
+//
+// Beats:
+//   1. Compute vector Poynting flux S = (1/mu0) * (E x B).
+//   2. Compute flux as flat 3-element list for generic pipeline callers.
+//   3. Compute time-averaged intensity from peak electric field E0 and magnetic field B0.
+//   4. Calculate energy density and total power flux through oriented surface areas.
+
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+// Vacuum permittivity eps0 in F/m (~8.8541878128e-12)
+pub fn poynting_vacuum_permittivity() -> Float {
+    return 8.8541878128 / 1000000000000.0;
+}
+
+// Vacuum permeability mu0 in H/m (~1.25663706212e-6)
+pub fn poynting_vacuum_permeability() -> Float {
+    return 1.25663706212 / 1000000.0;
+}
+
+// Speed of light c in m/s
+pub fn poynting_speed_of_light() -> Float {
+    return 299792458.0;
+}
+
+// Vacuum wave impedance Z0 = sqrt(mu0 / eps0) (~376.730313668 Ohm)
+pub fn poynting_vacuum_impedance() -> Float {
+    let mu0: Float = poynting_vacuum_permeability();
+    let eps0: Float = poynting_vacuum_permittivity();
+    return sqrt(mu0 / eps0);
+}
+
+// Compute Poynting vector S = (1 / mu0) * (E x B) (W/m^2)
+pub fn poynting_vector(e_vec: Vec3, b_vec: Vec3) -> Vec3 {
+    let mu0: Float = poynting_vacuum_permeability();
+    let inv_mu0: Float = 1.0 / mu0;
+    let sx: Float = inv_mu0 * ((e_vec.y * b_vec.z) - (e_vec.z * b_vec.y));
+    let sy: Float = inv_mu0 * ((e_vec.z * b_vec.x) - (e_vec.x * b_vec.z));
+    let sz: Float = inv_mu0 * ((e_vec.x * b_vec.y) - (e_vec.y * b_vec.x));
+    return Vec3 { x: sx, y: sy, z: sz };
+}
+
+// Compute Poynting vector flux as flat 3-element list [Sx, Sy, Sz]
+pub fn poynting_vector_flux(e_vec: List[Float], b_vec: List[Float]) -> List[Float] {
+    let mut ex: Float = 0.0;
+    let mut ey: Float = 0.0;
+    let mut ez: Float = 0.0;
+    let mut bx: Float = 0.0;
+    let mut by: Float = 0.0;
+    let mut bz: Float = 0.0;
+
+    if list_len(e_vec) >= 3 {
+        ex = list_get(e_vec, 0);
+        ey = list_get(e_vec, 1);
+        ez = list_get(e_vec, 2);
+    }
+    if list_len(b_vec) >= 3 {
+        bx = list_get(b_vec, 0);
+        by = list_get(b_vec, 1);
+        bz = list_get(b_vec, 2);
+    }
+
+    let ve: Vec3 = Vec3 { x: ex, y: ey, z: ez };
+    let vb: Vec3 = Vec3 { x: bx, y: by, z: bz };
+    let s: Vec3 = poynting_vector(ve, vb);
+
+    let mut res: List[Float] = list_new();
+    res = list_push(res, s.x);
+    res = list_push(res, s.y);
+    res = list_push(res, s.z);
+    return res;
+}
+
+// Compute Poynting vector magnitude |S| (W/m^2)
+pub fn poynting_magnitude(e_vec: Vec3, b_vec: Vec3) -> Float {
+    let s: Vec3 = poynting_vector(e_vec, b_vec);
+    let s_sq: Float = (s.x * s.x) + (s.y * s.y) + (s.z * s.z);
+    return sqrt(s_sq);
+}
+
+// Time-averaged intensity I = E0^2 / (2 * Z0) for vacuum plane wave (W/m^2)
+pub fn poynting_intensity_from_e0(e0_v_per_m: Float) -> Float {
+    if e0_v_per_m <= 0.0 { return 0.0; }
+    let z0: Float = poynting_vacuum_impedance();
+    return (e0_v_per_m * e0_v_per_m) / (2.0 * z0);
+}
+
+// Time-averaged intensity I = (c * B0^2) / (2 * mu0) for vacuum plane wave (W/m^2)
+pub fn poynting_intensity_from_b0(b0_tesla: Float) -> Float {
+    if b0_tesla <= 0.0 { return 0.0; }
+    let c: Float = poynting_speed_of_light();
+    let mu0: Float = poynting_vacuum_permeability();
+    return (c * b0_tesla * b0_tesla) / (2.0 * mu0);
+}
+
+// Compute energy density u = 0.5 * (eps0 * E^2 + (1/mu0) * B^2) (J/m^3)
+pub fn poynting_energy_density(e_mag: Float, b_mag: Float) -> Float {
+    let eps0: Float = poynting_vacuum_permittivity();
+    let mu0: Float = poynting_vacuum_permeability();
+    let u_e: Float = 0.5 * eps0 * (e_mag * e_mag);
+    let u_b: Float = 0.5 * (1.0 / mu0) * (b_mag * b_mag);
+    return u_e + u_b;
+}
+
+// Compute power transmitted through an oriented flat area: P = |S| * A * cos(theta) (Watts)
+pub fn poynting_power_through_area(s_mag: Float, area_m2: Float, theta_rad: Float) -> Float {
+    if s_mag <= 0.0 || area_m2 <= 0.0 { return 0.0; }
+    let cos_t: Float = cos(theta_rad);
+    if cos_t <= 0.0 { return 0.0; }
+    return s_mag * area_m2 * cos_t;
+}

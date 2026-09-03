@@ -1,0 +1,169 @@
+// # WebAssembly Host Function Runtime: Implementation
+//
+// Logline: Implementations of every host function the engine dispatches: list_new, list_push, list_first, list_last, byte_in_range, parse_int, int_to_string, string_concat, string_contains, result_is_ok, result_unwrap_int, result_unwrap_str, println, process_exit.
+//
+// Setup: Pure .oo implementation. Uses the flat list_data + list_starts representation from wasm_host_runtime.oo. List N is stored at list_data[list_starts[N]..list_starts[N+1]] (or end of list_data for the last list).
+//
+// Beats:
+//   1. Dispatch list manipulation host calls.
+//   2. Dispatch string and integer conversion host calls.
+//   3. Dispatch result unwrapping and status check host calls.
+//   4. Dispatch I/O and runtime control host calls.
+
+
+import "std/core/str.oo";
+import "std/compile/wasm_interpreter/wasm_host_runtime.oo";
+import "std/compile/wasm_interpreter/wasm_host_struct.oo";
+
+pub fn wasm_host_call(rt: WasmHostRuntime, name: String, args: List[Int]) -> Result[PairRuntimeInt, String] {
+    if name == "list_new" {
+        let new_rt: WasmHostRuntime = wasm_host_alloc_list(rt);
+        let new_id: Int = wasm_host_list_count(new_rt) - 1;
+        return Ok(PairRuntimeInt { rt: new_rt, value: new_id });
+    }
+    if name == "list_push" {
+        let list_id: Int = list_get(args, 0);
+        let val: Int = list_get(args, 1);
+        let new_rt: WasmHostRuntime = wasm_host_push_list_data(rt, val);
+        return Ok(PairRuntimeInt { rt: new_rt, value: list_id });
+    }
+    if name == "list_first" {
+        let list_id: Int = list_get(args, 0);
+        let start: Int = wasm_host_list_start(rt, list_id);
+        let next_start: Int = if list_id + 1 < wasm_host_list_count(rt) { wasm_host_list_start(rt, list_id + 1) } else { list_len(wasm_host_list_data(rt)) };
+        let len: Int = next_start - start;
+        if len == 0 {
+            let r1: WasmHostRuntime = wasm_host_intern(rt, "ERR\tlist_first_empty");
+            let err_id: Int = wasm_host_intern_count(r1) - 1;
+            let r2: WasmHostRuntime = wasm_host_alloc_result(r1, 1, err_id);
+            let res_id: Int = wasm_host_result_count(r2) - 1;
+            return Ok(PairRuntimeInt { rt: r2, value: res_id });
+        } else {
+            let first_val: Int = list_get(wasm_host_list_data(rt), start);
+            let r1: WasmHostRuntime = wasm_host_alloc_result(rt, 0, first_val);
+            let res_id: Int = wasm_host_result_count(r1) - 1;
+            return Ok(PairRuntimeInt { rt: r1, value: res_id });
+        }
+    }
+    if name == "list_last" {
+        let list_id: Int = list_get(args, 0);
+        let start: Int = wasm_host_list_start(rt, list_id);
+        let next_start: Int = if list_id + 1 < wasm_host_list_count(rt) { wasm_host_list_start(rt, list_id + 1) } else { list_len(wasm_host_list_data(rt)) };
+        let len: Int = next_start - start;
+        if len == 0 {
+            let r1: WasmHostRuntime = wasm_host_intern(rt, "ERR\tlist_last_empty");
+            let err_id: Int = wasm_host_intern_count(r1) - 1;
+            let r2: WasmHostRuntime = wasm_host_alloc_result(r1, 1, err_id);
+            let res_id: Int = wasm_host_result_count(r2) - 1;
+            return Ok(PairRuntimeInt { rt: r2, value: res_id });
+        } else {
+            let last_val: Int = list_get(wasm_host_list_data(rt), next_start - 1);
+            let r1: WasmHostRuntime = wasm_host_alloc_result(rt, 0, last_val);
+            let res_id: Int = wasm_host_result_count(r1) - 1;
+            return Ok(PairRuntimeInt { rt: r1, value: res_id });
+        }
+    }
+    if name == "list_length" {
+        let list_id: Int = list_get(args, 0);
+        let start: Int = wasm_host_list_start(rt, list_id);
+        let next_start: Int = if list_id + 1 < wasm_host_list_count(rt) { wasm_host_list_start(rt, list_id + 1) } else { list_len(wasm_host_list_data(rt)) };
+        let len: Int = next_start - start;
+        return Ok(PairRuntimeInt { rt: rt, value: len });
+    }
+    if name == "byte_in_range" {
+        let n_arg: Int = list_get(args, 0);
+        let rv: Int = if n_arg >= 0 { if n_arg <= 255 { 1 } else { 0 } } else { 0 };
+        return Ok(PairRuntimeInt { rt: rt, value: rv });
+    }
+    if name == "parse_int" {
+        let s_id: Int = list_get(args, 0);
+        let s_str: String = wasm_host_get_string(rt, s_id);
+        let r_parse: Result[Int, String] = parse_int(s_str);
+        if r_parse.ok == 1 {
+            let pv: Int = r_parse.val;
+            let r1: WasmHostRuntime = wasm_host_alloc_result(rt, 0, pv);
+            let pres_id: Int = wasm_host_result_count(r1) - 1;
+            return Ok(PairRuntimeInt { rt: r1, value: pres_id });
+        } else {
+            let r1: WasmHostRuntime = wasm_host_intern(rt, "ERR\tparse_int_invalid");
+            let err_id: Int = wasm_host_intern_count(r1) - 1;
+            let r2: WasmHostRuntime = wasm_host_alloc_result(r1, 1, err_id);
+            let pres_id: Int = wasm_host_result_count(r2) - 1;
+            return Ok(PairRuntimeInt { rt: r2, value: pres_id });
+        }
+    }
+    if name == "int_to_string" {
+        let n_arg: Int = list_get(args, 0);
+        let s_repr: String = n_arg.to_string();
+        let new_rt: WasmHostRuntime = wasm_host_intern(rt, s_repr);
+        let s_id: Int = wasm_host_intern_count(new_rt) - 1;
+        return Ok(PairRuntimeInt { rt: new_rt, value: s_id });
+    }
+    if name == "string_concat" {
+        let a_id: Int = list_get(args, 0);
+        let b_id: Int = list_get(args, 1);
+        let a_str: String = wasm_host_get_string(rt, a_id);
+        let b_str: String = wasm_host_get_string(rt, b_id);
+        let joined: String = a_str + b_str;
+        let new_rt: WasmHostRuntime = wasm_host_intern(rt, joined);
+        let j_id: Int = wasm_host_intern_count(new_rt) - 1;
+        return Ok(PairRuntimeInt { rt: new_rt, value: j_id });
+    }
+    if name == "string_contains" {
+        let s_id: Int = list_get(args, 0);
+        let sub_id: Int = list_get(args, 1);
+        let s_str: String = wasm_host_get_string(rt, s_id);
+        let sub_str: String = wasm_host_get_string(rt, sub_id);
+        let r_contains: Bool = str_contains(s_str, sub_str);
+        let rv: Int = if r_contains { 1 } else { 0 };
+        return Ok(PairRuntimeInt { rt: rt, value: rv });
+    }
+    if name == "result_is_ok" {
+        let r_id: Int = list_get(args, 0);
+        let tag: Int = wasm_host_result_tag(rt, r_id);
+        let rv: Int = if tag == 0 { 1 } else { 0 };
+        return Ok(PairRuntimeInt { rt: rt, value: rv });
+    }
+    if name == "result_unwrap_int" {
+        let r_id: Int = list_get(args, 0);
+        let p: Int = wasm_host_result_payload(rt, r_id);
+        return Ok(PairRuntimeInt { rt: rt, value: p });
+    }
+    if name == "result_unwrap_str" {
+        let r_id: Int = list_get(args, 0);
+        let p: Int = wasm_host_result_payload(rt, r_id);
+        return Ok(PairRuntimeInt { rt: rt, value: p });
+    }
+    if name == "println" {
+        let p_id: Int = list_get(args, 0);
+        let p_str: String = wasm_host_get_string(rt, p_id);
+        println(p_str);
+        let new_rt: WasmHostRuntime = wasm_host_append_print(rt, p_str);
+        return Ok(PairRuntimeInt { rt: new_rt, value: 0 });
+    }
+    if name == "process_exit" {
+        let code: Int = list_get(args, 0);
+        let new_rt: WasmHostRuntime = wasm_host_set_exit_code(rt, code);
+        return Ok(PairRuntimeInt { rt: new_rt, value: code });
+    }
+    if name == "struct_new" {
+        let fc: Int = list_get(args, 0);
+        let new_rt: WasmHostRuntime = wasm_host_alloc_struct(rt, fc);
+        let new_id: Int = wasm_host_struct_count(new_rt) - 1;
+        return Ok(PairRuntimeInt { rt: new_rt, value: new_id });
+    }
+    if name == "struct_set" {
+        let handle: Int = list_get(args, 0);
+        let fidx: Int = list_get(args, 1);
+        let val: Int = list_get(args, 2);
+        let new_rt: WasmHostRuntime = wasm_host_struct_set(rt, handle, fidx, val);
+        return Ok(PairRuntimeInt { rt: new_rt, value: handle });
+    }
+    if name == "struct_get" {
+        let handle: Int = list_get(args, 0);
+        let fidx: Int = list_get(args, 1);
+        let v: Int = wasm_host_struct_get(rt, handle, fidx);
+        return Ok(PairRuntimeInt { rt: rt, value: v });
+    }
+    return Err("ERR\twasm_host_call\tunknown\t" + name);
+}

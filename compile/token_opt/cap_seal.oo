@@ -1,0 +1,103 @@
+// # HMAC-SHA256 Capability Seal for SessionTokenLedger
+//
+// Logline: Sign each SessionTokenLedger with HMAC-SHA256; reject unsigned or mismatched merges as fail-closed.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) D4 sovereign capability seal.
+//
+// Beats:
+//   1. Define CapSeal and SealedLedger structures.
+//   2. Compute HMAC-SHA256 of a canonical payload string.
+//   3. Stamp the SessionTokenLedger with a seal.
+//   4. Verify a seal matches the ledger.
+
+type CapSeal = struct {
+    hmac_hex: String,
+    algorithm: String,
+    domain: String,
+    sealed_at_ms: Int
+};
+
+type SealedLedger = struct {
+    session_id: String,
+    prompt_tokens: Int,
+    completion_tokens: Int,
+    tool_payload_bytes: Int,
+    seal: CapSeal
+};
+
+pub fn cap_seal_new(
+    hex: String,
+    algo: String,
+    domain: String,
+    ts: Int
+) -> CapSeal {
+    return CapSeal {
+        hmac_hex: hex,
+        algorithm: algo,
+        domain: domain,
+        sealed_at_ms: ts
+    };
+}
+
+pub fn sealed_ledger_new(
+    sid: String,
+    p: Int,
+    c: Int,
+    t: Int,
+    seal: CapSeal
+) -> SealedLedger {
+    return SealedLedger {
+        session_id: sid,
+        prompt_tokens: p,
+        completion_tokens: c,
+        tool_payload_bytes: t,
+        seal: seal
+    };
+}
+
+pub fn cap_seal_canonical_payload(
+    sid: String,
+    p: Int,
+    c: Int,
+    t: Int
+) -> String {
+    let mut s: String = "sid=";
+    s = s + sid;
+    s = s + "|p=";
+    s = s + p.to_string();
+    s = s + "|c=";
+    s = s + c.to_string();
+    s = s + "|t=";
+    s = s + t.to_string();
+    return s;
+}
+
+pub fn cap_seal_compute(
+    sid: String,
+    p: Int,
+    c: Int,
+    t: Int,
+    domain: String,
+    ts: Int
+) -> CapSeal {
+    let payload: String = cap_seal_canonical_payload(sid, p, c, t);
+    let h: String = crypto_hmac_sha256_internal(payload, domain);
+    return cap_seal_new(h, "HMAC-SHA256", domain, ts);
+}
+
+pub fn cap_seal_verify(
+    sl: SealedLedger,
+    domain: String
+) -> Bool {
+    let payload: String = cap_seal_canonical_payload(
+        sl.session_id,
+        sl.prompt_tokens,
+        sl.completion_tokens,
+        sl.tool_payload_bytes
+    );
+    let expected: String = crypto_hmac_sha256_internal(payload, domain);
+    if expected == sl.seal.hmac_hex {
+        return true;
+    }
+    return false;
+}

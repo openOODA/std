@@ -1,0 +1,54 @@
+// # Financial Order Routing Facade
+//
+// Logline: Re-exports smart order routing models, route state management, and execution interfaces.
+//
+// Setup: Pure module shim importing types, operations, and venue submodules.
+//
+// Beats:
+//   1. Import routing types, operations, and venue companion modules.
+//   2. Re-export public symbols with typed shim markers.
+//   3. Preserve API compatibility for order routing consumers.
+
+import "./routing_types.oo";
+import "./routing_ops.oo";
+import "./routing_venue.oo";
+
+pub fn shim_marker_order_route_init() -> OrderRoute {
+    return order_route_new(1, 100, 15000);
+}
+
+pub fn shim_marker_execution_report_init() -> ExecutionReport {
+    return execution_report_new(100, 15000, 5, 1);
+}
+
+pub fn shim_marker_venue_init() -> OrderRoute {
+    return routing_venue_init(1, 100, 15000);
+}
+
+pub fn shim_marker_route_fill(route: OrderRoute) -> OrderRoute {
+    return order_route_update_fill(route, 50, 15000);
+}
+
+pub fn shim_marker_route_cancel(route: OrderRoute) -> OrderRoute {
+    return order_route_cancel(route);
+}
+
+pub fn shim_marker_route_rem_qty(route: OrderRoute) -> Int {
+    return order_route_remaining_qty(route);
+}
+
+pub fn shim_marker_route_complete(route: OrderRoute) -> Int {
+    return order_route_is_complete(route);
+}
+
+pub fn shim_marker_fill_rate(route: OrderRoute) -> Int {
+    return order_route_calculate_fill_rate(route);
+}
+
+pub fn shim_marker_net_amount(report: ExecutionReport) -> Int {
+    return execution_report_net_amount(report);
+}
+
+pub fn routing_probe() -> Int {
+    return 0;
+}

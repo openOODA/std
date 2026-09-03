@@ -1,0 +1,47 @@
+// # Khatib artificial potential field
+//
+// Logline: Attractive magnitude is k_att * dist. Repulsion is k_rep (1/d - 1/d0)/d^2 inside d0.
+//
+// Setup: Self-contained 3-axis Float. UAV APF remains the 3D flight caller. Illegal gains or distances return Err. Outside d0, repulsion is Ok(0).
+//
+// Beats:
+//   1. F_att mag = k_att * Euclidean distance when k_att >= 0.
+//   2. Outside d0 or at the surface bound, repulsion is Ok(0).
+//   3. Negative gains, non-positive d0, or non-positive d return Err.
+
+fn apf_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn apf_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn khatib_attractive_magnitude(k_att: Float, dx: Float, dy: Float, dz: Float) -> Result[Float, String] {
+    if k_att < 0.0 { return Err("ERR\tapf\tk"); }
+    let dist: Float = sqrt((dx * dx) + (dy * dy) + (dz * dz));
+    return Ok(k_att * dist);
+}
+
+pub fn khatib_repulsive_magnitude(k_rep: Float, d: Float, d0: Float) -> Result[Float, String] {
+    if k_rep < 0.0 { return Err("ERR\tapf\tk"); }
+    if d0 <= 0.0 { return Err("ERR\tapf\td0"); }
+    if d <= 0.0 { return Err("ERR\tapf\td"); }
+    if d >= d0 { return Ok(0.0); }
+    let inv_d: Float = 1.0 / d;
+    let inv_d0: Float = 1.0 / d0;
+    return Ok(k_rep * (inv_d - inv_d0) * (inv_d * inv_d));
+}
+
+pub fn verify_khatib_apf_theory() -> Bool {
+    let att: Float = apf_got(khatib_attractive_magnitude(2.0, 3.0, 4.0, 0.0));
+    if apf_abs(att - 10.0) > 0.0000001 { return false; }
+    if khatib_attractive_magnitude(0.0 - 1.0, 1.0, 0.0, 0.0).is_ok() { return false; }
+    if apf_got(khatib_repulsive_magnitude(12.0, 7.0, 6.0)) != 0.0 { return false; }
+    if khatib_repulsive_magnitude(0.0 - 1.0, 1.0, 6.0).is_ok() { return false; }
+    if khatib_repulsive_magnitude(12.0, 1.0, 0.0).is_ok() { return false; }
+    if khatib_repulsive_magnitude(12.0, 0.0, 6.0).is_ok() { return false; }
+    if khatib_repulsive_magnitude(12.0, 0.0 - 1.0, 6.0).is_ok() { return false; }
+    return true;
+}

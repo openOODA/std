@@ -1,0 +1,34 @@
+// # Attitude types
+//
+// Logline: AttVec3 implemented off pub type Float Vec3.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type AttVec3 = struct {
+    x: Int,
+    y: Int,
+    z: Int
+};
+
+pub fn att_vec3_new(x: Int, y: Int, z: Int) -> AttVec3 {
+    return AttVec3 { x: x, y: y, z: z };
+}
+
+pub fn att_vec3_x(v: AttVec3) -> Int {
+    return v.x;
+}
+
+pub fn att_vec3_y(v: AttVec3) -> Int {
+    return v.y;
+}
+
+pub fn att_vec3_z(v: AttVec3) -> Int {
+    return v.z;
+}

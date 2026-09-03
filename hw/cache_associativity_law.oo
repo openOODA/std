@@ -1,0 +1,108 @@
+// # Cache associativity conflict-miss law
+//
+// Logline: Conflict-miss fraction equals 1 minus 1/associativity; an 8-way set-associative cache shows 7/8 (875 milli) conflict misses, while a direct-mapped cache (assoc=1) shows 0 by the degenerate closed-form bound.
+//
+// Setup: Pure Int. associativity >= 1. Conflict rate returned as fixed-point scale 1000 (so 1000 = 1.0). Coupled miss_rate = miss_per_byte_milli * size_bytes. Hostile associativity < 1 fails closed. Uses domain_cert("hw", ...).
+//
+// Beats:
+//   1. cache_conflict_rate(assoc) returns 1000 * (1 - 1/assoc) at scale 1000.
+//   2. cache_miss_rate(assoc, size, miss_per_byte_milli) returns (1000 - 1000/assoc) + size*miss_per_byte_milli/1000.
+//   3. associativity < 1 fails closed to 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn car_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Conflict-miss fraction at fixed-point scale 1000.
+// assoc=1 is Ok(0). assoc < 1 returns Err.
+pub fn cache_conflict_rate(assoc: Int) -> Result[Int, String] {
+    if assoc < 1 { return Err("ERR\tcar\tdomain"); }
+    return Ok(1000 * (assoc - 1) / assoc);
+}
+
+// Coupled miss rate. Illegal assoc/size/milli return Err. assoc=1, size=0 is Ok(0) plus capacity.
+pub fn cache_miss_rate(assoc: Int, size_bytes: Int, miss_per_byte_milli: Int) -> Result[Int, String] {
+    if size_bytes < 0 { return Err("ERR\tcar\tdomain"); }
+    if miss_per_byte_milli < 0 { return Err("ERR\tcar\tdomain"); }
+    let cr: Result[Int, String] = cache_conflict_rate(assoc);
+    if cr.is_ok() == false { return cr; }
+    let capacity: Int = size_bytes * miss_per_byte_milli / 1000;
+    let total: Int = car_got(cr) + capacity;
+    if total > 1000 { return Ok(1000); }
+    return Ok(total);
+}
+
+pub fn cache_assoc_golden_cert() -> DomainCert {
+    let r1: Result[Int, String] = cache_conflict_rate(1);
+    let r8: Result[Int, String] = cache_conflict_rate(8);
+    let mut holds: Int = 0;
+    if r1.is_ok() {
+        if car_got(r1) == 0 {
+            if r8.is_ok() {
+                if car_got(r8) == 875 {
+                    holds = 1;
+                }
+            }
+        }
+    }
+    return domain_cert("hw", "cache_assoc_golden", holds);
+}
+
+pub fn cache_assoc_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if cache_conflict_rate(0).is_ok() == false {
+        if cache_conflict_rate(0 - 1).is_ok() == false {
+            if cache_conflict_rate(0 - 100).is_ok() == false {
+                holds = 1;
+            }
+        }
+    }
+    return domain_cert("hw", "cache_assoc_hostile", holds);
+}
+
+pub fn cache_assoc_coupled_cert() -> DomainCert {
+    let r: Result[Int, String] = cache_miss_rate(1, 4096, 1);
+    let mut holds: Int = 0;
+    if r.is_ok() {
+        if car_got(r) == 4 { holds = 1; }
+    }
+    return domain_cert("hw", "cache_assoc_coupled", holds);
+}
+
+pub fn verify_cache_associativity_law() -> Bool {
+    // Identity: assoc=1 -> conflict Ok(0).
+    let zc: Result[Int, String] = cache_conflict_rate(1);
+    if zc.is_ok() == false { return false; }
+    if car_got(zc) != 0 { return false; }
+    if car_got(cache_conflict_rate(8)) != 875 { return false; }
+    if car_got(cache_conflict_rate(2)) != 500 { return false; }
+    if car_got(cache_conflict_rate(4)) != 750 { return false; }
+    let r16: Int = car_got(cache_conflict_rate(16));
+    if r16 < 928 { return false; }
+    if r16 > 947 { return false; }
+    // Hostile: assoc<1 returns Err.
+    if cache_conflict_rate(0).is_ok() { return false; }
+    if cache_conflict_rate(0 - 1).is_ok() { return false; }
+    let r2: Int = car_got(cache_conflict_rate(2));
+    let r4: Int = car_got(cache_conflict_rate(4));
+    let r8: Int = car_got(cache_conflict_rate(8));
+    if r2 > r4 { return false; }
+    if r4 > r8 { return false; }
+    if car_got(cache_miss_rate(8, 0, 1)) != 875 { return false; }
+    if car_got(cache_miss_rate(1, 4096, 1)) != 4 { return false; }
+    if car_got(cache_miss_rate(8, 1024, 0)) != 875 { return false; }
+    if cache_miss_rate(0, 1024, 1).is_ok() { return false; }
+    if cache_miss_rate(8, 0 - 1, 1).is_ok() { return false; }
+    if cache_miss_rate(8, 1024, 0 - 1).is_ok() { return false; }
+    if car_got(cache_miss_rate(8, 1000000, 100)) != 1000 { return false; }
+    // Certificates: golden, hostile, coupled all hold.
+    let g: DomainCert = cache_assoc_golden_cert();
+    let h: DomainCert = cache_assoc_hostile_cert();
+    let cu: DomainCert = cache_assoc_coupled_cert();
+    if g.holds != 1 { return false; }
+    if h.holds != 1 { return false; }
+    if cu.holds != 1 { return false; }
+    return true;
+}

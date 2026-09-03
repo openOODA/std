@@ -1,0 +1,113 @@
+// # Molecular Genetics, Nucleotide Base Pairing, and GC Content
+//
+// Logline: DNA/RNA sequence operations, Watson-Crick complementary base pairing, and GC thermal stability metrics.
+//
+// Setup: Pure bioinformatics data models for genomic string sequences.
+//
+// Beats:
+//   1. Validate DNA nucleotide sequences (A, C, G, T).
+//   2. Generate Watson-Crick reverse complement strand (A <-> T, C <-> G).
+//   3. Transcribe DNA to RNA (T -> U).
+//   4. Calculate GC content ratio for thermal stability.
+//   5. Calculate genetic Hamming distance (point mutation count).
+
+// Validate if string contains only valid DNA nucleotides (A, C, G, T)
+pub fn dna_is_valid(seq: String) -> Bool {
+    let n: Int = chars_len(seq);
+    if n == 0 { return false; }
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(seq, i);
+        if c != "A" && c != "C" && c != "G" && c != "T" {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// Compute Watson-Crick complement base
+pub fn dna_complement_base(base: String) -> String {
+    if base == "A" { return "T"; }
+    if base == "T" { return "A"; }
+    if base == "C" { return "G"; }
+    if base == "G" { return "C"; }
+    return base;
+}
+
+// Generate Watson-Crick reverse complement DNA strand
+pub fn dna_reverse_complement(seq: String) -> String {
+    let n: Int = chars_len(seq);
+    let mut rev: String = "";
+    let mut i: Int = n - 1;
+    while i >= 0 {
+        let b: String = char_at(seq, i);
+        rev = rev + dna_complement_base(b);
+        i = i - 1;
+    }
+    return rev;
+}
+
+// Transcribe DNA sequence to RNA sequence (T -> U)
+pub fn dna_to_rna(seq: String) -> String {
+    let n: Int = chars_len(seq);
+    let mut rna: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: String = char_at(seq, i);
+        if b == "T" {
+            rna = rna + "U";
+        } else {
+            rna = rna + b;
+        }
+        i = i + 1;
+    }
+    return rna;
+}
+
+pub fn int_to_float(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 1000000 { f = f + 1000000.0; count = count - 1000000; }
+    while count >= 10000 { f = f + 10000.0; count = count - 10000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
+// Calculate GC-content percentage (0.0 to 1.0)
+pub fn dna_gc_content(seq: String) -> Float {
+    let n: Int = chars_len(seq);
+    if n == 0 { return 0.0; }
+    let mut gc_count: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: String = char_at(seq, i);
+        if b == "G" || b == "C" {
+            gc_count = gc_count + 1;
+        }
+        i = i + 1;
+    }
+    return int_to_float(gc_count) / int_to_float(n);
+}
+
+// Calculate genetic Hamming distance (point mutations) between two equal-length sequences
+pub fn dna_hamming_distance(seq_a: String, seq_b: String) -> Int {
+    let na: Int = chars_len(seq_a);
+    let nb: Int = chars_len(seq_b);
+    let mut min_n: Int = na;
+    if nb < min_n { min_n = nb; }
+    let mut dist: Int = 0;
+    let mut i: Int = 0;
+    while i < min_n {
+        if char_at(seq_a, i) != char_at(seq_b, i) {
+            dist = dist + 1;
+        }
+        i = i + 1;
+    }
+    let mut len_diff: Int = na - nb;
+    if len_diff < 0 { len_diff = 0 - len_diff; }
+    return dist + len_diff;
+}

@@ -1,0 +1,104 @@
+// # Schwarzschild escape velocity law
+//
+// Logline: v_esc = sqrt(2 G M / r) for a static point mass. Fails closed inside r_s = 2 G M / c^2.
+//
+// Setup: Imports std/principles/constants.oo for G and c. Pure Float. Non-physical M or r, and r<=r_s, return Err.
+//
+// Beats:
+//   1. Ideal form v_esc = sqrt(2 G M / r) for r > 0.
+//   2. Non-ideal form requires r > r_s (Schwarzschild radius). r <= r_s is Err.
+//   3. Law returns DomainCert with holds=1 when v_esc < c and r > r_s.
+
+import "std/core/principles/physical_constants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn sw_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Schwarzschild radius r_s = 2 G M / c^2 (meters). Non-physical input returns Err.
+pub fn escape_schwarzschild_radius(M: Float, c_val: Float) -> Result[Float, String] {
+    if M <= 0.0 { return Err("ERR\tschwarzschild\tm"); }
+    if c_val <= 0.0 { return Err("ERR\tschwarzschild\tc"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let g: Float = pc.gravitational_constant;
+    let c2: Float = c_val * c_val;
+    return Ok((2.0 * g * M) / c2);
+}
+
+// Ideal escape velocity v_esc = sqrt(2 G M / r) in m/s.
+pub fn escape_velocity_ideal(M: Float, r: Float) -> Result[Float, String] {
+    if M <= 0.0 { return Err("ERR\tschwarzschild\tm"); }
+    if r <= 0.0 { return Err("ERR\tschwarzschild\tr"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let g: Float = pc.gravitational_constant;
+    return Ok(sqrt((2.0 * g * M) / r));
+}
+
+// Non-ideal Schwarzschild-aware escape velocity. Returns Err if r <= r_s.
+pub fn escape_velocity_schwarzschild(M: Float, r: Float) -> Result[Float, String] {
+    if M <= 0.0 { return Err("ERR\tschwarzschild\tm"); }
+    if r <= 0.0 { return Err("ERR\tschwarzschild\tr"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let c_val: Float = pc.speed_of_light;
+    let rsr: Result[Float, String] = escape_schwarzschild_radius(M, c_val);
+    let mut rs: Float = 0.0;
+    match rsr {
+        Ok(v)  => { rs = v; },
+        Err(e) => { return Err(e); }
+    }
+    if r <= rs { return Err("ERR\tschwarzschild\trs"); }
+    return escape_velocity_ideal(M, r);
+}
+
+// Circular orbital velocity v_circ = sqrt(GM/r) in m/s.
+pub fn escape_circular_velocity(M: Float, r: Float) -> Result[Float, String] {
+    if M <= 0.0 { return Err("ERR\tschwarzschild\tm"); }
+    if r <= 0.0 { return Err("ERR\tschwarzschild\tr"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let g: Float = pc.gravitational_constant;
+    return Ok(sqrt((g * M) / r));
+}
+
+// DomainCert. holds=1 iff M>0, r>0, r>r_s, and v_esc < c.
+pub fn phys_schwarzschild_escape_law(M: Float, r: Float) -> DomainCert {
+    let mut h: Int = 0;
+    let v: Float = sw_got(escape_velocity_schwarzschild(M, r));
+    if v > 0.0 {
+        let pc: PhysicalConstants = constants_codata_2022();
+        let c_val: Float = pc.speed_of_light;
+        if v < c_val {
+            h = 1;
+        }
+    }
+    return domain_cert("phys", "schwarzschild_escape", h);
+}
+
+// Combined verify: golden Earth, hostile (M<=0, r<=0, M<0, r<r_s), coupled.
+pub fn verify_schwarzschild_escape_law() -> Bool {
+    let m_earth: Float = 5972000000000000000000000.0;
+    let r_earth: Float = 6371000.0;
+    let v: Float = sw_got(escape_velocity_ideal(m_earth, r_earth));
+    let target: Float = 11186.0;
+    let bound: Float = target * 0.005;
+    if pabs(v - target) > bound { return false; }
+    if escape_velocity_ideal(0.0, r_earth).is_ok() { return false; }
+    if escape_velocity_ideal(m_earth, 0.0).is_ok() { return false; }
+    if escape_velocity_ideal(0.0 - 1.0, r_earth).is_ok() { return false; }
+    if escape_velocity_schwarzschild(m_earth, 0.001).is_ok() { return false; }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let c_val: Float = pc.speed_of_light;
+    let rs_earth: Float = sw_got(escape_schwarzschild_radius(m_earth, c_val));
+    if escape_velocity_schwarzschild(m_earth, rs_earth).is_ok() { return false; }
+    if sw_got(escape_velocity_schwarzschild(m_earth, rs_earth + 1.0)) <= 0.0 { return false; }
+    let vc: Float = sw_got(escape_circular_velocity(m_earth, r_earth));
+    let sqrt2: Float = 1.4142135623730951;
+    let coupled: Float = sqrt2 * vc;
+    if pabs(v - coupled) > 0.001 { return false; }
+    return true;
+}

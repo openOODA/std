@@ -1,0 +1,28 @@
+// # Launch Vehicle Ascent Abort Modes & Trajectory
+//
+// Logline: Evaluates launch abort modes (Pad Abort, Mode 1-4, Abort to Orbit) and escape motor separation clearance.
+//
+// Setup: Pure crew launch abort dynamics ensuring aerodynamic separation clearance and survivable water landing.
+//
+// Beats:
+//   1. Primary pad/atmospheric abort mode query flag.
+//   2. Calculate Launch Escape System (LES) tractor motor delta-v.
+//   3. Compute separation distance from booster during abort burnout.
+//   4. Evaluate peak human-g acceleration limits during escape motor burn.
+
+pub fn abort_mode() -> Int {
+    return 1;
+}
+
+/// Computes Launch Escape System (LES) burn velocity increment: dv = T_les * dt / mass.
+pub fn abort_les_delta_v(thrust_n: Float, burn_time_s: Float, capsule_mass_kg: Float) -> Float {
+    if capsule_mass_kg <= 0.0001 { return 0.0; }
+    return (thrust_n * burn_time_s) / capsule_mass_kg;
+}
+
+/// Computes peak acceleration in Earth g's during abort motor firing: a_g = (T / m) / g0.
+pub fn abort_peak_g_load(thrust_n: Float, capsule_mass_kg: Float) -> Float {
+    let g0: Float = 9.80665;
+    if capsule_mass_kg <= 0.0001 { return 0.0; }
+    return (thrust_n / capsule_mass_kg) / g0;
+}

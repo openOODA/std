@@ -1,0 +1,222 @@
+// # Struct, GEP & Heap Memory Lowering Engine
+//
+// Logline: Lowers struct field accesses, Swiss Table lookups, ARC retain/release, and match discriminants to SSA IR.
+//
+// Setup: Pure SSA memory lowering module generating typed LLVM IR memory instructions and runtime bridge calls.
+//
+// Beats:
+//   1. Clean struct identifiers and compute LLVM getelementptr (GEP) inbounds instructions.
+//   2. Lower Swiss Table flat-array lookups and quadratic probing GEP calculations.
+//   3. Lower String and List automatic reference counting (ARC) retain/release calls.
+//   4. Lower tagged union pattern matching into discriminant checks and jump tables.
+
+type MemFieldInfo = struct {
+    struct_name: String,
+    field_name: String,
+    field_idx: Int,
+    field_type: String
+};
+
+type MatchCaseArm = struct {
+    tag_id: Int,
+    target_label: String
+};
+
+pub fn ssa_clean_struct_name(struct_type: String) -> String {
+    let n: Int = chars_len(struct_type);
+    if n >= 8 && str_slice(struct_type, 0, 8) == "%struct." { return str_slice(struct_type, 8, n); }
+    if n >= 1 && str_slice(struct_type, 0, 1) == "%" { return str_slice(struct_type, 1, n); }
+    return struct_type;
+}
+
+pub fn ssa_mem_clean_name(struct_type: String) -> String { return ssa_clean_struct_name(struct_type); }
+
+pub fn ssa_mem_normalize_struct_ty(struct_type: String) -> String {
+    if chars_len(struct_type) == 0 { return "%struct.Anon"; }
+    if str_starts_with(struct_type, "%struct.") || str_starts_with(struct_type, "%Oo") || str_starts_with(struct_type, "%") {
+        return struct_type;
+    }
+    return "%struct." + struct_type;
+}
+
+pub fn ssa_lower_struct_gep(struct_type: String, field_idx: Int, ptr_val: String) -> String {
+    let clean: String = ssa_clean_struct_name(struct_type);
+    return "getelementptr inbounds %struct." + clean + ", %struct." + clean + "* " + ptr_val + ", i32 0, i32 " + field_idx.to_string();
+}
+
+pub fn ssa_mem_gep_offset(struct_type: String, field_idx: Int, ptr_val: String) -> String {
+    return ssa_lower_struct_gep(struct_type, field_idx, ptr_val);
+}
+
+pub fn ssa_lower_struct_field_ptr(res_reg: String, struct_type: String, field_idx: Int, ptr_val: String) -> String {
+    return "  " + res_reg + " = " + ssa_lower_struct_gep(struct_type, field_idx, ptr_val);
+}
+
+pub fn ssa_mem_field_gep_named(dst_reg: String, struct_type: String, field_idx: Int, ptr_val: String) -> String {
+    return ssa_lower_struct_field_ptr(dst_reg, struct_type, field_idx, ptr_val);
+}
+
+pub fn ssa_lower_struct_load(res_reg: String, field_type: String, ptr_val: String) -> String {
+    let ty: String = if chars_len(field_type) == 0 { "i64" } else { field_type };
+    return "  " + res_reg + " = load " + ty + ", " + ty + "* " + ptr_val + ", align 8";
+}
+
+pub fn ssa_lower_field_load(dst_reg: String, field_type: String, ptr_val: String) -> String {
+    return ssa_lower_struct_load(dst_reg, field_type, ptr_val);
+}
+
+pub fn ssa_lower_struct_store(field_type: String, val_reg: String, ptr_val: String) -> String {
+    let ty: String = if chars_len(field_type) == 0 { "i64" } else { field_type };
+    return "  store " + ty + " " + val_reg + ", " + ty + "* " + ptr_val + ", align 8";
+}
+
+pub fn ssa_lower_field_store(field_type: String, src_val: String, ptr_val: String) -> String {
+    return ssa_lower_struct_store(field_type, src_val, ptr_val);
+}
+
+pub fn ssa_lower_extract_payload(dst_reg: String, rty: String, src_val: String, elem_idx: Int) -> String {
+    return "  " + dst_reg + " = extractvalue " + rty + " " + src_val + ", " + elem_idx.to_string();
+}
+
+pub fn ssa_lower_swiss_lookup(table_ptr: String, key_hash: String, key_str: String) -> String {
+    return "call %OoRes.String @oo_swiss_map_get(%struct.SwissMap* " + table_ptr + ", i64 " + key_hash + ", %OoStr " + key_str + ")";
+}
+
+pub fn ssa_lower_swiss_probe_step(ctrl_ptr: String, step_reg: String) -> String {
+    return "getelementptr inbounds i8, i8* " + ctrl_ptr + ", i64 " + step_reg;
+}
+
+pub fn ssa_lower_swiss_ctrl_gep(table_ptr: String, slot_idx: String) -> String {
+    return "getelementptr inbounds i8, i8* " + table_ptr + ", i64 " + slot_idx;
+}
+
+pub fn ssa_lower_swiss_tag_cmp(tag_val: String, h2_hash: String) -> String {
+    return "icmp eq i8 " + tag_val + ", " + h2_hash;
+}
+
+pub fn ssa_lower_swiss_set(table_ptr: String, key_str: String, val_str: String) -> String {
+    return "call %struct.SwissMap @oo_swiss_map_set(%struct.SwissMap* " + table_ptr + ", %OoStr " + key_str + ", %OoStr " + val_str + ")";
+}
+
+pub fn ssa_lower_str_retain(str_ptr: String) -> String {
+    return "call void @oo_str_retain(%OoStr " + str_ptr + ")";
+}
+
+pub fn ssa_lower_str_release(str_ptr: String) -> String {
+    return "call void @oo_str_release(%OoStr " + str_ptr + ")";
+}
+
+pub fn ssa_lower_list_retain(list_ptr: String) -> String {
+    return "call void @oo_list_retain(%OoList* " + list_ptr + ")";
+}
+
+pub fn ssa_lower_list_release(list_ptr: String) -> String {
+    return "call void @oo_list_release(%OoList* " + list_ptr + ")";
+}
+
+pub fn ssa_lower_ilist_retain(list_ptr: String) -> String {
+    return "call void @oo_ilist_retain(%OoIList* byval(%OoIList) " + list_ptr + ")";
+}
+
+pub fn ssa_lower_ilist_release(list_ptr: String) -> String {
+    return "call void @oo_ilist_release(%OoIList* byval(%OoIList) " + list_ptr + ")";
+}
+
+pub fn ssa_lower_slist_retain(list_ptr: String) -> String {
+    return "call void @oo_slist_retain(%OoSList* byval(%OoSList) " + list_ptr + ")";
+}
+
+pub fn ssa_lower_slist_release(list_ptr: String) -> String {
+    return "call void @oo_slist_release(%OoSList* byval(%OoSList) " + list_ptr + ")";
+}
+
+pub fn ssa_lower_flist_retain(list_ptr: String) -> String {
+    return "call void @oo_flist_retain(%OoFList* byval(%OoFList) " + list_ptr + ")";
+}
+
+pub fn ssa_lower_flist_release(list_ptr: String) -> String {
+    return "call void @oo_flist_release(%OoFList* byval(%OoFList) " + list_ptr + ")";
+}
+
+pub fn ssa_mem_is_arc_type(type_name: String) -> Bool {
+    if type_name == "String" || type_name == "%OoStr" || type_name == "OoStr" { return true; }
+    if type_name == "List[Int]" || type_name == "%OoIList" || type_name == "OoIList" { return true; }
+    if type_name == "List[String]" || type_name == "%OoSList" || type_name == "OoSList" { return true; }
+    if type_name == "List[Float]" || type_name == "%OoFList" || type_name == "OoFList" { return true; }
+    if str_starts_with(type_name, "List[") || str_starts_with(type_name, "%OoLL_") { return true; }
+    return false;
+}
+
+pub fn ssa_lower_typed_list_retain(elem_type: String, list_ptr: String) -> String {
+    if elem_type == "Int" || elem_type == "i64" { return ssa_lower_ilist_retain(list_ptr); }
+    if elem_type == "String" || elem_type == "%OoStr" { return ssa_lower_slist_retain(list_ptr); }
+    if elem_type == "Float" || elem_type == "double" { return ssa_lower_flist_retain(list_ptr); }
+    return ssa_lower_list_retain(list_ptr);
+}
+
+pub fn ssa_lower_typed_list_release(elem_type: String, list_ptr: String) -> String {
+    if elem_type == "Int" || elem_type == "i64" { return ssa_lower_ilist_release(list_ptr); }
+    if elem_type == "String" || elem_type == "%OoStr" { return ssa_lower_slist_release(list_ptr); }
+    if elem_type == "Float" || elem_type == "double" { return ssa_lower_flist_release(list_ptr); }
+    return ssa_lower_list_release(list_ptr);
+}
+
+pub fn ssa_lower_arc_retain(type_name: String, val_ptr: String) -> String {
+    if type_name == "String" || type_name == "%OoStr" { return ssa_lower_str_retain(val_ptr); }
+    if type_name == "List[Int]" || type_name == "%OoIList" { return ssa_lower_typed_list_retain("Int", val_ptr); }
+    if type_name == "List[String]" || type_name == "%OoSList" { return ssa_lower_typed_list_retain("String", val_ptr); }
+    if type_name == "List[Float]" || type_name == "%OoFList" { return ssa_lower_typed_list_retain("Float", val_ptr); }
+    return ssa_lower_list_retain(val_ptr);
+}
+
+pub fn ssa_lower_arc_release(type_name: String, val_ptr: String) -> String {
+    if type_name == "String" || type_name == "%OoStr" { return ssa_lower_str_release(val_ptr); }
+    if type_name == "List[Int]" || type_name == "%OoIList" { return ssa_lower_typed_list_release("Int", val_ptr); }
+    if type_name == "List[String]" || type_name == "%OoSList" { return ssa_lower_typed_list_release("String", val_ptr); }
+    if type_name == "List[Float]" || type_name == "%OoFList" { return ssa_lower_typed_list_release("Float", val_ptr); }
+    return ssa_lower_list_release(val_ptr);
+}
+
+pub fn ssa_lower_match_tag(discrim_val: String, cases_count: Int) -> String {
+    if cases_count <= 2 { return "icmp eq i32 " + discrim_val + ", 0"; }
+    let mut sw: String = "switch i32 " + discrim_val + ", label %match.default [";
+    let mut i: Int = 0;
+    while i < cases_count {
+        sw = sw + " i32 " + i.to_string() + ", label %match.case." + i.to_string();
+        i = i + 1;
+    }
+    return sw + " ]";
+}
+
+pub fn ssa_lower_match_case_arm(case_val: Int, target_bb: String) -> String {
+    return "i32 " + case_val.to_string() + ", label %" + target_bb;
+}
+
+pub fn ssa_lower_discriminant_cmp(discrim_val: String, expected_tag: Int) -> String {
+    return "icmp eq i32 " + discrim_val + ", " + expected_tag.to_string();
+}
+
+pub fn ssa_lower_match_switch(discrim_val: String, default_bb: String, arm_tags: List[Int], arm_labels: List[String]) -> String {
+    let mut out: String = "switch i32 " + discrim_val + ", label %" + default_bb + " [\n";
+    let n_tags: Int = list_len(arm_tags);
+    let n_lbls: Int = list_len(arm_labels);
+    let count: Int = if n_tags < n_lbls { n_tags } else { n_lbls };
+    let mut i: Int = 0;
+    while i < count {
+        let tag: Int = list_get(arm_tags, i);
+        let lbl: String = list_get(arm_labels, i);
+        out = out + "    " + ssa_lower_match_case_arm(tag, lbl) + "\n";
+        i = i + 1;
+    }
+    out = out + "  ]";
+    return out;
+}
+
+pub fn ssa_lower_match_extract_tag(res_reg: String, enum_type: String, val_reg: String) -> String {
+    return "  " + res_reg + " = extractvalue " + enum_type + " " + val_reg + ", 0";
+}
+
+pub fn ssa_lower_match_extract_payload(res_reg: String, enum_type: String, val_reg: String, variant_idx: Int) -> String {
+    let field_idx: Int = variant_idx + 1;
+    return "  " + res_reg + " = extractvalue " + enum_type + " " + val_reg + ", " + field_idx.to_string();
+}

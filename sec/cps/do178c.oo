@@ -1,0 +1,115 @@
+// # DO-178C Avionics DAL Constants, Types, and Constructors
+//
+// Logline: Defines DAL level constants, review method constants, CCI status constants, DalLevel / SoftwareRequirement / SoftwareTestCase / SoftwareReview / DalEngine record types, and the constructors for each level and record.
+//
+// Setup: Imports do178c_types.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. DAL level constants E..A, review method constants, CCI status constants.
+//   2. DalLevel, SoftwareRequirement, SoftwareTestCase, SoftwareReview, DalEngine record types.
+//   3. dal_level_a..e_struct constructors, software_requirement_create, software_test_case_create, software_review_create.
+//   4. dal_required_test_coverage_pct, dal_required_review_method pure helpers.
+
+type DalLevel = struct {
+    level: Int, failure_condition: String, required_coverage_pct: Int, required_review_method: Int
+};
+
+type SoftwareRequirement = struct {
+    req_id: String, parent_id: String, description: String, trace_up: String,
+    trace_down: String, dal: Int, verified: Bool
+};
+
+type SoftwareTestCase = struct {
+    test_id: String, req_id: String, test_procedure: String, expected_result: String,
+    passed: Bool, executed_at: Int
+};
+
+type SoftwareReview = struct {
+    review_id: String, target_id: String, review_method: Int, reviewer_id: String,
+    status: Int, completed_at: Int
+};
+
+type DalEngine = struct {
+    engine_id: String, requirements: List[SoftwareRequirement], tests: List[SoftwareTestCase],
+    reviews: List[SoftwareReview], total_objectives_satisfied: Int, total_requirements: Int,
+    is_halted: Bool
+};
+
+// DAL Level Constants
+pub fn dal_level_e() -> Int { return 0; }
+pub fn dal_level_d() -> Int { return 1; }
+pub fn dal_level_c() -> Int { return 2; }
+pub fn dal_level_b() -> Int { return 3; }
+pub fn dal_level_a() -> Int { return 4; }
+
+// Review Method Constants
+pub fn review_method_inspection() -> Int { return 1; }
+pub fn review_method_walkthrough() -> Int { return 2; }
+pub fn review_method_peer_review() -> Int { return 3; }
+pub fn review_method_independent_review() -> Int { return 4; }
+
+// CCI Status Constants
+pub fn cci_status_draft() -> Int { return 1; }
+pub fn cci_status_review() -> Int { return 2; }
+pub fn cci_status_approved() -> Int { return 3; }
+pub fn cci_status_released() -> Int { return 4; }
+pub fn cci_status_rejected() -> Int { return 5; }
+
+// Required Coverage and Review Method
+pub fn dal_required_test_coverage_pct(dal_v: Int) -> Int {
+    if dal_v == 4  { return 100; }
+    if dal_v == 3  { return 100; }
+    if dal_v == 2  { return 100; }
+    if dal_v == 1  { return 100; }
+    return 0;
+}
+
+pub fn dal_required_review_method(dal_v: Int) -> Int {
+    if dal_v == 4  { return review_method_independent_review(); }
+    if dal_v == 3  { return review_method_peer_review(); }
+    if dal_v == 2  { return review_method_walkthrough(); }
+    if dal_v == 1  { return review_method_inspection(); }
+    return 0;
+}
+
+// DalLevel Constructors
+pub fn dal_level_e_struct() -> DalLevel {
+    return DalLevel { level: 0, failure_condition: "No Effect", required_coverage_pct: 0, required_review_method: 0 };
+}
+
+pub fn dal_level_d_struct() -> DalLevel {
+    return DalLevel { level: 1, failure_condition: "Minor", required_coverage_pct: 100, required_review_method: review_method_inspection() };
+}
+
+pub fn dal_level_c_struct() -> DalLevel {
+    return DalLevel { level: 2, failure_condition: "Major", required_coverage_pct: 100, required_review_method: review_method_walkthrough() };
+}
+
+pub fn dal_level_b_struct() -> DalLevel {
+    return DalLevel { level: 3, failure_condition: "Hazardous", required_coverage_pct: 100, required_review_method: review_method_peer_review() };
+}
+
+pub fn dal_level_a_struct() -> DalLevel {
+    return DalLevel { level: 4, failure_condition: "Catastrophic", required_coverage_pct: 100, required_review_method: review_method_independent_review() };
+}
+
+pub fn software_requirement_create(req_id_v: String, parent_id_v: String, desc_v: String, trace_up_v: String, trace_down_v: String, dal_v: Int) -> SoftwareRequirement {
+    return SoftwareRequirement {
+        req_id: req_id_v, parent_id: parent_id_v, description: desc_v,
+        trace_up: trace_up_v, trace_down: trace_down_v, dal: dal_v, verified: false
+    };
+}
+
+pub fn software_test_case_create(test_id_v: String, req_id_v: String, procedure_v: String, expected_v: String) -> SoftwareTestCase {
+    return SoftwareTestCase {
+        test_id: test_id_v, req_id: req_id_v, test_procedure: procedure_v,
+        expected_result: expected_v, passed: false, executed_at: 0
+    };
+}
+
+pub fn software_review_create(review_id_v: String, target_id_v: String, method_v: Int, reviewer_id_v: String) -> SoftwareReview {
+    return SoftwareReview {
+        review_id: review_id_v, target_id: target_id_v, review_method: method_v,
+        reviewer_id: reviewer_id_v, status: cci_status_draft(), completed_at: 0
+    };
+}

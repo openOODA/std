@@ -1,0 +1,56 @@
+// # 3D Vector Orthogonal Rejection Module
+//
+// Logline: Orthogonal vector rejection of vector U from vector V: rej_v(u) = u - proj_v(u).
+//
+// Setup: Pure math module. Computes perpendicular component of vector decomposition.
+//
+// Beats:
+//   1. Import vector projection.
+//   2. Compute perpendicular rejection component.
+//   3. Verify orthogonality: dot(proj, rej) == 0.
+// RULES.oot 1.4: Pure mathematical data format structure, zero ambient effects.
+// RULES.oot 1.7: Under 256 lines.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/vector_projection.oo";
+
+pub fn vec3_reject(u: Vec3, v: Vec3) -> Result[Vec3, String] {
+    let p_res: Result[Vec3, String] = vec3_project(u, v);
+    match p_res {
+        Ok(p) => {
+            let ux: Float = vec3_get_x(u);
+            let uy: Float = vec3_get_y(u);
+            let uz: Float = vec3_get_z(u);
+            let px: Float = vec3_get_x(p);
+            let py: Float = vec3_get_y(p);
+            let pz: Float = vec3_get_z(p);
+            return Ok(vec3_new(
+                ux - px,
+                uy - py,
+                uz - pz
+            ));
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+}
+
+pub fn vec3_decompose_is_orthogonal(u: Vec3, v: Vec3) -> Bool {
+    let p_res: Result[Vec3, String] = vec3_project(u, v);
+    let r_res: Result[Vec3, String] = vec3_reject(u, v);
+    match p_res {
+        Ok(p)         => {
+            match r_res {
+                Ok(r) => {
+                    let d: Float = vec3_dot(p, r);
+                    let mut abs_d: Float = d;
+                    if abs_d < 0.0 { abs_d = 0.0 - abs_d; }
+                    return abs_d < 0.0001;
+                }
+                Err(e) => { return false; }
+            }
+        }
+        Err(e) => { return false; }
+    }
+}

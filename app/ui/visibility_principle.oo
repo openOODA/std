@@ -1,0 +1,84 @@
+// # Visibility of System Status Principle (Nielsen)
+//
+// Logline: The system must keep users informed about what is going on through appropriate feedback within reasonable time.
+//
+// Setup: Pure Int. feedback_codes in [0, 3]. dwell_time_ms >= 0. Out-of-range returns 0. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. Feedback code 0 = none, 1 = passive, 2 = active, 3 = modal.
+//   2. Visibility witness: 1 if feedback level >= 1 and dwell_time <= threshold.
+//   3. Status freshness: 1 if last update is within timeout.
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+
+// Feedback code constants.
+pub fn visibility_feedback_none() -> Int {
+    return 0;
+}
+
+pub fn visibility_feedback_passive() -> Int {
+    return 1;
+}
+
+pub fn visibility_feedback_active() -> Int {
+    return 2;
+}
+
+pub fn visibility_feedback_modal() -> Int {
+    return 3;
+}
+
+// Default dwell time threshold (ms): a system should respond within 100ms.
+pub fn visibility_dwell_threshold_ms() -> Int {
+    return 100;
+}
+
+// Visibility witness: 1 if feedback >= passive and dwell_time <= threshold.
+pub fn visibility_satisfied(feedback_code: Int, dwell_time_ms: Int) -> Int {
+    if feedback_code < 0 { return 0; }
+    if feedback_code > 3 { return 0; }
+    if dwell_time_ms < 0 { return 0; }
+    if feedback_code == visibility_feedback_none() { return 0; }
+    if dwell_time_ms > visibility_dwell_threshold_ms() { return 0; }
+    return 1;
+}
+
+// Status freshness: 1 if last update within timeout_ms.
+pub fn visibility_status_fresh(last_update_ms: Int, current_ms: Int, timeout_ms: Int) -> Int {
+    if last_update_ms < 0 { return 0; }
+    if current_ms < 0 { return 0; }
+    if timeout_ms <= 0 { return 0; }
+    if current_ms < last_update_ms { return 0; }
+    let elapsed: Int = current_ms - last_update_ms;
+    if elapsed <= timeout_ms { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for the visibility principle.
+pub fn verify_visibility_principle() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    if visibility_feedback_none() != 0 { return false; }
+    if visibility_feedback_passive() != 1 { return false; }
+    if visibility_feedback_active() != 2 { return false; }
+    if visibility_feedback_modal() != 3 { return false; }
+    if visibility_satisfied(1, 50) != 1 { return false; }
+    if visibility_satisfied(2, 100) != 1 { return false; }
+    if visibility_satisfied(3, 50) != 1 { return false; }
+    if visibility_satisfied(0, 50) != 0 { return false; }
+    if visibility_satisfied(1, 101) != 0 { return false; }
+    if visibility_satisfied(1, 0) != 1 { return false; }
+    if visibility_satisfied(0 - 1, 50) != 0 { return false; }
+    if visibility_satisfied(4, 50) != 0 { return false; }
+    if visibility_satisfied(1, 0 - 1) != 0 { return false; }
+    if visibility_dwell_threshold_ms() != 100 { return false; }
+    if visibility_status_fresh(0, 50, 100) != 1 { return false; }
+    if visibility_status_fresh(0, 100, 100) != 1 { return false; }
+    if visibility_status_fresh(0, 101, 100) != 0 { return false; }
+    if visibility_status_fresh(0 - 1, 50, 100) != 0 { return false; }
+    if visibility_status_fresh(50, 0, 100) != 0 { return false; }
+    if visibility_status_fresh(50, 50, 0) != 0 { return false; }
+    if visibility_status_fresh(50, 50, 0 - 1) != 0 { return false; }
+    return true;
+}

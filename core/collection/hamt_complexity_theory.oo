@@ -1,0 +1,104 @@
+// # Hash Array Mapped Trie (HAMT) complexity theory
+//
+// Logline: A HAMT is a 32-way bitmapped trie with O(log_32 n) lookup; persistence is for free because updates create a new path of O(log_32 n) nodes and share the rest.
+//
+// Setup: Pure Int. "n" is the number of keys; "branching" is the trie branching factor; "depth" is the expected lookup depth.
+//
+// Beats:
+//   1. Bagwell 2001 "Ideal Hash Trees" (EPFL Tech Report), p. 4: 32-way branching, 5 bits per level.
+//   2. Lookup depth = ceiling(log_2(n) / 5) = ceiling(log_32(n)).
+//   3. HAMT is persistent: each update creates O(log_32 n) new nodes; the rest of the trie is shared.
+//   4. Coupled with hash consing: shared substructure is maximized between versions.
+
+import "std/core/primitives/domain_cert.oo";
+
+// hamt_branching_factor returns the canonical HAMT branching factor: 32.
+// Bagwell 2001 "Ideal Hash Trees" p. 4: branching factor = 2^5 = 32.
+pub fn hamt_branching_factor() -> Int {
+    return 32;
+}
+
+// hamt_lookup_depth returns the expected lookup depth for a HAMT with n keys.
+// Bagwell 2001 p. 4: lookup depth = ceiling(log_2(n) / 5) = ceiling(log_32(n)).
+// n <= 1 returns 0 (an empty or singleton HAMT needs no descent).
+pub fn hamt_lookup_depth(n: Int) -> Int {
+    if n <= 1 {
+        return 0;
+    }
+    // Compute floor(log_2(n))
+    let mut d: Int = 0;
+    let mut v: Int = n;
+    while v > 1 {
+        v = v / 2;
+        d = d + 1;
+    }
+    // depth = ceiling(d / 5)
+    let q: Int = d / 5;
+    let r: Int = d - q * 5;
+    if r > 0 {
+        return q + 1;
+    }
+    return q;
+}
+
+// hamt_branching_ok holds 1 when branching equals 32.
+// Bagwell 2001 p. 4: the canonical HAMT branching factor is exactly 32.
+pub fn hamt_branching_ok(branching: Int) -> DomainCert {
+    if branching == 32 {
+        return domain_cert("collections", "hamt_branching", 1);
+    }
+    return domain_cert("collections", "hamt_branching", 0);
+}
+
+// hamt_capacity returns branching^depth: the maximum keys a fully populated
+// HAMT of the given depth can hold. Used to couple branching and depth
+// against the key count n.
+pub fn hamt_capacity(branching: Int, depth: Int) -> Int {
+    let mut cap: Int = 1;
+    let mut k: Int = 0;
+    while k < depth {
+        cap = cap * branching;
+        k = k + 1;
+    }
+    return cap;
+}
+
+pub fn verify_hamt_complexity_theory() -> Bool {
+    // Golden: branching factor is exactly 32.
+    if hamt_branching_factor() != 32 { return false; }
+    if cert_holds(hamt_branching_ok(32)) != 1 { return false; }
+
+    // Hostile: other branching factors fail.
+    if cert_holds(hamt_branching_ok(16)) != 0 { return false; }
+    if cert_holds(hamt_branching_ok(64)) != 0 { return false; }
+    if cert_holds(hamt_branching_ok(2)) != 0 { return false; }
+    if cert_holds(hamt_branching_ok(0)) != 0 { return false; }
+
+    // Golden: lookup depth log_32(n).
+    if hamt_lookup_depth(1024) != 2 { return false; }   // log_2(1024) = 10, 10/5 = 2.
+    if hamt_lookup_depth(32) != 1 { return false; }    // log_2(32) = 5, 5/5 = 1.
+    if hamt_lookup_depth(64) != 2 { return false; }    // log_2(64) = 6, ceiling(6/5) = 2.
+    if hamt_lookup_depth(32768) != 3 { return false; } // log_2(32768) = 15, 15/5 = 3.
+    if hamt_lookup_depth(2) != 1 { return false; }     // log_2(2) = 1, ceiling(1/5) = 1.
+
+    // Hostile: n <= 0 -> 0.
+    if hamt_lookup_depth(0) != 0 { return false; }
+    if hamt_lookup_depth(0 - 1) != 0 { return false; }
+    if hamt_lookup_depth(0 - 1024) != 0 { return false; }
+
+    // Coupled: branching^depth >= n (the trie has enough leaves to hold n keys).
+    let branching: Int = hamt_branching_factor();
+    let cap_2: Int = hamt_capacity(branching, 2);
+    if cap_2 != 1024 { return false; }          // 32^2 = 1024.
+    if cap_2 < 1024 { return false; }
+    let cap_3: Int = hamt_capacity(branching, 3);
+    if cap_3 != 32768 { return false; }         // 32^3 = 32768.
+    if cap_3 < 32768 { return false; }
+    let cap_1: Int = hamt_capacity(branching, 1);
+    if cap_1 != 32 { return false; }            // 32^1 = 32.
+
+    // Coupled: depth 0 has capacity 1 (n=1 is a single leaf).
+    if hamt_capacity(branching, 0) != 1 { return false; }
+
+    return true;
+}

@@ -1,0 +1,146 @@
+// # Linear Kalman filter theory
+//
+// Logline: 1D constant-velocity x' = x + v dt with covariance predict and update. 2D F = [[1, dt], [0, 1]].
+//
+// Setup: Pure Float. Process noise q and measurement noise r must be non-negative. dt must be non-negative.
+//
+// Beats:
+//   1. kalman1d_predict advances x = x + v dt and propagates p = p + q.
+//   2. kalman1d_update computes K = p / (p + r) and corrects x and p.
+//   3. kalman2d_predict and kalman2d_update operate on 2D position-velocity state and covariance.
+//   4. Hostile negative dt, q, r, or P is Err. q=0 and dt=0 stay Ok.
+
+pub type KalmanState1D = struct { x: Float, v: Float, p: Float, q: Float, r: Float };
+pub type KalmanState2D = struct { x: Float, v: Float, p00: Float, p01: Float, p10: Float, p11: Float, q: Float, r: Float };
+
+fn k1_got(r: Result[KalmanState1D, String]) -> KalmanState1D {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return KalmanState1D { x: 0.0 - 1.0, v: 0.0, p: 0.0, q: 0.0, r: 0.0 }; }
+    }
+}
+
+fn k2_got(r: Result[KalmanState2D, String]) -> KalmanState2D {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return KalmanState2D { x: 0.0 - 1.0, v: 0.0, p00: 0.0, p01: 0.0, p10: 0.0, p11: 0.0, q: 0.0, r: 0.0 }; }
+    }
+}
+
+pub fn kalman1d_create(x0: Float, v0: Float, p0: Float, q: Float, r: Float) -> Result[KalmanState1D, String] {
+    if q < 0.0 { return Err("ERR\tk1\tdomain"); }
+    if r < 0.0 { return Err("ERR\tk1\tdomain"); }
+    if p0 < 0.0 { return Err("ERR\tk1\tdomain"); }
+    return Ok(KalmanState1D { x: x0, v: v0, p: p0, q: q, r: r });
+}
+
+pub fn kalman1d_predict(state: KalmanState1D, dt: Float) -> Result[KalmanState1D, String] {
+    if dt < 0.0 { return Err("ERR\tk1\tdomain"); }
+    if state.q < 0.0 { return Err("ERR\tk1\tdomain"); }
+    if state.r < 0.0 { return Err("ERR\tk1\tdomain"); }
+    if state.p < 0.0 { return Err("ERR\tk1\tdomain"); }
+    let new_x: Float = state.x + (state.v * dt);
+    let new_p: Float = state.p + state.q;
+    return Ok(KalmanState1D { x: new_x, v: state.v, p: new_p, q: state.q, r: state.r });
+}
+
+pub fn kalman1d_update(state: KalmanState1D, measurement: Float) -> Result[KalmanState1D, String] {
+    if state.q < 0.0 { return Err("ERR\tk1\tdomain"); }
+    if state.r < 0.0 { return Err("ERR\tk1\tdomain"); }
+    if state.p < 0.0 { return Err("ERR\tk1\tdomain"); }
+    let s: Float = state.p + state.r;
+    if s == 0.0 { return Ok(state); }
+    if s < 0.0 { return Err("ERR\tk1\tdomain"); }
+    let k: Float = state.p / s;
+    let y: Float = measurement - state.x;
+    let new_x: Float = state.x + (k * y);
+    let new_p: Float = (1.0 - k) * state.p;
+    return Ok(KalmanState1D { x: new_x, v: state.v, p: new_p, q: state.q, r: state.r });
+}
+
+pub fn kalman2d_create(x0: Float, v0: Float, p00: Float, p01: Float, p11: Float, q: Float, r: Float) -> Result[KalmanState2D, String] {
+    if q < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if r < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if p00 < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if p11 < 0.0 { return Err("ERR\tk2\tdomain"); }
+    return Ok(KalmanState2D { x: x0, v: v0, p00: p00, p01: p01, p10: p01, p11: p11, q: q, r: r });
+}
+
+pub fn kalman2d_predict(state: KalmanState2D, dt: Float) -> Result[KalmanState2D, String] {
+    if dt < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if state.q < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if state.r < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if state.p00 < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if state.p11 < 0.0 { return Err("ERR\tk2\tdomain"); }
+    let new_x: Float = state.x + (state.v * dt);
+    let new_p00: Float = state.p00 + (2.0 * dt * state.p01) + (dt * dt * state.p11) + state.q;
+    let new_p01: Float = state.p01 + (dt * state.p11);
+    let new_p11: Float = state.p11 + state.q;
+    return Ok(KalmanState2D { x: new_x, v: state.v, p00: new_p00, p01: new_p01, p10: new_p01, p11: new_p11, q: state.q, r: state.r });
+}
+
+pub fn kalman2d_update(state: KalmanState2D, measurement: Float) -> Result[KalmanState2D, String] {
+    if state.q < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if state.r < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if state.p00 < 0.0 { return Err("ERR\tk2\tdomain"); }
+    if state.p11 < 0.0 { return Err("ERR\tk2\tdomain"); }
+    let s: Float = state.p00 + state.r;
+    if s == 0.0 { return Ok(state); }
+    if s < 0.0 { return Err("ERR\tk2\tdomain"); }
+    let k0: Float = state.p00 / s;
+    let k1: Float = state.p01 / s;
+    let y: Float = measurement - state.x;
+    let new_x: Float = state.x + (k0 * y);
+    let new_v: Float = state.v + (k1 * y);
+    let new_p00: Float = (1.0 - k0) * state.p00;
+    let new_p01: Float = (1.0 - k0) * state.p01;
+    let new_p10: Float = state.p10 - (k1 * state.p00);
+    let new_p11: Float = state.p11 - (k1 * state.p01);
+    return Ok(KalmanState2D { x: new_x, v: new_v, p00: new_p00, p01: new_p01, p10: new_p10, p11: new_p11, q: state.q, r: state.r });
+}
+
+pub fn verify_kalman_filter_theory() -> Bool {
+    // 1D Golden: x=0, v=1, p=1, q=0.1, r=0.5.
+    let s0: KalmanState1D = k1_got(kalman1d_create(0.0, 1.0, 1.0, 0.1, 0.5));
+    let mut d: Float = s0.x - 0.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = s0.v - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = s0.p - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    // 1D predict dt=1: x = 0 + 1*1 = 1, p = 1 + 0.1 = 1.1.
+    let s1: KalmanState1D = k1_got(kalman1d_predict(s0, 1.0));
+    d = s1.x - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = s1.p - 1.1; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = s1.v - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    // 1D update z=1.5: y=0.5, S=1.6, K=0.6875 -> x=1.34375, p=0.34375.
+    let s2: KalmanState1D = k1_got(kalman1d_update(s1, 1.5));
+    d = s2.x - 1.34375; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = s2.p - 0.34375; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    // 2D Golden: x=0, v=1, P=I, q=0.1, r=0.5.
+    let t0: KalmanState2D = k2_got(kalman2d_create(0.0, 1.0, 1.0, 0.0, 1.0, 0.1, 0.5));
+    // 2D predict dt=1: x=1, v=1, p00=2.1, p01=1, p11=1.1.
+    let t1: KalmanState2D = k2_got(kalman2d_predict(t0, 1.0));
+    d = t1.x - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t1.v - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t1.p00 - 2.1; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t1.p01 - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t1.p10 - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t1.p11 - 1.1; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    // 2D update z=2: y=2, S=1.5, K=[1/1.5, 0/1.5] -> x=4/3, v=1, p00=1/3, p11=1.
+    let t2: KalmanState2D = k2_got(kalman2d_update(t0, 2.0));
+    d = t2.x - (4.0 / 3.0); if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t2.v - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t2.p00 - (1.0 / 3.0); if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = t2.p11 - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    // dt=0 is identity on x; q=0 is legal zero process noise.
+    let zdt: KalmanState1D = k1_got(kalman1d_predict(s0, 0.0));
+    d = zdt.x - s0.x; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    let zq0: KalmanState1D = k1_got(kalman1d_create(1.0, 1.0, 1.0, 0.0, 0.5));
+    d = zq0.q - 0.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    d = zq0.x - 1.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    // Hostile: negative dt, q, r is Err (0 state is in-band).
+    if kalman1d_predict(s0, 0.0 - 1.0).is_ok() { return false; }
+    if kalman1d_create(1.0, 1.0, 1.0, 0.0 - 0.1, 0.5).is_ok() { return false; }
+    if kalman1d_create(1.0, 1.0, 1.0, 0.1, 0.0 - 0.5).is_ok() { return false; }
+    if kalman2d_create(1.0, 1.0, 1.0, 0.0, 1.0, 0.0 - 0.1, 0.5).is_ok() { return false; }
+    if kalman2d_predict(t0, 0.0 - 1.0).is_ok() { return false; }
+    return true;
+}

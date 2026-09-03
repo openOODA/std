@@ -1,0 +1,114 @@
+// # Rankine Vapor Power Cycle and Steam Energetics
+//
+// Logline: Evaluates four-state Rankine steam power cycles, pump work, turbine expansion, thermal efficiency, and back work ratios.
+//
+// Setup: Pure floating-point thermodynamic equations using specific enthalpy and pressure state coordinates.
+//
+// Beats:
+//   1. Pump work extraction from incompressible liquid specific volume and pressure delta.
+//   2. Boiler heat addition, turbine expansion work, and condenser heat rejection.
+//   3. Thermal efficiency eta = w_net / q_in and back work ratio BWR = w_pump / w_turbine.
+//   4. Fail-closed guards for unphysical enthalpies and negative work differentials.
+
+type RankineCycle = struct {
+    p_boiler_kpa: Float,
+    p_condenser_kpa: Float,
+    h1_kj_kg: Float,
+    h2_kj_kg: Float,
+    h3_kj_kg: Float,
+    h4_kj_kg: Float,
+    work_pump: Float,
+    work_turbine: Float,
+    net_work: Float,
+    heat_in: Float,
+    heat_out: Float,
+    efficiency: Float,
+    back_work_ratio: Float
+};
+
+// Calculate pump work for incompressible liquid: w_p = v1 * (P2 - P1) (kJ/kg).
+pub fn rankine_pump_work(v1_m3_per_kg: Float, p_boiler_kpa: Float, p_condenser_kpa: Float) -> Float {
+    if v1_m3_per_kg <= 0.0 || p_boiler_kpa <= p_condenser_kpa || p_condenser_kpa < 0.0 {
+        return 0.0;
+    }
+    let delta_p: Float = p_boiler_kpa - p_condenser_kpa;
+    return v1_m3_per_kg * delta_p;
+}
+
+// Calculate thermal efficiency eta = (w_turbine - w_pump) / q_in.
+pub fn rankine_efficiency(h1_kj_kg: Float, h2_kj_kg: Float, h3_kj_kg: Float, h4_kj_kg: Float) -> Float {
+    let q_in: Float = h3_kj_kg - h2_kj_kg;
+    let w_t: Float = h3_kj_kg - h4_kj_kg;
+    let w_p: Float = h2_kj_kg - h1_kj_kg;
+    if q_in <= 0.000001 || w_t < w_p || w_p < 0.0 {
+        return 0.0;
+    }
+    let w_net: Float = w_t - w_p;
+    return w_net / q_in;
+}
+
+// Calculate Back Work Ratio (BWR) = w_pump / w_turbine.
+pub fn rankine_back_work_ratio(work_pump: Float, work_turbine: Float) -> Float {
+    if work_turbine <= 0.000001 || work_pump < 0.0 {
+        return 0.0;
+    }
+    return work_pump / work_turbine;
+}
+
+// Solve complete 4-state Rankine cycle from enthalpy and pressure inputs.
+pub fn rankine_cycle_solve(
+    p_boiler_kpa: Float,
+    p_condenser_kpa: Float,
+    h1_kj_kg: Float,
+    h2_kj_kg: Float,
+    h3_kj_kg: Float,
+    h4_kj_kg: Float
+) -> RankineCycle {
+    let mut w_p: Float = h2_kj_kg - h1_kj_kg;
+    if w_p < 0.0 { w_p = 0.0; }
+    let mut w_t: Float = h3_kj_kg - h4_kj_kg;
+    if w_t < 0.0 { w_t = 0.0; }
+    let mut q_in: Float = h3_kj_kg - h2_kj_kg;
+    if q_in < 0.0 { q_in = 0.0; }
+    let mut q_out: Float = h4_kj_kg - h1_kj_kg;
+    if q_out < 0.0 { q_out = 0.0; }
+
+    let mut w_net: Float = w_t - w_p;
+    if w_net < 0.0 { w_net = 0.0; }
+
+    let mut eff: Float = 0.0;
+    if q_in > 0.000001 {
+        eff = w_net / q_in;
+    }
+
+    let mut bwr: Float = 0.0;
+    if w_t > 0.000001 {
+        bwr = w_p / w_t;
+    }
+
+    return RankineCycle {
+        p_boiler_kpa: p_boiler_kpa,
+        p_condenser_kpa: p_condenser_kpa,
+        h1_kj_kg: h1_kj_kg,
+        h2_kj_kg: h2_kj_kg,
+        h3_kj_kg: h3_kj_kg,
+        h4_kj_kg: h4_kj_kg,
+        work_pump: w_p,
+        work_turbine: w_t,
+        net_work: w_net,
+        heat_in: q_in,
+        heat_out: q_out,
+        efficiency: eff,
+        back_work_ratio: bwr
+    };
+}
+
+// Net electric/mechanical power output in Megawatts (MW) given mass flow rate (kg/s).
+pub fn rankine_net_power_mw(mass_flow_kg_per_s: Float, net_work_kj_per_kg: Float) -> Float {
+    if mass_flow_kg_per_s <= 0.0 || net_work_kj_per_kg <= 0.0 {
+        return 0.0;
+    }
+    // mass_flow (kg/s) * net_work (kJ/kg) = kW. kW / 1000.0 = MW.
+    let power_kw: Float = mass_flow_kg_per_s * net_work_kj_per_kg;
+    return power_kw / 1000.0;
+}

@@ -1,0 +1,62 @@
+// # Science Comm -- Satellite DVB & GNSS
+//
+// Logline: Satellite digital video broadcasting (DVB-S2/S2X), GNSS positioning, and inter-satellite links. Phase 3.4 reorg: moved from std/phys/satellite_dvb/ (was communications engineering, not physics).
+//
+// Setup: Co-located module of 50 files under std/science/comm. Pure compute, no caps.
+//
+// Beats:
+//   1. DVB-S2/S2X family (frames, modcod, LDPC, BCH, GSE, VCM/ACM).
+//   2. GNSS family (GPS, GLONASS, Galileo, BeiDou PRN generators, PVT solvers).
+//   3. Satellite link budget and propagation (ITU-P recommendations).
+//   4. Inter-satellite links (ISL laser/RF, routing).
+
+import "satellite_dvb.oo";
+import "satellite_dvb_stubs.oo";
+import "satellite_antenna_itu_s465.oo";
+import "satellite_beamforming_phased_array.oo";
+import "satellite_beam_hopping_scheduler.oo";
+import "satellite_doppler_precompensation.oo";
+import "satellite_doppler_shift_calc.oo";
+import "satellite_ephemeris_sgp4_orbit.oo";
+import "satellite_faraday_rotation.oo";
+import "satellite_group_delay_filter.oo";
+import "satellite_im_multipoint_im3.oo";
+import "satellite_itu_p618_rain.oo";
+import "satellite_itu_p676_gaseous.oo";
+import "satellite_itu_p840_cloud.oo";
+import "satellite_link_budget_calc.oo";
+import "satellite_ntn_3gpp_timing_advance.oo";
+import "satellite_phase_noise_model.oo";
+import "satellite_scintillation_iono.oo";
+import "satellite_thermal_noise_temp.oo";
+import "satellite_transponder_saleh.oo";
+import "satellite_transponder_volterra.oo";
+import "cpm_continuous_phase_mod.oo";
+import "dvb_rcs2_burst_structure.oo";
+import "dvb_rcs2_cpm_waveform.oo";
+import "dvb_s2_bch_encoder.oo";
+import "dvb_s2_ldpc_interleaver.oo";
+import "dvb_s2x_bb_header.oo";
+import "dvb_s2x_gse_encapsulation.oo";
+import "dvb_s2x_modcod_table.oo";
+import "dvb_s2x_pl_framing.oo";
+import "dvb_s2x_superframe.oo";
+import "dvb_s2x_vcm_acm_controller.oo";
+import "gnss_beidou_b1i_generator.oo";
+import "gnss_carrier_phase_rtk.oo";
+import "gnss_galileo_e1_boc.oo";
+import "gnss_galileo_prn_generator.oo";
+import "gnss_glonass_ofdm_fdma.oo";
+import "gnss_gps_l1_ca_correlator.oo";
+import "gnss_gps_l1_ca_generator.oo";
+import "gnss_klobuchar_ionosphere.oo";
+import "gnss_multipath_detector.oo";
+import "gnss_pseudorange_calc.oo";
+import "gnss_pvt_least_squares.oo";
+import "gnss_saastamoinen_troposphere.oo";
+import "isl_intersatellite_routing.oo";
+import "isl_laser_edfa_amplifier.oo";
+import "isl_laser_link_budget.oo";
+import "isl_laser_link_doppler.oo";
+import "isl_laser_pat_pointing.oo";
+import "isl_rf_v_w_band_budget.oo";

@@ -1,0 +1,160 @@
+// # Power-of-Two Ring Buffer
+//
+// Logline: Power-of-two circular FIFO buffer using bitmask wraparound for O(1) push and pop.
+//
+// Setup: Pure collection module. Capacity is rounded up to the next power of two. Uses bitwise AND with a mask for wrap.
+//
+// Beats:
+//   1. Round a minimum capacity up to the next power of two.
+//   2. Construct a ring buffer with preallocated storage and a mask.
+//   3. Push and pop elements in O(1) with bitmask wraparound.
+//   4. Peek and indexed get elements from the oldest end.
+//   5. Query length, capacity, mask, emptiness, and fullness.
+//   6. Reset the ring buffer to empty state without releasing storage.
+//
+// residual: SPSC concurrent variant; memory ordering fences for MPMC.
+
+import "std/core/primitives/result.oo";
+import "std/core/primitives/list.oo";
+
+type RingPow2 = struct {
+    data: List[Int],
+    head: Int,
+    tail: Int,
+    size: Int,
+    mask: Int,
+    capacity: Int
+};
+
+// Round n up to the next power of two. Values <= 1 return 1.
+pub fn pow2_round_up(n: Int) -> Int {
+    if n <= 1 { return 1; }
+    let mut c: Int = 1;
+    while c < n {
+        c = c * 2;
+    }
+    return c;
+}
+
+// Build an uninitialized storage list of size cap.
+fn rb_fill(cap: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < cap {
+        out = list_push(out, 0);
+        i = i + 1;
+    }
+    return out;
+}
+
+// Construct a new power-of-two ring buffer with capacity at least min_capacity.
+pub fn ring_pow2_new(min_capacity: Int) -> RingPow2 {
+    let cap: Int = pow2_round_up(min_capacity);
+    let storage: List[Int] = rb_fill(cap);
+    return RingPow2 {
+        data: storage,
+        head: 0,
+        tail: 0,
+        size: 0,
+        mask: cap - 1,
+        capacity: cap
+    };
+}
+
+// Return the number of stored elements.
+pub fn ring_pow2_len(rb: RingPow2) -> Int {
+    return rb.size;
+}
+
+// Return the total capacity of the buffer (a power of two).
+pub fn ring_pow2_capacity(rb: RingPow2) -> Int {
+    return rb.capacity;
+}
+
+// Return the bitmask used for wraparound (capacity minus 1).
+pub fn ring_pow2_mask(rb: RingPow2) -> Int {
+    return rb.mask;
+}
+
+// True when the buffer holds no elements.
+pub fn ring_pow2_is_empty(rb: RingPow2) -> Bool {
+    return rb.size == 0;
+}
+
+// True when the buffer cannot accept more elements.
+pub fn ring_pow2_is_full(rb: RingPow2) -> Bool {
+    return rb.size == rb.capacity;
+}
+
+// Push a value. Returns the buffer unchanged when full.
+pub fn ring_pow2_push(rb: RingPow2, val: Int) -> RingPow2 {
+    let sz: Int = rb.size;
+    let cap: Int = rb.capacity;
+    if sz >= cap {
+        return rb;
+    }
+    let t: Int = rb.tail;
+    let new_data: List[Int] = list_set(rb.data, t, val);
+    let next_tail: Int = (t + 1) & rb.mask;
+    return RingPow2 {
+        data: new_data,
+        head: rb.head,
+        tail: next_tail,
+        size: sz + 1,
+        mask: rb.mask,
+        capacity: cap
+    };
+}
+
+// Pop the oldest value. Returns the buffer unchanged when empty.
+pub fn ring_pow2_pop(rb: RingPow2) -> RingPow2 {
+    let sz: Int = rb.size;
+    if sz == 0 {
+        return rb;
+    }
+    let h: Int = rb.head;
+    let new_data: List[Int] = list_set(rb.data, h, 0);
+    let next_head: Int = (h + 1) & rb.mask;
+    return RingPow2 {
+        data: new_data,
+        head: next_head,
+        tail: rb.tail,
+        size: sz - 1,
+        mask: rb.mask,
+        capacity: rb.capacity
+    };
+}
+
+// Peek the oldest value without removing it.
+pub fn ring_pow2_peek(rb: RingPow2) -> Result[Int, String] {
+    let sz: Int = rb.size;
+    if sz == 0 {
+        return Err("ERR\tring_pow2_peek\tempty");
+    }
+    return Ok(list_get(rb.data, rb.head));
+}
+
+// Read element at logical index 0 (oldest) up to size - 1 (newest).
+pub fn ring_pow2_get(rb: RingPow2, i: Int) -> Result[Int, String] {
+    let sz: Int = rb.size;
+    if i < 0 {
+        return Err("ERR\tring_pow2_get\tout_of_bounds");
+    }
+    if i >= sz {
+        return Err("ERR\tring_pow2_get\tout_of_bounds");
+    }
+    let phys: Int = (rb.head + i) & rb.mask;
+    return Ok(list_get(rb.data, phys));
+}
+
+// Reset to empty state. Storage is retained for reuse.
+pub fn ring_pow2_reset(rb: RingPow2) -> RingPow2 {
+    return RingPow2 {
+        data: rb.data,
+        head: 0,
+        tail: 0,
+        size: 0,
+        mask: rb.mask,
+        capacity: rb.capacity
+    };
+}

@@ -1,0 +1,42 @@
+// # IEEE-754 Circle Constants
+//
+// Logline: Publishes the binary64 circle constant pi and the derived two_pi and half_pi values.
+//
+// Setup: Pure math. Pi is the unique positive real with exp(i*pi) = -1. Product Float is IEEE-754 binary64.
+//
+// Beats:
+//   1. ieee754_pi returns the round-to-nearest binary64 encoding of pi (0x1.921fb54442d18p+1).
+//   2. math_pi aliases that encoding for math-domain callers.
+//   3. math_two_pi is 2*pi. math_half_pi is pi/2. Both derive from ieee754_pi.
+//   4. No other math module may invent a second decimal for pi.
+
+pub fn ieee754_pi() -> Float {
+    return 3.141592653589793;
+}
+
+pub fn math_pi() -> Float {
+    return ieee754_pi();
+}
+
+pub fn math_two_pi() -> Float {
+    return 2.0 * ieee754_pi();
+}
+
+pub fn math_half_pi() -> Float {
+    return 0.5 * ieee754_pi();
+}
+
+pub type CircleConstants = struct {
+    pi: Float,
+    two_pi: Float,
+    half_pi: Float
+};
+
+pub fn circle_constants() -> CircleConstants {
+    let p: Float = ieee754_pi();
+    return CircleConstants {
+        pi: p,
+        two_pi: 2.0 * p,
+        half_pi: 0.5 * p
+    };
+}

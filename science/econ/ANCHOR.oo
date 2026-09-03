@@ -1,0 +1,87 @@
+// # Econ Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard econ (economics) domain library. Re-exports a stable econ_mod_* surface for the most-used public API (auction, VCG auction, Gresham's law, Hayek price signal, Okun's law, supply/demand, yield-curve arbitrage, Black-Scholes, efficient-market hypothesis, Kelly criterion). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private econ siblings; no caps required for pure numerical economics. Market-clearing tatonnement is pure float math.
+//
+// Beats:
+//   1. Re-export the auction and VCG surface (new_bid, resolve_vickrey, nash_stable) as econ_mod_auction_*, econ_mod_vcg_*.
+//   2. Re-export the Gresham, Hayek, Okun, supply/demand, and yield-curve arbitrage surface as econ_mod_gresham_*, econ_mod_market_*, econ_mod_okun_*, econ_mod_sd_*, econ_mod_yca_*.
+//   3. Re-export the Black-Scholes and efficient-market-hypothesis surface as econ_mod_bs_*, econ_mod_emh_*.
+//   4. Re-export the Kelly criterion surface as econ_mod_kelly_*.
+//   5. Document the private siblings (theories, laws, principles, invariants, KATs).
+
+import "auction.oo";
+import "vcg_auction.oo";
+import "greshams_law.oo";
+import "hayek_price_signal.oo";
+import "okuns_law.oo";
+import "supply_demand_law.oo";
+import "yield_curve_arbitrage_law.oo";
+import "black_scholes_theory.oo";
+import "efficient_market_theory.oo";
+import "kelly_criterion_principle.oo";
+
+// Public auction surface: econ_mod_auction_*
+pub fn econ_mod_auction_new_bid(actor_id: Int, amount: Int) -> Bid { return auction_new_bid(actor_id, amount); }
+pub fn econ_mod_auction_resolve_vickrey(bids: List[Bid]) -> AuctionResult { return auction_resolve_vickrey(bids); }
+pub fn econ_mod_auction_is_nash_stable(current_payoff: Int, defect_payoff: Int) -> Bool { return auction_is_nash_stable(current_payoff, defect_payoff); }
+
+// Public VCG auction surface: econ_mod_vcg_*
+pub fn econ_mod_vcg_new() -> List[Bid] { return vcg_new(); }
+pub fn econ_mod_vcg_add_bid(bids: List[Bid], bidder: Int, value: Int) -> List[Bid] { return vcg_add_bid(bids, bidder, value); }
+pub fn econ_mod_vcg_allocate(bids: List[Bid]) -> Int { return vcg_allocate(bids); }
+pub fn econ_mod_vcg_payment(bids: List[Bid], winner_idx: Int) -> Int { return vcg_payment(bids, winner_idx); }
+pub fn econ_mod_vcg_external_welfare(bids: List[Bid], exclude_idx: Int) -> Int { return vcg_external_welfare(bids, exclude_idx); }
+
+// Public Gresham surface: econ_mod_gresham_*
+pub fn econ_mod_gresham_intrinsic_value(face_value: Int, metal_cents: Int) -> Result[Int, String] { return gresham_intrinsic_value(face_value, metal_cents); }
+pub fn econ_mod_gresham_is_overvalued(face_value: Int, metal_cents: Int) -> Int { return gresham_is_overvalued(face_value, metal_cents); }
+pub fn econ_mod_gresham_dominates(bad_face: Int, good_face: Int, bad_metal: Int, good_metal: Int) -> Int { return gresham_dominates(bad_face, good_face, bad_metal, good_metal); }
+
+// Public Hayek market surface: econ_mod_market_*
+pub fn econ_mod_market_new() -> Market { return market_new(); }
+pub fn econ_mod_market_add_agent(m: Market, reservation: Float, quantity: Float) -> Market { return market_add_agent(m, reservation, quantity); }
+pub fn econ_mod_market_excess_demand(m: Market, central_price: Float) -> Float { return market_excess_demand(m, central_price); }
+pub fn econ_mod_market_tatonnement_step(m: Market, current_price: Float, step: Float) -> Float { return tatonnement_step(m, current_price, step); }
+pub fn econ_mod_market_tatonnement_run(m: Market, p0: Float, step: Float, n_steps: Int) -> Float { return tatonnement_run(m, p0, step, n_steps); }
+
+// Public Okun surface: econ_mod_okun_*
+pub fn econ_mod_okun_default_coef() -> Int { return okun_default_coef(); }
+pub fn econ_mod_okun_gdp_gap(unemployment_pct: Int, natural_rate_pct: Int, coef: Int) -> Result[Int, String] { return okun_gdp_gap(unemployment_pct, natural_rate_pct, coef); }
+pub fn econ_mod_okun_required_growth(unemployment_pct: Int, natural_rate_pct: Int, coef: Int) -> Result[Int, String] { return okun_required_growth(unemployment_pct, natural_rate_pct, coef); }
+
+// Public supply/demand surface: econ_mod_sd_*
+pub fn econ_mod_sd_quantity_demanded(a: Int, b: Int, price: Int) -> Result[Int, String] { return sd_quantity_demanded(a, b, price); }
+pub fn econ_mod_sd_quantity_supplied(c: Int, d: Int, price: Int) -> Result[Int, String] { return sd_quantity_supplied(c, d, price); }
+pub fn econ_mod_sd_excess_demand(a: Int, b: Int, c: Int, d: Int, price: Int) -> Result[Int, String] { return sd_excess_demand(a, b, c, d, price); }
+pub fn econ_mod_sd_equilibrium_price(a: Int, b: Int, c: Int, d: Int) -> Result[Int, String] { return sd_equilibrium_price(a, b, c, d); }
+
+// Public yield-curve arbitrage surface: econ_mod_yca_*
+pub fn econ_mod_yca_implied_yield(p1: Float, y1: Float, p2: Float) -> Result[Float, String] { return yca_implied_yield(p1, y1, p2); }
+pub fn econ_mod_yca_no_arbitrage_holds(p1: Float, y1: Float, p2: Float, y2: Float, tol: Float) -> Int { return yca_no_arbitrage_holds(p1, y1, p2, y2, tol); }
+pub fn econ_mod_yca_arbitrage_profit(p1: Float, y1: Float, p2: Float, y2: Float) -> Result[Float, String] { return yca_arbitrage_profit(p1, y1, p2, y2); }
+pub fn econ_mod_yca_cert(p1: Float, y1: Float, p2: Float, y2: Float) -> DomainCert { return yield_curve_arbitrage_cert(p1, y1, p2, y2); }
+
+// Public Black-Scholes surface: econ_mod_bs_*
+pub fn econ_mod_bs_normal_cdf(x: Float) -> Float { return bs_normal_cdf(x); }
+pub fn econ_mod_bs_d1(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] { return bs_d1(s, k, t, r, sigma); }
+pub fn econ_mod_bs_call_price(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] { return bs_call_price(s, k, t, r, sigma); }
+pub fn econ_mod_bs_put_price(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] { return bs_put_price(s, k, t, r, sigma); }
+
+// Public efficient-market-hypothesis surface: econ_mod_emh_*
+pub fn econ_mod_emh_weak_form_holds(info_reflected_mask: Int) -> Int { return emh_weak_form_holds(info_reflected_mask); }
+pub fn econ_mod_emh_semi_strong_holds(info_reflected_mask: Int) -> Int { return emh_semi_strong_holds(info_reflected_mask); }
+
+// Public Kelly criterion surface: econ_mod_kelly_*
+pub fn econ_mod_kelly_fraction(p: Float, b: Float) -> Result[Float, String] { return kelly_fraction(p, b); }
+pub fn econ_mod_kelly_log_growth(p: Float, b: Float, f: Float) -> Result[Float, String] { return kelly_log_growth(p, b, f); }
+pub fn econ_mod_kelly_log_growth_maximized(p: Float, b: Float, tol: Float) -> Int { return kelly_log_growth_maximized(p, b, tol); }
+pub fn econ_mod_kelly_cert(p: Float, b: Float) -> DomainCert { return kelly_criterion_cert(p, b); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. greshams_law.oo, okuns_law.oo, supply_demand_law.oo, yield_curve_arbitrage_law.oo)
+//   _theory files (e.g. black_scholes_theory.oo, efficient_market_theory.oo, kyle_1985_microstructure_theory.oo, markowitz_variance_theory.oo, myerson_optimal_auction_theory.oo, nash_equilibrium_theory.oo)
+//   _principle files (e.g. comparative_advantage_principle.oo, kelly_criterion_principle.oo, mean_field_nash_principle.oo, risk_return_principle.oo, time_value_principle.oo)
+//   _invariants files (e.g. econ_invariants.oo)
+//   _kat files (e.g. econ_kat.oo)

@@ -1,0 +1,98 @@
+// # String Builder Buffer Module ◈ ZERO-DRAG
+//
+// Logline: Accumulates strings via chunk list with O(1) reset.
+//
+// Setup: Pure string aggregation; chunk defers copy until join; zero ambient.
+//
+// Beats:
+//   1. Initialize builder with chunk list and length zero.
+//   2. Append segments by list_push and bump length, no buffer copy.
+//   3. Join chunks once on to_string and reset via new builder.
+
+// ──▓▓ Sovereign Lattice ── OODA LOOP ENGAGED ──▓▓──
+// :: Ps↑  W↓  V ████████ ::  chunk·defer·join ::
+
+import "std/core/primitives/result.oo";
+import "std/core/primitives/str.oo";
+
+pub type StringBuilder = struct {
+  chunks: List[String],
+  length: Int
+};
+
+pub fn sb_new() -> StringBuilder {
+  let cs: List[String] = list_new();
+  return StringBuilder {
+    chunks: cs,
+    length: 0
+  };
+}
+
+pub fn sb_with_capacity(initial_cap: Int) -> StringBuilder {
+  return sb_new();
+}
+
+pub fn sb_append(sb: StringBuilder, s: String) -> StringBuilder {
+  let slen: Int = chars_len(s);
+  if slen == 0 {
+    return sb;
+  }
+  let cs: List[String] = sb.chunks;
+  let nl: List[String] = list_push(cs, s);
+  return StringBuilder {
+    chunks: nl,
+    length: sb.length + slen
+  };
+}
+
+pub fn sb_append_char(sb: StringBuilder, ch: String) -> StringBuilder {
+  return sb_append(sb, ch);
+}
+
+pub fn sb_append_int(sb: StringBuilder, val: Int) -> StringBuilder {
+  let s: String = val.to_string();
+  return sb_append(sb, s);
+}
+
+pub fn sb_append_line(sb: StringBuilder, line: String) -> StringBuilder {
+  let s1: StringBuilder = sb_append(sb, line);
+  return sb_append(s1, "\n");
+}
+
+pub fn sb_append_repeat(
+  sb: StringBuilder,
+  s: String,
+  count: Int
+) -> StringBuilder {
+  let mut cur: StringBuilder = sb;
+  let mut i: Int = 0;
+  while i < count {
+    cur = sb_append(cur, s);
+    i = i + 1;
+  }
+  return cur;
+}
+
+pub fn sb_to_string(sb: StringBuilder) -> String {
+  let n: Int = list_len(sb.chunks);
+  let mut out: String = "";
+  let mut i: Int = 0;
+  while i < n {
+    let seg: String = list_get(sb.chunks, i);
+    out = out + seg;
+    i = i + 1;
+  }
+  return out;
+}
+
+pub fn sb_len(sb: StringBuilder) -> Int {
+  return sb.length;
+}
+
+pub fn sb_is_empty(sb: StringBuilder) -> Bool {
+  return sb.length == 0;
+}
+
+pub fn sb_clear(sb: StringBuilder) -> StringBuilder {
+  return sb_new();
+}

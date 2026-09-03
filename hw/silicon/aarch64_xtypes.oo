@@ -1,0 +1,125 @@
+// # AArch64 Type Layout Pass
+//
+// Logline: Walks a unit once recording struct field offsets before any function is lowered.
+//
+// Setup: Reuses skip_import, skip_type, and skip_braces. Does not emit instruction words.
+//
+// Beats:
+//   1. Skip import strings and function bodies including requires clauses.
+//   2. Record type Name = struct field 8-byte slots on fld_nm/fld_off.
+//   3. Rewind the cursor to byte 0 keeping those field tables.
+//   4. Fail closed if the type scanner sets err.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+
+fn a64x_skip_fn(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    if a64_starts(a64x_as_p(x), "pub") {
+        x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "pub"), x);
+        x = a64x_skip(x);
+    }
+    let mut nm: String = "";
+    if a64_starts(a64x_as_p(x), "fn") {
+        x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "fn"), x);
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        nm = x.p.text;
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 40 {
+            let mut pd: Int = 1;
+            x = a64x_from_p(a64_eat(a64x_as_p(x), 40), x);
+            while pd > 0 && a64_peek(a64x_as_p(x)) >= 0 {
+                let b: Int = a64_peek(a64x_as_p(x));
+                if b == 40 {
+                    pd = pd + 1;
+                    x = a64x_from_p(a64_eat(a64x_as_p(x), 40), x);
+                } else {
+                    if b == 41 {
+                        pd = pd - 1;
+                        x = a64x_from_p(a64_eat(a64x_as_p(x), 41), x);
+                    } else {
+                        x = a64x_from_p(a64_at(a64x_as_p(x), x.p.i + 1), x);
+                    }
+                }
+                x = a64x_skip(x);
+            }
+        }
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 45 {
+            x = a64x_from_p(a64_eat(a64x_as_p(x), 45), x);
+            x = a64x_from_p(a64_eat(a64x_as_p(x), 62), x);
+            x = a64x_eat_type(x);
+            let rt: String = x.p.text;
+            if rt == "String" { x = a64x_add_field(x, "->" + nm, 2); }
+            if rt == "Float" { x = a64x_add_field(x, "->" + nm, 1); }
+            if rt == "Result" || rt == "Option" { x = a64x_add_field(x, "->" + nm, 3); }
+        }
+    }
+    while a64_peek(a64x_as_p(x)) != 123 && a64_peek(a64x_as_p(x)) >= 0 {
+        let p: A64P = a64x_as_p(x);
+        x = a64x_from_p(a64_at(p, p.i + 1), x);
+        x = a64x_skip(x);
+    }
+    return a64x_skip_braces(x);
+}
+
+pub fn a64x_rewind(x: A64X) -> A64X {
+    return a64x_with_i(x, 0);
+}
+
+pub fn a64x_name_in(xs: List[String], nm: String) -> Bool {
+    let n: Int = list_len(xs);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(xs, i) == nm {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn a64x_keep_fields(src: String, t: A64X) -> A64X {
+    return a64x_with_fields_err(a64x_new(src), t.st.fld_nm, t.st.fld_off, t.st.err);
+}
+
+pub fn a64x_scan_types(src: String) -> A64X {
+    let mut x: A64X = a64x_new(src);
+    let nsrc: Int = bytes_len(src);
+    let mut guard: Int = 0;
+    while guard < nsrc + 2 {
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) < 0 {
+            return x;
+        }
+        if a64_starts(a64x_as_p(x), "import") {
+            x = a64x_skip_import(x);
+        } else {
+            let mut is_type: Bool = a64_starts(a64x_as_p(x), "type");
+            if a64_starts(a64x_as_p(x), "pub") {
+                let mut y: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x), "pub"), x);
+                y = a64x_skip(y);
+                if a64_starts(a64x_as_p(y), "type") {
+                    is_type = true;
+                    x = y;
+                }
+            }
+            if is_type {
+                x = a64x_skip_type(x);
+            } else {
+                if a64_starts(a64x_as_p(x), "pub") || a64_starts(a64x_as_p(x), "fn") {
+                    x = a64x_skip_fn(x);
+                } else {
+                    let p: A64P = a64x_as_p(x);
+                    x = a64x_from_p(a64_at(p, p.i + 1), x);
+                }
+            }
+        }
+        if x.st.err != "" {
+            return x;
+        }
+        guard = guard + 1;
+    }
+    return x;
+}

@@ -1,0 +1,150 @@
+// # FIPS 204 ML-DSA Matrix Expansion & Challenge Sampling
+//
+// Logline: Implements ExpandA, ExpandS, ExpandMASK, and SampleInBall sampling routines for ML-DSA-87.
+//
+// Setup: FIPS 204 Algorithms 25, 26, 27, and 28 for pseudo-random lattice expansion.
+//
+// Beats:
+//   1. ExpandA uniform matrix sampling from SHAKE128 byte streams.
+//   2. ExpandS secret noise sampling with eta=2.
+//   3. ExpandMASK masking vector sampling with gamma_1 = 2^19.
+//   4. SampleInBall generating challenge polynomial with tau=60 non-zero entries.
+
+import "./ml_dsa_poly.oo";
+import "./ml_kem_symmetric.oo";
+
+pub fn ml_dsa_sample_poly_uniform(rho: List[Int], r: Int, s: Int) -> MlDsaPoly {
+    let mut stream: List[Int] = ml_kem_xof(rho, r, s, 840);
+    let mut coeffs: List[Int] = list_new();
+    let mut count: Int = 0;
+    let mut pos: Int = 0;
+
+    while count < 256 {
+        if (pos + 3) > list_len(stream) {
+            stream = ml_kem_xof(rho, r, s, list_len(stream) + 420);
+        }
+        let b0: Int = list_get(stream, pos);
+        let b1: Int = list_get(stream, pos + 1);
+        let b2: Int = list_get(stream, pos + 2);
+        pos = pos + 3;
+
+        let val: Int = b0 | (b1 << 8) | ((b2 & 127) << 16);
+        if val < 8380417 {
+            coeffs = list_push(coeffs, val);
+            count = count + 1;
+        }
+    }
+    return MlDsaPoly { coeffs: coeffs, degree: 256, modulus: 8380417 };
+}
+
+pub fn ml_dsa_expand_a(rho: List[Int], k: Int, l: Int) -> List[Int] {
+    let mut mat_coeffs: List[Int] = list_new();
+    let mut r: Int = 0;
+    while r < k {
+        let mut s: Int = 0;
+        while s < l {
+            let p: MlDsaPoly = ml_dsa_sample_poly_uniform(rho, r, s);
+            let mut i: Int = 0;
+            while i < 256 {
+                mat_coeffs = list_push(mat_coeffs, list_get(p.coeffs, i));
+                i = i + 1;
+            }
+            s = s + 1;
+        }
+        r = r + 1;
+    }
+    return mat_coeffs;
+}
+
+pub fn ml_dsa_sample_poly_eta(stream: List[Int]) -> MlDsaPoly {
+    let mut coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let b: Int = list_get(stream, i / 2);
+        let nibble: Int = if (i & 1) == 0 { b & 15 } else { (b >> 4) & 15 };
+        let mut val: Int = 0;
+        if nibble < 15 {
+            val = (2 - (nibble % 5));
+        }
+        coeffs = list_push(coeffs, ml_dsa_poly_mod(val));
+        i = i + 1;
+    }
+    return MlDsaPoly { coeffs: coeffs, degree: 256, modulus: 8380417 };
+}
+
+pub fn ml_dsa_expand_mask(seed: List[Int], kappa: Int, dim: Int) -> MlDsaPolyVec {
+    let mut out_c: List[Int] = list_new();
+    let gamma1: Int = 524288;
+    let mut i: Int = 0;
+    while i < dim {
+        let mut in_bytes: List[Int] = list_new();
+        let n: Int = list_len(seed);
+        let mut idx: Int = 0;
+        while idx < n {
+            in_bytes = list_push(in_bytes, list_get(seed, idx));
+            idx = idx + 1;
+        }
+        in_bytes = list_push(in_bytes, (kappa + i) & 255);
+        in_bytes = list_push(in_bytes, ((kappa + i) >> 8) & 255);
+        let stream: List[Int] = ml_kem_shake256(in_bytes, 640);
+
+        let mut j: Int = 0;
+        while j < 256 {
+            let b0: Int = list_get(stream, (j * 20) / 8);
+            let b1: Int = list_get(stream, (j * 20) / 8 + 1);
+            let b2: Int = list_get(stream, (j * 20) / 8 + 2);
+            let bit_shift: Int = (j * 20) % 8;
+            let raw_val: Int = ((b0 | (b1 << 8) | (b2 << 16)) >> bit_shift) & 1048575;
+            let val: Int = gamma1 - raw_val;
+            out_c = list_push(out_c, ml_dsa_poly_mod(val));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: out_c,
+        dim: dim
+    };
+}
+
+pub fn ml_dsa_sample_in_ball(c_tilde: List[Int]) -> MlDsaPoly {
+    let mut c_coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        c_coeffs = list_push(c_coeffs, 0);
+        i = i + 1;
+    }
+
+    let stream: List[Int] = ml_kem_shake256(c_tilde, 136);
+    let mut signs: Int = 0;
+    i = 0;
+    while i < 8 {
+        signs = signs | (list_get(stream, i) << (8 * i));
+        i = i + 1;
+    }
+
+    let mut pos: Int = 8;
+    i = 256 - 60;
+    while i < 256 {
+        let b: Int = list_get(stream, pos);
+        pos = pos + 1;
+        let mut j: Int = b;
+        while j > i {
+            let next_b: Int = list_get(stream, pos);
+            pos = pos + 1;
+            j = next_b;
+        }
+        let sign_bit: Int = signs & 1;
+        signs = signs >> 1;
+        let sign_val: Int = if sign_bit == 1 { 8380417 - 1 } else { 1 };
+        c_coeffs = list_set(c_coeffs, i, list_get(c_coeffs, j));
+        c_coeffs = list_set(c_coeffs, j, sign_val);
+        i = i + 1;
+    }
+
+    return MlDsaPoly {
+        coeffs: c_coeffs,
+        degree: 256,
+        modulus: 8380417
+    };
+}

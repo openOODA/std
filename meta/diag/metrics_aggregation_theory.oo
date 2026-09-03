@@ -1,0 +1,177 @@
+// # Metrics Aggregation Theory
+//
+// Logline: avg = sum/count for count > 0; p50 (median) and p99 (99th percentile) are computed over a sorted list scaled by 10; a histogram bucket count is in [0, total].
+//
+// Setup: Pure Int. sum, count, and samples are non-negative; p50 and p99 are returned scaled by 10 (e.g. 5.5 = 55, 10.0 = 100). Empty samples, count == 0, negative sum, or out-of-range bucket counts fail closed to 0.
+//
+// Beats:
+//   1. metrics_avg: sum/count when count > 0; 0 otherwise.
+//   2. metrics_p50: median of sorted samples scaled by 10; 0 when empty.
+//   3. metrics_p99: 99th percentile of sorted samples scaled by 10; 0 when empty.
+//   4. histogram_bucket_ok: 1 iff 0 <= bucket_count <= total; 0 otherwise.
+//   5. Coupled certificate requires all three: avg, p50/p99 over samples, and bucket bound.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Local bubble sort for List[Int]; pure (no FS, no net).
+fn metrics_sort_ints(xs: List[Int]) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(xs, i));
+        i = i + 1;
+    }
+    let mut passes: Int = 0;
+    while passes < n {
+        let mut j: Int = 0;
+        while j + 1 < n - passes {
+            let a: Int = list_get(out, j);
+            let b: Int = list_get(out, j + 1);
+            if a > b {
+                out = list_set(out, j, b);
+                out = list_set(out, j + 1, a);
+            }
+            j = j + 1;
+        }
+        passes = passes + 1;
+    }
+    return out;
+}
+
+// Integer average of (sum, count). count <= 0 or sum < 0 returns 0.
+fn met_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn metrics_avg(sum: Int, count: Int) -> Result[Int, String] {
+    if count <= 0 { return Err("ERR\tmet\tcount"); }
+    if sum < 0 { return Err("ERR\tmet\sum"); }
+    return Ok(sum / count);
+}
+
+// Median of a list, scaled by 10 (e.g. 5.5 -> 55). Empty list returns 0.
+pub fn metrics_p50(samples: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(samples);
+    if n <= 0 { return Err("ERR\tmet\tempty"); }
+    let sorted: List[Int] = metrics_sort_ints(samples);
+    if n % 2 == 1 {
+        let mid: Int = n / 2;
+        let v: Int = list_get(sorted, mid);
+        return Ok(v * 10);
+    }
+    let lo: Int = list_get(sorted, n / 2 - 1);
+    let hi: Int = list_get(sorted, n / 2);
+    return Ok((lo + hi) * 5);
+}
+
+// 99th percentile of a list, scaled by 10. Empty list returns 0.
+pub fn metrics_p99(samples: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(samples);
+    if n <= 0 { return Err("ERR\tmet\tempty"); }
+    let sorted: List[Int] = metrics_sort_ints(samples);
+    let rank: Int = (n * 99) / 100;
+    let v: Int = list_get(sorted, rank);
+    return Ok(v * 10);
+}
+
+// 1 iff 0 <= bucket_count <= total; 0 otherwise.
+pub fn histogram_bucket_ok(bucket_count: Int, total: Int) -> Int {
+    if bucket_count < 0 { return 0; }
+    if total < 0 { return 0; }
+    if bucket_count > total { return 0; }
+    return 1;
+}
+
+// Build a sample list [1, 2, ..., n]. n <= 0 returns an empty list.
+pub fn metrics_sample_range(n: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if n <= 0 { return out; }
+    let mut i: Int = 1;
+    while i <= n {
+        out = list_push(out, i);
+        i = i + 1;
+    }
+    return out;
+}
+
+// Certificate that bundles avg, p50, p99, and the histogram bucket bound.
+pub fn metrics_aggregation_holds(
+    sum: Int,
+    count: Int,
+    samples: List[Int],
+    bucket_count: Int,
+    total: Int
+) -> DomainCert {
+    let mut holds: Int = 0;
+    if count > 0 {
+        if sum >= 0 {
+            let ar: Result[Int, String] = metrics_avg(sum, count);
+            if ar.is_ok() == false { return domain_cert("diag", "metrics_aggregation", 0); }
+            let a: Int = met_got(ar);
+            if a * count == sum {
+                if met_got(metrics_p50(samples)) > 0 {
+                    if met_got(metrics_p99(samples)) > 0 {
+                        if histogram_bucket_ok(bucket_count, total) == 1 {
+                            holds = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("diag", "metrics_aggregation", holds);
+}
+
+pub fn verify_metrics_aggregation_theory() -> Bool {
+    // Golden: avg(100, 10) = 10.
+    if met_got(metrics_avg(100, 10)) != 10 { return false; }
+    if met_got(metrics_avg(50, 5)) != 10 { return false; }
+    if met_got(metrics_avg(0, 5)) != 0 { return false; }
+    if met_got(metrics_avg(7, 3)) != 2 { return false; }
+    // p50 of [1..10] = 5.5 = 55.
+    let xs: List[Int] = metrics_sample_range(10);
+    if list_len(xs) != 10 { return false; }
+    if met_got(metrics_p50(xs)) != 55 { return false; }
+    if met_got(metrics_p99(xs)) != 100 { return false; }
+    // p50 of [1..9] (odd) = 5 = 50.
+    let ys: List[Int] = metrics_sample_range(9);
+    if met_got(metrics_p50(ys)) != 50 { return false; }
+    if met_got(metrics_p99(ys)) != 90 { return false; }
+    // p50 of [1] -> 10, p99 of [1] -> 10.
+    let one: List[Int] = metrics_sample_range(1);
+    if met_got(metrics_p50(one)) != 10 { return false; }
+    if met_got(metrics_p99(one)) != 10 { return false; }
+    // p50 of [1, 100] = 50.5 = 505.
+    let mut pair: List[Int] = list_new();
+    pair = list_push(pair, 1);
+    pair = list_push(pair, 100);
+    if met_got(metrics_p50(pair)) != 505 { return false; }
+    let empty: List[Int] = list_new();
+    if metrics_p50(empty).is_ok() { return false; }
+    if metrics_p99(empty).is_ok() { return false; }
+    if metrics_avg(100, 0).is_ok() { return false; }
+    if metrics_avg(0, 0 - 1).is_ok() { return false; }
+    if metrics_avg(0, 0).is_ok() { return false; }
+    if metrics_avg(0 - 1, 5).is_ok() { return false; }
+    // Coupled: histogram bucket ok.
+    if histogram_bucket_ok(0, 10) != 1 { return false; }
+    if histogram_bucket_ok(5, 10) != 1 { return false; }
+    if histogram_bucket_ok(10, 10) != 1 { return false; }
+    if histogram_bucket_ok(11, 10) != 0 { return false; }
+    if histogram_bucket_ok(0 - 1, 10) != 0 { return false; }
+    if histogram_bucket_ok(5, 0 - 1) != 0 { return false; }
+    if histogram_bucket_ok(5, 0) != 0 { return false; }
+    // Certificate: closed + coupled side holds.
+    let c1: DomainCert = metrics_aggregation_holds(100, 10, xs, 5, 10);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "diag" { return false; }
+    if c1.law_name != "metrics_aggregation" { return false; }
+    // Certificate: empty samples -> p50 = 0 -> fails closed.
+    let c2: DomainCert = metrics_aggregation_holds(100, 10, empty, 5, 10);
+    if c2.holds != 0 { return false; }
+    // Certificate: out-of-range bucket fails closed.
+    let c3: DomainCert = metrics_aggregation_holds(100, 10, xs, 11, 10);
+    if c3.holds != 0 { return false; }
+    return true;
+}

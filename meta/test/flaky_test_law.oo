@@ -1,0 +1,186 @@
+// # Flaky test law
+//
+// Logline: A flaky test is one that passes sometimes and fails sometimes across runs; a deterministic seed is non-flaky, real time/IO dependence is non-ideal.
+//
+// Setup: Pure Int arithmetic on a FlakyRecord. No FS, net, env.
+//
+// Beats:
+//   1. flaky_record_new reports is_flaky=true only when 0 < passes < runs.
+//   2. flaky_test_holds fails closed for negative counts or passes > runs.
+//   3. should_quarantine triggers when 2+ fails appear within 3+ runs.
+//   4. Coupled with retry policy: a non-flaky deterministic seed never reaches quarantine.
+
+import "std/core/primitives/domain_cert.oo";
+
+type FlakyRecord = struct {
+    passes: Int,
+    runs: Int,
+    fails: Int,
+    is_flaky: Bool,
+    should_quarantine: Bool,
+    is_deterministic: Bool
+};
+
+pub fn flaky_record_new(passes: Int, runs: Int) -> FlakyRecord {
+    let fails: Int = runs - passes;
+    let mut flaky: Bool = false;
+    if runs > 0 {
+        if passes > 0 {
+            if fails > 0 {
+                flaky = true;
+            }
+        }
+    }
+    let mut quar: Bool = false;
+    if runs >= 3 {
+        if fails >= 2 {
+            if passes > 0 {
+                quar = true;
+            }
+        }
+    }
+    let mut det: Bool = false;
+    if runs > 0 {
+        if fails == 0 {
+            det = true;
+        }
+        if passes == 0 {
+            det = true;
+        }
+    }
+    return FlakyRecord {
+        passes: passes,
+        runs: runs,
+        fails: fails,
+        is_flaky: flaky,
+        should_quarantine: quar,
+        is_deterministic: det
+    };
+}
+
+pub fn flaky_test_holds(passes: Int, runs: Int) -> DomainCert {
+    if runs < 0 {
+        return domain_cert("test", "flaky_test_law", 0);
+    }
+    if passes < 0 {
+        return domain_cert("test", "flaky_test_law", 0);
+    }
+    if passes > runs {
+        return domain_cert("test", "flaky_test_law", 0);
+    }
+    return domain_cert("test", "flaky_test_law", 1);
+}
+
+// Retry policy: a flaky test is quarantined after 2+ fails in 3+ runs.
+// A deterministic test (no fails or no passes) is never quarantined.
+pub fn retry_policy_quarantine(passes: Int, runs: Int) -> Int {
+    let rec: FlakyRecord = flaky_record_new(passes, runs);
+    if rec.should_quarantine {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_flaky_test_law() -> Bool {
+    // Golden: 10/10 -> not flaky, deterministic, never quarantined.
+    let p1: FlakyRecord = flaky_record_new(10, 10);
+    if p1.is_flaky != false {
+        return false;
+    }
+    if p1.is_deterministic != true {
+        return false;
+    }
+    if p1.should_quarantine != false {
+        return false;
+    }
+    if p1.passes != 10 {
+        return false;
+    }
+    if p1.runs != 10 {
+        return false;
+    }
+    if p1.fails != 0 {
+        return false;
+    }
+    // Golden: 5/10 -> flaky, deterministic = false.
+    let p2: FlakyRecord = flaky_record_new(5, 10);
+    if p2.is_flaky != true {
+        return false;
+    }
+    if p2.is_deterministic != false {
+        return false;
+    }
+    if p2.fails != 5 {
+        return false;
+    }
+    // Golden: 0/10 -> not flaky (always fails is deterministic, no quarantine).
+    let p3: FlakyRecord = flaky_record_new(0, 10);
+    if p3.is_flaky != false {
+        return false;
+    }
+    if p3.is_deterministic != true {
+        return false;
+    }
+    if p3.should_quarantine != false {
+        return false;
+    }
+    // 1/3 -> flaky (2 fails, 1 pass).
+    let p4: FlakyRecord = flaky_record_new(1, 3);
+    if p4.is_flaky != true {
+        return false;
+    }
+    if p4.should_quarantine != true {
+        return false;
+    }
+    // 2/3 -> flaky, only 1 fail, no quarantine.
+    let p5: FlakyRecord = flaky_record_new(2, 3);
+    if p5.is_flaky != true {
+        return false;
+    }
+    if p5.should_quarantine != false {
+        return false;
+    }
+    // 1/2 -> flaky, but only 1 fail and only 2 runs, no quarantine.
+    let p6: FlakyRecord = flaky_record_new(1, 2);
+    if p6.is_flaky != true {
+        return false;
+    }
+    if p6.should_quarantine != false {
+        return false;
+    }
+    // Hostile: negative counts fail closed.
+    let h0: DomainCert = flaky_test_holds(0 - 1, 10);
+    if h0.holds != 0 {
+        return false;
+    }
+    let h1: DomainCert = flaky_test_holds(5, 0 - 1);
+    if h1.holds != 0 {
+        return false;
+    }
+    let h2: DomainCert = flaky_test_holds(5, 0 - 10);
+    if h2.holds != 0 {
+        return false;
+    }
+    // Hostile: passes > runs fails closed.
+    let h3: DomainCert = flaky_test_holds(11, 10);
+    if h3.holds != 0 {
+        return false;
+    }
+    // Coupled with retry policy: 2 fails in 3 runs -> quarantine.
+    let q1: Int = retry_policy_quarantine(1, 3);
+    if q1 != 1 {
+        return false;
+    }
+    // Coupled: 5/10 flaky, but only 1 fail per 2 runs in the policy window
+    // (no quarantine when 1 fail in 3 runs).
+    let q2: Int = retry_policy_quarantine(2, 3);
+    if q2 != 0 {
+        return false;
+    }
+    // Coupled: 10/10 deterministic -> never quarantined.
+    let q3: Int = retry_policy_quarantine(10, 10);
+    if q3 != 0 {
+        return false;
+    }
+    return true;
+}

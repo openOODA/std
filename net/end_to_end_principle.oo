@@ -1,0 +1,65 @@
+// # End-to-End Principle (Saltzer, Reed, Clark)
+//
+// Logline: Functions placed at the lower layers of a network are justified only as a performance optimization, not as correctness.
+//
+// Setup: Pure Int. Argument counts and bitmasks describe where a function lives. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. Layer placement: lower-layer support is permitted only when it is a performance optimization.
+//   2. Correctness requirement: correctness must be achievable at the endpoints alone.
+//   3. Hosts net_invariants.oo stem for cross-law correlation.
+//   4. Fail-closed: required correctness without lower-layer support is 0.
+
+import "std/net/net_invariants.oo";
+
+// Layer codes: 0 LINK, 1 NETWORK, 2 TRANSPORT, 3 APPLICATION.
+pub fn e2e_layer_link() -> Int {
+    return 0;
+}
+
+pub fn e2e_layer_app() -> Int {
+    return 3;
+}
+
+// Performance flag: 1 if the lower-layer function is justified as a performance optimization, else 0.
+pub fn e2e_is_performance(perf_bit: Int) -> Int {
+    if perf_bit == 1 { return 1; }
+    return 0;
+}
+
+// End-to-end witness: 1 only if (a) the function is performance-justified OR
+// (b) the function is at the application layer. Otherwise 0.
+pub fn e2e_witness(layer: Int, perf_bit: Int) -> Int {
+    if layer < 0 { return 0; }
+    if layer > 3 { return 0; }
+    if layer == e2e_layer_app() { return 1; }
+    if e2e_is_performance(perf_bit) == 1 { return 1; }
+    return 0;
+}
+
+// End-to-end correctness: 1 if correctness is achievable at endpoints without lower-layer help.
+pub fn e2e_correct_at_endpoints_only(correct_at_endpoints: Int) -> Int {
+    if correct_at_endpoints == 1 { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for the end-to-end principle.
+pub fn verify_end_to_end_principle() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    if e2e_witness(3, 0) != 1 { return false; }
+    if e2e_witness(0, 1) != 1 { return false; }
+    if e2e_witness(0, 0) != 0 { return false; }
+    if e2e_witness(1, 0) != 0 { return false; }
+    if e2e_witness(2, 0) != 0 { return false; }
+    if e2e_witness(0 - 1, 1) != 0 { return false; }
+    if e2e_witness(4, 1) != 0 { return false; }
+    if e2e_is_performance(0) != 0 { return false; }
+    if e2e_is_performance(2) != 0 { return false; }
+    if e2e_is_performance(0 - 1) != 0 { return false; }
+    if e2e_correct_at_endpoints_only(1) != 1 { return false; }
+    if e2e_correct_at_endpoints_only(0) != 0 { return false; }
+    if e2e_correct_at_endpoints_only(2) != 0 { return false; }
+    if e2e_correct_at_endpoints_only(0 - 1) != 0 { return false; }
+    return true;
+}

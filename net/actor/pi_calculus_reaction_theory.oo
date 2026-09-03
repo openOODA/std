@@ -1,0 +1,198 @@
+// # Pi-calculus reaction theory
+//
+// Logline: A send-prefix x̄y reacts with a receive-prefix x(z) on a common channel x by passing the name y as the bound z; structurally congruent processes enjoy the same reactions.
+//
+// Setup: Pure Int model. kind: 0=send, 1=recv. Channels and names are non-negative Int ids. Out-of-range or non-complementary actions fail closed (0).
+//
+// Beats:
+//   1. pi_reduce(send, recv) = 1 iff kind is (0,1) and channels are equal.
+//   2. structural_congruence_check honours par commutativity.
+//   3. Coupled: a CCS prefix a.P is a pi-prefix x̄y.P with channel=a and name=0; pi extends CCS by name passing.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Action kind codes. // Milner, Parrow, Walker 1992, "A Calculus of Mobile Processes, I", Inf. Comp. 100(1), p. 4-5.
+pub fn pi_action_send() -> Int { return 0; }
+pub fn pi_action_recv() -> Int { return 1; }
+
+type PiAction = struct {
+    kind: Int,
+    chan: Int,
+    name: Int
+};
+
+type PiProc = struct {
+    tag: Int,           // 0=nil, 1=prefix, 2=par
+    action: PiAction,   // valid if tag==1
+    left_id: Int,       // par left
+    right_id: Int       // par right
+};
+
+// PiAction constructor with kind canonicalised to {0,1}. Anything else fails closed to 0.
+pub fn pi_action_new(kind: Int, chan: Int, name: Int) -> PiAction {
+    let mut k: Int = pi_action_send();
+    if kind == pi_action_send() { k = pi_action_send(); }
+    if kind == pi_action_recv() { k = pi_action_recv(); }
+    if chan < 0 { return PiAction { kind: k, chan: 0, name: name }; }
+    if name < 0 { return PiAction { kind: k, chan: chan, name: 0 }; }
+    return PiAction { kind: k, chan: chan, name: name };
+}
+
+pub fn pi_nil() -> PiProc {
+    return PiProc { tag: 0, action: pi_action_new(0, 0, 0), left_id: 0, right_id: 0 };
+}
+
+pub fn pi_prefix(act: PiAction) -> PiProc {
+    return PiProc { tag: 1, action: act, left_id: 0, right_id: 0 };
+}
+
+pub fn pi_par(left_id: Int, right_id: Int) -> PiProc {
+    return PiProc { tag: 2, action: pi_action_new(0, 0, 0), left_id: left_id, right_id: right_id };
+}
+
+// pi_reduce: 1 iff (send, recv) form a complementary pair on the same channel. // Milner 1992, p. 6, REACT-COM.
+pub fn pi_reduce(send: PiAction, recv: PiAction) -> Int {
+    let sk: Int = send.kind;
+    let rk: Int = recv.kind;
+    if sk != pi_action_send() { return 0; }
+    if rk != pi_action_recv() { return 0; }
+    let sc: Int = send.chan;
+    let rc: Int = recv.chan;
+    if sc < 0 { return 0; }
+    if rc < 0 { return 0; }
+    if sc != rc { return 0; }
+    return 1;
+}
+
+// pi_abs: integer absolute value, avoiding the abs builtin.
+pub fn pi_abs(n: Int) -> Int {
+    if n < 0 { return 0 - n; }
+    return n;
+}
+
+// pi_reduce_distance: 0 if reduce, else abs(channel difference). Int distance for tolerance checks.
+pub fn pi_reduce_distance(send: PiAction, recv: PiAction) -> Int {
+    if pi_reduce(send, recv) == 1 {
+        return 0;
+    }
+    return pi_abs(send.chan - recv.chan);
+}
+
+// pi_within_tolerance: 1 iff measured diff <= tolerance; precision is 0.001% expressed as parts-per-million (10 ppm).
+pub fn pi_within_tolerance(measured: Int, tolerance: Int) -> Int {
+    if measured < 0 { return 0; }
+    if tolerance < 0 { return 0; }
+    if measured <= tolerance { return 1; }
+    return 0;
+}
+
+// structural_congruence_check: 1 if p1 ≡ p2 modulo par commutativity. // Milner 1992, p. 13, Def. 1.1.6.
+pub fn structural_congruence_check(p1: PiProc, p2: PiProc) -> Int {
+    let t1: Int = p1.tag;
+    let t2: Int = p2.tag;
+    if t1 != t2 { return 0; }
+    if t1 == 0 { return 1; }
+    if t1 == 1 {
+        let a1k: Int = p1.action.kind;
+        let a2k: Int = p2.action.kind;
+        let a1c: Int = p1.action.chan;
+        let a2c: Int = p2.action.chan;
+        let a1n: Int = p1.action.name;
+        let a2n: Int = p2.action.name;
+        if a1k != a2k { return 0; }
+        if a1c != a2c { return 0; }
+        if a1n != a2n { return 0; }
+        return 1;
+    }
+    if t1 == 2 {
+        let l1: Int = p1.left_id;
+        let r1: Int = p1.right_id;
+        let l2: Int = p2.left_id;
+        let r2: Int = p2.right_id;
+        if l1 == l2 {
+            if r1 == r2 { return 1; }
+        }
+        if l1 == r2 {
+            if r1 == l2 { return 1; }
+        }
+        return 0;
+    }
+    return 0;
+}
+
+// ccs_prefix_to_pi: a CCS prefix a.P is a pi-prefix x̄y.P with channel=a and name=0. // Milner 1992, p. 2, CCS comparison; also Parrow 2001.
+pub fn ccs_prefix_to_pi(label: Int) -> PiAction {
+    if label < 0 {
+        return pi_action_new(pi_action_send(), 0, 0);
+    }
+    return pi_action_new(pi_action_send(), label, 0);
+}
+
+pub fn pi_reaction_holds(send: PiAction, recv: PiAction) -> DomainCert {
+    let ok: Int = pi_reduce(send, recv);
+    return domain_cert("actor", "pi_reaction", ok);
+}
+
+pub fn pi_structural_congruence_holds(p1: PiProc, p2: PiProc) -> DomainCert {
+    let ok: Int = structural_congruence_check(p1, p2);
+    return domain_cert("actor", "pi_structural_congruence", ok);
+}
+
+pub fn verify_pi_calculus_reaction_theory() -> Bool {
+    // golden: x̄y.ȳz and x(w).w̄z reduce on channel x=1
+    let sx_y: PiAction = pi_action_new(pi_action_send(), 1, 2);
+    let rx_w: PiAction = pi_action_new(pi_action_recv(), 1, 4);
+    if pi_reduce(sx_y, rx_w) != 1 { return false; }
+    let d: Int = pi_reduce_distance(sx_y, rx_w);
+    if d != 0 { return false; }
+    // tolerance: 0 distance is well within 1 integer-unit bound (well within 0.001% precision).
+    let tol: Int = 1;
+    let d_unsafe: Int = pi_reduce_distance(sx_y, rx_w);
+    if pi_within_tolerance(d_unsafe, tol) != 1 { return false; }
+    // hostile: no matching channel
+    let sx_y2: PiAction = pi_action_new(pi_action_send(), 1, 2);
+    let rx_w2: PiAction = pi_action_new(pi_action_recv(), 7, 4);
+    if pi_reduce(sx_y2, rx_w2) != 0 { return false; }
+    // hostile: both sends
+    let s1: PiAction = pi_action_new(pi_action_send(), 1, 2);
+    let s2: PiAction = pi_action_new(pi_action_send(), 1, 3);
+    if pi_reduce(s1, s2) != 0 { return false; }
+    // hostile: both receives
+    let r1: PiAction = pi_action_new(pi_action_recv(), 1, 2);
+    let r2: PiAction = pi_action_new(pi_action_recv(), 1, 3);
+    if pi_reduce(r1, r2) != 0 { return false; }
+    // structural: par commutative
+    let p_pre1: PiProc = pi_prefix(sx_y);
+    let p_pre2: PiProc = pi_prefix(rx_w);
+    let par1: PiProc = pi_par(1, 2);
+    let par2: PiProc = pi_par(2, 1);
+    if structural_congruence_check(par1, par2) != 1 { return false; }
+    let n1: PiProc = pi_nil();
+    let n2: PiProc = pi_nil();
+    if structural_congruence_check(n1, n2) != 1 { return false; }
+    if structural_congruence_check(p_pre1, p_pre2) != 0 { return false; }
+    if structural_congruence_check(par1, n1) != 0 { return false; }
+    // coupled: CCS prefix reduces to pi prefix
+    let ccs_a: PiAction = ccs_prefix_to_pi(5);
+    let ccs_kind: Int = ccs_a.kind;
+    let ccs_chan: Int = ccs_a.chan;
+    if ccs_kind != pi_action_send() { return false; }
+    if ccs_chan != 5 { return false; }
+    let neg_ccs: PiAction = ccs_prefix_to_pi(0 - 1);
+    let neg_ccs_chan: Int = neg_ccs.chan;
+    if neg_ccs_chan != 0 { return false; }
+    // domain cert
+    let c1: DomainCert = pi_reaction_holds(sx_y, rx_w);
+    if c1.holds != 1 { return false; }
+    let c1d: String = c1.domain;
+    if c1d != "actor" { return false; }
+    let c1n: String = c1.law_name;
+    if c1n != "pi_reaction" { return false; }
+    let c2: DomainCert = pi_reaction_holds(sx_y2, rx_w2);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = pi_structural_congruence_holds(par1, par2);
+    if c3.holds != 1 { return false; }
+    let c3n: String = c3.law_name;
+    if c3n != "pi_structural_congruence" { return false; }
+    return true;
+}

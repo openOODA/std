@@ -1,0 +1,95 @@
+// # Encoding Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard encoding domain library. Re-exports a stable encoding_mod_* surface for the most-used public API (hex, base64, base32, base58, ascii85, URL, CSV, TSV, varint/leb128, msgpack, CBOR, bencode). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private encoding siblings; no caps required for pure byte/string encoders. Streamed and zero-copy variants take FsReadCap at the call site.
+//
+// Beats:
+//   1. Re-export the hex, base64, base32, and base58 surface as encoding_mod_hex_*, encoding_mod_b64_*, encoding_mod_b32_*, encoding_mod_b58_*.
+//   2. Re-export the ASCII85, URL, CSV, and TSV surface as encoding_mod_a85_*, encoding_mod_url_*, encoding_mod_csv_*, encoding_mod_tsv_*.
+//   3. Re-export the varint, msgpack, CBOR, and bencode surface as encoding_mod_varint_*, encoding_mod_msgpack_*, encoding_mod_cbor_*, encoding_mod_bencode_*.
+//   4. Re-export the streaming and zero-copy JSON surface as encoding_mod_json_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _codec, _vec, _safe, _pure files.
+
+import "hex.oo";
+import "hex_ct.oo";
+import "hex_ct_low.oo";
+import "base64.oo";
+import "base64_vec.oo";
+import "base32.oo";
+import "base58_codec.oo";
+import "base58_check.oo";
+import "base58_check_codec.oo";
+import "ascii85.oo";
+import "url_encode.oo";
+import "csv.oo";
+import "tsv.oo";
+import "varint.oo";
+import "leb128_safe.oo";
+import "msgpack_pure.oo";
+import "msgpack_pure_dec.oo";
+import "msgpack_pure_tree.oo";
+import "cbor_rfc8949.oo";
+import "cbor_strict.oo";
+import "cbor_strict_dec.oo";
+import "cbor_strict_tree.oo";
+import "bencode_safe.oo";
+import "bencode_safe_parse.oo";
+import "json_stream.oo";
+import "json_zero_copy.oo";
+import "encoding.oo";
+
+// Public hex surface: encoding_mod_hex_*
+pub fn encoding_mod_hex_encode(s: String) -> String { return encoding_hex_encode(s); }
+pub fn encoding_mod_hex_byte_to_str(b: Int, upper: Bool) -> String { return hex_byte_to_str(b, upper); }
+pub fn encoding_mod_hex_nibble_val(c: String) -> Int { return hex_nibble_val(c); }
+
+// Public base64 surface: encoding_mod_b64_*
+pub fn encoding_mod_b64_encode(s: String) -> String { return encoding_b64_encode(s); }
+pub fn encoding_mod_b64_encode_custom(s: String, cfg: Base64Config) -> String { return base64_encode_custom(s, cfg); }
+
+// Public base32 surface: encoding_mod_b32_*
+pub fn encoding_mod_b32_encode(s: String) -> String { return encoding_b32_encode(s); }
+pub fn encoding_mod_b32_encode_custom(s: String, cfg: Base32Config) -> String { return base32_encode_custom(s, cfg); }
+
+// Public base58 surface: encoding_mod_b58_*
+pub fn encoding_mod_b58_encode_int(val: Int) -> String { return base58_encode_int(val); }
+pub fn encoding_mod_b58_decode_int(s: String) -> Result[Int, String] { return base58_decode_int(s); }
+pub fn encoding_mod_b58_check_encode(payload: List[Int]) -> B58Out { return base58_check_encode(payload); }
+pub fn encoding_mod_b58_check_decode(text: String) -> ByteOut { return base58_check_decode(text); }
+
+// Public ASCII85 surface: encoding_mod_a85_*
+pub fn encoding_mod_a85_encode(s: String) -> String { return ascii85_encode(s); }
+pub fn encoding_mod_a85_decode(s: String) -> Result[String, String] { return ascii85_decode(s); }
+
+// Public URL surface: encoding_mod_url_*
+pub fn encoding_mod_url_encode_component(s: String) -> String { return url_encode_component(s); }
+pub fn encoding_mod_url_is_unreserved(c: String) -> Bool { return url_is_unreserved(c); }
+
+// Public CSV / TSV surface: encoding_mod_csv_*, encoding_mod_tsv_*
+pub fn encoding_mod_csv_escape_field(field: String) -> String { return csv_escape_field(field); }
+pub fn encoding_mod_csv_field_count(line: String) -> Int { return csv_field_count(line); }
+pub fn encoding_mod_tsv_escape_field(field: String) -> String { return tsv_escape_field(field); }
+pub fn encoding_mod_tsv_unescape_field(field: String) -> String { return tsv_unescape_field(field); }
+
+// Public varint / leb128 surface: encoding_mod_varint_*
+pub fn encoding_mod_varint_zigzag_encode(n: Int) -> Int { return zigzag_encode(n); }
+pub fn encoding_mod_varint_zigzag_decode(n: Int) -> Int { return zigzag_decode(n); }
+
+// Public msgpack surface: encoding_mod_msgpack_*
+pub fn encoding_mod_msgpack_enc_int(v: Int) -> ByteOut { return msgpack_pure_enc_int(v); }
+pub fn encoding_mod_msgpack_dec(buf: List[Int]) -> Result[MsgValue, String] { return msgpack_decode(buf); }
+
+// Public CBOR surface: encoding_mod_cbor_*
+pub fn encoding_mod_cbor_enc_int(v: Int) -> ByteOut { return cbor_strict_encode_int(v); }
+pub fn encoding_mod_cbor_dec(buf: List[Int]) -> Result[CborValue, String] { return cbor_decode(buf); }
+
+// Public bencode surface: encoding_mod_bencode_*
+pub fn encoding_mod_bencode_enc_int(v: Int) -> ByteOut { return bencode_safe_encode_int(v); }
+pub fn encoding_mod_bencode_dec(buf: List[Int]) -> ByteOut { return bencode_safe_parse_all(buf); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. base64_alphabet_size_law.oo, cbor_determinism_rfc8949_law.oo, url_encoding_law.oo)
+//   _theory files (e.g. base32_theory.oo, capn_proto_arena_principle.oo, flatbuffers_size_calculation_theory.oo, utf8_lead_byte_principle.oo, ascii_printable_principle.oo)
+//   _invariants files (e.g. encoding_invariants.oo)
+//   _kat files (e.g. encoding_kat.oo)

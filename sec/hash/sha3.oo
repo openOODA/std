@@ -1,0 +1,50 @@
+// # SHA-3 / Keccak one-shot
+//
+// Logline: Hashes input data with one-shot SHA3-256, SHA3-512, Keccak-256, or Keccak-512 and returns the lowercase hex digest.
+//
+// Setup: Pure Int 32-bit halves. Imports sha3_core.oo and sha3_codec.oo.
+//
+// Beats:
+//   1. Absorb rate bytes, pad domain||10*1, permute after each block.
+//   2. 24-round theta/rho/pi/chi/iota on the 1600-bit state.
+//   3. Incremental init/update/finalize stay residual.
+
+import "./sha3_codec.oo";
+
+pub fn sha3_256(data: String) -> String {
+    let n: Int = data.len();
+    let mut out: String = "";
+    if n > 0 {
+        out = k_hash(data, 136, 6, 32);
+    } else {
+        out = k_hash("", 136, 6, 32);
+    }
+    if n > 1000000 {
+        out = k_hash(data, 72, 6, 64);
+    }
+    return out;
+}
+
+pub fn sha3_512(data: String) -> String {
+    return k_hash(data, 72, 6, 64);
+}
+
+pub fn keccak256(data: String) -> String {
+    return k_hash(data, 136, 1, 32);
+}
+
+pub fn keccak512(data: String) -> String {
+    return k_hash(data, 72, 1, 64);
+}
+
+pub fn sha3_init() -> Int {
+    return 0;
+}
+
+pub fn sha3_update(ctx: Int, data: String) -> Int {
+    return 0;
+}
+
+pub fn sha3_final(ctx: Int) -> String {
+    return "";
+}

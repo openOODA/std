@@ -1,0 +1,49 @@
+// # Constant-Time Arithmetic and Bitwise Comparisons
+//
+// Logline: Constant-time data selection, bitwise equality, and comparison primitives preventing cache and timing side channels.
+//
+// Setup: Pure branchless operations where control flow and instruction latency are independent of secret data.
+//
+// Beats:
+//   1. Implement branchless constant-time conditional select (ct_select).
+//   2. Implement branchless equality comparison (ct_eq).
+//   3. Implement constant-time buffer comparison over byte arrays.
+//   4. Validate zero-branch execution guarantees.
+
+pub fn ct_select(mask: Int, a: Int, b: Int) -> Int {
+    // mask must be all 1s (-1) or all 0s (0)
+    let m: Int = mask & 1;
+    let full_mask: Int = 0 - m; // 0 -> 0, 1 -> -1 (all 1s)
+    let inv_mask: Int = (-1) ^ full_mask;
+    return (a & full_mask) | (b & inv_mask);
+}
+
+pub fn ct_eq(a: Int, b: Int) -> Int {
+    let diff: Int = a ^ b;
+    // diff == 0 -> 1, diff != 0 -> 0
+    let diff_or_neg: Int = diff | (0 - diff);
+    let msb: Int = (diff_or_neg >> 63) & 1;
+    return 1 ^ msb;
+}
+
+pub fn ct_is_zero(x: Int) -> Int {
+    let x_or_neg: Int = x | (0 - x);
+    let msb: Int = (x_or_neg >> 63) & 1;
+    return 1 ^ msb;
+}
+
+pub fn ct_buffer_eq(a: List[Int], b: List[Int]) -> Bool {
+    let len_a: Int = list_len(a);
+    let len_b: Int = list_len(b);
+    let mut diff_accum: Int = len_a ^ len_b;
+    let n: Int = if len_a < len_b { len_a } else { len_b };
+    let mut i: Int = 0;
+    while i < n {
+        let va: Int = list_get(a, i);
+        let vb: Int = list_get(b, i);
+        diff_accum = diff_accum | (va ^ vb);
+        i = i + 1;
+    }
+    return ct_is_zero(diff_accum) == 1;
+}
+

@@ -1,0 +1,141 @@
+// # Streaming integrity principle
+//
+// Logline: A streaming checksum computed on-the-fly over a list of block residues matches a master checksum if and only if no block was corrupted; the empty block list fails closed to 0.
+//
+// Setup: Pure Int. blocks is a List[Int] of 32-bit block residues; master is the expected 32-bit residue. Returns 1 on match, 0 otherwise. Out-of-range master or empty blocks list fail closed.
+//
+// Beats:
+//   1. si_fold(blocks) starts at 0, XOR-fold each block, mask to 32 bits.
+//   2. streaming_checksum(blocks, master) returns 1 iff the fold equals master.
+//   3. Golden: known fold matches master -> 1; corruption -> 0.
+//   4. Hostile: empty blocks list -> 0; negative master -> 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Bitwise XOR: a^b == (a|b) - (a&b).
+fn si_xor(a: Int, b: Int) -> Int {
+    return (a | b) - (a & b);
+}
+
+// 32-bit mask 0xFFFFFFFF.
+fn si_mask() -> Int {
+    return 4294967295;
+}
+
+// Streaming XOR-fold over the block list. Returns -1 on bad input
+// (empty list or any negative block) so callers can distinguish failure.
+fn si_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn si_fold(blocks: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(blocks);
+    if n <= 0 { return Err("ERR\tsi\tempty"); }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = list_get(blocks, i);
+        if b < 0 { return Err("ERR\tsi\tblock"); }
+        if b > 4294967295 { return Err("ERR\tsi\tblock"); }
+        acc = si_xor(acc, b) & si_mask();
+        i = i + 1;
+    }
+    return Ok(acc);
+}
+
+// 1 iff the streaming fold equals master; 0 otherwise. Empty list, bad fold,
+// or bad master fail closed.
+pub fn si_match(blocks: List[Int], master: Int) -> Int {
+    if master < 0 { return 0; }
+    if master > 4294967295 { return 0; }
+    let fr: Result[Int, String] = si_fold(blocks);
+    if fr.is_ok() == false { return 0; }
+    let f: Int = si_got(fr);
+    if f != master { return 0; }
+    return 1;
+}
+
+// Quantitative streaming integrity check. Returns 1 iff the accumulated
+// XOR-fold over all blocks equals master.
+pub fn streaming_checksum(blocks: List[Int], master: Int) -> Int {
+    return si_match(blocks, master);
+}
+
+pub fn streaming_integrity_principle(blocks: List[Int], master: Int) -> DomainCert {
+    let ok: Int = si_match(blocks, master);
+    return domain_cert("archive", "streaming_integrity", ok);
+}
+
+pub fn verify_streaming_integrity_principle() -> Bool {
+    // Golden: a single block residue [0x12345678] folds to itself.
+    let mut b1: List[Int] = list_new();
+    b1 = list_push(b1, 305419896);
+    let f1: Int = si_got(si_fold(b1));
+    if f1 != 305419896 { return false; }
+    if si_match(b1, f1) != 1 { return false; }
+    // Golden: deterministic fold is reproducible.
+    let mut b2: List[Int] = list_new();
+    b2 = list_push(b2, 1);
+    b2 = list_push(b2, 2);
+    b2 = list_push(b2, 3);
+    let f2a: Int = si_got(si_fold(b2));
+    let f2b: Int = si_got(si_fold(b2));
+    if f2a != f2b { return false; }
+    if si_match(b2, f2a) != 1 { return false; }
+    // Golden: a known fold [5, 10, 15] is 0 XOR 5 XOR 10 XOR 15 = 0.
+    let mut b3: List[Int] = list_new();
+    b3 = list_push(b3, 5);
+    b3 = list_push(b3, 10);
+    b3 = list_push(b3, 15);
+    let f3: Int = si_got(si_fold(b3));
+    if f3 != 0 { return false; }
+    if si_match(b3, 0) != 1 { return false; }
+    // Hostile: empty list fails closed to 0.
+    let mut b0: List[Int] = list_new();
+    if si_match(b0, 0) != 0 { return false; }
+    if si_match(b0, 100) != 0 { return false; }
+    if si_fold(b0).is_ok() { return false; }
+    // Hostile: master mismatch fails closed to 0.
+    if si_match(b1, 0) != 0 { return false; }
+    if si_match(b1, 305419897) != 0 { return false; }
+    // Hostile: negative master fails closed.
+    if si_match(b1, 0 - 1) != 0 { return false; }
+    // Hostile: out-of-range master fails closed.
+    if si_match(b1, 4294967296) != 0 { return false; }
+    // Hostile: negative block fails closed.
+    let mut bneg: List[Int] = list_new();
+    bneg = list_push(bneg, 1);
+    bneg = list_push(bneg, 0 - 1);
+    if si_fold(bneg).is_ok() { return false; }
+    if si_match(bneg, 0) != 0 { return false; }
+    // Coupled: corrupting one block in a known list changes the fold.
+    let mut bc1: List[Int] = list_new();
+    bc1 = list_push(bc1, 100);
+    bc1 = list_push(bc1, 200);
+    bc1 = list_push(bc1, 300);
+    let fc1: Int = si_got(si_fold(bc1));
+    let mut bc2: List[Int] = list_new();
+    bc2 = list_push(bc2, 100);
+    bc2 = list_push(bc2, 200);
+    bc2 = list_push(bc2, 301);
+    let fc2: Int = si_got(si_fold(bc2));
+    if fc1 == fc2 { return false; }
+    if si_match(bc2, fc1) != 0 { return false; }
+    // Coupled: streaming_checksum returns 1 for a known master.
+    let m: Int = f2a;
+    if streaming_checksum(b2, m) != 1 { return false; }
+    if streaming_checksum(b2, 99) != 0 { return false; }
+    if streaming_checksum(b1, 999) != 0 { return false; }
+    if streaming_checksum(b3, 1) != 0 { return false; }
+    // DomainCert: streaming_integrity_principle holds for a valid pair.
+    let c1: DomainCert = streaming_integrity_principle(b2, f2a);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "archive" { return false; }
+    if c1.law_name != "streaming_integrity" { return false; }
+    // DomainCert: a miss does not hold.
+    let c2: DomainCert = streaming_integrity_principle(b0, 0);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = streaming_integrity_principle(b2, 99);
+    if c3.holds != 0 { return false; }
+    return true;
+}

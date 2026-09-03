@@ -1,0 +1,25 @@
+// # Result[List[Name]] emit honesty lock
+//
+// Logline: emit-c fail-closes Result[List[Name]] rather than inventing OoResL_Name.
+//
+// Setup: Backend-C. User struct Name. No undeclared Result typedef.
+//
+// Beats:
+//   1. Return Result[List[Name], String].
+//   2. Emit must not invent OoResL_Name.
+//   3. Fail closed with ERR c_emit.
+
+type Name = struct {
+    n: String
+}
+
+pub fn f() -> Result[List[Name], String] {
+    let xs: List[Name] = list_new();
+    return Ok(xs);
+}
+
+pub fn verify_result_ll_name_fail() -> Bool {
+    let r: Result[List[Name], String] = f();
+    println("should_not_emit");
+    return true;
+}

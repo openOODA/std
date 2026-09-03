@@ -1,0 +1,34 @@
+// # Connect on both match arms
+//
+// Logline: Connect in Ok and Err so the match join is Open and send is legal.
+//
+// Setup: Test fixture. Keep TYPESTATE directives and all code exact.
+//
+// Beats:
+//   1. Open into Closed.
+//   2. Connect in both match arms.
+//   3. Send after the join.
+//
+// TYPESTATE: Sock Closed Open
+// TYPESTATE fn open_sock: -> Closed
+// TYPESTATE fn connect: Closed -> Open
+// TYPESTATE fn send: Open -> Open
+
+fn open_sock() -> Int { return 1; }
+fn connect(s: Int) { let x = s; }
+fn send(s: Int) { let x = s; }
+
+pub fn verify_typestate_match_join_ok() -> Bool {
+    let s = open_sock();
+    let r = Ok(1);
+    match r {
+        Ok(v) => {
+            connect(s);
+        }
+        Err(e) => {
+            connect(s);
+        }
+    }
+    send(s);
+    return true;
+}

@@ -1,0 +1,152 @@
+// # Compressed Sparse Row Matrix Kernels
+//
+// Logline: Stores a sparse matrix as parallel CSR arrays and multiplies, transposes, and queries it.
+//
+// Setup: Pure math module. Zero ambient effects.
+//
+// Beats:
+//   1. Validate row pointers, column indices, and value length before any kernel.
+//   2. Compute y = A x by walking each CSR row span.
+//   3. Scatter A into a dense row-major A^T and report nnz, density, and A_ij.
+
+import "std/core/primitives/result.oo";
+
+fn csr_ok(row_ptr: List[Int], col_idx: List[Int], values: List[Float], rows: Int, cols: Int) -> Result[Int, String] {
+    if rows < 0 { return Err("ERR\tcsr\trows"); }
+    if cols < 0 { return Err("ERR\tcsr\tcols"); }
+    if list_len(row_ptr) != rows + 1 { return Err("ERR\tcsr\trow_ptr"); }
+    let nnz: Int = list_len(values);
+    if list_len(col_idx) != nnz { return Err("ERR\tcsr\tnnz"); }
+    if rows == 0 {
+        if nnz != 0 { return Err("ERR\tcsr\trow_ptr"); }
+        return Ok(0);
+    }
+    if list_get(row_ptr, 0) != 0 { return Err("ERR\tcsr\trow_ptr"); }
+    if list_get(row_ptr, rows) != nnz { return Err("ERR\tcsr\trow_ptr"); }
+    let mut i: Int = 0;
+    while i < rows {
+        let a: Int = list_get(row_ptr, i);
+        let b: Int = list_get(row_ptr, i + 1);
+        if a < 0 { return Err("ERR\tcsr\trow_ptr"); }
+        if b < a { return Err("ERR\tcsr\trow_ptr"); }
+        if b > nnz { return Err("ERR\tcsr\trow_ptr"); }
+        let mut k: Int = a;
+        while k < b {
+            let c: Int = list_get(col_idx, k);
+            if c < 0 { return Err("ERR\tcsr\tcol"); }
+            if c >= cols { return Err("ERR\tcsr\tcol"); }
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(nnz);
+}
+
+pub fn csr_nnz(values: List[Float]) -> Int {
+    return list_len(values);
+}
+
+fn csr_i2f(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
+pub fn csr_density(nnz: Int, rows: Int, cols: Int) -> Result[Float, String] {
+    if rows < 1 { return Err("ERR\tcsr\tshape"); }
+    if cols < 1 { return Err("ERR\tcsr\tshape"); }
+    if nnz < 0 { return Err("ERR\tcsr\tnnz"); }
+    let den: Float = csr_i2f(rows) * csr_i2f(cols);
+    if den == 0.0 { return Err("ERR\tcsr\tshape"); }
+    return Ok(csr_i2f(nnz) / den);
+}
+
+pub fn csr_get(row_ptr: List[Int], col_idx: List[Int], values: List[Float], rows: Int, cols: Int, r: Int, c: Int) -> Result[Float, String] {
+    if r < 0 { return Err("ERR\tcsr\trow"); }
+    if c < 0 { return Err("ERR\tcsr\tcol"); }
+    if r >= rows { return Err("ERR\tcsr\trow"); }
+    if c >= cols { return Err("ERR\tcsr\tcol"); }
+    if list_len(row_ptr) != rows + 1 { return Err("ERR\tcsr\tptr"); }
+    let nnz: Int = list_len(values);
+    if list_len(col_idx) != nnz { return Err("ERR\tcsr\tnnz"); }
+    let start: Int = list_get(row_ptr, r);
+    let end: Int = list_get(row_ptr, r + 1);
+    if start < 0 { return Err("ERR\tcsr\tptr"); }
+    if end > nnz { return Err("ERR\tcsr\tptr"); }
+    let mut k: Int = start;
+    while k < end {
+        if list_get(col_idx, k) == c {
+            return Ok(list_get(values, k));
+        }
+        k = k + 1;
+    }
+    return Ok(0.0);
+}
+
+pub fn csr_spmv(row_ptr: List[Int], col_idx: List[Int], values: List[Float], rows: Int, x: List[Float]) -> Result[List[Float], String] {
+    if list_len(x) != rows { return Err("ERR\tcsr\tx"); }
+    let chk: Result[Int, String] = csr_ok(row_ptr, col_idx, values, rows, rows);
+    match chk {
+        Ok(v)  => { let _n: Int = v; },
+        Err(e) => { return Err(e); }
+    }
+    let rp: List[Int] = row_ptr;
+    let ci: List[Int] = col_idx;
+    let vv: List[Float] = values;
+    let xv: List[Float] = x;
+    let mut y: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < rows {
+        let start: Int = list_get(rp, i);
+        let end: Int = list_get(rp, i + 1);
+        let mut s: Float = 0.0;
+        let mut k: Int = start;
+        while k < end {
+            let c: Int = list_get(ci, k);
+            s = s + list_get(vv, k) * list_get(xv, c);
+            k = k + 1;
+        }
+        y = list_push(y, s);
+        i = i + 1;
+    }
+    return Ok(y);
+}
+
+pub fn csr_transpose_dense(row_ptr: List[Int], col_idx: List[Int], values: List[Float], rows: Int, cols: Int) -> Result[List[Float], String] {
+    let chk: Result[Int, String] = csr_ok(row_ptr, col_idx, values, rows, cols);
+    match chk {
+        Ok(v)  => { let _n: Int = v; },
+        Err(e) => { return Err(e); }
+    }
+    let rp: List[Int] = row_ptr;
+    let ci: List[Int] = col_idx;
+    let vv: List[Float] = values;
+    let tot: Int = cols * rows;
+    let mut at: List[Float] = list_new();
+    let mut t: Int = 0;
+    while t < tot {
+        at = list_push(at, 0.0);
+        t = t + 1;
+    }
+    let mut i: Int = 0;
+    while i < rows {
+        let start: Int = list_get(rp, i);
+        let end: Int = list_get(rp, i + 1);
+        let mut k: Int = start;
+        while k < end {
+            let c: Int = list_get(ci, k);
+            let idx: Int = c * rows + i;
+            let nv: Float = list_get(at, idx) + list_get(vv, k);
+            at = list_set(at, idx, nv);
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(at);
+}

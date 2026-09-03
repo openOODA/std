@@ -1,0 +1,26 @@
+// # Send the old name after let-connect
+//
+// Logline: Bind t from connect(s) and send the original name so alias tracking can follow.
+//
+// Setup: Test fixture. Keep TYPESTATE directives and all code exact.
+//
+// Beats:
+//   1. Open into Closed.
+//   2. Bind t from connect(s).
+//   3. Send the original s.
+//
+// TYPESTATE: Sock Closed Open
+// TYPESTATE fn open_sock: -> Closed
+// TYPESTATE fn connect: Closed -> Open
+// TYPESTATE fn send: Open -> Open
+
+fn open_sock() -> Int { return 1; }
+fn connect(s: Int) -> Int { return s; }
+fn send(s: Int) { let x = s; }
+
+pub fn verify_typestate_let_connect() -> Bool {
+    let s = open_sock();
+    let t = connect(s);
+    send(s);
+    return true;
+}

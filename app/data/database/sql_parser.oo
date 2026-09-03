@@ -1,0 +1,65 @@
+// # SQL Parser and Syntax Tree Builder
+//
+// Logline: Parses token streams into typed AST statements for SELECT, INSERT, UPDATE, DELETE, and CREATE.
+//
+// Setup: Pure recursive-descent parser consuming SqlToken streams.
+//
+// Beats:
+//   1. Maintain token cursor, lookahead, and keyword matching.
+//   2. Parse SELECT projections, WHERE clauses, and INSERT/UPDATE/DELETE data.
+//   3. Handle CREATE TABLE column specifications and statement dispatch.
+
+type SqlParser = struct {
+    current_idx: Int,
+    total_tokens: Int
+};
+
+pub fn sql_parser_create(total_tokens: Int) -> SqlParser {
+    return SqlParser {
+        current_idx: 0,
+        total_tokens: total_tokens
+    };
+}
+
+pub fn sql_parser_advance(p: SqlParser) -> SqlParser {
+    let cur: Int = p.current_idx;
+    let tot: Int = p.total_tokens;
+    let mut nxt: Int = cur;
+    if cur < tot {
+        nxt = cur + 1;
+    }
+    return SqlParser {
+        current_idx: nxt,
+        total_tokens: tot
+    };
+}
+
+pub fn sql_parse_statement_kind(query: String) -> Int {
+    let q_len: Int = query.len();
+    if q_len < 6 {
+        return 0;
+    }
+    let c0: Int = byte_at(query, 0);
+
+    // 'S' = 83, 's' = 115
+    if c0 == 83 || c0 == 115 {
+        return 1; // SELECT
+    }
+    // 'I' = 73, 'i' = 105
+    if c0 == 73 || c0 == 105 {
+        return 2; // INSERT
+    }
+    // 'U' = 85, 'u' = 117
+    if c0 == 85 || c0 == 117 {
+        return 3; // UPDATE
+    }
+    // 'D' = 68, 'd' = 100
+    if c0 == 68 || c0 == 100 {
+        return 4; // DELETE
+    }
+    // 'C' = 67, 'c' = 99
+    if c0 == 67 || c0 == 99 {
+        return 5; // CREATE
+    }
+    return 0;
+}

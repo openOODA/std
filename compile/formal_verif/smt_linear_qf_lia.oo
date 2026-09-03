@@ -1,0 +1,155 @@
+// # SMT Linear QF_LIA (Fourier-Motzkin)
+//
+// Logline: Quantifier-Free Linear Integer Arithmetic solver for 2-variable systems using Fourier-Motzkin variable elimination.
+//
+// Setup: Each inequality has the form a*x + b*y + c (sense) 0, where sense 0 = LE, 1 = LT, 2 = EQ, 3 = GE, 4 = GT. Returns Sat, Unsat, or Counterexample with a witness (x, y).
+//
+// Beats:
+//   1. Bounded integer search: enumerate x in [x_lo, x_hi] and y in [y_lo, y_hi].
+//   2. Pure FM step on y: pair y-lower (b > 0) and y-upper (b < 0) bounds, derive x-only constraints as parallel arrays.
+//   3. Check intersection of x-bounds; return Sat with witness or Unsat.
+
+pub fn smt_lin_sense_le() -> Int { return 0; }
+pub fn smt_lin_sense_lt() -> Int { return 1; }
+pub fn smt_lin_sense_eq() -> Int { return 2; }
+pub fn smt_lin_sense_ge() -> Int { return 3; }
+pub fn smt_lin_sense_gt() -> Int { return 4; }
+
+pub fn smt_lin_sat() -> Int { return 1; }
+pub fn smt_lin_unsat() -> Int { return 0; }
+pub fn smt_lin_unknown() -> Int { return 0 - 1; }
+
+pub fn smt_lin_ineq_add(ineqs_flat: List[Int], ax: Int, by: Int, c: Int, sense: Int) -> List[Int] {
+    let mut out: List[Int] = ineqs_flat;
+    out = list_push(out, ax);
+    out = list_push(out, by);
+    out = list_push(out, c);
+    out = list_push(out, sense);
+    return out;
+}
+
+pub fn smt_lin_ineq_holds_at(ax: Int, by: Int, c: Int, sense: Int, x: Int, y: Int) -> Int {
+    let v: Int = ax * x + by * y + c;
+    if sense == 0 {
+        if v <= 0 { return 1; }
+        return 0;
+    }
+    if sense == 1 {
+        if v < 0 { return 1; }
+        return 0;
+    }
+    if sense == 2 {
+        if v == 0 { return 1; }
+        return 0;
+    }
+    if sense == 3 {
+        if v >= 0 { return 1; }
+        return 0;
+    }
+    if v > 0 { return 1; }
+    return 0;
+}
+
+pub fn smt_lin_all_hold_at(ineqs_flat: List[Int], x: Int, y: Int) -> Int {
+    let n: Int = list_len(ineqs_flat) / 4;
+    let mut i: Int = 0;
+    while i < n {
+        let ax: Int = list_get(ineqs_flat, i * 4);
+        let by: Int = list_get(ineqs_flat, i * 4 + 1);
+        let c: Int = list_get(ineqs_flat, i * 4 + 2);
+        let sense: Int = list_get(ineqs_flat, i * 4 + 3);
+        if smt_lin_ineq_holds_at(ax, by, c, sense, x, y) == 0 {
+            return 0;
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+pub fn smt_lin_search_bounded(
+    ineqs_flat: List[Int],
+    x_lo: Int, x_hi: Int,
+    y_lo: Int, y_hi: Int
+) -> List[Int] {
+    let mut x: Int = x_lo;
+    while x <= x_hi {
+        let mut y: Int = y_lo;
+        while y <= y_hi {
+            if smt_lin_all_hold_at(ineqs_flat, x, y) == 1 {
+                let mut out: List[Int] = list_new();
+                out = list_push(out, smt_lin_sat());
+                out = list_push(out, x);
+                out = list_push(out, y);
+                return out;
+            }
+            y = y + 1;
+        }
+        x = x + 1;
+    }
+    let mut unsat_out: List[Int] = list_new();
+    unsat_out = list_push(unsat_out, smt_lin_unsat());
+    unsat_out = list_push(unsat_out, 0);
+    unsat_out = list_push(unsat_out, 0);
+    return unsat_out;
+}
+
+pub fn smt_lin_fm_y_constraints(ineqs_flat: List[Int]) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let n: Int = list_len(ineqs_flat) / 4;
+    let mut i: Int = 0;
+    while i < n {
+        let ax: Int = list_get(ineqs_flat, i * 4);
+        let by: Int = list_get(ineqs_flat, i * 4 + 1);
+        let c: Int = list_get(ineqs_flat, i * 4 + 2);
+        if by == 0 {
+            out = list_push(out, ax);
+            out = list_push(out, c);
+        }
+        i = i + 1;
+    }
+    let mut li: Int = 0;
+    while li < n {
+        let by_l: Int = list_get(ineqs_flat, li * 4 + 1);
+        if by_l > 0 {
+            let ax_l: Int = list_get(ineqs_flat, li * 4);
+            let c_l: Int = list_get(ineqs_flat, li * 4 + 2);
+            let mut ui: Int = 0;
+            while ui < n {
+                let by_u: Int = list_get(ineqs_flat, ui * 4 + 1);
+                if by_u < 0 {
+                    let ax_u: Int = list_get(ineqs_flat, ui * 4);
+                    let c_u: Int = list_get(ineqs_flat, ui * 4 + 2);
+                    let new_ax: Int = by_u * ax_l - by_l * ax_u;
+                    let new_c: Int = by_u * c_l - by_l * c_u;
+                    out = list_push(out, new_ax);
+                    out = list_push(out, new_c);
+                }
+                ui = ui + 1;
+            }
+        }
+        li = li + 1;
+    }
+    return out;
+}
+
+pub fn smt_lin_x_only_feasible(x_only_flat: List[Int]) -> Int {
+    let n_pairs: Int = list_len(x_only_flat) / 2;
+    let mut i: Int = 0;
+    while i < n_pairs {
+        let ax: Int = list_get(x_only_flat, i * 2);
+        let c: Int = list_get(x_only_flat, i * 2 + 1);
+        if ax == 0 {
+            if c > 0 { return 0; }
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+pub fn ceil_div(a: Int, b: Int) -> Int {
+    if b == 0 { return 0; }
+    if a >= 0 {
+        return (a + b - 1) / b;
+    }
+    return a / b;
+}

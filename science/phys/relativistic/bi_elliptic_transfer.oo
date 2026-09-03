@@ -1,0 +1,66 @@
+// # Bi-Elliptic Orbital Transfer Maneuver
+//
+// Logline: Calculates fail-closed three-impulse bi-elliptic transfer delta-v, total cost, and flight duration.
+//
+// Setup: Pure celestial mechanics. No capability tokens. Inputs in kilometers and seconds; mu in km^3/s^2.
+//
+// Beats:
+//   1. Define BiEllipticTransferPlan product type.
+//   2. Validate radii and require intermediate apoapsis beyond both terminal orbits.
+//   3. Compute three burn magnitudes for the two transfer ellipses.
+//   4. Return total delta-v and combined transfer time.
+// residual: Optimal rb search and capture-escape bi-elliptic variants are residual.
+
+import "std/core/math/constants.oo";
+
+pub type BiEllipticTransferPlan = struct {
+    delta_v1_kms: Float,
+    delta_v2_kms: Float,
+    delta_v3_kms: Float,
+    total_delta_v_kms: Float,
+    transfer_time_s: Float
+};
+
+fn bi_elliptic_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn bi_elliptic_calculate_burns(
+    r1_km: Float,
+    r2_km: Float,
+    rb_km: Float,
+    mu: Float
+) -> Result[BiEllipticTransferPlan, String] {
+    if r1_km <= 0.0 || r2_km <= 0.0 || rb_km <= 0.0 {
+        return Err("ERR\tbi_elliptic_calculate_burns\tinvalid_radius");
+    }
+    if mu <= 0.0 {
+        return Err("ERR\tbi_elliptic_calculate_burns\tinvalid_mu");
+    }
+    if rb_km <= r1_km || rb_km <= r2_km {
+        return Err("ERR\tbi_elliptic_calculate_burns\tintermediate_apoapsis_too_low");
+    }
+    let v1: Float = sqrt(mu / r1_km);
+    let v2: Float = sqrt(mu / r2_km);
+    let a1: Float = 0.5 * (r1_km + rb_km);
+    let a2: Float = 0.5 * (r2_km + rb_km);
+    let vt1: Float = sqrt(mu * ((2.0 / r1_km) - (1.0 / a1)));
+    let vtb1: Float = sqrt(mu * ((2.0 / rb_km) - (1.0 / a1)));
+    let vtb2: Float = sqrt(mu * ((2.0 / rb_km) - (1.0 / a2)));
+    let vt2: Float = sqrt(mu * ((2.0 / r2_km) - (1.0 / a2)));
+    let dv1: Float = bi_elliptic_abs(vt1 - v1);
+    let dv2: Float = bi_elliptic_abs(vtb2 - vtb1);
+    let dv3: Float = bi_elliptic_abs(v2 - vt2);
+    let total: Float = dv1 + dv2 + dv3;
+    let pack: CircleConstants = circle_constants();
+    let t1: Float = pack.pi * sqrt((a1 * a1 * a1) / mu);
+    let t2: Float = pack.pi * sqrt((a2 * a2 * a2) / mu);
+    return Ok(BiEllipticTransferPlan {
+        delta_v1_kms: dv1,
+        delta_v2_kms: dv2,
+        delta_v3_kms: dv3,
+        total_delta_v_kms: total,
+        transfer_time_s: t1 + t2
+    });
+}

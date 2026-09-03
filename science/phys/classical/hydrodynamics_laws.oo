@@ -1,0 +1,216 @@
+// # Naval Hydrodynamics and Sonar Physical Domain Laws
+//
+// Logline: Canonical physics models for hull drag resistance, Froude speed limits, and active/passive underwater sonar acoustic equations.
+//
+// Setup: Pure mathematical implementation conforming to naval architecture and underwater acoustics standards with zero ambient authority.
+//
+// Beats:
+//   1. Total hull hydrodynamic drag and ITTC skin friction resistance.
+//   2. Froude number scaling, wave making resistance, and displacement hull speed limits.
+//   3. Passive sonar signal-to-noise ratio and transmission loss.
+//   4. Active monostatic sonar target echo return and propeller cavitation noise onset.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_hydro_hydrodynamics_laws() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type HullSpec = struct {
+    length_m: Float,
+    beam_m: Float,
+    draft_m: Float,
+    wetted_surface_m2: Float,
+    displacement_tons: Float,
+    form_factor_k: Float,
+    wave_resistance_kw: Float,
+    cavitation_speed_mps: Float
+};
+
+type SonarAcousticSpec = struct {
+    source_level_db: Float,
+    noise_level_db: Float,
+    directivity_index_db: Float,
+    target_strength_db: Float,
+    absorption_db_per_km: Float
+};
+
+type SonarEchoResult = struct {
+    is_active: Bool,
+    range_m: Float,
+    transmission_loss_db: Float,
+    snr_db: Float,
+    detection_margin_db: Float,
+    cavitation_noise_active: Bool
+};
+
+fn hyd_pi_val() -> Float { return circ_pi_std_phys_hydro_hydrodynamics_laws(); }
+fn hyd_gravity_mps2() -> Float { return 9.80665; }
+fn hyd_seawater_density_kg_m3() -> Float { return 1025.0; }
+
+fn hyd_abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn hyd_log10(x: Float) -> Float {
+    if x <= 0.000000000001 { return 0.0 - 100.0; }
+    return ln(x) / 2.302585092994046;
+}
+
+pub fn hydrodynamic_hull_resistance(rho: Float, ct: Float, wetted_surface_m2: Float, speed_m_s: Float) -> Float {
+    if rho <= 0.0 || ct <= 0.0 || wetted_surface_m2 <= 0.0 || speed_m_s <= 0.0 { return 0.0; }
+    let v_sq: Float = speed_m_s * speed_m_s;
+    return 0.5 * rho * ct * wetted_surface_m2 * v_sq;
+}
+
+pub fn calc_hull_resistance_n(rho: Float, ct: Float, wetted_surface_m2: Float, speed_m_s: Float) -> Float {
+    return hydrodynamic_hull_resistance(rho, ct, wetted_surface_m2, speed_m_s);
+}
+
+pub fn calc_ittc_friction_coeff(speed_m_s: Float, length_m: Float, kinematic_viscosity_m2_s: Float) -> Float {
+    if speed_m_s <= 0.0 || length_m <= 0.0 || kinematic_viscosity_m2_s <= 0.000000001 { return 0.003; }
+    let re: Float = (speed_m_s * length_m) / kinematic_viscosity_m2_s;
+    if re <= 1000.0 { return 0.003; }
+    let log_re: Float = hyd_log10(re);
+    let denom_term: Float = log_re - 2.0;
+    if denom_term <= 0.01 { return 0.003; }
+    return 0.075 / (denom_term * denom_term);
+}
+
+pub fn calc_froude_number(speed_m_s: Float, length_m: Float) -> Float {
+    if speed_m_s <= 0.0 || length_m <= 0.0 { return 0.0; }
+    let g: Float = hyd_gravity_mps2();
+    let denom: Float = sqrt(g * length_m);
+    if denom <= 0.0001 { return 0.0; }
+    return speed_m_s / denom;
+}
+
+pub fn calc_froude_hull_speed_knots(length_m: Float) -> Float {
+    if length_m <= 0.0 { return 0.0; }
+    let length_ft: Float = length_m * 3.280839895;
+    return 1.34 * sqrt(length_ft);
+}
+
+pub fn calc_froude_hull_speed_mps(length_m: Float) -> Float {
+    if length_m <= 0.0 { return 0.0; }
+    let kts: Float = calc_froude_hull_speed_knots(length_m);
+    return kts * 0.514444;
+}
+
+pub fn calc_wave_resistance_coeff(fn_val: Float, kw: Float) -> Float {
+    if fn_val <= 0.0 || kw <= 0.0 { return 0.0; }
+    let fn2: Float = fn_val * fn_val;
+    return kw * (fn2 * fn2);
+}
+
+pub fn calc_total_resistance_coeff(cf: Float, cr: Float, ca: Float, form_factor_k: Float) -> Float {
+    let cf_form: Float = cf * (1.0 + form_factor_k);
+    return cf_form + cr + ca;
+}
+
+pub fn calc_transmission_loss_db(range_m: Float, absorption_db_per_km: Float) -> Float {
+    if range_m <= 1.0 { return 0.0; }
+    let geom_loss: Float = 20.0 * hyd_log10(range_m);
+    let absorb_loss: Float = absorption_db_per_km * (range_m / 1000.0);
+    return geom_loss + absorb_loss;
+}
+
+pub fn sonar_signal_to_noise_ratio(sl: Float, tl: Float, ts: Float, nl: Float, di: Float, is_active: Bool) -> Float {
+    let noise_diff: Float = nl - di;
+    if is_active {
+        return sl - (2.0 * tl) + ts - noise_diff;
+    }
+    return sl - tl - noise_diff;
+}
+
+pub fn calc_sonar_passive_snr_db(sl: Float, tl: Float, nl: Float, di: Float) -> Float {
+    return sonar_signal_to_noise_ratio(sl, tl, 0.0, nl, di, false);
+}
+
+pub fn calc_sonar_active_snr_db(sl: Float, tl: Float, ts: Float, nl: Float, di: Float) -> Float {
+    return sonar_signal_to_noise_ratio(sl, tl, ts, nl, di, true);
+}
+
+pub fn calc_cavitation_noise_increment_db(speed_mps: Float, cav_speed_mps: Float) -> Float {
+    if speed_mps <= cav_speed_mps || cav_speed_mps <= 0.0 { return 0.0; }
+    let excess_v: Float = speed_mps - cav_speed_mps;
+    return 30.0 + (excess_v * 5.0);
+}
+
+pub fn calc_vessel_radiated_noise_db(speed_mps: Float, depth_m: Float, cav_speed_mps: Float, is_sub: Bool) -> Float {
+    let mut base_db: Float = if is_sub { 48.0 } else { 85.0 };
+    let speed_adder: Float = speed_mps * 3.5;
+    base_db = base_db + speed_adder;
+    if is_sub {
+        let depth_damping: Float = depth_m * 0.03;
+        base_db = base_db - depth_damping;
+        if base_db < 30.0 { base_db = 30.0; }
+    }
+    let cav_inc: Float = calc_cavitation_noise_increment_db(speed_mps, cav_speed_mps);
+    return base_db + cav_inc;
+}
+
+pub fn calc_target_strength_spherical_db(radius_m: Float) -> Float {
+    if radius_m <= 0.001 { return 0.0 - 50.0; }
+    let sigma_geom: Float = hyd_pi_val() * radius_m * radius_m;
+    let ratio: Float = sigma_geom / (4.0 * hyd_pi_val());
+    return 10.0 * hyd_log10(ratio);
+}
+
+pub fn evaluate_sonar_search(spec: SonarAcousticSpec, range_m: Float, vessel_speed_mps: Float, cav_speed_mps: Float, is_active: Bool) -> SonarEchoResult {
+    let tl: Float = calc_transmission_loss_db(range_m, spec.absorption_db_per_km);
+    let cav_active: Bool = vessel_speed_mps > cav_speed_mps;
+    let cav_noise: Float = if cav_active { calc_cavitation_noise_increment_db(vessel_speed_mps, cav_speed_mps) } else { 0.0 };
+    let total_nl: Float = spec.noise_level_db + cav_noise;
+
+    let snr: Float = sonar_signal_to_noise_ratio(
+        spec.source_level_db,
+        tl,
+        spec.target_strength_db,
+        total_nl,
+        spec.directivity_index_db,
+        is_active
+    );
+    let margin: Float = snr - 0.0;
+
+    return SonarEchoResult {
+        is_active: is_active,
+        range_m: range_m,
+        transmission_loss_db: tl,
+        snr_db: snr,
+        detection_margin_db: margin,
+        cavitation_noise_active: cav_active
+    };
+}
+
+pub fn verify_hydrodynamics_laws() -> Bool {
+    let rho: Float = hyd_seawater_density_kg_m3();
+    let r1: Float = hydrodynamic_hull_resistance(rho, 0.003, 3000.0, 10.0);
+    let r2: Float = hydrodynamic_hull_resistance(rho, 0.003, 3000.0, 20.0);
+    let r_ratio: Float = r2 / r1;
+    if hyd_abs_val(r_ratio - 4.0) > 0.001 { return false; }
+
+    let fn_val: Float = calc_froude_number(15.0, 150.0);
+    let exp_fn: Float = 15.0 / sqrt(9.80665 * 150.0);
+    if hyd_abs_val(fn_val - exp_fn) > 0.0001 { return false; }
+
+    let hull_spd_kts: Float = calc_froude_hull_speed_knots(155.0);
+    if hull_spd_kts < 29.0 || hull_spd_kts > 32.0 { return false; }
+
+    let tl_1000: Float = calc_transmission_loss_db(1000.0, 0.05);
+    let exp_tl: Float = (20.0 * 3.0) + (0.05 * 1.0);
+    if hyd_abs_val(tl_1000 - exp_tl) > 0.01 { return false; }
+
+    let pass_snr: Float = sonar_signal_to_noise_ratio(150.0, 60.0, 0.0, 70.0, 20.0, false);
+    let exp_pass: Float = 150.0 - 60.0 - (70.0 - 20.0);
+    if hyd_abs_val(pass_snr - exp_pass) > 0.001 { return false; }
+
+    let act_snr: Float = sonar_signal_to_noise_ratio(220.0, 60.0, 15.0, 70.0, 20.0, true);
+    let exp_act: Float = 220.0 - (2.0 * 60.0) + 15.0 - (70.0 - 20.0);
+    if hyd_abs_val(act_snr - exp_act) > 0.001 { return false; }
+
+    let cav_no: Float = calc_cavitation_noise_increment_db(10.0, 15.0);
+    if cav_no != 0.0 { return false; }
+
+    let cav_yes: Float = calc_cavitation_noise_increment_db(20.0, 15.0);
+    if hyd_abs_val(cav_yes - 55.0) > 0.001 { return false; }
+
+    return true;
+}

@@ -1,0 +1,82 @@
+// # Bare Metal Hardware Submodule Entry Point
+//
+// Logline: Re-exports the bare-metal primitives surface (string conversion, arena allocation, capability tokens) merged with the embedded HAL driver surface (UART, RISC-V CSR, RTOS, GPIO, I2C, SPI, timers, IPC, flash, USB).
+//
+// Setup: Pure entry door. Imports private sibling drivers and exposes the public API.
+//
+// Beats:
+//   1. Import the bare-metal primitives: int-to-string, mmap arena, sys cap.
+//   2. Import the embedded HAL core: cap token, IPC endpoints, fault handler, IDT/GDT.
+//   3. Import the embedded HAL driver families: UART, RISC-V CSR, RTOS, timer, GPIO, I2C, SPI, flash, USB.
+
+// ── Bare-metal primitives ──
+
+import "int_to_str.oo";
+import "mmap_arena.oo";
+import "sys_cap.oo";
+
+// ── Embedded HAL core ──
+
+import "cap_token.oo";
+import "cnode_tree.oo";
+import "cspace_table.oo";
+import "cycle_quota.oo";
+import "embedded_hal.oo";
+import "embedded_hal_stubs.oo";
+import "fault_handler.oo";
+import "idt_gdt.oo";
+import "ipc_badged.oo";
+import "ipc_endpoint.oo";
+import "mmu_token_map.oo";
+import "msg_reply.oo";
+import "smp_init.oo";
+
+// ── Embedded HAL driver families ──
+
+import "acpi_madt.oo";
+import "adc_dma_continuous.oo";
+import "can_bus_fd.oo";
+import "cpu_msr.oo";
+import "crc32_hardware.oo";
+import "dac_waveform_generator.oo";
+import "eeprom_emulation.oo";
+import "flash_nor_sector.oo";
+import "flash_wear_leveling.oo";
+import "gpio_pin_config.oo";
+import "i2c_master_smbus.oo";
+import "imu_sensor_driver.oo";
+import "lorawan_packet.oo";
+import "nvic_cortex_m.oo";
+import "pic_apic.oo";
+import "power_sleep_modes.oo";
+import "riscv_csr.oo";
+import "riscv_csr_ops.oo";
+import "riscv_csr_pmp.oo";
+import "riscv_csr_trap.oo";
+import "riscv_csr_types.oo";
+import "rtc_realtime_clock.oo";
+import "rtos_context_switch.oo";
+import "rtos_event_flags.oo";
+import "rtos_semaphore_binary.oo";
+import "rtos_task_tcb.oo";
+import "rtos_task_tcb_lifecycle.oo";
+import "rtos_task_tcb_metrics.oo";
+import "rtos_timer_queue.oo";
+import "serial_dbg.oo";
+import "spi_master_transaction.oo";
+import "timer_pit.oo";
+import "timer_pwm_channel.oo";
+import "uart_dma_ring.oo";
+import "uart_dma_ring_block.oo";
+import "uart_dma_ring_ops.oo";
+import "uart_dma_ring_types.oo";
+import "uefi_boot.oo";
+import "usb_device_cdc.oo";
+import "usb_device_hid.oo";
+import "watchdog_timer.oo";
+
+// ── Sovereign Lattice ── BARE_METAL MOD ──
+
+pub fn bare_metal_int_to_str(v: Int) -> String {
+    return int_to_str(v);
+}

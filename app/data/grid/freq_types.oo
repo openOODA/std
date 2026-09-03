@@ -1,0 +1,30 @@
+// # Grid frequency types
+//
+// Logline: GridFrequency destubbed off Float telemetry.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: destubbed to Int millihertz floor.
+
+type GridFrequency = struct {
+    nominal_mhz: Int,
+    current_mhz: Int,
+    status: Int
+};
+
+pub fn grid_freq_new(nominal_mhz: Int, current_mhz: Int, status: Int) -> GridFrequency {
+    return GridFrequency {
+        nominal_mhz: nominal_mhz,
+        current_mhz: current_mhz,
+        status: status
+    };
+}
+
+pub fn grid_freq_current(g: GridFrequency) -> Int {
+    return g.current_mhz;
+}

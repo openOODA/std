@@ -1,0 +1,200 @@
+// # Black-Scholes Option Pricing Theory
+//
+// Logline: Closed-form European call/put pricing via the Black-Scholes-Merton formula
+//   C = S*N(d1) - K*exp(-rT)*N(d2) with d1 = (ln(S/K) + (r + sigma^2/2)*T) / (sigma*sqrt(T))
+//   and d2 = d1 - sigma*sqrt(T). Coupled by put-call parity: P - C = K*exp(-rT) - S.
+//
+// Setup: Pure Float. Spot S, strike K, maturity T (years), risk-free rate r, volatility sigma.
+//   Uses stdlib math_exp and math_sqrt. Hostile (S<=0, K<=0, T<=0, sigma<=0, r<0) return Err.
+//   Standard normal CDF uses the Abramowitz & Stegun 26.2.17 rational approximation.
+//
+// Beats:
+//   1. Closed-form European call price C(S, K, T, r, sigma).
+//   2. Put-call parity residual: |(P - C) - (K*exp(-rT) - S)| <= 1e-6.
+//   3. Golden: S=100, K=100, T=1, r=0.05, sigma=0.2 -> C ~ 10.45 within 0.1%.
+//   4. Domain certificate domain_cert("econ", "black_scholes", holds).
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/trig.oo";
+
+fn bs_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn bs_inputs_valid(s: Float, k: Float, t: Float, sigma: Float, r: Float) -> Int {
+    if s <= 0.0 { return 0; }
+    if k <= 0.0 { return 0; }
+    if t <= 0.0 { return 0; }
+    if sigma <= 0.0 { return 0; }
+    if r < 0.0 { return 0; }
+    return 1;
+}
+
+// Abramowitz & Stegun 26.2.17 standard normal CDF.
+pub fn bs_normal_cdf(x: Float) -> Float {
+    if x < (0.0 - 7.0) { return 0.0; }
+    if x > 7.0 { return 1.0; }
+    let mut z: Float = x;
+    let mut is_neg: Bool = false;
+    if z < 0.0 {
+        z = 0.0 - z;
+        is_neg = true;
+    }
+    let p: Float = 0.2316419;
+    let b1: Float = 0.319381530;
+    let b2: Float = 0.0 - 0.356563782;
+    let b3: Float = 1.781477937;
+    let b4: Float = 0.0 - 1.821255978;
+    let b5: Float = 1.330274429;
+
+    let tpar: Float = 1.0 / (1.0 + p * z);
+    let pdf: Float = 0.3989422804014327 * math_exp(0.0 - 0.5 * z * z);
+    let poly: Float = (((b5 * tpar + b4) * tpar + b3) * tpar + b2) * tpar + b1;
+    let cdf: Float = 1.0 - pdf * poly * tpar;
+
+    if is_neg { return 1.0 - cdf; }
+    return cdf;
+}
+
+// d1 = (ln(S/K) + (r + sigma^2/2) * T) / (sigma * sqrt(T)).
+pub fn bs_d1(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] {
+    if s <= 0.0 { return Err("ERR\tbs\ts"); }
+    if k <= 0.0 { return Err("ERR\tbs\tk"); }
+    if t <= 0.0 { return Err("ERR\tbs\tt"); }
+    if sigma <= 0.0 { return Err("ERR\tbs\tsigma"); }
+    let sqrt_t: Float = math_sqrt(t);
+    let st: Float = sigma * sqrt_t;
+    let s_over_k: Float = s / k;
+    let ln_sk: Float = math_ln(s_over_k);
+    return Ok((ln_sk + (r + 0.5 * sigma * sigma) * t) / st);
+}
+
+pub fn bs_d2(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] {
+    let d1r: Result[Float, String] = bs_d1(s, k, t, r, sigma);
+    match d1r {
+        Ok(d1) => { return Ok(d1 - sigma * math_sqrt(t)); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn bs_call_price(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] {
+    if bs_inputs_valid(s, k, t, sigma, r) != 1 { return Err("ERR\tbs\tdomain"); }
+    let d1r: Result[Float, String] = bs_d1(s, k, t, r, sigma);
+    let d2r: Result[Float, String] = bs_d2(s, k, t, r, sigma);
+    match d1r {
+        Ok(d1)         => {
+            match d2r {
+                Ok(d2) => {
+                    let nd1: Float = bs_normal_cdf(d1);
+                    let nd2: Float = bs_normal_cdf(d2);
+                    let disc: Float = math_exp(0.0 - r * t);
+                    return Ok(s * nd1 - k * disc * nd2);
+                },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn bs_put_price(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] {
+    if bs_inputs_valid(s, k, t, sigma, r) != 1 { return Err("ERR\tbs\tdomain"); }
+    let cr: Result[Float, String] = bs_call_price(s, k, t, r, sigma);
+    match cr {
+        Ok(c)  => {
+            let disc: Float = math_exp(0.0 - r * t);
+            return Ok(c - s + k * disc);
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn bs_parity_residual(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> Result[Float, String] {
+    if bs_inputs_valid(s, k, t, sigma, r) != 1 { return Err("ERR\tbs\tdomain"); }
+    let cr: Result[Float, String] = bs_call_price(s, k, t, r, sigma);
+    let pr: Result[Float, String] = bs_put_price(s, k, t, r, sigma);
+    match cr {
+        Ok(c)          => {
+            match pr {
+                Ok(p)  => {
+                    let disc: Float = math_exp(0.0 - r * t);
+                    return Ok((p - c) - (k * disc - s));
+                },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+// 1 if put-call parity holds within tol, else 0.
+pub fn bs_parity_holds(s: Float, k: Float, t: Float, r: Float, sigma: Float, tol: Float) -> Int {
+    if bs_inputs_valid(s, k, t, sigma, r) != 1 { return 0; }
+    let rr: Result[Float, String] = bs_parity_residual(s, k, t, r, sigma);
+    match rr {
+        Ok(res) => { if bs_eabs(res) <= tol { return 1; } },
+        Err(_)  => { return 0; }
+    }
+    return 0;
+}
+
+pub fn black_scholes_cert(s: Float, k: Float, t: Float, r: Float, sigma: Float) -> DomainCert {
+    let mut h: Int = 0;
+    if bs_inputs_valid(s, k, t, sigma, r) == 1 {
+        let cr: Result[Float, String] = bs_call_price(s, k, t, r, sigma);
+        let parity: Int = bs_parity_holds(s, k, t, r, sigma, 0.000001);
+        match cr {
+            Ok(_)  => { if parity == 1 { h = 1; } },
+            Err(_) => { h = 0; }
+        }
+    }
+    return domain_cert("econ", "black_scholes", h);
+}
+
+fn bs_got(r: Result[Float, String]) -> Float {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return 0.0 - 1.0; }
+    }
+}
+
+pub fn verify_black_scholes_theory() -> Bool {
+    let c: Float = bs_got(bs_call_price(100.0, 100.0, 1.0, 0.05, 0.2));
+    if bs_eabs(c - 10.4506) > 0.011 { return false; }
+    let d1: Float = bs_got(bs_d1(100.0, 100.0, 1.0, 0.05, 0.2));
+    let d2: Float = bs_got(bs_d2(100.0, 100.0, 1.0, 0.05, 0.2));
+    if bs_eabs(d1 - 0.35) > 0.01 { return false; }
+    if bs_eabs(d2 - 0.15) > 0.01 { return false; }
+    if bs_eabs(bs_normal_cdf(0.0) - 0.5) > 0.001 { return false; }
+    if bs_eabs(bs_normal_cdf(0.0 - 3.0) - 0.00135) > 0.001 { return false; }
+    if bs_eabs(bs_normal_cdf(3.0) - 0.99865) > 0.001 { return false; }
+    if bs_parity_holds(100.0, 100.0, 1.0, 0.05, 0.2, 0.000001) != 1 { return false; }
+    if bs_parity_holds(90.0, 100.0, 1.0, 0.05, 0.2, 0.000001) != 1 { return false; }
+    if bs_parity_holds(110.0, 100.0, 1.0, 0.05, 0.2, 0.000001) != 1 { return false; }
+    let p_deep_itm: Float = bs_got(bs_put_price(50.0, 100.0, 1.0, 0.05, 0.2));
+    let intrinsic_put: Float = 100.0 * math_exp(0.0 - 0.05) - 50.0;
+    if p_deep_itm < intrinsic_put { return false; }
+    if p_deep_itm > intrinsic_put + 5.0 { return false; }
+    let lower: Float = 0.0 - 100.0 * math_exp(0.0 - 0.05);
+    if bs_got(bs_call_price(100.0, 100.0, 1.0, 0.05, 0.2)) < lower { return false; }
+    let c_low: Float = bs_got(bs_call_price(100.0, 100.0, 1.0, 0.05, 0.10));
+    let c_high: Float = bs_got(bs_call_price(100.0, 100.0, 1.0, 0.05, 0.40));
+    if c_high <= c_low { return false; }
+    let cert: DomainCert = black_scholes_cert(100.0, 100.0, 1.0, 0.05, 0.2);
+    if cert.holds != 1 { return false; }
+    if cert.domain != "econ" { return false; }
+    if cert.law_name != "black_scholes" { return false; }
+    if bs_call_price(0.0, 100.0, 1.0, 0.05, 0.2).is_ok() { return false; }
+    if bs_call_price(0.0 - 1.0, 100.0, 1.0, 0.05, 0.2).is_ok() { return false; }
+    if bs_call_price(100.0, 0.0, 1.0, 0.05, 0.2).is_ok() { return false; }
+    if bs_call_price(100.0, 0.0 - 1.0, 1.0, 0.05, 0.2).is_ok() { return false; }
+    if bs_call_price(100.0, 100.0, 0.0, 0.05, 0.2).is_ok() { return false; }
+    if bs_call_price(100.0, 100.0, 0.0 - 1.0, 0.05, 0.2).is_ok() { return false; }
+    if bs_call_price(100.0, 100.0, 1.0, 0.05, 0.0).is_ok() { return false; }
+    if bs_call_price(100.0, 100.0, 1.0, 0.05, 0.0 - 0.2).is_ok() { return false; }
+    if bs_call_price(100.0, 100.0, 1.0, 0.0 - 0.01, 0.2).is_ok() { return false; }
+    if bs_d1(0.0, 100.0, 1.0, 0.05, 0.2).is_ok() { return false; }
+    if bs_d2(0.0, 100.0, 1.0, 0.05, 0.2).is_ok() { return false; }
+    return true;
+}

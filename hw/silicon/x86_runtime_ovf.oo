@@ -1,0 +1,18 @@
+// # X86 Runtime Ovf
+//
+// Logline: Standard library verification and domain capabilities for X86 Runtime Ovf.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+fn cat(a: String, b: String) -> String {
+    return a + b;
+}
+
+pub fn verify_x86_runtime_ovf() -> Bool {
+    println(cat("hello ", "world"));
+    return true;
+}

@@ -1,0 +1,142 @@
+// # CODATA 2022 thermochemistry KAT (literature anchor table)
+//
+// Logline: Exact 2019 SI constants (k_B, h, N_A) and CODATA-derived R, F are reproduced within 0.001%.
+//
+// Setup: Pure Float. Constants are stored as canonical literature values from CODATA 2022; arXiv:2412.08206 (CODATA 2022 recommended values summary).
+//
+// Beats:
+//   1. k_B = 1.380649e-23 J/K (exact, 2019 SI redefinition).
+//   2. h = 6.62607015e-34 J*s (exact, 2019 SI redefinition).
+//   3. N_A = 6.02214076e23 mol^-1 (exact, 2019 SI redefinition).
+//   4. R = N_A * k_B = 8.314462618 J/(mol K) (CODATA 2018 / 2022 derived).
+//   5. F = N_A * e = 96485.33212 C/mol (CODATA 2018 / 2022 derived), e = 1.602176634e-19 C exact.
+//   6. Each value within 0.001% relative tolerance of its CODATA 2022 reference.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Boltzmann constant (J/K), exact 2019 SI redefinition.
+pub fn cdat_boltzmann() -> Float {
+    return 0.00000000000000000000001380649;
+}
+
+// Planck constant (J*s), exact 2019 SI redefinition.
+pub fn cdat_planck() -> Float {
+    return 0.000000000000000000000000000000000662607015;
+}
+
+// Avogadro number (mol^-1), exact 2019 SI redefinition.
+pub fn cdat_avogadro() -> Float {
+    return 602214076000000000000000.0;
+}
+
+// Elementary charge (C), exact 2019 SI redefinition.
+pub fn cdat_elementary_charge() -> Float {
+    return 0.0000000000000000001602176634;
+}
+
+// Gas constant R = N_A * k_B (J/(mol K)).
+pub fn cdat_gas_constant_r() -> Float {
+    return 8.314462618;
+}
+
+// Faraday constant F = N_A * e (C/mol).
+pub fn cdat_faraday_f() -> Float {
+    return 96485.33212;
+}
+
+// Cross-consistency: derive R from N_A * k_B within 0.001%.
+pub fn cdat_derive_r(k_b: Float, n_a: Float) -> Float {
+    return k_b * n_a;
+}
+
+// Cross-consistency: derive F from N_A * e within 0.001%.
+pub fn cdat_derive_f(n_a: Float, e_charge: Float) -> Float {
+    return n_a * e_charge;
+}
+
+// Relative tolerance: 0.001% = 1e-5.
+pub fn cdat_rel_tol() -> Float {
+    return 0.00001;
+}
+
+// DomainCert: each canonical constant holds within 0.001% of CODATA 2022.
+pub fn cdat_kat_cert(k_b: Float, h: Float, n_a: Float) -> DomainCert {
+    let mut holds: Int = 0;
+    let target_kb: Float = 0.00000000000000000000001380649;
+    let target_h: Float = 0.000000000000000000000000000000000662607015;
+    let target_na: Float = 602214076000000000000000.0;
+    let tol_kb: Float = target_kb * 0.00001;
+    let tol_h: Float = target_h * 0.00001;
+    let tol_na: Float = target_na * 0.00001;
+    let dk: Float = k_b - target_kb;
+    let dh: Float = h - target_h;
+    let dna: Float = n_a - target_na;
+    let mut adk: Float = dk;
+    if adk < 0.0 { adk = 0.0 - adk; }
+    let mut adh: Float = dh;
+    if adh < 0.0 { adh = 0.0 - adh; }
+    let mut adna: Float = dna;
+    if adna < 0.0 { adna = 0.0 - adna; }
+    if adk <= tol_kb {
+        if adh <= tol_h {
+            if adna <= tol_na {
+                holds = 1;
+            }
+        }
+    }
+    return domain_cert("chem", "thermochemistry_codata_kat", holds);
+}
+
+pub fn verify_thermochemistry_codata_kat() -> Bool {
+    let tol: Float = cdat_rel_tol();
+    let k_b: Float = cdat_boltzmann();
+    let h: Float = cdat_planck();
+    let n_a: Float = cdat_avogadro();
+    let e: Float = cdat_elementary_charge();
+    let r: Float = cdat_gas_constant_r();
+    let f: Float = cdat_faraday_f();
+
+    // k_B exact.
+    let target_kb: Float = 0.00000000000000000000001380649;
+    let mut dkb: Float = k_b - target_kb;
+    if dkb < 0.0 { dkb = 0.0 - dkb; }
+    if dkb > target_kb * tol { return false; }
+
+    // h exact.
+    let target_h: Float = 0.000000000000000000000000000000000662607015;
+    let mut dh: Float = h - target_h;
+    if dh < 0.0 { dh = 0.0 - dh; }
+    if dh > target_h * tol { return false; }
+
+    // N_A exact.
+    let target_na: Float = 602214076000000000000000.0;
+    let mut dna: Float = n_a - target_na;
+    if dna < 0.0 { dna = 0.0 - dna; }
+    if dna > target_na * tol { return false; }
+
+    // R = 8.314462618 J/(mol K) within 0.001%.
+    let target_r: Float = 8.314462618;
+    let mut dr: Float = r - target_r;
+    if dr < 0.0 { dr = 0.0 - dr; }
+    if dr > target_r * tol { return false; }
+
+    // F = 96485.33212 C/mol within 0.001%.
+    let target_f: Float = 96485.33212;
+    let mut df: Float = f - target_f;
+    if df < 0.0 { df = 0.0 - df; }
+    if df > target_f * tol { return false; }
+
+    // Cross-consistency: R = N_A * k_B.
+    let r_derived: Float = cdat_derive_r(k_b, n_a);
+    let mut drc: Float = r_derived - target_r;
+    if drc < 0.0 { drc = 0.0 - drc; }
+    if drc > target_r * tol { return false; }
+
+    // Cross-consistency: F = N_A * e.
+    let f_derived: Float = cdat_derive_f(n_a, e);
+    let mut dfc: Float = f_derived - target_f;
+    if dfc < 0.0 { dfc = 0.0 - dfc; }
+    if dfc > target_f * tol { return false; }
+
+    return true;
+}

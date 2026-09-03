@@ -1,0 +1,51 @@
+// # Serial Manipulator Forward Kinematic Chain
+//
+// Logline: Computes 6-DoF end-effector Cartesian pose from a serial DH joint chain.
+//
+// Setup: Pure 6-DoF serial manipulator forward kinematics. No capability tokens.
+//
+// Beats:
+//   1. Validate the joint list contains exactly six joints.
+//   2. Chain sequential DH link frames from base to end-effector.
+//   3. Extract end-effector position from the final homogeneous matrix.
+//   4. Extract roll-pitch-yaw using quadrant-resolved fast_atan2.
+// residual: Closed-loop inverse-kinematics solvers and alternate Euler conventions are residual.
+
+import "std/app/robot/ros2/dh_parameters.oo";
+import "std/core/math/fast_trig.oo";
+
+fn kfc_list_len_ok(joints: List[DhJoint]) -> Int {
+    let n: Int = list_len(joints);
+    if n != 6 { return 1; }
+    return 0;
+}
+
+fn kfc_extract_rpy(m: Matrix4x4Homogeneous) -> Pose6D {
+    let c_p: Float = sqrt((m.r11 * m.r11) + (m.r21 * m.r21));
+    let roll: Float = fast_atan2(m.r32, m.r33);
+    let pitch: Float = fast_atan2(0.0 - m.r31, c_p);
+    let yaw: Float = fast_atan2(m.r21, m.r11);
+    return Pose6D {
+        x: m.tx,
+        y: m.ty,
+        z: m.tz,
+        roll: roll,
+        pitch: pitch,
+        yaw: yaw
+    };
+}
+
+pub fn fk_chain_6dof(joints: List[DhJoint]) -> Result[Pose6D, String] {
+    if kfc_list_len_ok(joints) != 0 {
+        return Err("ERR\tfk_chain_6dof\tjoint_count_not_six");
+    }
+    let mut T: Matrix4x4Homogeneous = matrix4x4_identity();
+    let mut i: Int = 0;
+    while i < 6 {
+        let j: DhJoint = list_get(joints, i);
+        let tj: Matrix4x4Homogeneous = dh_joint_matrix(&j);
+        T = matrix4x4_multiply(T, tj);
+        i = i + 1;
+    }
+    return Ok(kfc_extract_rpy(T));
+}

@@ -1,0 +1,115 @@
+// # Leap second law
+//
+// Logline: TAI = UTC + n_leap_seconds; the canonical 2017-01-01 TAI-UTC offset is 37 seconds; a 1-year duration has a fixed number of seconds in TAI but a variable count in UTC because of leap seconds.
+//
+// Setup: Pure Int. leap_seconds is the integer TAI-UTC offset; tai_seconds = utc_seconds + leap_seconds. Negative TAI or out-of-range leap-second counts return Err. tai_from_utc(0, 0) is Ok(0).
+//
+// Beats:
+//   1. tai_from_utc(utc_seconds, leap_seconds) returns utc_seconds + leap_seconds.
+//   2. Hostile: negative utc_seconds or negative leap_seconds returns Err.
+//   3. Golden: 2017-01-01 has TAI - UTC = 37 seconds.
+//   4. Coupled: a 1-year TAI duration is exactly 365 * 86400 + leap_count; a 1-year UTC duration is exactly 365 * 86400.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn leap_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Canonical TAI - UTC offset at 2017-01-01: 37 seconds.
+pub fn leap_seconds_2017() -> Int {
+    return 37;
+}
+
+// Canonical TAI - UTC offset at 2020-01-01: 37 seconds.
+pub fn leap_seconds_2020() -> Int {
+    return 37;
+}
+
+// Seconds in a 365-day year (the non-leap baseline).
+pub fn secs_per_year() -> Int {
+    return 365 * 86400;
+}
+
+// Convert UTC seconds to TAI seconds by adding the leap-second offset.
+// Negative utc_seconds or leap_seconds return Err. tai_from_utc(0, 0) is Ok(0).
+pub fn tai_from_utc(utc_seconds: Int, leap_seconds: Int) -> Result[Int, String] {
+    if utc_seconds < 0 { return Err("ERR\tleap\tutc"); }
+    if leap_seconds < 0 { return Err("ERR\tleap\tleap"); }
+    return Ok(utc_seconds + leap_seconds);
+}
+
+// 1 if tai_from_utc yielded a strictly positive TAI count; 0 otherwise.
+pub fn tai_positive(utc_seconds: Int, leap_seconds: Int) -> Int {
+    if utc_seconds < 0 { return 0; }
+    if leap_seconds < 0 { return 0; }
+    if utc_seconds + leap_seconds > 0 { return 1; }
+    return 0;
+}
+
+// TAI seconds in a 1-year duration with `leap_count` leap seconds in that year.
+// Always equal to 365 * 86400 + leap_count, regardless of leap seconds.
+pub fn tai_secs_in_year(leap_count: Int) -> Result[Int, String] {
+    if leap_count < 0 { return Err("ERR\tleap\tleap"); }
+    return Ok(secs_per_year() + leap_count);
+}
+
+// UTC seconds in a 1-year duration that has `leap_count` leap seconds; UTC
+// counts 86400 per civil day whether or not a leap second is inserted, so a
+// 365-day year is 365 * 86400 seconds in UTC, with `leap_count` extra
+// physical seconds that the UTC clock skips.
+pub fn utc_secs_in_year(leap_count: Int) -> Result[Int, String] {
+    if leap_count < 0 { return Err("ERR\tleap\tleap"); }
+    return Ok(secs_per_year());
+}
+
+pub fn leap_second_law_holds(utc_seconds: Int, leap_seconds: Int) -> DomainCert {
+    let ok: Int = tai_positive(utc_seconds, leap_seconds);
+    return domain_cert("time", "leap_second_law", ok);
+}
+
+pub fn verify_leap_second_law() -> Bool {
+    // Golden: 2017-01-01 TAI - UTC = 37.
+    if leap_seconds_2017() != 37 { return false; }
+    // Golden: 2020-01-01 TAI - UTC = 37.
+    if leap_seconds_2020() != 37 { return false; }
+    // Golden: tai_from_utc(utc, 37) = utc + 37.
+    if leap_got(tai_from_utc(0, 37)) != 37 { return false; }
+    if leap_got(tai_from_utc(1000, 37)) != 1037 { return false; }
+    // Identity: tai_from_utc(0, 0) is Ok(0), not dummy-0.
+    if tai_from_utc(0, 0).is_ok() == false { return false; }
+    if leap_got(tai_from_utc(0, 0)) != 0 { return false; }
+    // Hostile: negative leap_seconds fails closed.
+    if tai_from_utc(100, 0 - 1).is_ok() { return false; }
+    // Hostile: negative utc_seconds fails closed.
+    if tai_from_utc(0 - 1, 37).is_ok() { return false; }
+    if tai_from_utc(0 - 5, 37).is_ok() { return false; }
+    // Golden: 1 year UTC seconds = 365 * 86400.
+    if leap_got(utc_secs_in_year(0)) != 31536000 { return false; }
+    if leap_got(utc_secs_in_year(2)) != 31536000 { return false; }
+    // Golden: 1 year TAI seconds includes the leap count.
+    if leap_got(tai_secs_in_year(0)) != 31536000 { return false; }
+    if leap_got(tai_secs_in_year(2)) != 31536002 { return false; }
+    if leap_got(tai_secs_in_year(leap_seconds_2017())) != 31536037 { return false; }
+    // Hostile: negative leap_count fails closed in year-second helpers.
+    if utc_secs_in_year(0 - 1).is_ok() { return false; }
+    if tai_secs_in_year(0 - 1).is_ok() { return false; }
+    // Coupled with duration_law: a 1-year TAI duration is 1-year UTC plus leaps.
+    let utc_year: Int = secs_per_year();
+    let tai_year_r: Result[Int, String] = tai_secs_in_year(leap_seconds_2017());
+    if tai_year_r.is_ok() == false { return false; }
+    let tai_year: Int = leap_got(tai_year_r);
+    if tai_year != utc_year + leap_seconds_2017() { return false; }
+    // Golden: domain_cert wrapper.
+    let c1: DomainCert = leap_second_law_holds(0, 37);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "time" { return false; }
+    if c1.law_name != "leap_second_law" { return false; }
+    let c2: DomainCert = leap_second_law_holds(0 - 1, 37);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = leap_second_law_holds(100, 0 - 1);
+    if c3.holds != 0 { return false; }
+    let c4: DomainCert = leap_second_law_holds(0, 0);
+    if c4.holds != 0 { return false; }
+    return true;
+}

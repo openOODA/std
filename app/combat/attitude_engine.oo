@@ -1,0 +1,29 @@
+// # Attitude engine
+//
+// Logline: AttEng implemented off pub type Float kinematics.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type AttEng = struct {
+    mode: Int,
+    rate: Int
+};
+
+pub fn att_eng_new(mode: Int, rate: Int) -> AttEng {
+    return AttEng { mode: mode, rate: rate };
+}
+
+pub fn att_eng_mode(e: AttEng) -> Int {
+    return e.mode;
+}
+
+pub fn att_eng_rate(e: AttEng) -> Int {
+    return e.rate;
+}

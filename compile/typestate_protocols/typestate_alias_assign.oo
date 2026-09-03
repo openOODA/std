@@ -1,0 +1,28 @@
+// # Send through a later alias
+//
+// Logline: Assign t = s after open, connect s, and send t so assign aliasing follows.
+//
+// Setup: Test fixture. Keep TYPESTATE directives and all code exact.
+//
+// Beats:
+//   1. Open into Closed.
+//   2. Assign t = s, then connect s.
+//   3. Send the alias t.
+//
+// TYPESTATE: Sock Closed Open
+// TYPESTATE fn open_sock: -> Closed
+// TYPESTATE fn connect: Closed -> Open
+// TYPESTATE fn send: Open -> Open
+
+fn open_sock() -> Int { return 1; }
+fn connect(s: Int) { let x = s; }
+fn send(s: Int) { let x = s; }
+
+pub fn verify_typestate_alias_assign() -> Bool {
+    let s = open_sock();
+    let mut t = 0;
+    t = s;
+    connect(s);
+    send(t);
+    return true;
+}

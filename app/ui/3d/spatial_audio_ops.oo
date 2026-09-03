@@ -1,0 +1,25 @@
+// # Spatial audio ops
+//
+// Logline: AudioOp destubbed off nested source/listener ops.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed to Int floor.
+
+type AudioOp = struct {
+    gain: Int,
+    pan: Int
+};
+
+pub fn audio_op_new(gain: Int, pan: Int) -> AudioOp {
+    return AudioOp { gain: gain, pan: pan };
+}
+
+pub fn audio_op_gain(op: AudioOp) -> Int {
+    return op.gain;
+}

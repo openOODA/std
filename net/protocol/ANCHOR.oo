@@ -1,0 +1,67 @@
+// # Net Protocol
+//
+// Logline: Wire-level and application-level protocol codecs. Merges the prior
+// std/net/wire/, std/net/web_protocols/, std/net/http3/, std/net/advanced/
+// subtrees. Pure compute, no caps.
+//
+// Setup: Domain module under std/net/protocol. Re-exports the wire codecs
+// (DNS wire, hpack, mqtt, quic, websocket) and the application protocols
+// (cors, csp, graphql, jsonrpc, oauth2, oidc, openapi, paseto, rtp, sse,
+// stun/turn, webrtc, webpush) and the advanced/ WebSocket stack
+// (websocket connection lifecycle, ws_frame codec, ws_handshake fail-closed).
+// Private siblings (web_proto_stubs, advanced stubs) remain non-public.
+//
+// Beats:
+//   1. Wire codecs: dns_wire_codec, hpack_decoder, mqtt_packet, quic_framer, websocket_frame, websocket_stream, ws_frame_payload.
+//   2. HTTP/3: flow, frame, http3, http3_quic, stream, varint.
+//   3. Web app: cors_middleware, csp_header_builder, graphql_*, jsonrpc_*, sse_stream.
+//   4. Auth: oauth2, oauth2_pkce, oauth2_token, oidc_jwt_claims, paseto_token, webpush_encryption.
+//   5. Real-time media: rtcp_sr_rr, rtp_packet, stun_message, turn_allocation, webrtc_*, openapi_*.
+//   6. Advanced WebSocket: websocket, ws_frame, ws_handshake (fail-closed).
+//   7. Cluster gossip: gossip_mesh, web_protocols, web_proto_stubs.
+
+import "cors_middleware.oo";
+import "csp_header_builder.oo";
+import "dns_wire_codec.oo";
+import "flow.oo";
+import "frame.oo";
+import "gossip_mesh_proto.oo";
+import "graphql_ast.oo";
+import "graphql_executor.oo";
+import "graphql_lexer.oo";
+import "graphql_parser.oo";
+import "graphql_schema.oo";
+import "hpack_decoder.oo";
+import "http3.oo";
+import "http3_quic.oo";
+import "jsonrpc_dispatcher.oo";
+import "jsonrpc_request.oo";
+import "jsonrpc_response.oo";
+import "mqtt_packet_types.oo";
+import "oauth2.oo";
+import "oauth2_pkce.oo";
+import "oauth2_token.oo";
+import "oidc_jwt_claims.oo";
+import "openapi_generator.oo";
+import "openapi_schema.oo";
+import "paseto_token.oo";
+import "quic_framer.oo";
+import "rtcp_sr_rr.oo";
+import "rtp_packet.oo";
+import "sse_stream.oo";
+import "quic_stream.oo";
+import "stun_message.oo";
+import "turn_allocation.oo";
+import "varint_wire.oo";
+import "web_protocols.oo";
+import "web_proto_stubs.oo";
+import "webpush_encryption.oo";
+import "webrtc_ice_candidate.oo";
+import "webrtc_sdp_parser.oo";
+import "webrtc_sdp_parser_lines.oo";
+import "ws_connection.oo";
+import "ws_frame_codec.oo";
+import "websocket_stream.oo";
+import "ws_frame.oo";
+import "ws_frame_payload.oo";
+import "ws_handshake.oo";

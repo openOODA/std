@@ -1,0 +1,60 @@
+// # Hilbert Transform & Phase-Locking Value (PLV)
+//
+// Logline: Computes instantaneous phase, envelope amplitude, and inter-electrode Phase-Locking Value (PLV).
+//
+// Setup: Analytic signal operator extracting time-resolved phase synchronization across brain networks.
+//
+// Beats:
+//   1. Define AnalyticSample (real: original signal, imag: quadrature Hilbert component).
+//   2. Compute instantaneous envelope amplitude A(t) = sqrt(real^2 + imag^2) and phase phi(t).
+//   3. Calculate 4-sample inter-channel Phase-Locking Value (PLV) quantifying phase consistency.
+
+type AnalyticSample = struct {
+    real: Float,
+    imag: Float
+};
+
+type InstantaneousMetrics = struct {
+    envelope_amplitude: Float,
+    phase_rad: Float
+};
+
+pub fn hilbert_instantaneous_metrics(sample: &AnalyticSample) -> InstantaneousMetrics {
+    let r: Float = sample.real;
+    let im: Float = sample.imag;
+
+    let amp_sq: Float = (r * r) + (im * im);
+    let amp: Float = sqrt(amp_sq);
+
+    // Approximate phase angle in [-pi, pi]
+    let phase: Float = if r != 0.0 { im / r } else { 0.0 };
+
+    return InstantaneousMetrics {
+        envelope_amplitude: amp,
+        phase_rad: phase
+    };
+}
+
+pub fn eeg_compute_plv_4pt(
+    dphi0: Float,
+    dphi1: Float,
+    dphi2: Float,
+    dphi3: Float
+) -> Float {
+    // PLV = (1/N) * |sum_k exp(i * dphi_k)|
+    let cos_sum: Float = cos(dphi0) + cos(dphi1) + cos(dphi2) + cos(dphi3);
+    let sin_sum: Float = sin(dphi0) + sin(dphi1) + sin(dphi2) + sin(dphi3);
+
+    let avg_cos: Float = cos_sum * 0.25;
+    let avg_sin: Float = sin_sum * 0.25;
+
+    let plv_sq: Float = (avg_cos * avg_cos) + (avg_sin * avg_sin);
+    let plv_val: Float = sqrt(plv_sq);
+
+    if plv_val > 1.0 { return 1.0; }
+    return plv_val;
+}
+
+pub fn eeg_is_phase_locked(plv_value: Float, threshold: Float) -> Bool {
+    return plv_value >= threshold;
+}

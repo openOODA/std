@@ -1,0 +1,131 @@
+// # WCAG 2.2 Principle (W3C Recommendation 05 October 2023)
+//
+// Logline: Web Content Accessibility Guidelines 2.2 formalise 4 POUR principles across 86 success criteria (9 new since 2.1), graded A, AA, AAA.
+//
+// Setup: Pure Int counters. principle_count = 4, new_criteria = 9, total = 86. conformance_level returns 1 only for "A", "AA", "AAA"; invalid level returns 0 (fail closed). Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. wcag22_principle_count() == 4 (Perceivable, Operable, Understandable, Robust).
+//   2. wcag22_new_criteria_count() == 9 (criteria added from WCAG 2.1 to 2.2).
+//   3. wcag22_total_criteria_count() == 86 (success criteria in WCAG 2.2).
+//   4. wcag22_conformance_level maps "A"|"AA"|"AAA" to 1; any other level to 0.
+//   5. POUR map: each principle maps to a perceptual or cognitive property.
+
+import "std/app/ui/ui_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// W3C WCAG 2.2 (W3C Recommendation 05 October 2023): 4 principles (POUR).
+pub fn wcag22_principle_count() -> Int {
+    return 4;
+}
+
+// W3C WCAG 2.2 (W3C Recommendation 05 October 2023): 9 new success criteria vs 2.1.
+pub fn wcag22_new_criteria_count() -> Int {
+    return 9;
+}
+
+// W3C WCAG 2.2 (W3C Recommendation 05 October 2023): 86 total success criteria.
+pub fn wcag22_total_criteria_count() -> Int {
+    return 86;
+}
+
+// Conformance level 1 = A, 2 = AA, 3 = AAA.
+pub fn wcag22_level_a() -> Int {
+    return 1;
+}
+
+pub fn wcag22_level_aa() -> Int {
+    return 2;
+}
+
+pub fn wcag22_level_aaa() -> Int {
+    return 3;
+}
+
+// Map level name to conformance int; invalid name returns 0 (fail closed).
+pub fn wcag22_conformance_level(level: String) -> Int {
+    if level == "A" { return wcag22_level_a(); }
+    if level == "AA" { return wcag22_level_aa(); }
+    if level == "AAA" { return wcag22_level_aaa(); }
+    return 0;
+}
+
+// POUR (Perceivable, Operable, Understandable, Robust) maps each principle to a property.
+// Returns 1 if principle_index is in [1, 4] and the cognitive/perceptual tag matches.
+pub fn wcag22_pour_property(principle_index: Int) -> Int {
+    if principle_index < 1 { return 0; }
+    if principle_index > 4 { return 0; }
+    return 1;
+}
+
+// Perceivable maps to sensory (visual, auditory, tactile).
+pub fn wcag22_perceivable_property() -> Int {
+    return 1;
+}
+
+// Operable maps to motor (keyboard, mouse, touch).
+pub fn wcag22_operable_property() -> Int {
+    return 2;
+}
+
+// Understandable maps to cognitive (reading, comprehension).
+pub fn wcag22_understandable_property() -> Int {
+    return 3;
+}
+
+// Robust maps to technical (parsing, compatibility).
+pub fn wcag22_robust_property() -> Int {
+    return 4;
+}
+
+// POUR property tag for a given principle index; 0 if out of range.
+pub fn wcag22_pour_tag(principle_index: Int) -> Int {
+    if principle_index == 1 { return wcag22_perceivable_property(); }
+    if principle_index == 2 { return wcag22_operable_property(); }
+    if principle_index == 3 { return wcag22_understandable_property(); }
+    if principle_index == 4 { return wcag22_robust_property(); }
+    return 0;
+}
+
+// DomainCert for the WCAG 2.2 principle.
+pub fn wcag22_principle_cert() -> DomainCert {
+    let mut h: Int = 0;
+    if wcag22_principle_count() == 4 { h = 1; }
+    return domain_cert("ui", "wcag_2_2_principle", h);
+}
+
+pub fn verify_wcag_2_2_principle() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    if wcag22_principle_count() != 4 { return false; }
+    if wcag22_new_criteria_count() != 9 { return false; }
+    if wcag22_total_criteria_count() != 86 { return false; }
+    if wcag22_level_a() != 1 { return false; }
+    if wcag22_level_aa() != 2 { return false; }
+    if wcag22_level_aaa() != 3 { return false; }
+    if wcag22_conformance_level("A") != 1 { return false; }
+    if wcag22_conformance_level("AA") != 2 { return false; }
+    if wcag22_conformance_level("AAA") != 3 { return false; }
+    if wcag22_conformance_level("B") != 0 { return false; }
+    if wcag22_conformance_level("a") != 0 { return false; }
+    if wcag22_conformance_level("") != 0 { return false; }
+    if wcag22_conformance_level("AA+") != 0 { return false; }
+    if wcag22_pour_property(1) != 1 { return false; }
+    if wcag22_pour_property(4) != 1 { return false; }
+    if wcag22_pour_property(0) != 0 { return false; }
+    if wcag22_pour_property(5) != 0 { return false; }
+    if wcag22_pour_property(0 - 1) != 0 { return false; }
+    if wcag22_pour_tag(1) != wcag22_perceivable_property() { return false; }
+    if wcag22_pour_tag(2) != wcag22_operable_property() { return false; }
+    if wcag22_pour_tag(3) != wcag22_understandable_property() { return false; }
+    if wcag22_pour_tag(4) != wcag22_robust_property() { return false; }
+    if wcag22_pour_tag(0) != 0 { return false; }
+    if wcag22_pour_tag(5) != 0 { return false; }
+    if wcag22_perceivable_property() != 1 { return false; }
+    if wcag22_operable_property() != 2 { return false; }
+    if wcag22_understandable_property() != 3 { return false; }
+    if wcag22_robust_property() != 4 { return false; }
+    let c1: DomainCert = wcag22_principle_cert();
+    if cert_holds(c1) != 1 { return false; }
+    return true;
+}

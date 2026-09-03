@@ -1,0 +1,123 @@
+// # Spherical Harmonic Y_l^m
+//
+// Logline: Evaluates the complex spherical harmonic from associated Legendre polynomials.
+//
+// Setup: Pure math. Uses std/math/special/legendre_polynomials.oo. Returns [re, im].
+//
+// Beats:
+//   1. Reject |m| > l or l < 0.
+//   2. Form the normalization sqrt((2l+1)/4pi * (l-|m|)! / (l+|m|)!).
+//   3. Multiply by P_l^{|m|}(cos theta).
+//   4. Attach e^{i m phi} and the Condon-Shortley sign already in P.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/constants.oo";
+import "std/core/math/special/legendre_polynomials.oo";
+
+fn ylm_sin_t(t: Float) -> Float {
+    let t2: Float = t * t;
+    return t * (1.0 + t2 * ((0.0 - 1.0 / 6.0) + t2 * (1.0 / 120.0 + t2 * ((0.0 - 1.0 / 5040.0) + t2 * (1.0 / 362880.0)))));
+}
+
+fn ylm_cos_t(t: Float) -> Float {
+    let t2: Float = t * t;
+    return 1.0 + t2 * ((0.0 - 0.5) + t2 * (1.0 / 24.0 + t2 * ((0.0 - 1.0 / 720.0) + t2 * (1.0 / 40320.0))));
+}
+
+fn ylm_cos(x: Float) -> Float {
+    let pi: Float = math_pi();
+    let two_pi: Float = math_two_pi();
+    let half: Float = math_half_pi();
+    let q: Float = 0.7853981633974483;
+    let mut t: Float = x;
+    while t > pi { t = t - two_pi; }
+    while t < (0.0 - pi) { t = t + two_pi; }
+    let mut s: Float = 1.0;
+    if t < 0.0 { t = 0.0 - t; }
+    if t > half {
+        t = pi - t;
+        s = 0.0 - 1.0;
+    }
+    if t > q {
+        return s * ylm_sin_t(half - t);
+    }
+    return s * ylm_cos_t(t);
+}
+
+fn ylm_sin(x: Float) -> Float {
+    let pi: Float = math_pi();
+    let two_pi: Float = math_two_pi();
+    let half: Float = math_half_pi();
+    let mut t: Float = x;
+    while t > pi { t = t - two_pi; }
+    while t < (0.0 - pi) { t = t + two_pi; }
+    let mut s: Float = 1.0;
+    if t < 0.0 {
+        s = 0.0 - 1.0;
+        t = 0.0 - t;
+    }
+    if t > half { t = pi - t; }
+    return s * ylm_sin_t(t);
+}
+
+fn ylm_fact_ratio(l: Int, mabs: Int) -> Float {
+    let mut num: Float = 1.0;
+    let mut k: Int = 1;
+    let mut kf: Float = 1.0;
+    while k <= (l - mabs) {
+        num = num * kf;
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    let mut den: Float = 1.0;
+    k = 1;
+    kf = 1.0;
+    while k <= (l + mabs) {
+        den = den * kf;
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    return num / den;
+}
+
+fn ylm_two_l_1(l: Int) -> Float {
+    let mut f: Float = 1.0;
+    let mut i: Int = 0;
+    while i < l {
+        f = f + 2.0;
+        i = i + 1;
+    }
+    return f;
+}
+
+pub fn ylm(l: Int, m: Int, theta: Float, phi: Float) -> Result[List[Float], String] {
+    if l < 0 { return Err("ERR\tylm\tl"); }
+    let mut mabs: Int = m;
+    if mabs < 0 { mabs = 0 - mabs; }
+    if mabs > l { return Err("ERR\tylm\tm"); }
+    let nrm: Float = sqrt(ylm_two_l_1(l) / (12.566370614359172) * ylm_fact_ratio(l, mabs));
+    let ct: Float = ylm_cos(theta);
+    let p: Float = legendre_associated(l, mabs, ct);
+    let mut mf: Float = 0.0;
+    let mut t: Int = 0;
+    let mut ma: Int = m;
+    if ma < 0 { ma = 0 - ma; }
+    while t < ma {
+        mf = mf + 1.0;
+        t = t + 1;
+    }
+    if m < 0 { mf = 0.0 - mf; }
+    let ang: Float = mf * phi;
+    let mut re: Float = nrm * p * ylm_cos(ang);
+    let mut im: Float = nrm * p * ylm_sin(ang);
+    if m < 0 {
+        if mabs - (mabs / 2) * 2 == 1 {
+            re = 0.0 - re;
+            im = 0.0 - im;
+        }
+    }
+    let mut o: List[Float] = list_new();
+    o = list_push(o, re);
+    o = list_push(o, im);
+    return Ok(o);
+}

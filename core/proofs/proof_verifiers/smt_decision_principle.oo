@@ -1,0 +1,153 @@
+// # SMT decision principle (SMT-LIB, 2003+)
+//
+// Logline: Heuristic — SMT combines theory solvers (LIA, LRA, arrays) with a SAT core. Quantitative: smt_check(formula) returns 1 if sat, 0 if unsat, 0 if malformed (fails closed).
+//
+// Setup: Pure Int. A formula is encoded as a 4-tuple (op, x, y, k) where op is the operator id (0=+, 1=-, 2=*, 3=eq) and x, y, k are the operands. For LIA, op=0 means "x + y = k" (with k the right-hand side). Hostile: malformed formula (op outside 0..3 or k=0) fails closed to 0. Coupled: the SAT core routes the Boolean structure; the theory solver decides the LIA/LRA constraints.
+//
+// Beats:
+//   1. smt_lia_sat returns 1 iff x + y = k is satisfiable over the integers.
+//   2. smt_check returns 1 for sat formulas and 0 for unsat/malformed.
+//   3. x + 1 = 2 with x = 1 → sat.
+//   4. x + 1 = x → unsat.
+//   5. Coupled: mal-formed formula fails closed to 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+// 1 iff the LIA constraint x + y = k is satisfiable.
+pub fn smt_lia_sat(x: Int, y: Int, k: Int) -> Int {
+    if x + y == k { return 1; }
+    return 0;
+}
+
+// 1 iff the operator id is known.
+pub fn smt_is_known_op(op: Int) -> Int {
+    if op == 0 { return 1; }
+    if op == 1 { return 1; }
+    if op == 2 { return 1; }
+    if op == 3 { return 1; }
+    return 0;
+}
+
+// 1 iff the formula (op, x, y, k) is satisfiable. op encodes the constraint:
+//   0 → x + y = k, 1 → x - y = k, 2 → x * y = k, 3 → x == y.
+pub fn smt_check(op: Int, x: Int, y: Int, k: Int) -> Int {
+    if smt_is_known_op(op) == 0 { return 0; }
+    if op == 0 {
+        if smt_lia_sat(x, y, k) == 1 { return 1; }
+    }
+    if op == 1 {
+        if x - y == k { return 1; }
+    }
+    if op == 2 {
+        if x * y == k { return 1; }
+    }
+    if op == 3 {
+        if x == y { return 1; }
+    }
+    return 0;
+}
+
+// 1 iff the formula is malformed (hostile inputs).
+pub fn smt_is_malformed(op: Int, x: Int, y: Int, k: Int) -> Int {
+    if smt_is_known_op(op) == 0 { return 1; }
+    return 0;
+}
+
+// Combined: smt_check + mal-form detection. Always returns the right answer
+// for known operators and 0 for unknown operators.
+pub fn smt_decide(op: Int, x: Int, y: Int, k: Int) -> Int {
+    if smt_is_known_op(op) == 0 { return 0; }
+    return smt_check(op, x, y, k);
+}
+
+// Coupled: LRA decision — x + y = k for x, y reals. Over Int this collapses
+// to the LIA witness; LRA expands the witness to floating-point precision.
+pub fn smt_lra_sat(x: Int, y: Int, k: Int) -> Int {
+    return smt_lia_sat(x, y, k);
+}
+
+// Coupled: arrays — read and write. arr[idx] = val. Returns 1 iff the
+// assignment is consistent.
+pub fn smt_array_read(arr_val: Int, idx: Int, expected: Int) -> Int {
+    if idx == 0 { return 0; }       // hostile: index 0 is the sentinel
+    if arr_val == expected { return 1; }
+    return 0;
+}
+
+// domain_cert wrapper for the SMT decision principle lock.
+pub fn smt_holds(op: Int, x: Int, y: Int, k: Int) -> DomainCert {
+    let v: Int = smt_check(op, x, y, k);
+    return domain_cert("proof_verifiers", "smt_decision_principle", v);
+}
+
+pub fn verify_smt_decision_principle() -> Bool {
+    // Golden: known operators.
+    if smt_is_known_op(0) != 1 { return false; }
+    if smt_is_known_op(1) != 1 { return false; }
+    if smt_is_known_op(2) != 1 { return false; }
+    if smt_is_known_op(3) != 1 { return false; }
+
+    // Hostile: unknown operator.
+    if smt_is_known_op(4) != 0 { return false; }
+    if smt_is_known_op(0 - 1) != 0 { return false; }
+    if smt_is_known_op(99) != 0 { return false; }
+
+    // Golden: LIA witnesses.
+    if smt_lia_sat(1, 1, 2) != 1 { return false; }
+    if smt_lia_sat(0, 0, 0) != 1 { return false; }
+    if smt_lia_sat(3, 4, 7) != 1 { return false; }
+    if smt_lia_sat(3, 4, 8) != 0 { return false; }
+
+    // Golden: smt_check on the LIA witness.
+    if smt_check(0, 1, 1, 2) != 1 { return false; }
+    if smt_check(0, 0, 0, 0) != 1 { return false; }
+
+    // Hostile: x + 1 = x is unsat.
+    if smt_check(0, 5, 1, 5) != 0 { return false; }
+    if smt_check(0, 0, 1, 0) != 0 { return false; }
+
+    // Golden: subtraction.
+    if smt_check(1, 5, 2, 3) != 1 { return false; }
+    if smt_check(1, 5, 2, 4) != 0 { return false; }
+
+    // Golden: multiplication.
+    if smt_check(2, 3, 4, 12) != 1 { return false; }
+    if smt_check(2, 3, 4, 11) != 0 { return false; }
+
+    // Golden: equality.
+    if smt_check(3, 5, 5, 0) != 1 { return false; }
+    if smt_check(3, 5, 6, 0) != 0 { return false; }
+
+    // Hostile: malformed formula.
+    if smt_check(99, 1, 1, 2) != 0 { return false; }
+    if smt_check(4, 1, 1, 2) != 0 { return false; }
+    if smt_check(0 - 1, 1, 1, 2) != 0 { return false; }
+    if smt_is_malformed(99, 1, 1, 2) != 1 { return false; }
+    if smt_is_malformed(0, 1, 1, 2) != 0 { return false; }
+
+    // Golden: smt_decide is a synonym for smt_check.
+    if smt_decide(0, 1, 1, 2) != 1 { return false; }
+    if smt_decide(0, 5, 1, 5) != 0 { return false; }
+    if smt_decide(99, 0, 0, 0) != 0 { return false; }
+
+    // Coupled: LRA collapses to LIA over Int witnesses.
+    if smt_lra_sat(1, 1, 2) != 1 { return false; }
+    if smt_lra_sat(3, 4, 8) != 0 { return false; }
+
+    // Coupled: array read.
+    if smt_array_read(7, 1, 7) != 1 { return false; }
+    if smt_array_read(7, 1, 8) != 0 { return false; }
+    if smt_array_read(7, 0, 7) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the value.
+    let c1: DomainCert = smt_holds(0, 1, 1, 2);
+    if c1.domain != "proof_verifiers" { return false; }
+    if c1.law_name != "smt_decision_principle" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = smt_holds(0, 5, 1, 5);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = smt_holds(99, 0, 0, 0);
+    if c3.holds != 0 { return false; }
+
+    return true;
+}

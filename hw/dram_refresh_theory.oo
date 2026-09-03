@@ -1,0 +1,98 @@
+// # DRAM periodic refresh theory
+//
+// Logline: A DRAM cell holding 1 bit must be refreshed every t_REF; the closed-form required refresh count is t_REF divided by t_period, and bit error rate scales inversely with refresh count.
+//
+// Setup: Pure Int. t_ref_ns and t_period_ns must be positive. Closed form count = t_ref_ns / t_period_ns. Coupled form ber_normalized = ber * count / count_ref for design-count normalization. Uses domain_cert("hw", ...).
+//
+// Beats:
+//   1. dram_refresh_count(t_ref_ns, t_period_ns) returns t_ref_ns / t_period_ns (integer division).
+//   2. dram_ber_normalized(ber, count, count_ref) returns ber * count / count_ref.
+//   3. Hostile: t_ref_ns <= 0, t_period_ns <= 0, count_ref <= 0 fail closed to 0.
+//   4. Golden cert holds at t_ref=64 ms, t_period=7.8 us -> count 8205 within 0.1%.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Required refresh count over a refresh window t_REF at period t_period.
+// Returns 0 (fail closed) for non-positive t_ref_ns or t_period_ns.
+fn dram_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn dram_refresh_count(t_ref_ns: Int, t_period_ns: Int) -> Result[Int, String] {
+    if t_ref_ns <= 0 { return Err("ERR\tdram\tref"); }
+    if t_period_ns <= 0 { return Err("ERR\tdram\tperiod"); }
+    return Ok(t_ref_ns / t_period_ns);
+}
+
+// BER normalization at a measured count relative to a design count.
+// BER is supplied in scaled units where 1 represents 1e-15 (atto-scale witness).
+// Returns ber * count / count_ref; returns 0 if count_ref is non-positive or count is negative.
+pub fn dram_ber_normalized(ber: Int, count: Int, count_ref: Int) -> Result[Int, String] {
+    if ber < 0 { return Err("ERR\tdram\tber"); }
+    if count < 0 { return Err("ERR\tdram\tcount"); }
+    if count_ref <= 0 { return Err("ERR\tdram\tref"); }
+    if count == 0 { return Ok(0); }
+    return Ok(ber * count / count_ref);
+}
+
+// DomainCert for the closed-form refresh count golden case.
+pub fn dram_refresh_golden_cert() -> DomainCert {
+    // t_ref = 64 ms = 64_000_000 ns; t_period = 7.8 us = 7800 ns.
+    // count = 64_000_000 / 7800 = 8205 (true 8205.128; 0.1% tolerance: 8197..8213).
+    let count: Int = dram_got(dram_refresh_count(64000000, 7800));
+    let mut holds: Int = 0;
+    if count >= 8197 { if count <= 8213 { holds = 1; } }
+    return domain_cert("hw", "dram_refresh_golden", holds);
+}
+
+// DomainCert for the closed-form refresh count hostile case.
+pub fn dram_refresh_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if dram_refresh_count(0, 7800).is_ok() == false {
+        if dram_refresh_count(64000000, 0).is_ok() == false {
+            if dram_refresh_count(0 - 1, 7800).is_ok() == false {
+                if dram_refresh_count(64000000, 0 - 1).is_ok() == false {
+                    holds = 1;
+                }
+            }
+        }
+    }
+    return domain_cert("hw", "dram_refresh_hostile", holds);
+}
+
+// DomainCert for the coupled BER normalization golden case.
+pub fn dram_refresh_coupled_cert() -> DomainCert {
+    // ber = 1 (i.e. 1e-15), count = 8205, count_ref = 8205 -> normalized = 1 (1e-15).
+    let n: Int = dram_got(dram_ber_normalized(1, 8205, 8205));
+    let mut holds: Int = 0;
+    if n == 1 { holds = 1; }
+    return domain_cert("hw", "dram_refresh_coupled", holds);
+}
+
+pub fn verify_dram_refresh_theory() -> Bool {
+    // Golden: t_ref = 64 ms, t_period = 7.8 us -> count 8205.
+    let c1: Int = dram_got(dram_refresh_count(64000000, 7800));
+    if c1 != 8205 { return false; }
+    let c2: Int = dram_got(dram_refresh_count(32000000, 7800));
+    if c2 != 4102 { return false; }
+    let c3: Int = dram_got(dram_refresh_count(64000000, 1000));
+    if c3 != 64000 { return false; }
+    if dram_refresh_count(0, 7800).is_ok() { return false; }
+    if dram_refresh_count(0 - 1, 7800).is_ok() { return false; }
+    if dram_refresh_count(64000000, 0).is_ok() { return false; }
+    if dram_refresh_count(64000000, 0 - 1).is_ok() { return false; }
+    if dram_got(dram_ber_normalized(1, 8205, 8205)) != 1 { return false; }
+    if dram_got(dram_ber_normalized(1, 4102, 8205)) != 0 { return false; }
+    if dram_ber_normalized(0 - 1, 8205, 8205).is_ok() { return false; }
+    if dram_ber_normalized(1, 0 - 1, 8205).is_ok() { return false; }
+    if dram_ber_normalized(1, 8205, 0).is_ok() { return false; }
+    if dram_got(dram_ber_normalized(1, 0, 8205)) != 0 { return false; }
+    // Certificates: golden, hostile, coupled all hold.
+    let g: DomainCert = dram_refresh_golden_cert();
+    let h: DomainCert = dram_refresh_hostile_cert();
+    let cu: DomainCert = dram_refresh_coupled_cert();
+    if g.holds != 1 { return false; }
+    if h.holds != 1 { return false; }
+    if cu.holds != 1 { return false; }
+    return true;
+}

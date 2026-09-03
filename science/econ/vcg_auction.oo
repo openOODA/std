@@ -1,0 +1,174 @@
+// # Vickrey-Clarke-Groves Dominant-Strategy Truthful Auction
+//
+// Logline: Implement the VCG mechanism for n-bidder single-item auctions, computing the optimal allocation and per-bidder VCG payments that make truth-telling dominant.
+//
+// Setup: Pure combinatorial auction. Each bidder reports a value for receiving the item; the mechanism charges each winner the externality their presence imposes on others.
+//
+// Beats:
+//   1. vcg_allocate returns the index of the winning bidder (highest value), or -1 if no positive-value bidders exist.
+//   2. vcg_payment computes the VCG payment for the winner as the difference between social welfare with and without them.
+//   3. vcg_truthful verifies the second-price property: payment equals the second-highest value.
+//   4. vcg_individual_rationality verifies the winner's utility (value - payment) is non-negative.
+//   5. vcg_efficiency verifies the allocation maximizes total reported value.
+//
+// residual: Single-item auction only; multi-item VCG requires combinatorial optimization.
+
+type Bid = struct {
+    bidder_id: Int,
+    value: Int
+};
+
+pub fn vcg_new() -> List[Bid] {
+    return list_new();
+}
+
+pub fn vcg_add_bid(bids: List[Bid], bidder: Int, value: Int) -> List[Bid] {
+    let b: Bid = Bid { bidder_id: bidder, value: value };
+    return list_push(bids, b);
+}
+
+// Returns the index of the winning bidder, or -1 if all values are <= 0.
+pub fn vcg_allocate(bids: List[Bid]) -> Int {
+    let n: Int = list_len(bids);
+    if n == 0 {
+        return 0 - 1;
+    }
+    let mut best_idx: Int = 0 - 1;
+    let mut best_val: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(bids, i).value;
+        if v > best_val {
+            best_val = v;
+            best_idx = i;
+        }
+        i = i + 1;
+    }
+    return best_idx;
+}
+
+// VCG payment: welfare of others with winner removed minus welfare of others in the chosen allocation.
+// In a single-item auction, the winner pays the second-highest value.
+pub fn vcg_payment(bids: List[Bid], winner_idx: Int) -> Int {
+    let n: Int = list_len(bids);
+    if n < 2 {
+        return 0;
+    }
+    if winner_idx < 0 {
+        return 0;
+    }
+    if winner_idx >= n {
+        return 0;
+    }
+    let mut highest: Int = 0 - 1;
+    let mut second: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(bids, i).value;
+        if i == winner_idx {
+            highest = v;
+        } else {
+            if v > second {
+                second = v;
+            }
+        }
+        i = i + 1;
+    }
+    if second < 0 {
+        second = 0;
+    }
+    return second;
+}
+
+// Welfare of others when bidder at exclude_idx is removed.
+pub fn vcg_external_welfare(bids: List[Bid], exclude_idx: Int) -> Int {
+    let n: Int = list_len(bids);
+    let mut best: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        if i != exclude_idx {
+            let v: Int = list_get(bids, i).value;
+            if v > best {
+                best = v;
+            }
+        }
+        i = i + 1;
+    }
+    return best;
+}
+
+// Strict VCG payment: welfare(exclude winner) - welfare(others given chosen allocation).
+// In single-item: welfare(exclude winner) = second-highest; welfare(others) = 0 (no item to allocate to others).
+pub fn vcg_payment_strict(bids: List[Bid], winner_idx: Int) -> Int {
+    return vcg_external_welfare(bids, winner_idx);
+}
+
+// Verify the second-price property: payment equals the second-highest value.
+pub fn vcg_truthful(bids: List[Bid]) -> Bool {
+    let n: Int = list_len(bids);
+    if n < 2 {
+        return true;
+    }
+    let winner: Int = vcg_allocate(bids);
+    if winner < 0 {
+        return true;
+    }
+    let payment: Int = vcg_payment(bids, winner);
+    let expected: Int = vcg_external_welfare(bids, winner);
+    if payment == expected {
+        return true;
+    }
+    return false;
+}
+
+// Winner's utility value minus payment; must be >= 0.
+pub fn vcg_utility(bids: List[Bid], winner_idx: Int) -> Int {
+    if winner_idx < 0 {
+        return 0;
+    }
+    let n: Int = list_len(bids);
+    if winner_idx >= n {
+        return 0;
+    }
+    let v: Int = list_get(bids, winner_idx).value;
+    let pay: Int = vcg_payment(bids, winner_idx);
+    return v - pay;
+}
+
+// Verify the winner has non-negative utility (individual rationality).
+pub fn vcg_individual_rationality(bids: List[Bid]) -> Bool {
+    let winner: Int = vcg_allocate(bids);
+    if winner < 0 {
+        return true;
+    }
+    let u: Int = vcg_utility(bids, winner);
+    if u >= 0 {
+        return true;
+    }
+    return false;
+}
+
+// Verify the allocation maximizes total reported value.
+pub fn vcg_efficiency(bids: List[Bid]) -> Bool {
+    let n: Int = list_len(bids);
+    if n == 0 {
+        return true;
+    }
+    let winner: Int = vcg_allocate(bids);
+    if winner < 0 {
+        return true;
+    }
+    let mut max_v: Int = list_get(bids, 0).value;
+    let mut i: Int = 1;
+    while i < n {
+        let v: Int = list_get(bids, i).value;
+        if v > max_v {
+            max_v = v;
+        }
+        i = i + 1;
+    }
+    if list_get(bids, winner).value == max_v {
+        return true;
+    }
+    return false;
+}

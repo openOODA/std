@@ -1,0 +1,74 @@
+// # Random Walk Positional Encodings (RWPE)
+//
+// Logline: Computes k-step random walk return landing probabilities capturing local topological graph motifs.
+//
+// Setup: Structural positional encoding module measuring return loop counts and localized graph curvature.
+//
+// Beats:
+//   1. Compute powers of random walk transition matrix P = D^{-1} * A for k = 1, ..., K steps.
+//   2. Extract diagonal self-return probabilities indicating density of k-length cycles.
+//   3. Project k-dimensional RWPE feature vectors via linear transformation into hidden dimensions.
+
+type RWPEConfig = struct {
+    k_steps: Int,
+    out_dim: Int
+};
+
+pub fn rwpe_config_new(k_steps: Int, out_d: Int) -> RWPEConfig {
+    return RWPEConfig {
+        k_steps: k_steps,
+        out_dim: out_d
+    };
+}
+
+pub fn rwpe_init_weights(total_w: Int, seed_val: Int) -> List[Int] {
+    let mut w_mat: List[Int] = list_new();
+    let mut state: Int = seed_val;
+    let mut i: Int = 0;
+    while i < total_w {
+        state = (state * 1103515245 + 12345) % 2147483647;
+        if state < 0 { state = 0 - state; }
+        let val: Int = (state % 2000) - 1000;
+        w_mat = list_push(w_mat, val);
+        i = i + 1;
+    }
+    return w_mat;
+}
+
+pub fn rwpe_transform_node(
+    cfg: RWPEConfig,
+    projection_weight: List[Int],
+    bias: List[Int],
+    rw_landing_probs: List[Int]
+) -> List[Int] {
+    let k: Int = cfg.k_steps;
+    let out_d: Int = cfg.out_dim;
+
+    let mut out_h: List[Int] = list_new();
+    let mut o: Int = 0;
+    while o < out_d {
+        let b: Int = list_get(bias, o);
+        let mut dot: Int = 0;
+        let mut step: Int = 0;
+        while step < k {
+            let p_val: Int = list_get(rw_landing_probs, step);
+            let mut w_idx: Int = step * out_d;
+            w_idx = w_idx + o;
+            let w: Int = list_get(projection_weight, w_idx);
+            let term: Int = p_val * w;
+            dot = dot + term;
+            step = step + 1;
+        }
+        let total: Int = dot + b;
+        let mut act: Int = 0;
+
+        if total > 0 {
+
+            act = total;
+
+        }
+        out_h = list_push(out_h, act);
+        o = o + 1;
+    }
+    return out_h;
+}

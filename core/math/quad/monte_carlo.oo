@@ -1,0 +1,30 @@
+// # Quasi Monte Carlo Unit Integrator
+//
+// Logline: Integrates x^2 on [0, 1] by a Weyl sequence average.
+//
+// Setup: Pure math. No callbacks and no host RNG. The sample count must be at least 1.
+//
+// Beats:
+//   1. Reject n < 1.
+//   2. Advance u += sqrt(2) - 1 modulo 1.
+//   3. Average u^2 over n samples.
+//   4. Return the estimate of 1/3.
+
+import "std/core/primitives/result.oo";
+
+pub fn mc_x2_unit(n: Int) -> Result[Float, String] {
+    if n < 1 { return Err("ERR\tmc\tn"); }
+    let alpha: Float = 0.41421356237309515;
+    let mut u: Float = alpha;
+    let mut s: Float = 0.0;
+    let mut i: Int = 0;
+    let mut nf: Float = 0.0;
+    while i < n {
+        s = s + u * u;
+        u = u + alpha;
+        if u >= 1.0 { u = u - 1.0; }
+        nf = nf + 1.0;
+        i = i + 1;
+    }
+    return Ok(s / nf);
+}

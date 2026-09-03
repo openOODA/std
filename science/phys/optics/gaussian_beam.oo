@@ -1,0 +1,149 @@
+// # Gaussian Beam Propagation and Wavefront Mechanics
+//
+// Logline: Calculates Rayleigh range, spot size evolution, wavefront curvature, Gouy phase, and intensity distributions.
+//
+// Setup: Paraxial Helmholtz equation solutions for fundamental TEM00 laser modes.
+//
+// Beats:
+//   1. Calculate Rayleigh range z_R and beam divergence angle.
+//   2. Compute spot size w(z) and wavefront radius of curvature R(z).
+//   3. Compute Gouy phase shift psi(z).
+//   4. Evaluate transverse radial intensity distribution.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_photonics_gaussian_beam() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type GaussianBeam = struct {
+    wavelength_m: Float,
+    waist_radius_w0_m: Float,
+    rayleigh_range_zr_m: Float,
+    divergence_half_angle_rad: Float,
+    total_power_watts: Float
+};
+
+fn gaussian_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn gaussian_atan_poly(x: Float) -> Float {
+    let x2: Float = x * x;
+    let t17: Float = 1.0 / 17.0;
+    let t15: Float = 1.0 / 15.0;
+    let t13: Float = 1.0 / 13.0;
+    let t11: Float = 1.0 / 11.0;
+    let t9: Float = 1.0 / 9.0;
+    let t7: Float = 1.0 / 7.0;
+    let t5: Float = 1.0 / 5.0;
+    let t3: Float = 1.0 / 3.0;
+    let p: Float = x2 * (t3 - x2 * (t5 - x2 * (t7 - x2 * (t9 - x2 * (t11 - x2 * (t13 - x2 * (t15 - x2 * t17)))))));
+    return x * (1.0 - p);
+}
+
+fn gaussian_atan(x: Float) -> Float {
+    let ax: Float = gaussian_abs(x);
+    let pi: Float = circ_pi_std_phys_photonics_gaussian_beam();
+    let pi_4: Float = pi / 4.0;
+    let pi_2: Float = pi / 2.0;
+    let mut res: Float = 0.0;
+    if ax < 0.41421356237309505 {
+        res = gaussian_atan_poly(ax);
+    } else if ax < 2.414213562373095 {
+        let u: Float = (ax - 1.0) / (ax + 1.0);
+        res = pi_4 + gaussian_atan_poly(u);
+    } else {
+        let u: Float = 1.0 / ax;
+        res = pi_2 - gaussian_atan_poly(u);
+    }
+    if x < 0.0 { return 0.0 - res; }
+    return res;
+}
+
+// Compute Rayleigh range z_R = (pi * w0^2) / lambda (meters)
+pub fn gaussian_beam_rayleigh(w0: Float, wavelength: Float) -> Float {
+    if w0 <= 0.0 || wavelength <= 0.0 { return 0.0; }
+    let pi: Float = circ_pi_std_phys_photonics_gaussian_beam();
+    return (pi * w0 * w0) / wavelength;
+}
+
+// Compute far-field divergence half-angle theta_div = lambda / (pi * w0) = w0 / z_R (radians)
+pub fn gaussian_beam_divergence(w0: Float, wavelength: Float) -> Float {
+    if w0 <= 0.0 || wavelength <= 0.0 { return 0.0; }
+    let pi: Float = circ_pi_std_phys_photonics_gaussian_beam();
+    return wavelength / (pi * w0);
+}
+
+// Compute spot size w(z) = w0 * sqrt(1 + (z / z_R)^2)
+pub fn gaussian_beam_waist(w0: Float, z: Float, zr: Float) -> Float {
+    if w0 <= 0.0 || zr <= 0.0 { return 0.0; }
+    let ratio: Float = z / zr;
+    let factor: Float = sqrt(1.0 + (ratio * ratio));
+    return w0 * factor;
+}
+
+// Initialize a GaussianBeam struct
+pub fn gaussian_beam_new(wavelength: Float, w0: Float, power: Float) -> GaussianBeam {
+    if wavelength <= 0.0 || w0 <= 0.0 {
+        return GaussianBeam {
+            wavelength_m: wavelength,
+            waist_radius_w0_m: w0,
+            rayleigh_range_zr_m: 0.0,
+            divergence_half_angle_rad: 0.0,
+            total_power_watts: power
+        };
+    }
+    let zr: Float = gaussian_beam_rayleigh(w0, wavelength);
+    let div: Float = gaussian_beam_divergence(w0, wavelength);
+    return GaussianBeam {
+        wavelength_m: wavelength,
+        waist_radius_w0_m: w0,
+        rayleigh_range_zr_m: zr,
+        divergence_half_angle_rad: div,
+        total_power_watts: power
+    };
+}
+
+// Compute spot size at distance z
+pub fn gaussian_beam_spot_size(beam: GaussianBeam, z_m: Float) -> Float {
+    if beam.waist_radius_w0_m <= 0.0 || beam.rayleigh_range_zr_m <= 0.0 { return 0.0; }
+    return gaussian_beam_waist(beam.waist_radius_w0_m, z_m, beam.rayleigh_range_zr_m);
+}
+
+// Compute wavefront radius of curvature R(z) = z + (z_R^2 / z)
+pub fn gaussian_beam_curvature(beam: GaussianBeam, z_m: Float) -> Float {
+    if beam.rayleigh_range_zr_m <= 0.0 { return 0.0; }
+    if z_m == 0.0 {
+        return 1000000000000000.0;
+    }
+    let zr: Float = beam.rayleigh_range_zr_m;
+    return z_m + ((zr * zr) / z_m);
+}
+
+// Compute Gouy phase shift psi(z) = atan(z / z_R) (radians)
+pub fn gaussian_beam_gouy_phase(beam: GaussianBeam, z_m: Float) -> Float {
+    if beam.rayleigh_range_zr_m <= 0.0 { return 0.0; }
+    let ratio: Float = z_m / beam.rayleigh_range_zr_m;
+    return gaussian_atan(ratio);
+}
+
+// Peak on-axis intensity I0 = (2 * P) / (pi * w0^2) (W/m^2)
+pub fn gaussian_beam_peak_intensity(beam: GaussianBeam) -> Float {
+    if beam.waist_radius_w0_m <= 0.0 || beam.total_power_watts <= 0.0 { return 0.0; }
+    let pi: Float = circ_pi_std_phys_photonics_gaussian_beam();
+    let area_factor: Float = pi * beam.waist_radius_w0_m * beam.waist_radius_w0_m;
+    return (2.0 * beam.total_power_watts) / area_factor;
+}
+
+// Compute spatial intensity I(r, z) = I0 * (w0 / w(z))^2 * exp(-2 * r^2 / w(z)^2)
+pub fn gaussian_beam_intensity(beam: GaussianBeam, r_m: Float, z_m: Float) -> Float {
+    if beam.waist_radius_w0_m <= 0.0 || beam.rayleigh_range_zr_m <= 0.0 || beam.total_power_watts <= 0.0 {
+        return 0.0;
+    }
+    let wz: Float = gaussian_beam_spot_size(beam, z_m);
+    if wz <= 0.0 { return 0.0; }
+    let i0: Float = gaussian_beam_peak_intensity(beam);
+    let ratio_w: Float = beam.waist_radius_w0_m / wz;
+    let geom_factor: Float = ratio_w * ratio_w;
+    let r_ratio: Float = (r_m * r_m) / (wz * wz);
+    let exp_factor: Float = exp(0.0 - (2.0 * r_ratio));
+    return i0 * geom_factor * exp_factor;
+}

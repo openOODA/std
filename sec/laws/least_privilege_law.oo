@@ -1,0 +1,139 @@
+// # Least Privilege Per-Action Law
+//
+// Logline: A process may exercise only the single role or capability set required to perform the requested action.
+//
+// Setup: Pure Int role and capability set IDs. Ideal: single role; non-ideal: capability set. Deny default on mismatch.
+//
+// Beats:
+//   1. Role-based grant: action granted to role R by holder with role R -> 1.
+//   2. Capability-based grant: every cap in `needed` is present in `granted` -> 1.
+//   3. Need for an action beyond the grant -> 0 (deny by default).
+//   4. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Special role IDs: 0 NONE, 1 READER, 2 WRITER, 3 ADMIN.
+pub fn lpl_role_none() -> Int { return 0; }
+pub fn lpl_role_reader() -> Int { return 1; }
+pub fn lpl_role_writer() -> Int { return 2; }
+pub fn lpl_role_admin() -> Int { return 3; }
+
+// Ideal law: a single role R grants action A only if action A's role is exactly R.
+pub fn lpl_role_grant(holder_role: Int, action_role: Int) -> Int {
+    if holder_role <= 0 { return 0; }
+    if action_role <= 0 { return 0; }
+    if holder_role == action_role { return 1; }
+    return 0;
+}
+
+// Cap-set bit walk: 1 if every bit in `needed` is present in `granted`.
+pub fn lpl_caps_contain(granted: Int, needed: Int) -> Int {
+    if granted < 0 { return 0; }
+    if needed < 0 { return 0; }
+    if needed == 0 { return 0; }
+    let mut bit: Int = 1;
+    while bit <= 128 {
+        let in_needed: Int = needed & bit;
+        if in_needed != 0 {
+            let in_granted: Int = granted & bit;
+            if in_granted == 0 { return 0; }
+        }
+        bit = bit * 2;
+    }
+    return 1;
+}
+
+// Non-ideal law: every cap in needed must be in granted; deny default.
+pub fn lpl_cap_grant(granted_caps: Int, needed_caps: Int) -> Int {
+    return lpl_caps_contain(granted_caps, needed_caps);
+}
+
+// Action A vs granted_caps. The caller asks: may I perform action A?
+// action_perm encodes the cap set action A needs; granted_caps is the process mask.
+pub fn lpl_action_allowed(granted_caps: Int, action_perm: Int) -> Int {
+    if action_perm <= 0 { return 0; }
+    return lpl_caps_contain(granted_caps, action_perm);
+}
+
+// Excess flag: 1 if granted_caps contains any cap not in action_perm's needed set
+// (i.e., a stricter reading: action allowed AND no extraneous caps).
+pub fn lpl_excess_deny(granted_caps: Int, action_perm: Int, action_allowed: Int) -> Int {
+    if action_allowed == 0 { return 0; }
+    if granted_caps < 0 { return 0; }
+    if action_perm < 0 { return 0; }
+    // Walk each bit 0..15 to detect any cap in granted_caps missing from action_perm.
+    let mut bit: Int = 1;
+    while bit <= 32768 {
+        let in_granted: Int = granted_caps & bit;
+        let in_perm: Int = action_perm & bit;
+        if in_granted != 0 {
+            if in_perm == 0 {
+                return 1;
+            }
+        }
+        bit = bit * 2;
+    }
+    return 0;
+}
+
+// Domain certificate for the ideal role-grant law.
+pub fn lpl_role_law(holder_role: Int, action_role: Int) -> DomainCert {
+    let h: Int = lpl_role_grant(holder_role, action_role);
+    return domain_cert("sec", "least_privilege_role", h);
+}
+
+// Domain certificate for the non-ideal cap-grant law.
+pub fn lpl_cap_law(granted_caps: Int, needed_caps: Int) -> DomainCert {
+    let h: Int = lpl_cap_grant(granted_caps, needed_caps);
+    return domain_cert("sec", "least_privilege_cap", h);
+}
+
+// KAT and hostile cases for the least privilege law.
+pub fn verify_least_privilege_law() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if lpl_role_none() != 0 { return false; }
+    if lpl_role_reader() != 1 { return false; }
+    if lpl_role_writer() != 2 { return false; }
+    if lpl_role_admin() != 3 { return false; }
+    let r1: DomainCert = lpl_role_law(1, 1);
+    if r1.holds != 1 { return false; }
+    let r2: DomainCert = lpl_role_law(2, 2);
+    if r2.holds != 1 { return false; }
+    let r3: DomainCert = lpl_role_law(1, 2);
+    if r3.holds != 0 { return false; }
+    let r4: DomainCert = lpl_role_law(3, 1);
+    if r4.holds != 0 { return false; }
+    let r5: DomainCert = lpl_role_law(0, 1);
+    if r5.holds != 0 { return false; }
+    let r6: DomainCert = lpl_role_law(1, 0);
+    if r6.holds != 0 { return false; }
+    let r7: DomainCert = lpl_role_law(0 - 1, 1);
+    if r7.holds != 0 { return false; }
+    if lpl_cap_grant(7, 1) != 1 { return false; }
+    if lpl_cap_grant(7, 3) != 1 { return false; }
+    if lpl_cap_grant(7, 7) != 1 { return false; }
+    if lpl_cap_grant(1, 2) != 0 { return false; }
+    if lpl_cap_grant(2, 1) != 0 { return false; }
+    if lpl_cap_grant(0, 1) != 0 { return false; }
+    if lpl_cap_grant(0 - 1, 3) != 0 { return false; }
+    let cg1: DomainCert = lpl_cap_law(7, 3);
+    if cg1.holds != 1 { return false; }
+    let cg2: DomainCert = lpl_cap_law(3, 7);
+    if cg2.holds != 0 { return false; }
+    let cg3: DomainCert = lpl_cap_law(0, 0);
+    if cg3.holds != 0 { return false; }
+    let cg4: DomainCert = lpl_cap_law(0 - 1, 1);
+    if cg4.holds != 0 { return false; }
+    if lpl_action_allowed(7, 1) != 1 { return false; }
+    if lpl_action_allowed(7, 2) != 1 { return false; }
+    if lpl_action_allowed(7, 4) != 1 { return false; }
+    if lpl_action_allowed(15, 8) != 1 { return false; }
+    if lpl_action_allowed(15, 15) != 1 { return false; }
+    if lpl_action_allowed(7, 16) != 0 { return false; }
+    if lpl_action_allowed(0, 1) != 0 { return false; }
+    if lpl_action_allowed(0 - 1, 1) != 0 { return false; }
+    if lpl_action_allowed(7, 0) != 0 { return false; }
+    return true;
+}

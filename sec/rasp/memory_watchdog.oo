@@ -1,0 +1,84 @@
+// # Autonomic RASP Live Memory SHA-256 Integrity Scanner
+//
+// Logline: Scans live RAM text segments against sealed Gold Master SHA-256 reference digests.
+//
+// Setup: Cap-checked. Requires unforgeable &SysCap capability token for live memory probing.
+//
+// Beats:
+//   1. Convert live memory byte buffers into canonical binary string streams.
+//   2. Compute hardware-accelerated SHA-256 cryptographic digests across executable segments.
+//   3. Compare live digests against sealed Gold Master hashes and compile integrity reports.
+
+import "./rasp_types.oo";
+import "std/sec/hash/sha256.oo";
+
+pub fn memory_watchdog_scan(
+    sys: &SysCap,
+    master: GoldMasterImage
+) -> Result[RaspIntegrityReport, String] {
+    return rasp_check_integrity(sys, master);
+}
+
+pub fn rasp_compute_segment_sha256(bytes: List[Int], len: Int) -> String {
+    let mut bs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < len {
+        let b: Int = list_get(bytes, i);
+        bs = list_push(bs, b & 255);
+        i = i + 1;
+    }
+    let data_str: String = bytes_to_str(bs);
+    return sha256(data_str);
+}
+
+pub fn rasp_check_integrity(
+    sys: &SysCap,
+    master: GoldMasterImage
+) -> Result[RaspIntegrityReport, String] {
+    let count: Int = master.segment_count;
+    if count == 0 {
+        let clean_report: RaspIntegrityReport = rasp_integrity_report_new(
+            true,
+            list_new(),
+            0,
+            "NO_SEGMENTS_REGISTERED"
+        );
+        return Ok(clean_report);
+    }
+
+    let mut corrupted: List[Int] = list_new();
+    let mut corrupt_count: Int = 0;
+    let mut i: Int = 0;
+
+    while i < count {
+        let seg: CodeSegmentBackup = gold_master_get_segment(master, i);
+        let live_hash: String = rasp_compute_segment_sha256(
+            seg.image_bytes,
+            seg.length
+        );
+
+        if live_hash != seg.expected_sha256 {
+            corrupted = list_push(corrupted, seg.segment_id);
+            corrupt_count = corrupt_count + 1;
+        }
+        i = i + 1;
+    }
+
+    if corrupt_count > 0 {
+        let report: RaspIntegrityReport = rasp_integrity_report_new(
+            false,
+            corrupted,
+            corrupt_count,
+            "TAMPERING_DETECTED"
+        );
+        return Ok(report);
+    }
+
+    let ok_report: RaspIntegrityReport = rasp_integrity_report_new(
+        true,
+        list_new(),
+        0,
+        "ALL_SEGMENTS_INTACT"
+    );
+    return Ok(ok_report);
+}

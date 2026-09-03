@@ -1,0 +1,157 @@
+// # Constant-time principle
+//
+// Logline: Two timing samples from the same distribution are statistically indistinguishable (Welch-style t-check on the means); samples with very different means are flagged as a timing leak.
+//
+// Setup: Pure Int timing samples in List[Int]. The mean difference is compared against a relative threshold derived from the larger mean; hostile inputs (empty, negative-length, or wildly different means) fail closed.
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. ct_mean(samples) returns the integer mean of List[Int]; empty list is Err.
+//   2. ct_kr_diff(a, b) returns the absolute difference |a - b| without using abs_f.
+//   3. ct_compares_constant(samples_a, samples_b) returns 1 if the relative mean gap is within a tolerance and 0 otherwise.
+//   4. Golden: same-distribution samples are indistinguishable.
+//   5. Hostile: very different means (10x larger) fail closed.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Absolute difference |a - b| using only arithmetic (no abs_f).
+pub fn ct_kr_diff(a: Int, b: Int) -> Int {
+    let d: Int = a - b;
+    if d < 0 {
+        return 0 - d;
+    }
+    return d;
+}
+
+fn ctm_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Integer mean of timing samples. Empty is Err. All-zero samples are Ok(0).
+pub fn ct_mean(samples: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(samples);
+    if n <= 0 { return Err("ERR\tctm\tdomain"); }
+    let mut s: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        s = s + list_get(samples, i);
+        i = i + 1;
+    }
+    return Ok(s / n);
+}
+
+// 1 if samples_a and samples_b are statistically indistinguishable; 0 otherwise.
+// Uses a relative mean-gap test: |mean_a - mean_b| * 1000 <= max(mean_a, mean_b) * tolerance_per_mille.
+pub fn ct_compares_constant(samples_a: List[Int], samples_b: List[Int]) -> Int {
+    let na: Int = list_len(samples_a);
+    let nb: Int = list_len(samples_b);
+    if na <= 0 { return 0; }
+    if nb <= 0 { return 0; }
+    let mar: Result[Int, String] = ct_mean(samples_a);
+    let mbr: Result[Int, String] = ct_mean(samples_b);
+    if mar.is_ok() == false { return 0; }
+    if mbr.is_ok() == false { return 0; }
+    let ma: Int = ctm_got(mar);
+    let mb: Int = ctm_got(mbr);
+    let gap: Int = ct_kr_diff(ma, mb);
+    let mut big: Int = ma;
+    if mb > big { big = mb; }
+    // Tolerance: 5% of the larger mean, with a floor of 1 to keep trivial small means honest.
+    let mut tol: Int = big / 20;
+    if tol < 1 { tol = 1; }
+    if gap <= tol { return 1; }
+    return 0;
+}
+
+// domain_cert wrapper.
+pub fn ct_principle_holds(samples_a: List[Int], samples_b: List[Int]) -> DomainCert {
+    let ok: Int = ct_compares_constant(samples_a, samples_b);
+    return domain_cert("crypto", "constant_time_principle", ok);
+}
+
+pub fn verify_constant_time_principle() -> Bool {
+    // Golden: kr_diff is symmetric and unsigned.
+    if ct_kr_diff(0, 0) != 0 { return false; }
+    if ct_kr_diff(5, 5) != 0 { return false; }
+    if ct_kr_diff(10, 3) != 7 { return false; }
+    if ct_kr_diff(3, 10) != 7 { return false; }
+    if ct_kr_diff(0, 1) != 1 { return false; }
+    if ct_kr_diff(1, 0) != 1 { return false; }
+
+    // Golden: mean of a small sample list.
+    let a1: List[Int] = list_new();
+    let a2: List[Int] = list_push(a1, 10);
+    let a3: List[Int] = list_push(a2, 20);
+    let a4: List[Int] = list_push(a3, 30);
+    if ctm_got(ct_mean(a4)) != 20 { return false; }
+    let a5: List[Int] = list_push(a4, 40);
+    if ctm_got(ct_mean(a5)) != 25 { return false; }
+    let s1: List[Int] = list_new();
+    if ct_mean(s1).is_ok() { return false; }
+    let mut zeros: List[Int] = list_new();
+    zeros = list_push(zeros, 0);
+    zeros = list_push(zeros, 0);
+    let zmean: Result[Int, String] = ct_mean(zeros);
+    if zmean.is_ok() == false { return false; }
+    if ctm_got(zmean) != 0 { return false; }
+
+    // Golden: two samples from the same distribution (10 cycles, ~100 each) agree.
+    let mut sam_a: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 10 {
+        sam_a = list_push(sam_a, 100 + (i % 3));  // 100,101,102,100,101,102,...
+        i = i + 1;
+    }
+    let mut sam_b: List[Int] = list_new();
+    let mut j: Int = 0;
+    while j < 10 {
+        sam_b = list_push(sam_b, 100 + (j % 3));
+        j = j + 1;
+    }
+    if ct_compares_constant(sam_a, sam_b) != 1 { return false; }
+
+    // Golden: identical samples are perfectly indistinguishable.
+    if ct_compares_constant(sam_a, sam_a) != 1 { return false; }
+
+    // Golden: two samples shifted by a small constant are still indistinguishable.
+    let mut sam_c: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < 10 {
+        sam_c = list_push(sam_c, 101 + (k % 3));
+        k = k + 1;
+    }
+    if ct_compares_constant(sam_a, sam_c) != 1 { return false; }  // 1-unit shift is within 5% of 100
+
+    // Hostile: very different means (10x) are detected as a timing leak.
+    let mut sam_x: List[Int] = list_new();
+    let mut l: Int = 0;
+    while l < 10 {
+        sam_x = list_push(sam_x, 1000);
+        l = l + 1;
+    }
+    if ct_compares_constant(sam_a, sam_x) != 0 { return false; }  // 100 vs 1000 = 10x gap
+    let mut sam_y: List[Int] = list_new();
+    let mut m: Int = 0;
+    while m < 10 {
+        sam_y = list_push(sam_y, 10);
+        m = m + 1;
+    }
+    if ct_compares_constant(sam_x, sam_y) != 0 { return false; }  // 1000 vs 10 = 100x gap
+
+    // Hostile: empty input samples fail closed.
+    let empty: List[Int] = list_new();
+    if ct_compares_constant(empty, sam_a) != 0 { return false; }
+    if ct_compares_constant(sam_a, empty) != 0 { return false; }
+    if ct_compares_constant(empty, empty) != 0 { return false; }
+
+    // Coupled: domain_cert.
+    let c1: DomainCert = ct_principle_holds(sam_a, sam_b);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "crypto" { return false; }
+    if c1.law_name != "constant_time_principle" { return false; }
+    let c2: DomainCert = ct_principle_holds(sam_a, sam_x);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

@@ -1,0 +1,88 @@
+// # Square-Cube Law
+//
+// Logline: When a shape scales by factor k, area scales by k^2 and volume by k^3.
+//
+// Setup: Pure Int. k > 0. area_base and volume_base >= 0. k<=0 or base<0 return Err. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. Scaled area = area_base * k^2. base==0 and k>0 is Ok(0).
+//   2. Scaled volume = volume_base * k^3. base==0 and k>0 is Ok(0).
+//   3. Surface-to-volume ratio: A/V at scale k. Valid 0-volume may Ok(0).
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+
+fn sq_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Scaled area: area_base * k^2. k <= 0 or area_base < 0 return Err.
+pub fn squares_scaled_area(area_base: Int, k: Int) -> Result[Int, String] {
+    if area_base < 0 { return Err("ERR\tsquares\tbase"); }
+    if k <= 0 { return Err("ERR\tsquares\tk"); }
+    return Ok(area_base * k * k);
+}
+
+// Scaled volume: volume_base * k^3. k <= 0 or volume_base < 0 return Err.
+pub fn squares_scaled_volume(volume_base: Int, k: Int) -> Result[Int, String] {
+    if volume_base < 0 { return Err("ERR\tsquares\tbase"); }
+    if k <= 0 { return Err("ERR\tsquares\tk"); }
+    return Ok(volume_base * k * k * k);
+}
+
+// Surface-to-volume ratio: scaled_area * 1000 / scaled_volume.
+// Propagates Err. Valid 0-volume (volume_base==0, k>0) may Ok(0).
+pub fn squares_area_to_volume_ratio(area_base: Int, volume_base: Int, k: Int) -> Result[Int, String] {
+    let ar: Result[Int, String] = squares_scaled_area(area_base, k);
+    if ar.is_ok() == false { return Err("ERR\tsquares\tarea"); }
+    let vr: Result[Int, String] = squares_scaled_volume(volume_base, k);
+    if vr.is_ok() == false { return Err("ERR\tsquares\tvol"); }
+    let a: Int = sq_got(ar);
+    let v: Int = sq_got(vr);
+    if v == 0 { return Ok(0); }
+    return Ok((a * 1000) / v);
+}
+
+// Doubling witness: 1 if area at k=2 is exactly 4 * area at k=1. Negative base is 0.
+pub fn squares_doubling_area(area_base: Int) -> Int {
+    if area_base < 0 { return 0; }
+    let a1: Int = area_base * 1 * 1;
+    let a2: Int = area_base * 2 * 2;
+    if a2 == a1 * 4 { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for the square-cube law.
+pub fn verify_squares_law() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    if sq_got(squares_scaled_area(10, 2)) != 40 { return false; }
+    if sq_got(squares_scaled_area(10, 3)) != 90 { return false; }
+    let a0: Result[Int, String] = squares_scaled_area(0, 5);
+    if a0.is_ok() == false { return false; }
+    if sq_got(a0) != 0 { return false; }
+    if squares_scaled_area(10, 0).is_ok() { return false; }
+    if squares_scaled_area(10, 0 - 1).is_ok() { return false; }
+    if squares_scaled_area(0 - 1, 5).is_ok() { return false; }
+    if sq_got(squares_scaled_volume(10, 2)) != 80 { return false; }
+    if sq_got(squares_scaled_volume(10, 3)) != 270 { return false; }
+    let v0: Result[Int, String] = squares_scaled_volume(0, 5);
+    if v0.is_ok() == false { return false; }
+    if sq_got(v0) != 0 { return false; }
+    if squares_scaled_volume(10, 0).is_ok() { return false; }
+    if squares_scaled_volume(0 - 1, 5).is_ok() { return false; }
+    if squares_doubling_area(10) != 1 { return false; }
+    if squares_doubling_area(0) != 1 { return false; }
+    if squares_doubling_area(0 - 1) != 0 { return false; }
+    if sq_got(squares_area_to_volume_ratio(6, 1, 1)) != 6000 { return false; }
+    let r00: Result[Int, String] = squares_area_to_volume_ratio(0, 0, 1);
+    if r00.is_ok() == false { return false; }
+    if sq_got(r00) != 0 { return false; }
+    let r60: Result[Int, String] = squares_area_to_volume_ratio(6, 0, 1);
+    if r60.is_ok() == false { return false; }
+    if sq_got(r60) != 0 { return false; }
+    if squares_area_to_volume_ratio(6, 1, 0).is_ok() { return false; }
+    if squares_area_to_volume_ratio(6, 0 - 1, 1).is_ok() { return false; }
+    if squares_area_to_volume_ratio(0 - 1, 1, 1).is_ok() { return false; }
+    return true;
+}

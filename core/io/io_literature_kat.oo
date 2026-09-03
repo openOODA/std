@@ -1,0 +1,132 @@
+// # I/O literature KAT constants
+//
+// Logline: documented OS-level I/O constants exposed as pure Int comparators for the I/O KAT lock to verify against the published values.
+//
+// Setup: Pure Int. Each claim is a predicate returning 1 for true. Hostile or off-by-one inputs return 0. Hosts io_invariants.oo stem.
+//
+// Beats:
+//   1. Page size = 4096 bytes (4 KiB) and max single I/O = 2 GiB on Linux.
+//   2. fsync latency orders of magnitude: HDD ~10ms, SSD ~100us.
+//   3. Standard file descriptors 0, 1, 2; open flags O_RDONLY=0, O_WRONLY=1, O_RDWR=2.
+//   4. Power-of-two ring buffer capacities; Linux pipe capacity 64 KiB; epoll O(1) vs select O(N).
+
+import "std/core/io/io_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Linux page size in bytes.
+pub fn io_kat_page_size() -> Int {
+    return 4096;
+}
+
+// Linux max single I/O size in bytes (2 GiB).
+pub fn io_kat_max_io() -> Int {
+    return 2 * 1024 * 1024 * 1024;
+}
+
+// fsync latency on HDD in milliseconds (order of magnitude).
+pub fn io_kat_fsync_hdd_ms() -> Int {
+    return 10;
+}
+
+// fsync latency on SSD in microseconds (order of magnitude).
+pub fn io_kat_fsync_ssd_us() -> Int {
+    return 100;
+}
+
+// 1 if fd is a standard fd (0 stdin, 1 stdout, 2 stderr).
+pub fn io_kat_is_standard_fd(fd: Int) -> Int {
+    if fd < 0 { return 0; }
+    if fd > 2 { return 0; }
+    return 1;
+}
+
+// Open flag values for O_RDONLY, O_WRONLY, O_RDWR (Linux x86_64 asm/fcntl.h).
+pub fn io_kat_o_rdonly() -> Int {
+    return 0;
+}
+
+pub fn io_kat_o_wronly() -> Int {
+    return 1;
+}
+
+pub fn io_kat_o_rdwr() -> Int {
+    return 2;
+}
+
+// 1 if cap is a power of two strictly greater than zero.
+pub fn io_kat_is_power_of_two(cap: Int) -> Int {
+    if cap <= 0 { return 0; }
+    let mut n: Int = cap;
+    let mut saw_one: Int = 0;
+    while n > 0 {
+        let bit: Int = n % 2;
+        if bit == 1 {
+            if saw_one == 1 { return 0; }
+            saw_one = 1;
+        }
+        n = n / 2;
+    }
+    return 1;
+}
+
+// Linux pipe capacity in bytes.
+pub fn io_kat_pipe_capacity() -> Int {
+    return 64 * 1024;
+}
+
+// 1 if scalability is "O(1)" (epoll), 0 if "O(N)" (select).
+pub fn io_kat_is_o1_scalable(is_o1: Int) -> Int {
+    if is_o1 == 1 { return 1; }
+    return 0;
+}
+
+// Domain certificate: 1 if all documented constants hold.
+pub fn io_kat_holds() -> DomainCert {
+    let inv_ok: Bool = io_path_ok("io_kat").holds == 1;
+    if inv_ok == false { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_page_size() != 4096 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_max_io() != 2 * 1024 * 1024 * 1024 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_fsync_hdd_ms() != 10 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_fsync_ssd_us() != 100 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_standard_fd(0) != 1 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_standard_fd(2) != 1 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_standard_fd(3) != 0 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_o_rdonly() != 0 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_o_wronly() != 1 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_o_rdwr() != 2 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_power_of_two(4096) != 1 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_power_of_two(8192) != 1 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_power_of_two(4194304) != 1 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_power_of_two(0) != 0 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_power_of_two(0 - 1) != 0 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_pipe_capacity() != 64 * 1024 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_o1_scalable(1) != 1 { return domain_cert("io", "literature_kat", 0); }
+    if io_kat_is_o1_scalable(0) != 0 { return domain_cert("io", "literature_kat", 0); }
+    return domain_cert("io", "literature_kat", 1);
+}
+
+// KAT and hostile cases for the I/O literature KAT.
+pub fn verify_io_literature_kat() -> Bool {
+    if io_kat_holds().holds != 1 { return false; }
+    if io_kat_page_size() != 4096 { return false; }
+    if io_kat_max_io() != 2 * 1024 * 1024 * 1024 { return false; }
+    if io_kat_fsync_hdd_ms() != 10 { return false; }
+    if io_kat_fsync_ssd_us() != 100 { return false; }
+    if io_kat_is_standard_fd(0) != 1 { return false; }
+    if io_kat_is_standard_fd(1) != 1 { return false; }
+    if io_kat_is_standard_fd(2) != 1 { return false; }
+    if io_kat_is_standard_fd(3) != 0 { return false; }
+    if io_kat_is_standard_fd(0 - 1) != 0 { return false; }
+    if io_kat_o_rdonly() != 0 { return false; }
+    if io_kat_o_wronly() != 1 { return false; }
+    if io_kat_o_rdwr() != 2 { return false; }
+    if io_kat_is_power_of_two(4096) != 1 { return false; }
+    if io_kat_is_power_of_two(8192) != 1 { return false; }
+    if io_kat_is_power_of_two(4194304) != 1 { return false; }
+    if io_kat_is_power_of_two(3) != 0 { return false; }
+    if io_kat_is_power_of_two(0) != 0 { return false; }
+    if io_kat_pipe_capacity() != 64 * 1024 { return false; }
+    if io_kat_is_o1_scalable(1) != 1 { return false; }
+    if io_kat_is_o1_scalable(0) != 0 { return false; }
+    return true;
+}

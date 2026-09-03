@@ -1,0 +1,166 @@
+// # AArch64 Value-Kind Markers
+//
+// Logline: Tags String and Result locals on A64X.flt and classifies call/field results.
+//
+// Setup: "$name" marks String, "R:name" marks Result. fp 2 is a string pointer, fp 3 is a Result pair.
+//
+// Beats:
+//   1. name_is_str / name_is_res look up those tags last-wins.
+//   2. local_fp returns 1/2/3 for Float/String/Result locals.
+//   3. mark_str and mark_res push tags without taking stack slots.
+//   4. ret_fp and str_field classify calls and struct fields.
+
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xfloat.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+
+pub fn a64x_name_is_str(x: A64X, nm: String) -> Bool {
+    return a64x_name_is_flt(x, "$" + nm);
+}
+
+pub fn a64x_name_is_res(x: A64X, nm: String) -> Bool {
+    return a64x_name_is_flt(x, "R:" + nm);
+}
+
+pub fn a64x_local_fp(x: A64X, nm: String) -> Int {
+    if a64x_name_is_flt(x, nm) {
+        return 1;
+    }
+    if a64x_name_is_str(x, nm) {
+        return 2;
+    }
+    if a64x_name_is_res(x, nm) {
+        return 3;
+    }
+    return 0;
+}
+
+pub fn a64x_with_text(x: A64X, t: String) -> A64X {
+    return a64x_with_text(x, t);
+}
+
+pub fn a64x_mark_flt(x: A64X, nm: String) -> A64X {
+    let names: List[String] = x.st.flt;
+    let marked: List[String] = list_push(names, nm);
+    return a64x_with_flt(a64x_with_fp(x, 1), marked);
+}
+
+pub fn a64x_mark_str(x: A64X, nm: String) -> A64X {
+    let names: List[String] = x.st.flt;
+    let marked: List[String] = list_push(names, "$" + nm);
+    return a64x_with_flt(a64x_with_fp(x, 2), marked);
+}
+
+pub fn a64x_mark_res(x: A64X, nm: String) -> A64X {
+    let names: List[String] = x.st.flt;
+    let marked: List[String] = list_push(names, "R:" + nm);
+    return a64x_with_flt(a64x_with_fp(x, 3), marked);
+}
+
+pub fn a64x_ret_fp(x: A64X, nm: String) -> A64X {
+    if nm == "sqrt" || nm == "sin" || nm == "cos" || nm == "ln" || nm == "exp" || nm == "pow" {
+        return a64x_with_fp(x, 1);
+    }
+    if nm == "math_sqrt" || nm == "math_sin" || nm == "math_cos" || nm == "math_ln" || nm == "math_exp" || nm == "math_pow" {
+        return a64x_with_fp(x, 1);
+    }
+    if nm == "char_at" || nm == "str_slice" || nm == "str_replace" || nm == "to_string" || nm == "str_concat" || nm == "str_char_at" {
+        return a64x_with_fp(x, 2);
+    }
+    if nm == "parse_int" || nm == "channel_new" || nm == "channel_send" || nm == "channel_recv" || nm == "fetch" {
+        return a64x_with_fp(x, 3);
+    }
+    if nm == "crypto_sha256_internal" || nm == "crypto_hmac_sha256_internal" || nm == "sha256" || nm == "hmac_sha256" {
+        return a64x_with_fp(x, 2);
+    }
+    return a64x_with_fp(x, 0);
+}
+
+pub fn a64x_mark_ty(x: A64X, nm: String, ty: String) -> A64X {
+    let names: List[String] = x.st.flt;
+    let marked: List[String] = list_push(names, "T:" + nm + ":" + ty);
+    return a64x_with_flt(x, marked);
+}
+
+pub fn a64x_pfx_val(names: List[String], pfx: String) -> String {
+    let n: Int = bytes_len(pfx);
+    let mut i: Int = list_len(names) - 1;
+    while i >= 0 {
+        let s: String = list_get(names, i);
+        if bytes_len(s) > n {
+            let mut ok: Bool = true;
+            let mut k: Int = 0;
+            while k < n {
+                if byte_at(s, k) != byte_at(pfx, k) { ok = false; }
+                k = k + 1;
+            }
+            if ok { return byte_slice(s, n, bytes_len(s)); }
+        }
+        i = i - 1;
+    }
+    return "";
+}
+
+pub fn a64x_local_ty(x: A64X, nm: String) -> String {
+    return a64x_pfx_val(x.st.flt, "T:" + nm + ":");
+}
+
+pub fn a64x_last_inner(x: A64X) -> String {
+    let names: List[String] = x.st.flt;
+    let mut i: Int = list_len(names) - 1;
+    while i >= 0 {
+        let s: String = list_get(names, i);
+        if bytes_len(s) >= 2 && byte_at(s, 0) == 73 && byte_at(s, 1) == 58 {
+            return byte_slice(s, 2, bytes_len(s));
+        }
+        i = i - 1;
+    }
+    return "";
+}
+
+pub fn a64x_last_err(x: A64X) -> String {
+    let names: List[String] = x.st.flt;
+    let mut i: Int = list_len(names) - 1;
+    while i >= 0 {
+        let s: String = list_get(names, i);
+        if bytes_len(s) >= 2 && byte_at(s, 0) == 69 && byte_at(s, 1) == 58 {
+            return byte_slice(s, 2, bytes_len(s));
+        }
+        i = i - 1;
+    }
+    return "";
+}
+
+pub fn a64x_mark_ok(x: A64X, nm: String, ty: String) -> A64X {
+    return a64x_mark_ty(x, "K:" + nm, ty);
+}
+
+pub fn a64x_ok_ty(x: A64X, nm: String) -> String {
+    return a64x_local_ty(x, "K:" + nm);
+}
+
+pub fn a64x_mark_err(x: A64X, nm: String, ty: String) -> A64X {
+    return a64x_mark_ty(x, "Z:" + nm, ty);
+}
+
+pub fn a64x_err_ty(x: A64X, nm: String) -> String {
+    return a64x_local_ty(x, "Z:" + nm);
+}
+
+pub fn a64x_ret_err_ty(x: A64X, nm: String) -> String {
+    return a64x_pfx_val(x.st.fld_nm, "E->" + nm + ":");
+}
+
+pub fn a64x_field_fp(x: A64X, obj: String, nm: String) -> Int {
+    let mut ty: String = a64x_local_ty(x, obj);
+    if bytes_len(ty) == 0 {
+        ty = obj;
+    }
+    if a64x_lookup_field(x, "F:" + ty + "." + nm) >= 0 {
+        return 1;
+    }
+    if a64x_lookup_field(x, "S:" + ty + "." + nm) >= 0 {
+        return 2;
+    }
+    return 0;
+}

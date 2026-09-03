@@ -1,0 +1,81 @@
+// # Consistency and Standards Principle (Nielsen)
+//
+// Logline: Similar actions should produce similar results; the same word/icon/command should mean the same thing everywhere.
+//
+// Setup: Pure Int. action and result codes are non-negative. mismatch_count counts divergences. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. Consistency witness: 1 if same-action-same-result is 100% of the time.
+//   2. Standard adherence: 1 if interface follows the design standard.
+//   3. Plural instances of the same UI element: 1 if all render the same way.
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+
+fn cst_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn cons_total(action_count: Int) -> Result[Int, String] {
+    if action_count < 0 { return Err("ERR\tcst\tdomain"); }
+    return Ok(action_count);
+}
+
+pub fn cons_mismatches(mismatch_count: Int) -> Result[Int, String] {
+    if mismatch_count < 0 { return Err("ERR\tcst\tdomain"); }
+    return Ok(mismatch_count);
+}
+
+// Consistency witness: 1 if mismatches == 0 and total > 0.
+pub fn cons_consistent(action_count: Int, mismatch_count: Int) -> Int {
+    if action_count <= 0 { return 0; }
+    if mismatch_count < 0 { return 0; }
+    if mismatch_count == 0 { return 1; }
+    return 0;
+}
+
+// Standard adherence: 1 if interface follows the standard.
+pub fn cons_standard_adherent(follows_standard: Int) -> Int {
+    if follows_standard == 1 { return 1; }
+    return 0;
+}
+
+// Plural consistency: 1 if all instance_count renderings are equal.
+pub fn cons_plural_equal(instance_count: Int, mismatched_renderings: Int) -> Int {
+    if instance_count < 0 { return 0; }
+    if mismatched_renderings < 0 { return 0; }
+    if instance_count == 0 { return 0; }
+    if mismatched_renderings == 0 { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for the consistency principle.
+pub fn verify_consistency_principle() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    if cst_got(cons_total(10)) != 10 { return false; }
+    let ztot: Result[Int, String] = cons_total(0);
+    if ztot.is_ok() == false { return false; }
+    if cst_got(ztot) != 0 { return false; }
+    if cons_total(0 - 1).is_ok() { return false; }
+    let zmis: Result[Int, String] = cons_mismatches(0);
+    if zmis.is_ok() == false { return false; }
+    if cst_got(zmis) != 0 { return false; }
+    if cst_got(cons_mismatches(3)) != 3 { return false; }
+    if cons_mismatches(0 - 1).is_ok() { return false; }
+    if cons_consistent(10, 0) != 1 { return false; }
+    if cons_consistent(10, 1) != 0 { return false; }
+    if cons_consistent(0, 0) != 0 { return false; }
+    if cons_consistent(0 - 1, 0) != 0 { return false; }
+    if cons_consistent(10, 0 - 1) != 0 { return false; }
+    if cons_standard_adherent(1) != 1 { return false; }
+    if cons_standard_adherent(0) != 0 { return false; }
+    if cons_standard_adherent(2) != 0 { return false; }
+    if cons_standard_adherent(0 - 1) != 0 { return false; }
+    if cons_plural_equal(5, 0) != 1 { return false; }
+    if cons_plural_equal(5, 1) != 0 { return false; }
+    if cons_plural_equal(0, 0) != 0 { return false; }
+    if cons_plural_equal(0 - 1, 0) != 0 { return false; }
+    if cons_plural_equal(5, 0 - 1) != 0 { return false; }
+    return true;
+}

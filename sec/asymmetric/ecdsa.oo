@@ -1,0 +1,56 @@
+// # ECDSA Signature Specification
+//
+// Logline: ECDSA keypair, signature generation, and verification data structures.
+//
+// Setup: Elliptic curve signature structures and parameters.
+//
+// Beats:
+//   1. ecdsa_generate_keypair: keypair generation descriptor.
+//   2. ecdsa_sign: signature generation descriptor.
+//   3. ecdsa_verify: signature verification routine.
+//   4. fail-closed: returns error status on invalid parameters.
+
+type ECDSAPrivateKey = struct {
+    d_scalar: String,
+    curve_id: Int
+};
+
+type ECDSAPublicKey = struct {
+    x_coord: String,
+    y_coord: String,
+    curve_id: Int
+};
+
+type ECDSASignature = struct {
+    r_val: String,
+    s_val: String
+};
+
+// FAIL-CLOSED: the openOODA compiler has no real ECDSA backend (no
+// constant-time scalar mul, no secure nonce, no curve point ops).
+// A prior version returned an empty ECDSASignature / always-false
+// Bool, which would let callers believe a "signature" of empty
+// strings or a "verify" of false is meaningful. That is a fail-open
+// trap: any caller treating the empty signature as a valid one
+// would sign nothing while claiming to sign something.
+pub fn ecdsa_generate_keypair() -> Int {
+    return 0 - 1;
+}
+
+// FAIL-CLOSED. Returns Err so the caller cannot pattern-match on
+// "Ok" to treat a forged value as a real signature. Returning a
+// real ECDSASignature { r_val: "", s_val: "" } would be worse than
+// returning Err — empty scalars are not on any standard curve and
+// would silently bypass signature checks downstream.
+pub fn ecdsa_sign(_msg_hash: String, _priv_key: &ECDSAPrivateKey) -> Result[ECDSASignature, String] {
+    return Err("UNSUPPORTED: ecdsa_sign: compiler limitation; real ECDSA requires a vetted library FFI (e.g., libsecp256k1 or OpenSSL)");
+}
+
+// FAIL-CLOSED. Returns Err. Returning false unconditionally would
+// also be a fail-open for "accept no signature" callers, but at
+// least it never asserts validity. Err is the more honest shape: it
+// forces the caller to decide what to do when verification is
+// unavailable.
+pub fn ecdsa_verify(_msg_hash: String, _sig: &ECDSASignature, _pub_key: &ECDSAPublicKey) -> Result[Bool, String] {
+    return Err("UNSUPPORTED: ecdsa_verify: compiler limitation; real ECDSA requires a vetted library FFI (e.g., libsecp256k1 or OpenSSL)");
+}

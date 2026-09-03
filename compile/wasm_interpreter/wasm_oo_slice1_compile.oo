@@ -1,0 +1,250 @@
+// # .oo Source Compiler for slice1: Core State and Helpers
+//
+// Logline: S1CC state, accessors, emit helpers, symbol table, string interning, host table. Binary-op table in wasm_oo_slice1_types.oo; struct accessors in wasm_oo_slice1_structs.oo.
+//
+// Setup: import token, types, codegen, opcodes, engine, and host runtime modules.
+//
+// Beats:
+//   1. Declare S1CC compiler context struct.
+//   2. Define bytecode emission helpers.
+//   3. Implement symbol table resolution and local tracking.
+//   4. Export compiler initialization and dispatch routines.
+
+import "std/compile/wasm_interpreter/wasm_oo_slice1_token.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_types.oo";
+import "std/compile/wasm_interpreter/wasm_codegen.oo";
+import "std/compile/wasm_interpreter/wasm_host_runtime.oo";
+import "std/core/str.oo";
+
+type S1CC = struct {
+    kinds: List[Int],
+    texts: List[String],
+    pos: Int,
+    code: List[Int],
+    rt: WasmHostRuntime,
+    locals: List[String],
+    fns: List[String],
+    fns_count: Int,
+    errs: List[String],
+    last_ret: Int,
+    local_types: List[Int],
+    struct_name_ids: List[Int],
+    struct_field_name_ids: List[Int],
+    struct_field_starts: List[Int],
+    local_struct_ids: List[Int],
+    last_struct_id: Int,
+    struct_field_types: List[Int]
+};
+
+pub fn s1cc_new(t: WfTokens, rt: WasmHostRuntime, fns: List[String], fns_count: Int) -> S1CC {
+    let empty_locs: List[String] = list_new();
+    let empty_errs: List[String] = list_new();
+    let tk: List[Int] = t.kinds;
+    let tt: List[String] = t.texts;
+    return S1CC { kinds: tk, texts: tt, pos: 0, code: list_new(), rt: rt, locals: empty_locs, fns: fns, fns_count: fns_count, errs: empty_errs, last_ret: s1_rt_unit(), local_types: list_new(), struct_name_ids: list_new(), struct_field_name_ids: list_new(), struct_field_starts: list_new(), local_struct_ids: list_new(), last_struct_id: 0 - 1, struct_field_types: list_new() };}
+
+pub fn s1cc_k(s: S1CC) -> Int {
+    if s.pos < 0 || s.pos >= list_len(s.kinds) { return 0; }
+    return list_get(s.kinds, s.pos);
+}
+
+pub fn s1cc_t(s: S1CC) -> String {
+    if s.pos < 0 || s.pos >= list_len(s.texts) { return ""; }
+    return list_get(s.texts, s.pos);
+}
+
+pub fn s1cc_end(s: S1CC) -> Bool {
+    return s.pos >= list_len(s.kinds);
+}
+
+pub fn s1cc_adv(s: S1CC) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos + 1, code: s.code, rt: s.rt, locals: s.locals, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_match(s: S1CC, k: Int, txt: String) -> Bool {
+    return s1cc_k(s) == k && (txt == "" || s1cc_t(s) == txt);
+}
+
+pub fn s1cc_setc(s: S1CC, c: List[Int]) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: c, rt: s.rt, locals: s.locals, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_setrt(s: S1CC, rt: WasmHostRuntime) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: rt, locals: s.locals, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_setlocs(s: S1CC, locs: List[String]) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: s.rt, locals: locs, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_setlocs_and_types(s: S1CC, locs: List[String], lts: List[Int]) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: s.rt, locals: locs, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: lts, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_setlocs_types_structids(s: S1CC, locs: List[String], lts: List[Int], lsids: List[Int]) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: s.rt, locals: locs, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: lts, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: lsids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_setret(s: S1CC, t: Int) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: s.rt, locals: s.locals, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: t, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_setpos(s: S1CC, p: Int) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: p, code: s.code, rt: s.rt, locals: s.locals, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_setfns(s: S1CC, fns: List[String], fns_count: Int) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: s.rt, locals: s.locals, fns: fns, fns_count: fns_count, errs: s.errs, last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_err(s: S1CC, msg: String) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: s.rt, locals: s.locals, fns: s.fns, fns_count: s.fns_count, errs: list_push(s.errs, msg), last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: s.last_struct_id };
+}
+
+pub fn s1cc_set_struct_id(s: S1CC, sid: Int) -> S1CC {
+    return S1CC { kinds: s.kinds, texts: s.texts, pos: s.pos, code: s.code, rt: s.rt, locals: s.locals, fns: s.fns, fns_count: s.fns_count, errs: s.errs, last_ret: s.last_ret, local_types: s.local_types, struct_name_ids: s.struct_name_ids, struct_field_name_ids: s.struct_field_name_ids, struct_field_starts: s.struct_field_starts, local_struct_ids: s.local_struct_ids, struct_field_types: s.struct_field_types, last_struct_id: sid };
+}
+
+pub fn s1cc_err_count(s: S1CC) -> Int {
+    return list_len(s.errs);
+}
+
+pub fn s1cc_err_at(s: S1CC, idx: Int) -> String {
+    return list_get(s.errs, idx);
+}
+
+pub fn s1cc_emit(s: S1CC, b: Int) -> S1CC {
+    return s1cc_setc(s, list_push(s.code, b & 255));
+}
+
+pub fn s1cc_emit_bytes(s: S1CC, bs: List[Int]) -> S1CC {
+    let n: Int = list_len(bs);
+    let mut out: S1CC = s;
+    let mut i: Int = 0;
+    while i < n { out = s1cc_emit(out, list_get(bs, i)); i = i + 1; }
+    return out;
+}
+
+pub fn s1cc_emit_i32(s: S1CC, v: Int) -> S1CC {
+    return s1cc_emit_bytes(s1cc_emit(s, 65), wasm_binary_encode_i32_leb128(v));
+}
+
+pub fn s1cc_emit_get(s: S1CC, idx: Int) -> S1CC {
+    return s1cc_emit_bytes(s1cc_emit(s, 32), wasm_binary_encode_u32_leb128(idx));
+}
+
+pub fn s1cc_emit_set(s: S1CC, idx: Int) -> S1CC {
+    return s1cc_emit_bytes(s1cc_emit(s, 33), wasm_binary_encode_u32_leb128(idx));
+}
+
+pub fn s1cc_emit_tee(s: S1CC, idx: Int) -> S1CC {
+    return s1cc_emit_bytes(s1cc_emit(s, 34), wasm_binary_encode_u32_leb128(idx));
+}
+
+pub fn s1cc_emit_op(s: S1CC, op: Int) -> S1CC { return s1cc_emit(s, op); }
+
+pub fn s1cc_emit_call(s: S1CC, target: Int) -> S1CC {
+    return s1cc_emit_bytes(s1cc_emit(s, 16), wasm_binary_encode_u32_leb128(target));
+}
+
+pub fn s1cc_emit_drop(s: S1CC) -> S1CC { return s1cc_emit(s, 26); }
+
+pub fn s1cc_emit_if(s: S1CC) -> S1CC { return s1cc_emit(s1cc_emit(s, 4), 64); }
+
+pub fn s1cc_emit_else(s: S1CC) -> S1CC { return s1cc_emit(s, 5); }
+
+pub fn s1cc_emit_end(s: S1CC) -> S1CC { return s1cc_emit(s, 11); }
+
+pub fn s1cc_emit_return(s: S1CC) -> S1CC { return s1cc_emit(s, 15); }
+
+pub fn s1cc_emit_eqz(s: S1CC) -> S1CC { return s1cc_emit(s, 69); }
+
+pub fn s1_find_host(name: String) -> Int {
+    if name == "list_new" { return 0; }
+    if name == "list_push" { return 1; }
+    if name == "list_first" { return 2; }
+    if name == "list_last" { return 3; }
+    if name == "list_length" { return 4; }
+    if name == "byte_in_range" { return 5; }
+    if name == "parse_int" { return 6; }
+    if name == "int_to_string" { return 7; }
+    if name == "string_concat" { return 8; }
+    if name == "string_contains" { return 9; }
+    if name == "result_is_ok" { return 10; }
+    if name == "result_unwrap_int" { return 11; }
+    if name == "result_unwrap_str" { return 12; }
+    if name == "println" { return 13; }
+    if name == "process_exit" { return 14; }
+    if name == "struct_new" { return 15; }
+    if name == "struct_set" { return 16; }
+    if name == "struct_get" { return 17; }
+    return 0 - 1;
+}
+
+pub fn s1_user_fn(name: String, fns: List[String], fns_count: Int) -> Int {
+    let mut i: Int = 0;
+    while i < fns_count { if list_get(fns, i) == name { return i; } i = i + 1; }
+    return 0 - 1;
+}
+
+pub fn s1_call_arity(name: String) -> Int {
+    if name == "list_new" { return 0; }
+    if name == "list_push" { return 2; }
+    if name == "list_first" { return 1; }
+    if name == "list_last" { return 1; }
+    if name == "byte_in_range" { return 1; }
+    if name == "parse_int" { return 1; }
+    if name == "int_to_string" { return 1; }
+    if name == "string_concat" { return 2; }
+    if name == "string_contains" { return 2; }
+    if name == "result_is_ok" { return 1; }
+    if name == "result_unwrap_int" { return 1; }
+    if name == "result_unwrap_str" { return 1; }
+    if name == "println" { return 1; }
+    if name == "process_exit" { return 1; }
+    if name == "struct_new" { return 1; }
+    if name == "struct_set" { return 3; }
+    if name == "struct_get" { return 2; }
+    return 0 - 1;
+}
+
+pub fn s1_local_idx(s: S1CC, name: String) -> Int {
+    let n: Int = list_len(s.locals);
+    let mut i: Int = n - 1;
+    while i >= 0 { if list_get(s.locals, i) == name { return i; } i = i - 1; }
+    return 0 - 1;
+}
+
+pub fn s1_suggest_name(s: S1CC, name: String) -> String {
+    let n: Int = list_len(s.locals);
+    let nlen: Int = chars_len(name);
+    let mut best: String = "";
+    let mut best_score: Int = 0 - 1;
+    let mut i: Int = 0;
+    while i < n {
+        let cand: String = list_get(s.locals, i);
+        let clen: Int = chars_len(cand);
+        let common: Int = s1_common_prefix(name, cand, nlen, clen);
+        if common > best_score { best_score = common; best = cand; }
+        i = i + 1;
+    }
+    if best_score >= 1 { return best; }
+    return "";
+}
+
+pub fn s1_common_prefix(a: String, b: String, alen: Int, blen: Int) -> Int {
+    let mut i: Int = 0;
+    let mut common: Int = 0;
+    let lim: Int = if alen < blen { alen } else { blen };
+    while i < lim {
+        if char_at(a, i) == char_at(b, i) { common = common + 1; } else { return common; }
+        i = i + 1;
+    }
+    return common;
+}
+
+pub fn s1_local_type(s: S1CC, idx: Int) -> Int {
+    let lts: List[Int] = s.local_types;
+    if idx >= 0 && idx < list_len(lts) { return list_get(lts, idx); }
+    return s1_rt_unit();
+}

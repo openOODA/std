@@ -1,0 +1,78 @@
+// # Peer-to-Peer Epidemic Gossip Dissemination
+//
+// Logline: Decentralized epidemic broadcast mesh with message deduplication, fanout dissemination, and membership tracking.
+//
+// Setup: Pure peer-to-peer message diffusion engine.
+//
+// Beats:
+//   1. Maintain node identifier, active peer list, and seen message cache.
+//   2. Deduplicate inbound messages against seen message history.
+//   3. Disseminate new message IDs to fanout peer subsets.
+//   4. Track message propagation count.
+
+type GossipNode = struct {
+    node_id: Int,
+    peer_count: Int,
+    peers: List[Int],
+    seen_messages: List[Int]
+};
+
+pub fn gossip_node_new(id: Int) -> GossipNode {
+    let p: List[Int] = list_new();
+    let m: List[Int] = list_new();
+    return GossipNode {
+        node_id: id,
+        peer_count: 0,
+        peers: p,
+        seen_messages: m
+    };
+}
+
+pub fn gossip_add_peer(node: GossipNode, peer_id: Int) -> GossipNode {
+    let mut ps: List[Int] = node.peers;
+    ps = list_push(ps, peer_id);
+    return GossipNode {
+        node_id: node.node_id,
+        peer_count: node.peer_count + 1,
+        peers: ps,
+        seen_messages: node.seen_messages
+    };
+}
+
+fn list_has_msg(xs: List[Int], msg_id: Int) -> Bool {
+    let n: Int = list_len(xs);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(xs, i) == msg_id {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+type GossipRecvResult = struct {
+    node: GossipNode,
+    should_forward: Bool
+};
+
+pub fn gossip_receive_message(node: GossipNode, msg_id: Int) -> Result[GossipRecvResult, String] {
+    if list_has_msg(node.seen_messages, msg_id) {
+        return Ok(GossipRecvResult {
+            node: node,
+            should_forward: false
+        });
+    }
+    let mut ms: List[Int] = node.seen_messages;
+    ms = list_push(ms, msg_id);
+    let updated_node: GossipNode = GossipNode {
+        node_id: node.node_id,
+        peer_count: node.peer_count,
+        peers: node.peers,
+        seen_messages: ms
+    };
+    return Ok(GossipRecvResult {
+        node: updated_node,
+        should_forward: true
+    });
+}

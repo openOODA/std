@@ -1,0 +1,89 @@
+// # Gibbs Free Energy and Chemical Thermodynamic Spontaneity
+//
+// Logline: Calculates Gibbs free energy differentials, equilibrium temperatures, reaction constants, and Gibbs-Helmholtz derivatives.
+//
+// Setup: Pure floating-point thermodynamic relations based on enthalpy, entropy, and absolute temperature in Kelvin.
+//
+// Beats:
+//   1. Fundamental Gibbs relation Delta G = Delta H - T * Delta S.
+//   2. Chemical reaction spontaneity classification and equilibrium temperature calculation.
+//   3. Equilibrium constant K_eq = exp(-Delta G / (R * T)) with exponent domain clamping.
+//   4. Gibbs-Helmholtz temperature sensitivity derivative d(Delta G / T) / dT = -Delta H / T^2.
+
+type GibbsState = struct {
+    delta_h_joules: Float,
+    delta_s_j_per_k: Float,
+    temp_kelvin: Float,
+    delta_g_joules: Float,
+    is_spontaneous: Bool,
+    equilibrium_temp: Float
+};
+
+// Universal gas constant R in J / (mol * K) (2019 SI standard).
+pub fn gibbs_gas_constant() -> Float {
+    return 8.314462618;
+}
+
+// Calculate Gibbs free energy change Delta G = Delta H - T * Delta S (Joules or J/mol).
+pub fn gibbs_delta_g(delta_h_joules: Float, delta_s_j_per_k: Float, temp_kelvin: Float) -> Float {
+    let mut t: Float = temp_kelvin;
+    if t < 0.0 { t = 0.0; }
+    return delta_h_joules - (t * delta_s_j_per_k);
+}
+
+// Calculate equilibrium transition temperature T_eq = Delta H / Delta S (Kelvin).
+pub fn gibbs_equilibrium_temp(delta_h_joules: Float, delta_s_j_per_k: Float) -> Float {
+    let mut abs_s: Float = delta_s_j_per_k;
+    if abs_s < 0.0 { abs_s = 0.0 - abs_s; }
+    if abs_s <= 0.000000001 {
+        return 0.0;
+    }
+    let teq: Float = delta_h_joules / delta_s_j_per_k;
+    if teq < 0.0 {
+        return 0.0;
+    }
+    return teq;
+}
+
+// Calculate thermodynamic equilibrium constant K_eq = exp(-Delta G / (R * T)).
+pub fn gibbs_equilibrium_constant(delta_g_joules: Float, temp_kelvin: Float) -> Float {
+    if temp_kelvin <= 0.000001 {
+        return 0.0;
+    }
+    let r: Float = gibbs_gas_constant();
+    let rt: Float = r * temp_kelvin;
+    let mut exponent: Float = (0.0 - delta_g_joules) / rt;
+    // Domain protection against floating-point underflow/overflow
+    if exponent > 500.0 { exponent = 500.0; }
+    if exponent < -500.0 { return 0.0; }
+    return exp(exponent);
+}
+
+// Gibbs-Helmholtz derivative: d(Delta G / T) / dT = -Delta H / T^2 (J / (mol * K^2)).
+pub fn gibbs_helmholtz_derivative(delta_h_joules: Float, temp_kelvin: Float) -> Float {
+    if temp_kelvin <= 0.000001 {
+        return 0.0;
+    }
+    let t_sq: Float = temp_kelvin * temp_kelvin;
+    return (0.0 - delta_h_joules) / t_sq;
+}
+
+// Evaluate complete thermodynamic GibbsState.
+pub fn gibbs_free_energy(delta_h_joules: Float, delta_s_j_per_k: Float, temp_kelvin: Float) -> GibbsState {
+    let mut t: Float = temp_kelvin;
+    if t < 0.0 { t = 0.0; }
+    let dg: Float = gibbs_delta_g(delta_h_joules, delta_s_j_per_k, t);
+    let teq: Float = gibbs_equilibrium_temp(delta_h_joules, delta_s_j_per_k);
+    let mut spont: Bool = false;
+    if dg < 0.0 {
+        spont = true;
+    }
+    return GibbsState {
+        delta_h_joules: delta_h_joules,
+        delta_s_j_per_k: delta_s_j_per_k,
+        temp_kelvin: t,
+        delta_g_joules: dg,
+        is_spontaneous: spont,
+        equilibrium_temp: teq
+    };
+}

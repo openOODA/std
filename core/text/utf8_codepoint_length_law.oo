@@ -1,0 +1,175 @@
+// # UTF-8 codepoint length law
+//
+// Logline: A pure-ASCII string has byte length equal to codepoint count; a valid non-ASCII UTF-8 string has byte length strictly greater than codepoint count; an invalid UTF-8 byte sequence fails closed.
+//
+// Setup: Pure. Imports std/core/byte.oo and std/text/utf8_validator.oo. byte_len, byte_at, and byte_buf_to_str are the only string metrics.
+//
+// Beats:
+//   1. utf8_codepoint_count returns the number of valid UTF-8 codepoints or -1 on invalid input.
+//   2. utf8_codepoint_eq_byte holds for pure ASCII strings.
+//   3. utf8_codepoint_lt_byte holds for valid non-ASCII UTF-8 strings.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/primitives/byte.oo";
+import "std/core/text/utf8_validator.oo";
+
+// Return the lead-byte sequence length for a single UTF-8 codepoint, or 0 on bad lead.
+fn utf8_law_seq_len(b: Int) -> Int {
+    if (b & 128) == 0 {
+        return 1;
+    }
+    if (b & 224) == 192 {
+        return 2;
+    }
+    if (b & 240) == 224 {
+        return 3;
+    }
+    if (b & 248) == 240 {
+        return 4;
+    }
+    return 0;
+}
+
+// True when b is a 10xxxxxx continuation byte.
+fn utf8_law_is_cont(b: Int) -> Bool {
+    if (b & 192) == 128 {
+        return true;
+    }
+    return false;
+}
+
+// Count UTF-8 codepoints in s. Returns -1 if the byte stream is not valid UTF-8.
+pub fn utf8_codepoint_count(s: String) -> Int {
+    let total: Int = byte_len(s);
+    let mut offset: Int = 0;
+    let mut count: Int = 0;
+    while offset < total {
+        let b: Int = byte_at(s, offset);
+        let seq: Int = utf8_law_seq_len(b);
+        if seq == 0 {
+            return 0 - 1;
+        }
+        if offset + seq > total {
+            return 0 - 1;
+        }
+        let mut k: Int = 1;
+        while k < seq {
+            let cb: Int = byte_at(s, offset + k);
+            if utf8_law_is_cont(cb) == false {
+                return 0 - 1;
+            }
+            k = k + 1;
+        }
+        count = count + 1;
+        offset = offset + seq;
+    }
+    return count;
+}
+
+// True when byte length equals codepoint count (pure ASCII or empty).
+pub fn utf8_codepoint_eq_byte(s: String) -> Bool {
+    let bytes: Int = byte_len(s);
+    let cps: Int = utf8_codepoint_count(s);
+    if cps < 0 {
+        return false;
+    }
+    if bytes != cps {
+        return false;
+    }
+    return true;
+}
+
+// True when byte length is strictly greater than codepoint count.
+pub fn utf8_codepoint_lt_byte(s: String) -> Bool {
+    let bytes: Int = byte_len(s);
+    let cps: Int = utf8_codepoint_count(s);
+    if cps <= 0 {
+        return false;
+    }
+    if bytes <= cps {
+        return false;
+    }
+    return true;
+}
+
+// True when s is not valid UTF-8.
+pub fn utf8_codepoint_invalid(s: String) -> Bool {
+    let cps: Int = utf8_codepoint_count(s);
+    if cps < 0 {
+        return true;
+    }
+    return false;
+}
+
+pub fn verify_utf8_codepoint_length_law() -> Bool {
+    // Golden: empty string is 0 bytes and 0 codepoints.
+    if byte_len("") != 0 {
+        return false;
+    }
+    if utf8_codepoint_count("") != 0 {
+        return false;
+    }
+    if utf8_codepoint_eq_byte("") != true {
+        return false;
+    }
+    // Golden: pure ASCII "abc" has 3 bytes and 3 codepoints.
+    if byte_len("abc") != 3 {
+        return false;
+    }
+    if utf8_codepoint_count("abc") != 3 {
+        return false;
+    }
+    if utf8_codepoint_eq_byte("abc") != true {
+        return false;
+    }
+    // Golden: valid 2-byte UTF-8 "é" is 2 bytes, 1 codepoint.
+    let two_byte: String = "é";
+    if byte_len(two_byte) != 2 {
+        return false;
+    }
+    if utf8_codepoint_count(two_byte) != 1 {
+        return false;
+    }
+    if utf8_codepoint_eq_byte(two_byte) != false {
+        return false;
+    }
+    if utf8_codepoint_lt_byte(two_byte) != true {
+        return false;
+    }
+    // Golden: valid 3-byte UTF-8 "あ" is 3 bytes, 1 codepoint.
+    let three_byte: String = "あ";
+    if byte_len(three_byte) != 3 {
+        return false;
+    }
+    if utf8_codepoint_count(three_byte) != 1 {
+        return false;
+    }
+    if utf8_codepoint_lt_byte(three_byte) != true {
+        return false;
+    }
+    // Hostile: a lone 0x80 continuation byte is not valid UTF-8 and must fail closed.
+    let mut buf: List[Int] = bytes_new();
+    buf = bytes_push(buf, 128);
+    let bad: String = bytes_to_str(buf);
+    if byte_len(bad) != 1 {
+        return false;
+    }
+    if utf8_codepoint_invalid(bad) != true {
+        return false;
+    }
+    if utf8_codepoint_count(bad) != 0 - 1 {
+        return false;
+    }
+    // Hostile: a truncated 3-byte lead (0xE3 0x80) is not valid UTF-8 and must fail closed.
+    let mut buf2: List[Int] = bytes_new();
+    buf2 = bytes_push(buf2, 227);
+    buf2 = bytes_push(buf2, 128);
+    let truncated: String = bytes_to_str(buf2);
+    if byte_len(truncated) != 2 {
+        return false;
+    }
+    if utf8_codepoint_invalid(truncated) != true {
+        return false;
+    }
+    return true;
+}

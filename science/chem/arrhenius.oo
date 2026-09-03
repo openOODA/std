@@ -1,0 +1,155 @@
+// # Arrhenius Chemical Reaction Kinetics
+//
+// Logline: Calculates reaction rate constants, Kooij temperature dependencies, activation energies, and two-temperature extrapolations.
+//
+// Setup: Pure chemical kinetics module based on transition state theory and collision theory without ambient authority.
+//
+// Beats:
+//   1. Define ArrheniusReaction data structure with pre-exponential factor, activation energy, and Kooij exponent.
+//   2. Compute standard and modified Kooij Arrhenius reaction rate constant k(T).
+//   3. Compute two-temperature rate extrapolation and inverse activation energy derivation.
+//   4. Calculate logarithmic temperature sensitivity coefficient.
+
+import "std/core/math/trig.oo";
+
+type ArrheniusReaction = struct {
+    pre_exponential_a: Float,
+    activation_energy_ea: Float,
+    kooij_temp_exponent_n: Float
+};
+
+// Gas constant R in J / (mol * K) (2019 SI / CODATA).
+pub fn arrhenius_gas_constant() -> Float {
+    return 8.314462618;
+}
+
+// Construct a standard Arrhenius reaction model (n = 0).
+pub fn arrhenius_reaction_new(a: Float, ea: Float) -> ArrheniusReaction {
+    if a <= 0.0 || ea < 0.0 {
+        return ArrheniusReaction {
+            pre_exponential_a: 0.0,
+            activation_energy_ea: 0.0,
+            kooij_temp_exponent_n: 0.0
+        };
+    }
+    return ArrheniusReaction {
+        pre_exponential_a: a,
+        activation_energy_ea: ea,
+        kooij_temp_exponent_n: 0.0
+    };
+}
+
+// Construct a modified Kooij Arrhenius reaction model with temperature exponent n.
+pub fn arrhenius_kooij_new(a: Float, ea: Float, n: Float) -> ArrheniusReaction {
+    if a <= 0.0 || ea < 0.0 {
+        return ArrheniusReaction {
+            pre_exponential_a: 0.0,
+            activation_energy_ea: 0.0,
+            kooij_temp_exponent_n: 0.0
+        };
+    }
+    return ArrheniusReaction {
+        pre_exponential_a: a,
+        activation_energy_ea: ea,
+        kooij_temp_exponent_n: n
+    };
+}
+
+// Calculate the reaction rate constant k(T) = A * (T^n) * exp(-Ea / (R * T)).
+pub fn arrhenius_rate_k(rxn: ArrheniusReaction, temp_k: Float) -> Float {
+    let a: Float = rxn.pre_exponential_a;
+    let ea: Float = rxn.activation_energy_ea;
+    let n: Float = rxn.kooij_temp_exponent_n;
+
+    if temp_k <= 0.000001 || a <= 0.0 {
+        return 0.0;
+    }
+
+    let r: Float = arrhenius_gas_constant();
+    let rt: Float = r * temp_k;
+    let mut exp_arg: Float = 0.0 - (ea / rt);
+
+    // Prevent floating point underflow / overflow on extreme exponential args
+    if exp_arg < (0.0 - 700.0) {
+        return 0.0;
+    }
+    if exp_arg > 700.0 {
+        exp_arg = 700.0;
+    }
+
+    let exp_term: Float = math_exp(exp_arg);
+
+    if n != 0.0 {
+        let temp_factor: Float = math_pow(temp_k, n);
+        return a * temp_factor * exp_term;
+    }
+
+    return a * exp_term;
+}
+
+// Extrapolate reaction rate constant k2 at temperature T2 given k1 at T1:
+// k2 = k1 * exp( (Ea / R) * (1/T1 - 1/T2) ).
+pub fn arrhenius_extrapolate_k(k1: Float, ea: Float, t1_k: Float, t2_k: Float) -> Float {
+    if k1 <= 0.0 || t1_k <= 0.000001 || t2_k <= 0.000001 || ea < 0.0 {
+        return 0.0;
+    }
+
+    let r: Float = arrhenius_gas_constant();
+    let inv_t1: Float = 1.0 / t1_k;
+    let inv_t2: Float = 1.0 / t2_k;
+    let diff: Float = inv_t1 - inv_t2;
+    let mut exp_arg: Float = (ea / r) * diff;
+
+    if exp_arg < (0.0 - 700.0) {
+        return 0.0;
+    }
+    if exp_arg > 700.0 {
+        exp_arg = 700.0;
+    }
+
+    return k1 * math_exp(exp_arg);
+}
+
+// Calculate activation energy Ea from two rate measurements (k1, T1) and (k2, T2):
+// Ea = R * ln(k2 / k1) / (1/T1 - 1/T2).
+pub fn arrhenius_activation_energy(k1: Float, t1_k: Float, k2: Float, t2_k: Float) -> Float {
+    if k1 <= 0.0 || k2 <= 0.0 || t1_k <= 0.000001 || t2_k <= 0.000001 {
+        return 0.0;
+    }
+    let diff_t: Float = t2_k - t1_k;
+    let mut abs_diff: Float = diff_t;
+    if abs_diff < 0.0 {
+        abs_diff = 0.0 - abs_diff;
+    }
+    if abs_diff < 0.00001 {
+        return 0.0;
+    }
+
+    let r: Float = arrhenius_gas_constant();
+    let ratio: Float = k2 / k1;
+    let ln_ratio: Float = math_ln(ratio);
+    let inv_diff: Float = (1.0 / t1_k) - (1.0 / t2_k);
+
+    if inv_diff == 0.0 {
+        return 0.0;
+    }
+
+    return (r * ln_ratio) / inv_diff;
+}
+
+// Calculate temperature sensitivity d(ln k) / dT = Ea / (R * T^2) + n / T.
+pub fn arrhenius_temperature_sensitivity(rxn: ArrheniusReaction, temp_k: Float) -> Float {
+    let ea: Float = rxn.activation_energy_ea;
+    let n: Float = rxn.kooij_temp_exponent_n;
+
+    if temp_k <= 0.000001 {
+        return 0.0;
+    }
+
+    let r: Float = arrhenius_gas_constant();
+    let t_sq: Float = temp_k * temp_k;
+    let term1: Float = ea / (r * t_sq);
+    let term2: Float = n / temp_k;
+
+    return term1 + term2;
+}

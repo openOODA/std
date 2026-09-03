@@ -1,0 +1,159 @@
+// # TUI Tab Bar Widget
+//
+// Logline: Multi-page tab bar container with tab switching, overflow handling, and styled dividers.
+//
+// Setup: Top-level view switching component for multi-document and multi-panel TUIs.
+//
+// Beats:
+//   1. Define TabItem descriptors and WidgetTabs state tracker.
+//   2. Provide tab switching, wrap-around index selection, and active tab arbitration.
+//   3. Render active tab highlight, inactive tab headers, and bottom tab separator line.
+
+import "std/app/ui/tui/tui_cell.oo";
+import "std/app/ui/tui/tui_buffer.oo";
+
+type TabItem = struct {
+    id: Int,
+    title: String,
+    is_disabled: Bool
+};
+
+pub fn tab_item_new(id: Int, title: String) -> TabItem {
+    return TabItem {
+        id: id,
+        title: title,
+        is_disabled: false
+    };
+}
+
+type WidgetTabs = struct {
+    id: Int,
+    area: BufferArea,
+    tabs: List[TabItem],
+    active_tab_index: Int,
+    is_focused: Bool
+};
+
+pub fn widget_tabs_new(id: Int, area: BufferArea) -> WidgetTabs {
+    let t: List[TabItem] = list_new();
+    return WidgetTabs {
+        id: id,
+        area: area,
+        tabs: t,
+        active_tab_index: 0,
+        is_focused: false
+    };
+}
+
+pub fn widget_tabs_add_tab(tabs: WidgetTabs, tab: TabItem) -> WidgetTabs {
+    let mut t: List[TabItem] = tabs.tabs;
+    t = list_push(t, tab);
+    return WidgetTabs {
+        id: tabs.id,
+        area: tabs.area,
+        tabs: t,
+        active_tab_index: tabs.active_tab_index,
+        is_focused: tabs.is_focused
+    };
+}
+
+pub fn widget_tabs_select_next(tabs: WidgetTabs) -> WidgetTabs {
+    let total: Int = list_len(tabs.tabs);
+    if total == 0 {
+        return tabs;
+    }
+    let next_idx: Int = (tabs.active_tab_index + 1) % total;
+    return WidgetTabs {
+        id: tabs.id,
+        area: tabs.area,
+        tabs: tabs.tabs,
+        active_tab_index: next_idx,
+        is_focused: tabs.is_focused
+    };
+}
+
+pub fn widget_tabs_select_prev(tabs: WidgetTabs) -> WidgetTabs {
+    let total: Int = list_len(tabs.tabs);
+    if total == 0 {
+        return tabs;
+    }
+    let prev_idx: Int = if tabs.active_tab_index == 0 {
+        total - 1
+    } else {
+        tabs.active_tab_index - 1
+    };
+    return WidgetTabs {
+        id: tabs.id,
+        area: tabs.area,
+        tabs: tabs.tabs,
+        active_tab_index: prev_idx,
+        is_focused: tabs.is_focused
+    };
+}
+
+pub fn widget_tabs_set_active(tabs: WidgetTabs, index: Int) -> WidgetTabs {
+    let total: Int = list_len(tabs.tabs);
+    let mut act_idx: Int = tabs.active_tab_index;
+    if index >= 0 && index < total {
+        act_idx = index;
+    }
+    return WidgetTabs {
+        id: tabs.id,
+        area: tabs.area,
+        tabs: tabs.tabs,
+        active_tab_index: act_idx,
+        is_focused: tabs.is_focused
+    };
+}
+
+pub fn widget_tabs_render(tabs: WidgetTabs, buf: TuiBuffer) -> TuiBuffer {
+    let a: BufferArea = tabs.area;
+    if a.width < 5 || a.height < 1 {
+        return buf;
+    }
+
+    let tab_y: Int = a.y;
+    let total_tabs: Int = list_len(tabs.tabs);
+    let mut cur_x: Int = a.x;
+    let mut out: TuiBuffer = buf;
+
+    let mut i: Int = 0;
+    while i < total_tabs && cur_x < (a.x + a.width) {
+        let tab: TabItem = list_get(tabs.tabs, i);
+        let is_active: Bool = i == tabs.active_tab_index;
+        let is_foc: Bool = tabs.is_focused;
+
+        let fg: Int = if tab.is_disabled {
+            8
+        } else if is_active && is_foc {
+            0
+        } else if is_active {
+            15
+        } else {
+            7
+        };
+
+        let bg: Int = if is_active && is_foc {
+            14
+        } else if is_active {
+            4
+        } else {
+            0
+        };
+
+        let header: String = " [" + tab.title + "] ";
+        let h_len: Int = header.len();
+
+        let active_mod: Int = if is_active { 1 } else { 0 };
+        out = tui_buffer_write_string(out, cur_x, tab_y, header, fg, bg, active_mod);
+        cur_x = cur_x + h_len;
+        i = i + 1;
+    }
+
+    // Fill the rest of the tab header line
+    while cur_x < (a.x + a.width) {
+        out = tui_buffer_set_cell(out, cur_x, tab_y, tui_cell_new(45, 8, 0));
+        cur_x = cur_x + 1;
+    }
+    return out;
+}

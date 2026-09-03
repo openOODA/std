@@ -1,0 +1,53 @@
+// # Object Capability Registry
+//
+// Logline: Build an ObjectCapabilityRegistry and answer is_revoked by linear scan.
+//
+// Setup: Default-deny per RULES.oot 1.4. Imports ./types.oo for the registry record.
+//
+// Beats:
+//   1. objcap_registry_init: build a strict-mode registry with empty caps / revs / atts / audits.
+//   2. objcap_registry_is_revoked: linear scan revocations and return on first match.
+//   3. list_get / list_len: walk the revocations list by index.
+//
+// residual: linear scan; not a hash-indexed revocation map.
+
+import "capability_types.oo";
+
+pub fn objcap_registry_init(registry_id_val: String) -> ObjectCapabilityRegistry {
+    let empty_caps: List[String] = list_new();
+    let empty_revs: List[String] = list_new();
+    let empty_atts: List[String] = list_new();
+    let empty_audits: List[String] = list_new();
+    return ObjectCapabilityRegistry {
+        registry_id: registry_id_val,
+        capabilities: empty_caps,
+        revocations: empty_revs,
+        attenuations: empty_atts,
+        audits: empty_audits,
+        total_exercised: 0,
+        total_revoked: 0,
+        strict_mode: true,
+        is_halted: false
+    };
+}
+
+pub fn objcap_registry_is_revoked(
+    reg: ObjectCapabilityRegistry,
+    target_cap_id_val: String
+) -> Bool {
+    let revs: List[String] = reg.revocations;
+    let n: Int = list_len(revs);
+    let mut i: Int = 0;
+    while i < n {
+        let item: String = list_get(revs, i);
+        if item == target_cap_id_val {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn __dummy_std_src_ooda_sec_capability_registry_oo() -> Int {
+    return 0;
+}

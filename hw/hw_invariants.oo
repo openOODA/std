@@ -1,0 +1,31 @@
+// # Hardware alignment product invariants
+//
+// Logline: Alignment is a positive power of two; zero and odd widths fail closed.
+//
+// Setup: Pure Int checks. DomainCert is local because std/core/domain_cert.oo is absent.
+//
+// Beats:
+//   1. hw_align_ok returns 0 for align <= 0.
+//   2. hw_align_ok returns 1 iff align is a power of two.
+//   3. hw_align_cert boxes the law into DomainCert.holds.
+
+import "std/core/primitives/domain_cert.oo";
+// Alignment must be a positive power of two.
+pub fn hw_align_ok(align: Int) -> Int {
+    if align <= 0 {
+        return 0;
+    }
+    let leftover: Int = align & (align - 1);
+    if leftover == 0 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn hw_align_cert(align: Int) -> DomainCert {
+    return DomainCert {
+        domain: "hw",
+        law_name: "align_pow2",
+        holds: hw_align_ok(align)
+    };
+}

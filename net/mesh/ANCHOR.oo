@@ -1,0 +1,86 @@
+// # Net Mesh
+//
+// Logline: Peer-to-peer mesh + edge inference + OTA + power + open_*
+// fixtures. Phase 3.3 reorg: merged the prior std/net/p2p_mesh/ and
+// std/net/edge/ into a single std/net/mesh/ tree. The p2p_mesh/ subdir
+// carried the chord DHT, gossip, routing table, plus a flat set of open_*
+// fixtures (each prefixed with `open_` for a compiler-acceptance test).
+// The edge/ subdir carried mesh networking, inference, OTA, and power
+// governors. They are now one tree.
+//
+// Setup: Domain module under std/net/mesh. Pure compute, no caps.
+//   * Mesh surface (4 files): mesh, mesh_engine, mesh_ops_*, mesh_types.
+//   * Inference surface (6 files): edge inference engine, ops, pipeline, types, analysis, stubs.
+//   * OTA surface (4 files): ota, ota_engine, ota_stubs, ota_types.
+//   * Power surface (5 files): power, power_governor, power_ops, power_stubs, power_types.
+//   * DHT + gossip + routing (3 files): dht_chord, gossip_mesh, routing_table.
+//   * Open_* fixtures (40 files): one-file compiler-acceptance / regression fixtures (each starts with `open_`).
+//
+// Beats:
+//   1. Edge stack: mesh, inference, ota, power.
+//   2. P2P stack: dht_chord, gossip_mesh, routing_table.
+//   3. Open_* fixtures: open_actor_restart, open_arena, open_bare_metal, open_ci_add, open_crypto_hmac, etc.
+
+import "dht_chord.oo";
+import "gossip_mesh.oo";
+import "inference.oo";
+import "inference_analysis.oo";
+import "inference_ops.oo";
+import "inference_pipeline.oo";
+import "inference_stubs.oo";
+import "inference_types.oo";
+import "mesh_node.oo";
+import "mesh_engine.oo";
+import "mesh_link.oo";
+import "mesh_ops_link.oo";
+import "mesh_ops_node.oo";
+import "mesh_ops_packet.oo";
+import "mesh_ops_types.oo";
+import "mesh_config.oo";
+import "open_actor_restart.oo";
+import "open_arena.oo";
+import "open_bare_metal.oo";
+import "open_ci_add.oo";
+import "open_crypto_hmac.oo";
+import "open_discard_write.oo";
+import "open_hmac_verify.oo";
+import "open_hot_reload.oo";
+import "open_imp_lib.oo";
+import "open_imp_main.oo";
+import "open_import_c.oo";
+import "open_landlock.oo";
+import "open_let_underscore.oo";
+import "open_llvm_lib.oo";
+import "open_llvm_main.oo";
+import "open_llvm_match.oo";
+import "open_lock_sha.oo";
+import "open_lock_verify.oo";
+import "open_macro.oo";
+import "open_match_option_bad.oo";
+import "open_match_option_ok.oo";
+import "open_match_star.oo";
+import "open_match_unann.oo";
+import "open_missing_rbrace.oo";
+import "open_multi_fix.oo";
+import "open_objcap_hmac.oo";
+import "open_otp.oo";
+import "open_path_join.oo";
+import "open_regex.oo";
+import "open_regex_alt.oo";
+import "open_res_void.oo";
+import "open_rlimit.oo";
+import "open_secret_sib.oo";
+import "open_try_ok.oo";
+import "open_typestate_double.oo";
+import "open_unused_result.oo";
+import "open_user_res_disc.oo";
+import "ota.oo";
+import "ota_engine.oo";
+import "ota_stubs.oo";
+import "ota_types.oo";
+import "power.oo";
+import "power_governor.oo";
+import "power_ops.oo";
+import "power_stubs.oo";
+import "power_types.oo";
+import "routing_table.oo";

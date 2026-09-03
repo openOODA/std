@@ -1,0 +1,92 @@
+// # Symbolic Expression Tree and Evaluation Engine
+//
+// Logline: Symbolic mathematical expression AST nodes, recursive tree evaluation over variable bindings, and algebraic simplifications.
+//
+// Setup: Pure symbolic algebra module representing mathematical expressions with parallel node arrays.
+//
+// Beats:
+//   1. Define SymTree AST representation (Constant, Variable, Add, Sub, Mul, Div).
+//   2. Construct expression nodes with left/right child indexing.
+//   3. Recursively evaluate expression trees given variable value environments.
+//   4. Handle division-by-zero during symbolic evaluation.
+
+type SymTree = struct {
+    node_count: Int,
+    kinds: List[Int], // 0=Const, 1=Var, 2=Add, 3=Sub, 4=Mul, 5=Div
+    vals: List[Int],
+    left_children: List[Int],
+    right_children: List[Int]
+};
+
+pub fn sym_tree_new() -> SymTree {
+    let k: List[Int] = list_new();
+    let v: List[Int] = list_new();
+    let l: List[Int] = list_new();
+    let r: List[Int] = list_new();
+    return SymTree {
+        node_count: 0,
+        kinds: k,
+        vals: v,
+        left_children: l,
+        right_children: r
+    };
+}
+
+pub fn sym_add_node(t: SymTree, kind: Int, val: Int, left_ch: Int, right_ch: Int) -> SymTree {
+    let mut ks: List[Int] = t.kinds;
+    let mut vs: List[Int] = t.vals;
+    let mut ls: List[Int] = t.left_children;
+    let mut rs: List[Int] = t.right_children;
+    ks = list_push(ks, kind);
+    vs = list_push(vs, val);
+    ls = list_push(ls, left_ch);
+    rs = list_push(rs, right_ch);
+    return SymTree {
+        node_count: t.node_count + 1,
+        kinds: ks,
+        vals: vs,
+        left_children: ls,
+        right_children: rs
+    };
+}
+
+pub fn sym_eval(t: SymTree, root_idx: Int, env: List[Int]) -> Result[Int, String] {
+    if root_idx < 0 || root_idx >= t.node_count {
+        return Err("ERR\tsym_eval\tinvalid_node_index");
+    }
+    let k: Int = list_get(t.kinds, root_idx);
+    if k == 0 {
+        return Ok(list_get(t.vals, root_idx));
+    }
+    if k == 1 {
+        let v_id: Int = list_get(t.vals, root_idx);
+        if v_id < 0 || v_id >= list_len(env) {
+            return Err("ERR\tsym_eval\tunbound_variable");
+        }
+        return Ok(list_get(env, v_id));
+    }
+    let l_ch: Int = list_get(t.left_children, root_idx);
+    let r_ch: Int = list_get(t.right_children, root_idx);
+    let r_l: Result[Int, String] = sym_eval(t, l_ch, env);
+    match r_l {
+        Ok(lv)         => {
+            let r_r: Result[Int, String] = sym_eval(t, r_ch, env);
+            match r_r {
+                Ok(rv) => {
+                    if k == 2 { return Ok(lv + rv); }
+                    if k == 3 { return Ok(lv - rv); }
+                    if k == 4 { return Ok(lv * rv); }
+                    if k == 5 {
+                        if rv == 0 {
+                            return Err("ERR\tsym_eval\tdivision_by_zero");
+                        }
+                        return Ok(lv / rv);
+                    }
+                    return Err("ERR\tsym_eval\tunknown_node_kind");
+                }
+                Err(er) => { return Err(er); }
+            }
+        }
+        Err(el) => { return Err(el); }
+    }
+}

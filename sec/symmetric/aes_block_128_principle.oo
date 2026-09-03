@@ -1,0 +1,96 @@
+// # AES block 128 principle
+//
+// Logline: AES operates on 16-byte (128-bit) blocks; any block whose length is not a non-negative multiple of 16 is invalid.
+//
+// Setup: Pure Int. FIPS 197 AES block size is 16 bytes. The is_block_aligned predicate and round helpers fail closed on hostile input.
+//
+// Beats:
+//   1. aes_block_size is the constant 16 bytes (128 bits).
+//   2. aes_key_sizes returns the AES key sizes 16, 24, 32 (128, 192, 256 bits).
+//   3. is_block_aligned(n) holds when n is a non-negative multiple of 16.
+//   4. rounds_needed(n) reports how many 16-byte blocks fit in n bytes; n=0 is Ok(0); n<0 is Err.
+
+// AES block size in bytes. FIPS 197.
+pub fn crypto_aes_block_size() -> Int {
+    return 16;
+}
+
+// AES key sizes in bytes: 128, 192, 256 bit keys.
+pub fn crypto_aes_key_sizes() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 16);
+    out = list_push(out, 24);
+    out = list_push(out, 32);
+    return out;
+}
+
+// is_block_aligned(n) returns 1 when n is a non-negative multiple of 16.
+pub fn crypto_aes_is_block_aligned(n: Int) -> Int {
+    if n < 0 {
+        return 0;
+    }
+    if n % 16 == 0 {
+        return 1;
+    }
+    return 0;
+}
+
+fn aesr_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// rounds_needed(n) returns the number of 16-byte blocks required to hold n bytes.
+// n=0 is Ok(0). Negative n is Err (0 is in-band: empty payload).
+pub fn crypto_aes_rounds_needed(n: Int) -> Result[Int, String] {
+    if n < 0 { return Err("ERR\taesr\tdomain"); }
+    if n == 0 { return Ok(0); }
+    let q: Int = n / 16;
+    let r: Int = n % 16;
+    if r == 0 {
+        return Ok(q);
+    }
+    return Ok(q + 1);
+}
+
+pub fn verify_aes_block_128_principle() -> Bool {
+    // Golden: block size is 16 bytes.
+    if crypto_aes_block_size() != 16 { return false; }
+
+    // Golden: key sizes are 16, 24, 32.
+    let ks: List[Int] = crypto_aes_key_sizes();
+    if list_len(ks) != 3 { return false; }
+    if list_get(ks, 0) != 16 { return false; }
+    if list_get(ks, 1) != 24 { return false; }
+    if list_get(ks, 2) != 32 { return false; }
+
+    // Golden: is_block_aligned for representative non-negative multiples of 16.
+    if crypto_aes_is_block_aligned(0) != 1 { return false; }
+    if crypto_aes_is_block_aligned(16) != 1 { return false; }
+    if crypto_aes_is_block_aligned(32) != 1 { return false; }
+    if crypto_aes_is_block_aligned(48) != 1 { return false; }
+    if crypto_aes_is_block_aligned(256) != 1 { return false; }
+
+    // Golden: rounds_needed for block-aligned and non-aligned sizes.
+    let zblk: Result[Int, String] = crypto_aes_rounds_needed(0);
+    if zblk.is_ok() == false { return false; }
+    if aesr_got(zblk) != 0 { return false; }
+    if aesr_got(crypto_aes_rounds_needed(1)) != 1 { return false; }
+    if aesr_got(crypto_aes_rounds_needed(15)) != 1 { return false; }
+    if aesr_got(crypto_aes_rounds_needed(16)) != 1 { return false; }
+    if aesr_got(crypto_aes_rounds_needed(17)) != 2 { return false; }
+    if aesr_got(crypto_aes_rounds_needed(32)) != 2 { return false; }
+    if aesr_got(crypto_aes_rounds_needed(33)) != 3 { return false; }
+    if aesr_got(crypto_aes_rounds_needed(64)) != 4 { return false; }
+
+    // Hostile: negative n. Aligned is 0/1; rounds_needed is Err (0 is in-band).
+    if crypto_aes_is_block_aligned(0 - 1) != 0 { return false; }
+    if crypto_aes_rounds_needed(0 - 1).is_ok() { return false; }
+
+    // Hostile: non-multiple of 16 is not block-aligned.
+    if crypto_aes_is_block_aligned(1) != 0 { return false; }
+    if crypto_aes_is_block_aligned(15) != 0 { return false; }
+    if crypto_aes_is_block_aligned(17) != 0 { return false; }
+    if crypto_aes_is_block_aligned(33) != 0 { return false; }
+
+    return true;
+}

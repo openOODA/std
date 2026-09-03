@@ -1,0 +1,86 @@
+// # Polyhedral Pluto transformation law
+//
+// Logline: Pluto maximizes parallelism + minimizes communication via integer linear programming on the dependence polyhedron; a 2D nest is legal to fuse iff no dependence cycle, and 1 transformation is applied per legal fusion.
+// Setup: Pure Int. deps is a flat list of dependence edges (src_dim + dst_dim + 1) per edge, where the last element is the sign: +1 = forward, -1 = backward (cycle). Bad input fails closed to 0.
+// Beats:
+//   1. Ideal: 2D loop nest i,j fusion is legal if no dependence cycle; 1 transformation applied.
+//   2. Non-ideal: tile size grows with the schedule dimension count.
+//   3. Hostile: cyclic dependence -> 0 transformations, fail closed.
+//   4. Coupled: tiled schedule maps to isl scanning (Bondhugula 2008 PLDI).
+
+// Reference: Bondhugula, Hartono, Ramanujam, Sadayappan 2008 PLDI 39, 101-110.
+
+import "std/core/domain_cert.oo";
+
+// 1 if the dependence edge set is acyclic (legal), 0 if a cycle exists.
+pub fn compile_pluto_legality_check(xs: List[Int], n_deps: Int) -> Int {
+    if n_deps <= 0 { return 0; }
+    if list_len(xs) != n_deps * 3 { return 0; }
+    let mut cycle: Int = 0;
+    let mut i: Int = 0;
+    while i < n_deps {
+        let sgn: Int = list_get(xs, i * 3 + 2);
+        if sgn < 0 { cycle = 1; }
+        i = i + 1;
+    }
+    if cycle == 1 { return 0; }
+    return 1;
+}
+
+// Hostile: cyclic dependence count.
+pub fn compile_pluto_cycle_count(edges: List[Int], n_deps: Int) -> Int {
+    if n_deps <= 0 { return 0; }
+    if list_len(edges) != n_deps * 3 { return 0; }
+    let mut c: Int = 0;
+    let mut i: Int = 0;
+    while i < n_deps {
+        let sgn: Int = list_get(edges, i * 3 + 2);
+        if sgn < 0 { c = c + 1; }
+        i = i + 1;
+    }
+    return c;
+}
+
+// Number of transformations. Legal -> 1; illegal -> 0.
+pub fn compile_pluto_transformation_count(is_legal: Int, n_loops: Int) -> Int {
+    if is_legal == 0 { return 0; }
+    if n_loops < 2 { return 0; }
+    if n_loops > 8 { return 0; }
+    return 1;
+}
+
+// Coupled: tile size. isl-style: tile = 2^dim bounded by 32.
+pub fn compile_pluto_tile_size(tile_dim: Int) -> Int {
+    if tile_dim < 1 { return 0; }
+    if tile_dim > 6 { return 0; }
+    let mut s: Int = 1;
+    let mut i: Int = 0;
+    while i < tile_dim {
+        s = s * 2;
+        i = i + 1;
+    }
+    if s > 32 { return 32; }
+    return s;
+}
+
+// Domain certificate for the polyhedral Pluto law.
+pub fn compile_pluto_cert(holds: Int) -> DomainCert {
+    return domain_cert("compile", "polyhedral_pluto", holds);
+}
+
+// KAT and hostile cases. Ref: Bondhugula 2008 PLDI 39, 101-110.
+pub fn verify_polyhedral_pluto_law() -> Bool {
+    let mut legal: List[Int] = list_new();
+    legal = list_push(legal, 0);
+    legal = list_push(legal, 1);
+    legal = list_push(legal, 1);
+    if compile_pluto_legality_check(legal, 1) != 1 { return false; }
+    if compile_pluto_transformation_count(1, 2) != 1 { return false; }
+    if compile_pluto_cycle_count(legal, 1) != 0 { return false; }
+    if compile_pluto_tile_size(2) != 4 { return false; }
+    if compile_pluto_tile_size(0) != 0 { return false; }
+    if compile_pluto_transformation_count(0, 2) != 0 { return false; }
+    let c1: DomainCert = compile_pluto_cert(1);
+    if cert_holds(c1) != 1 { return false; }
+    return true;
+}

@@ -1,0 +1,71 @@
+// # CLI Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard cli domain library. Re-exports a stable cli_mod_* surface for the most-used public API (CliCommand builder, options, positionals, subcommands, parser, completion for bash/zsh/fish, prompts, style, color). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private cli siblings; pure command-builder ops take no caps. Some prompt and parse functions may take EnvCap at the call site for stdin/stdout access.
+//
+// Beats:
+//   1. Re-export the CliCommand builder surface (new, options, positionals, subcommands, parse) as cli_mod_cmd_*.
+//   2. Re-export the completion surface (bash, zsh, fish) as cli_mod_completion_*.
+//   3. Re-export the prompt surface (text, password, confirm, select, multiselect) as cli_mod_prompt_*.
+//   4. Re-export the style/color surface (definition, render, ansi, ansi256, rgb) as cli_mod_style_*, cli_mod_color_*.
+//   5. Re-export the quick-app convenience surface and version string. Document the private siblings.
+
+import "cli.oo";
+import "cli_arg_parser.oo";
+import "sh.oo";
+import "cli_completion.oo";
+import "cli_prompt.oo";
+import "cli_style.oo";
+
+// Public CliCommand builder surface: cli_mod_cmd_*
+pub fn cli_mod_cmd_new(name: String, ver: String, about: String) -> CliCommand { return cli_command_new(name, ver, about); }
+pub fn cli_mod_cmd_option_flag(short_n: String, long_n: String, desc: String) -> CliOption { return cli_option_flag(short_n, long_n, desc); }
+pub fn cli_mod_cmd_option_value(short_n: String, long_n: String, desc: String, default_val: String, req: Bool) -> CliOption { return cli_option_value(short_n, long_n, desc, default_val, req); }
+pub fn cli_mod_cmd_positional(name: String, desc: String, req: Bool, default_val: String) -> CliPositional { return cli_positional_new(name, desc, req, default_val); }
+pub fn cli_mod_cmd_add_option(cmd: CliCommand, opt: CliOption) -> CliCommand { return cli_command_add_option(cmd, opt); }
+pub fn cli_mod_cmd_add_positional(cmd: CliCommand, pos: CliPositional) -> CliCommand { return cli_command_add_positional(cmd, pos); }
+pub fn cli_mod_cmd_add_subcommand(cmd: CliCommand, sub: String) -> CliCommand { return cli_command_add_subcommand(cmd, sub); }
+pub fn cli_mod_cmd_parse(cmd: CliCommand, args: List[String]) -> Result[CliParsedArgs, String] { return cli_parse(cmd, args); }
+
+// Public completion surface: cli_mod_completion_*
+pub fn cli_mod_completion_new(bin_name: String, subcmds: String, flags: String) -> CliCompletionGenerator { return cli_completion_generator_new(bin_name, subcmds, flags); }
+pub fn cli_mod_completion_bash(gen: CliCompletionGenerator) -> String { return cli_completion_render_bash(gen); }
+pub fn cli_mod_completion_zsh(gen: CliCompletionGenerator) -> String { return cli_completion_render_zsh(gen); }
+pub fn cli_mod_completion_fish(gen: CliCompletionGenerator) -> String { return cli_completion_render_fish(gen); }
+
+// Public prompt surface: cli_mod_prompt_*
+pub fn cli_mod_prompt_text(prompt: String, default_val: String) -> String { return cli_prompt_text_format(prompt, default_val); }
+pub fn cli_mod_prompt_password(prompt: String, mask_char: String) -> String { return cli_prompt_password_format(prompt, mask_char); }
+pub fn cli_mod_prompt_confirm(prompt: String, default_yes: Bool) -> String { return cli_prompt_confirm_format(prompt, default_yes); }
+pub fn cli_mod_prompt_select(prompt: String, options: List[String], selected_idx: Int) -> String { return cli_prompt_select_format(prompt, options, selected_idx); }
+pub fn cli_mod_prompt_parse_int(response: String, default_val: Int) -> Result[Int, String] { return cli_prompt_parse_int(response, default_val); }
+
+// Public style surface: cli_mod_style_*, cli_mod_color_*
+pub fn cli_mod_style_definition(fg: String, bold: Bool, border: Bool) -> CliStyleDefinition { return cli_style_definition_new(fg, bold, border); }
+pub fn cli_mod_style_render(style: CliStyleDefinition, text: String) -> String { return cli_style_render(style, text); }
+pub fn cli_mod_color_ansi(code: Int) -> CliColor { return cli_color_ansi(code); }
+pub fn cli_mod_color_rgb(r: Int, g: Int, b: Int) -> CliColor { return cli_color_rgb(r, g, b); }
+
+// Public quick-app and version: cli_mod_*
+pub fn cli_mod_version_string() -> String { return cli_version_string(); }
+pub fn cli_mod_quick_app(name: String, ver: String, desc: String) -> CliCommand { return cli_quick_app(name, ver, desc); }
+
+// Public shell utility surface: cli_mod_sh_*
+pub fn cli_mod_sh_arg_ok(s: String) -> Bool { return sh_arg_ok(s); }
+pub fn cli_mod_sh_clean(fw: &FsWriteCap, fr: &FsReadCap, dir: String) -> Result[Void, String] { return sh_clean(fw, fr, dir); }
+pub fn cli_mod_sh_mkdir_p(fw: &FsWriteCap, dir: String) -> Result[Void, String] { return sh_mkdir_p(fw, dir); }
+pub fn cli_mod_sh_copy(fr: &FsReadCap, fw: &FsWriteCap, src: String, dst: String) -> Result[Void, String] { return sh_copy(fr, fw, src, dst); }
+pub fn cli_mod_sh_chmod(p: &ProcessCap, mode: String, path: String) -> Result[Void, String] { return sh_chmod(p, mode, path); }
+pub fn cli_mod_sh_which(p: &ProcessCap, name: String) -> Result[String, String] { return sh_which(p, name); }
+pub fn cli_mod_sh_env_get(p: &ProcessCap, key: String) -> Result[String, String] { return sh_env_get(p, key); }
+pub fn cli_mod_sh_env_get_or(p: &ProcessCap, key: String, fallback: String) -> Result[String, String] { return sh_env_get_or(p, key, fallback); }
+pub fn cli_mod_sh_realpath(p: &ProcessCap, path: String) -> Result[String, String] { return sh_realpath(p, path); }
+pub fn cli_mod_sh_tempfile(p: &ProcessCap, template: String) -> Result[String, String] { return sh_tempfile(p, template); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. cli_argc_law.oo, cli_exit_code_law.oo, cli_pager_convention_law.oo, optparse_long_options_law.oo)
+//   _theory files (e.g. cli_arg_parser_core.oo, cli_glob_expansion_theory.oo, posix_utility_convention_theory.oo)
+//   _principle files (e.g. cli_signal_handling_principle.oo, ux_help_text_principle.oo)
+//   _invariants files (e.g. cli_invariants.oo)
+//   _kat files (e.g. cli_kat.oo, cli_literature_kat.oo)

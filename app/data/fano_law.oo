@@ -1,0 +1,152 @@
+// # Fano's Inequality Law for Data-Channel Coding
+//
+// Logline: P_e >= (H(X) - C) / log_2(|X|) is the Fano lower bound on probability of error for a discrete memoryless channel of capacity C and source entropy H(X). Scaled by 1e6 (so 500000 = 0.5).
+//
+// Setup: Pure Int. h_x_milli (H(X)*1000) >= 0, c_milli (C*1000) >= 0, alphabet >= 1. log_2(|X|) computed in milli. Out-of-range fails closed to -1. Hosts data_invariants.oo stem and uses domain_cert("data", ...).
+//
+// Beats:
+//   1. fano_pe_bound returns 1e6 * (H - C) / (|X| >= 2 ? log2(|X|) : 1).
+//   2. log2_int_milli(n) returns log2(n)*1000 for n >= 1.
+//   3. fano_can_be_zero returns 1 iff C >= H(X) (P_e can be driven to 0).
+//   4. h_x < 0, c < 0, alphabet < 1 fail closed to -1.
+
+import "std/app/data/data_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn fano_ln(x: Float) -> Float {
+    return ln(x);
+}
+
+fn fano_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn fano_log2_milli(n: Int) -> Result[Int, String] {
+    if n < 1 { return Err("ERR\tfano\tn"); }
+    if n == 1 { return Ok(0); }
+    if n == 2 { return Ok(1000); }
+    if n == 4 { return Ok(2000); }
+    if n == 8 { return Ok(3000); }
+    if n == 16 { return Ok(4000); }
+    if n == 32 { return Ok(5000); }
+    if n == 64 { return Ok(6000); }
+    if n == 128 { return Ok(7000); }
+    if n == 256 { return Ok(8000); }
+    if n == 512 { return Ok(9000); }
+    if n == 1024 { return Ok(10000); }
+    // For other n, compute log2(n) = ln(n)/ln(2) via Float.
+    let mut nf: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n { nf = nf + 1.0; i = i + 1; }
+    let ln2: Float = 0.6931471805599453;
+    let ln_n: Float = fano_ln(nf);
+    let log2_n: Float = ln_n / ln2;
+    let scaled: Float = log2_n * 1000.0;
+    if scaled < 0.0 { return Err("ERR\tfano\tlog"); }
+    let mut out: Int = 0;
+    let mut j: Int = 0;
+    while j < 1000000 {
+        if ((j + 1) + 0) > scaled { out = j; j = 1000000; } else { j = j + 1; }
+    }
+    if scaled > 1000000.0 { out = 1000000; }
+    return Ok(out);
+}
+
+// Fano lower bound on probability of error.
+//   P_e >= (H(X) - C) / log_2(|X|)
+// Returned as fixed-point Int scaled by 1e6. -1 on bad input. If H <= C, returns 0.
+pub fn fano_pe_bound(h_x_milli: Int, c_milli: Int, alphabet_size: Int) -> Result[Int, String] {
+    if h_x_milli < 0 { return Err("ERR\tfano\th"); }
+    if c_milli < 0 { return Err("ERR\tfano\tc"); }
+    if alphabet_size < 1 { return Err("ERR\tfano\tx"); }
+    let diff: Int = h_x_milli - c_milli;
+    if diff <= 0 { return Ok(0); }
+    let lr: Result[Int, String] = fano_log2_milli(alphabet_size);
+    if lr.is_ok() == false { return Err("ERR\tfano\tlog"); }
+    let log2_x: Int = fano_got(lr);
+    if log2_x <= 0 { return Err("ERR\tfano\tlog"); }
+    let numerator: Int = diff * 1000000;
+    let pe_scaled: Int = numerator / log2_x;
+    if pe_scaled < 0 { return Ok(0); }
+    return Ok(pe_scaled);
+}
+
+pub fn fano_can_be_zero(h_x_milli: Int, c_milli: Int) -> Result[Int, String] {
+    if h_x_milli < 0 { return Err("ERR\tfano\th"); }
+    if c_milli < 0 { return Err("ERR\tfano\tc"); }
+    if c_milli >= h_x_milli { return Ok(1); }
+    return Ok(0);
+}
+
+pub fn fano_law_golden_cert() -> DomainCert {
+    let data_inv_ok: Int = data_table_ok("orders");
+    let mut holds: Int = 0;
+    let pe: Int = fano_got(fano_pe_bound(1000, 500, 2));
+    if data_inv_ok == 1 {
+        if pe == 500000 { holds = 1; }
+    }
+    return domain_cert("data", "fano_law", holds);
+}
+
+pub fn fano_law_coupled_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if fano_got(fano_can_be_zero(1000, 1000)) == 1 {
+        if fano_got(fano_can_be_zero(1000, 1500)) == 1 {
+            if fano_got(fano_can_be_zero(1000, 999)) == 0 {
+                if fano_got(fano_pe_bound(1000, 1000, 2)) == 0 {
+                    if fano_got(fano_pe_bound(1000, 1500, 2)) == 0 { holds = 1; }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "fano_shannon_coupled", holds);
+}
+
+pub fn fano_law_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if fano_pe_bound(0 - 1, 500, 2).is_ok() == false {
+        if fano_pe_bound(1000, 0 - 1, 2).is_ok() == false {
+            if fano_pe_bound(1000, 500, 0).is_ok() == false {
+                if fano_pe_bound(1000, 500, 0 - 1).is_ok() == false {
+                    if fano_can_be_zero(0 - 1, 500).is_ok() == false {
+                        if fano_can_be_zero(1000, 0 - 1).is_ok() == false { holds = 1; }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "fano_law_hostile", holds);
+}
+
+pub fn verify_fano_law() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    if fano_got(fano_log2_milli(1)) != 0 { return false; }
+    if fano_got(fano_log2_milli(2)) != 1000 { return false; }
+    if fano_got(fano_log2_milli(4)) != 2000 { return false; }
+    if fano_got(fano_log2_milli(8)) != 3000 { return false; }
+    if fano_got(fano_log2_milli(1024)) != 10000 { return false; }
+    if fano_log2_milli(0).is_ok() { return false; }
+    if fano_log2_milli(0 - 1).is_ok() { return false; }
+    if fano_got(fano_pe_bound(1000, 500, 2)) != 500000 { return false; }
+    if fano_got(fano_pe_bound(1000, 0, 2)) != 1000000 { return false; }
+    if fano_got(fano_pe_bound(2000, 0, 4)) != 1000000 { return false; }
+    if fano_got(fano_pe_bound(1000, 1000, 2)) != 0 { return false; }
+    if fano_got(fano_pe_bound(1000, 1500, 2)) != 0 { return false; }
+    if fano_pe_bound(0 - 1, 500, 2).is_ok() { return false; }
+    if fano_pe_bound(1000, 0 - 1, 2).is_ok() { return false; }
+    if fano_pe_bound(1000, 500, 0).is_ok() { return false; }
+    if fano_pe_bound(1000, 500, 0 - 1).is_ok() { return false; }
+    if fano_got(fano_can_be_zero(1000, 1000)) != 1 { return false; }
+    if fano_got(fano_can_be_zero(1000, 1500)) != 1 { return false; }
+    if fano_got(fano_can_be_zero(1000, 999)) != 0 { return false; }
+    if fano_can_be_zero(0 - 1, 500).is_ok() { return false; }
+    if fano_can_be_zero(1000, 0 - 1).is_ok() { return false; }
+    let a: DomainCert = fano_law_golden_cert();
+    let b: DomainCert = fano_law_coupled_cert();
+    let c: DomainCert = fano_law_hostile_cert();
+    if a.holds != 1 { return false; }
+    if b.holds != 1 { return false; }
+    if c.holds != 1 { return false; }
+    return true;
+}

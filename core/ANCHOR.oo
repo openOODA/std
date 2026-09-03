@@ -1,0 +1,57 @@
+// # Core Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard core (foundations) domain library. Re-exports the subdir hubs (cli, collection, encoding, format, io, markup, math, primitives, principles, proofs, text) so that callers can `import "std/core/ANCHOR.oo"` to pull in the full core surface. Phase 3.1: this domain is the foundation layer — every other domain imports from core/.
+//
+//   core/cli/         <- was std/cli/                  (CliCommand, parser, completion, prompts, style; OCap at call site for env)
+//   core/collection/  <- was std/collection/           (Vec, Queue, HashMap, HashSet, List, BitSet, Bloom, Trie, RingBuffer)
+//   core/encoding/    <- was std/encoding/             (hex, base64/32/58, ascii85, varint, msgpack, cbor, bencode)
+//   core/format/      <- was std/format/ + std/fmt/    (print, parse, verify, config, normalize; pure string ops)
+//   core/io/          <- was std/io/                   (Reader, Writer, Cursor, Buffered, Chunked, Pipe, BitReader/Writer)
+//   core/markup/      <- was std/markup/ + std/json/   (JSON, CBOR, MsgPack, XML, YAML, TOML, Protobuf wire)
+//   core/math/        <- was std/math/                 (stats, bigint, complex, matrix, polynomial, fraction, prime)
+//   core/primitives/  <- was std/core/                  (Option, Result, List, Str, byte, byte_out, ast, macro, semver, DomainCert)
+//   core/principles/  <- was std/principles/            (CODATA 2022 constants, dimensional units, uncertainty, zero-ambient-authority cap)
+//   core/proofs/      <- was std/proofs/                 (formal_proofs + proof_verifiers sub-hubs)
+//   core/text/        <- was std/text/                 (regex, KMP, Levenshtein, Hamming, Jaro-Winkler, UTF-8, diff, rope)
+//
+// Setup: Imports the sub-domain hubs. No caps required for pure compute. Allocation-bound ops take AllocCap at the call site. CLI prompt and parser functions may take EnvCap at the call site.
+//
+// Beats:
+//   1. Re-export the cli, collection, encoding, format, io, markup hub surfaces (cli_mod_*, collections_mod_*, encoding_mod_*, fmt_mod_*, io_mod_*, markup_mod_*).
+//   2. Re-export the math, primitives, principles hub surfaces (math_mod_*, core_mod_*, principles_mod_*).
+//   3. Re-export the proofs hub surface (formal_proofs_mod_*, proof_verifiers_mod_*).
+//   4. Re-export the text hub surface (text_mod_*).
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariant, _kat, _literature_kat, _stubs files in each subdir.
+
+import "cli/ANCHOR.oo";
+import "collection/ANCHOR.oo";
+import "encoding/ANCHOR.oo";
+import "format/ANCHOR.oo";
+import "io/ANCHOR.oo";
+import "markup/ANCHOR.oo";
+import "math/ANCHOR.oo";
+import "primitives/ANCHOR.oo";
+import "principles/ANCHOR.oo";
+import "proofs/ANCHOR.oo";
+import "text/ANCHOR.oo";
+
+// Public core version: core_mod_version_*
+pub fn core_mod_version() -> String { return "core/0.1.0"; }
+
+// Public core domain inventory: core_mod_*
+pub fn core_mod_subdir_count() -> Int { return 11; }
+pub fn core_mod_subdir_list() -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, "cli");
+    out = list_push(out, "collection");
+    out = list_push(out, "encoding");
+    out = list_push(out, "format");
+    out = list_push(out, "io");
+    out = list_push(out, "markup");
+    out = list_push(out, "math");
+    out = list_push(out, "primitives");
+    out = list_push(out, "principles");
+    out = list_push(out, "proofs");
+    out = list_push(out, "text");
+    return out;
+}

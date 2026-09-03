@@ -1,0 +1,44 @@
+// # Zero-Trust Constant-Time Hex Decoder
+//
+// Logline: Constant-time hex decoder that returns Result[List[Int], String] without leaking the input value through control flow.
+//
+// Setup: Pure. Imports hex_ct.oo for hex_ct_char_to_nibble. Validates even length up front, then walks every char in fixed order without early-exit on invalid input, and checks an all-valid mask at the end.
+//
+// Beats:
+//   1. Reject odd-length input as Err.
+//   2. Accumulate per-char validity into a single mask via hex_ct_char_to_nibble.
+//   3. Build the byte list with safe_hi*16+safe_lo, zeroing on bad chars so loop body shape is data-independent.
+//   4. Check the all-valid mask once at the end before Ok or Err.
+
+import "std/core/encoding/hex_ct.oo";
+
+// Constant-time hex decoder. Validates even length up front, then walks
+// every char in fixed order without early-exit on invalid input, and
+// checks an all-valid mask at the end. The "?" chars produced by the
+// encode path (when given OOB bytes) cannot occur on the decode path
+// because they are not valid hex.
+pub fn hex_ct_decode(s: String) -> Result[List[Int], String] {
+    let n: Int = chars_len(s);
+    if n < 0 { return Err("ERR\thex_ct_decode\todd_length"); }
+    if (n - (n / 2) * 2) != 0 {
+        return Err("ERR\thex_ct_decode\todd_length");
+    }
+    let mut out: List[Int] = list_new();
+    let mut all_valid: Int = 1;
+    let mut i: Int = 0;
+    while i < n {
+        let c1: String = str_sub(s, i, i + 1);
+        let c2: String = str_sub(s, i + 1, i + 2);
+        let hi: Int = hex_ct_char_to_nibble(c1);
+        let lo: Int = hex_ct_char_to_nibble(c2);
+        let hi_bad: Int = if hi < 0 { 1 } else { 0 };
+        let lo_bad: Int = if lo < 0 { 1 } else { 0 };
+        all_valid = all_valid & (1 - (hi_bad | lo_bad));
+        let safe_hi: Int = if hi < 0 { 0 } else { hi };
+        let safe_lo: Int = if lo < 0 { 0 } else { lo };
+        out = list_push(out, safe_hi * 16 + safe_lo);
+        i = i + 2;
+    }
+    if all_valid < 1 { return Err("ERR\thex_ct_decode\tinvalid_char"); }
+    return Ok(out);
+}

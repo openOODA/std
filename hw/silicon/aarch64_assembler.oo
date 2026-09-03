@@ -1,0 +1,52 @@
+// # AArch64 Assembler Stream Buffer
+//
+// Logline: Multi-instruction word stream buffer generating AArch64 machine code blocks.
+//
+// Setup: Pure code generator buffer synthesizing 32-bit aligned ARM64 instruction streams.
+//
+// Beats:
+//   1. Initialize assembler buffer with zero word count.
+//   2. Append 32-bit instructions as 4-byte aligned blocks.
+//   3. Compute instruction offsets and buffer sizes.
+//   4. Emit complete executable machine code byte array.
+
+type Arm64Assembler = struct {
+    num_instructions: Int,
+    code_bytes: List[Int]
+};
+
+pub fn arm64_asm_new() -> Arm64Assembler {
+    let empty: List[Int] = list_new();
+    return Arm64Assembler {
+        num_instructions: 0,
+        code_bytes: empty
+    };
+}
+
+pub fn arm64_asm_emit_inst(as: Arm64Assembler, inst_bytes: List[Int]) -> Result[Arm64Assembler, String] {
+    if list_len(inst_bytes) != 4 {
+        return Err("ERR\tarm64_asm_emit_inst\tinstruction_must_be_4_bytes");
+    }
+    let mut xs: List[Int] = as.code_bytes;
+    let mut i: Int = 0;
+    while i < 4 {
+        xs = list_push(xs, list_get(inst_bytes, i));
+        i = i + 1;
+    }
+    let next_as: Arm64Assembler = Arm64Assembler {
+        num_instructions: as.num_instructions + 1,
+        code_bytes: xs
+    };
+    return Ok(next_as);
+}
+
+pub fn arm64_asm_byte_count(as: Arm64Assembler) -> Int {
+    return as.num_instructions * 4;
+}
+
+pub fn arm64_asm_finish(as: Arm64Assembler) -> Result[List[Int], String] {
+    if as.num_instructions == 0 {
+        return Err("ERR\tarm64_asm_finish\tempty_assembler");
+    }
+    return Ok(as.code_bytes);
+}

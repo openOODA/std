@@ -1,0 +1,164 @@
+// # ChaCha20 Block Function
+//
+// Logline: Pure .oo 20-round ChaCha20 block producing 64 keystream bytes from a 32-byte key, 12-byte nonce, and 32-bit counter; reusable by chacha20_xor and the AEAD seal/open paths.
+//
+// Setup: Pure Int 32-bit. Sibling of poly1305_core.oo, called by chacha20_poly1305.oo.
+//
+// Beats:
+//   1. 32-bit mask/xor/rotl and quarter-round.
+//   2. CCSt state container, 8 quarter-rounds per double-round.
+//   3. Block function: load constants, LE key/nonce/counter, 20 rounds, emit 64 LE bytes.
+
+type CCSt = struct {
+    s0: Int,
+    s1: Int,
+    s2: Int,
+    s3: Int,
+    s4: Int,
+    s5: Int,
+    s6: Int,
+    s7: Int,
+    s8: Int,
+    s9: Int,
+    s10: Int,
+    s11: Int,
+    s12: Int,
+    s13: Int,
+    s14: Int,
+    s15: Int
+};
+
+type CC4 = struct {
+    a: Int,
+    b: Int,
+    c: Int,
+    d: Int
+};
+
+pub fn cc_mask(x: Int) -> Int {
+    return x & 4294967295;
+}
+
+pub fn cc_xor(a: Int, b: Int) -> Int {
+    return (a | b) - (a & b);
+}
+
+pub fn cc_rotl(x: Int, n: Int) -> Int {
+    let v: Int = cc_mask(x);
+    let left: Int = cc_mask(v << n);
+    let right: Int = v >> (32 - n);
+    return cc_mask(left | right);
+}
+
+pub fn cc_qr_step(a: Int, b: Int, c: Int, d: Int) -> CC4 {
+    let mut na: Int = cc_mask(a + b);
+    let mut nd: Int = cc_rotl(cc_xor(d, na), 16);
+    let mut nc: Int = cc_mask(c + nd);
+    let mut nb: Int = cc_rotl(cc_xor(b, nc), 12);
+    na = cc_mask(na + nb);
+    nd = cc_rotl(cc_xor(nd, na), 8);
+    nc = cc_mask(nc + nd);
+    nb = cc_rotl(cc_xor(nb, nc), 7);
+    return CC4 { a: na, b: nb, c: nc, d: nd };
+}
+
+pub fn cc_get(s: CCSt, i: Int) -> Int {
+    if i == 0 { return s.s0; }
+    if i == 1 { return s.s1; }
+    if i == 2 { return s.s2; }
+    if i == 3 { return s.s3; }
+    if i == 4 { return s.s4; }
+    if i == 5 { return s.s5; }
+    if i == 6 { return s.s6; }
+    if i == 7 { return s.s7; }
+    if i == 8 { return s.s8; }
+    if i == 9 { return s.s9; }
+    if i == 10 { return s.s10; }
+    if i == 11 { return s.s11; }
+    if i == 12 { return s.s12; }
+    if i == 13 { return s.s13; }
+    if i == 14 { return s.s14; }
+    return s.s15;
+}
+
+pub fn cc_set(s: CCSt, i: Int, v: Int) -> CCSt {
+    if i == 0 { return CCSt { s0: v, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 1 { return CCSt { s0: s.s0, s1: v, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 2 { return CCSt { s0: s.s0, s1: s.s1, s2: v, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 3 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: v, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 4 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: v, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 5 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: v, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 6 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: v, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 7 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: v, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 8 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: v, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 9 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: v, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 10 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: v, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 11 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: v, s12: s.s12, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 12 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: v, s13: s.s13, s14: s.s14, s15: s.s15 }; }
+    if i == 13 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: v, s14: s.s14, s15: s.s15 }; }
+    if i == 14 { return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: v, s15: s.s15 }; }
+    return CCSt { s0: s.s0, s1: s.s1, s2: s.s2, s3: s.s3, s4: s.s4, s5: s.s5, s6: s.s6, s7: s.s7, s8: s.s8, s9: s.s9, s10: s.s10, s11: s.s11, s12: s.s12, s13: s.s13, s14: s.s14, s15: v };
+}
+
+pub fn cc_le32(s: String, off: Int) -> Int {
+    return cc_mask(byte_at(s, off) + (byte_at(s, off + 1) << 8) + (byte_at(s, off + 2) << 16) + (byte_at(s, off + 3) << 24));
+}
+
+pub fn cc_apply_dr(s: CCSt) -> CCSt {
+    let mut t: CCSt = s;
+    let q0: CC4 = cc_qr_step(cc_get(t, 0), cc_get(t, 4), cc_get(t, 8), cc_get(t, 12));
+    t = cc_set(t, 0, q0.a); t = cc_set(t, 4, q0.b); t = cc_set(t, 8, q0.c); t = cc_set(t, 12, q0.d);
+    let q1: CC4 = cc_qr_step(cc_get(t, 1), cc_get(t, 5), cc_get(t, 9), cc_get(t, 13));
+    t = cc_set(t, 1, q1.a); t = cc_set(t, 5, q1.b); t = cc_set(t, 9, q1.c); t = cc_set(t, 13, q1.d);
+    let q2: CC4 = cc_qr_step(cc_get(t, 2), cc_get(t, 6), cc_get(t, 10), cc_get(t, 14));
+    t = cc_set(t, 2, q2.a); t = cc_set(t, 6, q2.b); t = cc_set(t, 10, q2.c); t = cc_set(t, 14, q2.d);
+    let q3: CC4 = cc_qr_step(cc_get(t, 3), cc_get(t, 7), cc_get(t, 11), cc_get(t, 15));
+    t = cc_set(t, 3, q3.a); t = cc_set(t, 7, q3.b); t = cc_set(t, 11, q3.c); t = cc_set(t, 15, q3.d);
+    let q4: CC4 = cc_qr_step(cc_get(t, 0), cc_get(t, 5), cc_get(t, 10), cc_get(t, 15));
+    t = cc_set(t, 0, q4.a); t = cc_set(t, 5, q4.b); t = cc_set(t, 10, q4.c); t = cc_set(t, 15, q4.d);
+    let q5: CC4 = cc_qr_step(cc_get(t, 1), cc_get(t, 6), cc_get(t, 11), cc_get(t, 12));
+    t = cc_set(t, 1, q5.a); t = cc_set(t, 6, q5.b); t = cc_set(t, 11, q5.c); t = cc_set(t, 12, q5.d);
+    let q6: CC4 = cc_qr_step(cc_get(t, 2), cc_get(t, 7), cc_get(t, 8), cc_get(t, 13));
+    t = cc_set(t, 2, q6.a); t = cc_set(t, 7, q6.b); t = cc_set(t, 8, q6.c); t = cc_set(t, 13, q6.d);
+    let q7: CC4 = cc_qr_step(cc_get(t, 3), cc_get(t, 4), cc_get(t, 9), cc_get(t, 14));
+    t = cc_set(t, 3, q7.a); t = cc_set(t, 4, q7.b); t = cc_set(t, 9, q7.c); t = cc_set(t, 14, q7.d);
+    return t;
+}
+
+pub fn cc_block(key: String, nonce: String, counter: Int) -> List[Int] {
+    let mut s: CCSt = CCSt {
+        s0: 1634760805,
+        s1: 857760878,
+        s2: 2036477234,
+        s3: 1797285236,
+        s4: cc_le32(key, 0),
+        s5: cc_le32(key, 4),
+        s6: cc_le32(key, 8),
+        s7: cc_le32(key, 12),
+        s8: cc_le32(key, 16),
+        s9: cc_le32(key, 20),
+        s10: cc_le32(key, 24),
+        s11: cc_le32(key, 28),
+        s12: cc_mask(counter),
+        s13: cc_le32(nonce, 0),
+        s14: cc_le32(nonce, 4),
+        s15: cc_le32(nonce, 8)
+    };
+    let start: CCSt = s;
+    let mut r: Int = 0;
+    while r < 10 {
+        s = cc_apply_dr(s);
+        r = r + 1;
+    }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        let w: Int = cc_mask(cc_get(s, i) + cc_get(start, i));
+        out = list_push(out, w & 255);
+        out = list_push(out, (w >> 8) & 255);
+        out = list_push(out, (w >> 16) & 255);
+        out = list_push(out, (w >> 24) & 255);
+        i = i + 1;
+    }
+    return out;
+}

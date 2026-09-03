@@ -1,0 +1,28 @@
+// # Empty archive member-count law
+//
+// Logline: An empty archive has 0 members; claiming 1 member fails closed.
+//
+// Setup: Pure Int member count. Empty archive is the zero-member snapshot.
+//
+// Beats:
+//   1. archive_empty_members returns 0.
+//   2. archive_claim_ok(0) holds=1; archive_claim_ok(1) holds=0.
+//   3. domain_cert boxes the holds bit for the archive domain.
+//
+// residual: count model only; not tar/zip bytes
+
+import "std/core/primitives/domain_cert.oo";
+pub fn archive_empty_members() -> Int {
+    return 0;
+}
+
+pub fn archive_claim_ok(claimed: Int) -> Int {
+    if claimed == archive_empty_members() {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn archive_empty_law(claimed: Int) -> DomainCert {
+    return domain_cert("archive", "empty_members", archive_claim_ok(claimed));
+}

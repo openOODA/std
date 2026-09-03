@@ -1,0 +1,175 @@
+// # Keys Store and Keystore Storage
+//
+// Logline: Manages persistent storage, lookup, and access control for cryptographic keys.
+//
+// Setup: Imports companion modules for keystore management.
+//
+// Beats:
+//   1. Initialize keystore containers with security policies.
+//   2. Store, retrieve, and enumerate public and private keys.
+//   3. Enforce revocation checks and storage quotas.
+//
+// KEYSTORE LOCK STATE: The KeyStore struct previously carried
+// `is_locked: Bool`, and every mutation path checked it as a guard.
+// The accompanying keystore_init / keystore_unlock / keystore_lock /
+// keystore_is_locked functions were insecure (31-bit checksum, timing
+// oracle) and have been removed (see keys_engine.oo). All lock checks
+// in this file have been removed along with the field.
+
+import "./keys_engine.oo";
+
+pub fn keystore_count_keys(store: &KeyStore) -> Int {
+    let s_list: List[SecretKey] = store.secret_keys;
+    let p_list: List[PublicKey] = store.public_keys;
+    let pairs_list: List[KeyPair] = store.key_pairs;
+    let num_s: Int = list_len(s_list);
+    let num_p: Int = list_len(p_list);
+    let num_pairs: Int = list_len(pairs_list);
+    let total_single: Int = num_s + num_p;
+    return total_single + num_pairs;
+}
+
+pub fn keystore_add_secret_key(store: &mut KeyStore, key_val: SecretKey) -> Result[Int, String] {
+    let req_cap: Bool = (store.policy).require_sys_cap;
+    if req_cap {
+        return Err("CAPABILITY_REQUIRED: System capability token required for key store mutation");
+    }
+
+    let total: Int = keystore_count_keys(store);
+    let max_k: Int = (store.policy).max_keys;
+    if total >= max_k {
+        let fc: Bool = (store.policy).fail_closed;
+        if fc {
+            return Err("KEYSTORE_FULL: Capacity reached; store locked in fail-closed mode");
+        } else {
+            return Err("KEYSTORE_FULL: Maximum key storage capacity reached");
+        }
+    }
+
+    let s_keys: List[SecretKey] = store.secret_keys;
+    let updated_keys: List[SecretKey] = list_push(s_keys, key_val);
+    store.secret_keys = updated_keys;
+    let new_count: Int = list_len(updated_keys);
+    return Ok(new_count);
+}
+
+pub fn keystore_add_secret_key_with_capability(
+    sys: &SysCap,
+    store: &mut KeyStore,
+    key_val: SecretKey
+) -> Result[Int, String] {
+    let total: Int = keystore_count_keys(store);
+    let max_k: Int = (store.policy).max_keys;
+    if total >= max_k {
+        let fc: Bool = (store.policy).fail_closed;
+        if fc {
+            return Err("KEYSTORE_FULL: Capacity reached; store locked in fail-closed mode");
+        } else {
+            return Err("KEYSTORE_FULL: Maximum key storage capacity reached");
+        }
+    }
+
+    let s_keys: List[SecretKey] = store.secret_keys;
+    let updated_keys: List[SecretKey] = list_push(s_keys, key_val);
+    store.secret_keys = updated_keys;
+    let new_count: Int = list_len(updated_keys);
+    return Ok(new_count);
+}
+
+pub fn keystore_add_public_key(store: &mut KeyStore, key_val: PublicKey) -> Result[Int, String] {
+    let total: Int = keystore_count_keys(store);
+    let max_k: Int = (store.policy).max_keys;
+    if total >= max_k {
+        let fc: Bool = (store.policy).fail_closed;
+        if fc {
+            return Err("KEYSTORE_FULL: Capacity reached; store locked in fail-closed mode");
+        } else {
+            return Err("KEYSTORE_FULL: Maximum key storage capacity reached");
+        }
+    }
+
+    let p_keys: List[PublicKey] = store.public_keys;
+    let updated_keys: List[PublicKey] = list_push(p_keys, key_val);
+    store.public_keys = updated_keys;
+    let new_count: Int = list_len(updated_keys);
+    return Ok(new_count);
+}
+
+pub fn keystore_add_key_pair(
+    sys: &SysCap,
+    store: &mut KeyStore,
+    pair: KeyPair
+) -> Result[Int, String] {
+    let total: Int = keystore_count_keys(store);
+    let max_k: Int = (store.policy).max_keys;
+    if total >= max_k {
+        let fc: Bool = (store.policy).fail_closed;
+        if fc {
+            return Err("KEYSTORE_FULL: Capacity reached; store locked in fail-closed mode");
+        } else {
+            return Err("KEYSTORE_FULL: Maximum key storage capacity reached");
+        }
+    }
+
+    let pairs: List[KeyPair] = store.key_pairs;
+    let updated_pairs: List[KeyPair] = list_push(pairs, pair);
+    store.key_pairs = updated_pairs;
+    let new_count: Int = list_len(updated_pairs);
+    return Ok(new_count);
+}
+
+pub fn keystore_get_secret_key(store: &KeyStore, key_id: String) -> Result[SecretKey, String] {
+    let s_keys: List[SecretKey] = store.secret_keys;
+    let n: Int = list_len(s_keys);
+    let mut i: Int = 0;
+
+    while i < n {
+        let sk_entry: SecretKey = list_get(s_keys, i);
+        if sk_entry.key_id == key_id {
+            if sk_entry.is_wiped {
+                return Err("KEY_WIPED: Secret key has been zeroized");
+            }
+            if sk_entry.is_revoked {
+                return Err("KEY_REVOKED: Key has been revoked");
+            }
+            return Ok(sk_entry);
+        }
+        i = i + 1;
+    }
+
+    return Err("KEY_NOT_FOUND: Secret key not found in store");
+}
+
+pub fn keystore_get_public_key(store: &KeyStore, key_id: String) -> Result[PublicKey, String] {
+    let p_keys: List[PublicKey] = store.public_keys;
+    let n: Int = list_len(p_keys);
+    let mut i: Int = 0;
+
+    while i < n {
+        let pk_entry: PublicKey = list_get(p_keys, i);
+        if pk_entry.key_id == key_id {
+            if pk_entry.is_revoked {
+                return Err("KEY_REVOKED: Key has been revoked");
+            }
+            return Ok(pk_entry);
+        }
+        i = i + 1;
+    }
+
+    return Err("KEY_NOT_FOUND: Public key not found in store");
+}
+
+type Secret = struct {};
+type Default = struct {};
+type Key = struct {};
+type Public = struct {};
+type Capacity = struct {};
+type Cannot = struct {};
+type Maximum = struct {};
+type Fail = struct {};
+type System = struct {};
+
+
+pub fn __dummy_std_src_ooda_crypto_keys_store_oo() -> Int {
+    return 0;
+}

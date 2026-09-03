@@ -1,0 +1,238 @@
+// # Content-addressable build artifact store
+//
+// Logline: Key objects by SHA-256 of AST hash, full-file compiler digest, and flag manifest, then reuse the blob with a hardlink.
+//
+// Setup: FsWriteCap stores blobs. FsReadCap reads them. SysCap runs ln. Hash is crypto_sha256_internal of every file byte.
+//
+// Beats:
+//   1. Compiler identity is product SHA-256 of the whole compiler file, not a prefix or chunk merkle.
+//   2. cas_put and cas_put_file fail closed on a key clash instead of keeping the old blob.
+//   3. A changed source, compiler, or flag set is a different key and does not return the old blob.
+
+import "std/sec/hash/sha256.oo";
+
+fn cas_sq(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    let mut out: String = "'";
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "'" {
+            out = out + "'\\''";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out + "'";
+}
+
+pub fn cas_key(ast_hash: String, compiler_hash: String, flags: String) -> String {
+    return sha256(ast_hash + "|" + compiler_hash + "|" + flags);
+}
+
+pub fn cas_file_digest(fs: &FsReadCap, path: String) -> Result[String, String] {
+    if !path_exists(fs, path) {
+        return Err("ERR\tcas\tmissing");
+    }
+    let body: Result[String, String] = read_file(fs, path);
+    if body.is_err() {
+        return Err("ERR\tcas\tread");
+    }
+    let bytes: String = match body { Ok(s) => s, Err(_) => "" };
+    return Ok(sha256(bytes));
+}
+
+pub fn cas_object_id(blob: String) -> String {
+    return sha256(blob);
+}
+
+pub fn cas_path(root: String, key: String) -> String {
+    return root + "/" + key;
+}
+
+pub fn cas_has(fs: &FsReadCap, root: String, key: String) -> Bool {
+    return path_exists(fs, cas_path(root, key));
+}
+
+pub fn cas_get(fs: &FsReadCap, root: String, key: String) -> Result[String, String] {
+    let dest: String = cas_path(root, key);
+    if !path_exists(fs, dest) {
+        return Err("ERR\tcas\tmiss");
+    }
+    return read_file(fs, dest);
+}
+
+pub fn cas_put(sys: &ProcessCap, fw: &FsWriteCap, fs: &FsReadCap, root: String, key: String, blob: String) -> Result[String, String] {
+    let dest: String = cas_path(root, key);
+    let obj: String = cas_object_id(blob);
+    if path_exists(fs, dest) {
+        let old: Result[String, String] = read_file(fs, dest);
+        if old.is_err() {
+            return Err("ERR\tcas\tread");
+        }
+        let prev: String = match old { Ok(s) => s, Err(_) => "" };
+        if prev != blob {
+            return Err("ERR\tcas\tkey clash");
+        }
+        let _h: Result[String, String] = cas_chmod_exec(sys, dest);
+        return Ok(obj);
+    }
+    let wr: Result[Void, String] = write_file(fw, dest, blob);
+    if wr.is_err() {
+        let wr2: Result[String, String] = sys_exec(sys, "sh", "-c", "printf %s " + cas_sq(blob) + " > " + cas_sq(dest));
+        if wr2.is_err() {
+            return Err("ERR\tcas\tput");
+        }
+    }
+    let _m: Result[String, String] = cas_chmod_exec(sys, dest);
+    return Ok(obj);
+}
+
+pub fn cas_chmod_exec(sys: &ProcessCap, path: String) -> Result[String, String] {
+    return sys_exec(sys, "sh", "-c", "chmod 0755 " + cas_sq(path));
+}
+
+pub fn cas_link(sys: &ProcessCap, stored: String, dest: String) -> Result[String, String] {
+    let hard: Result[String, String] = sys_exec(sys, "sh", "-c", "ln -f " + cas_sq(stored) + " " + cas_sq(dest) + " 2>/dev/null || cp -f " + cas_sq(stored) + " " + cas_sq(dest));
+    if hard.is_ok() {
+        let _m: Result[String, String] = cas_chmod_exec(sys, dest);
+        return Ok(dest);
+    }
+    return Err("ERR\tcas\tlink");
+}
+
+pub fn cas_sidecar(path: String) -> String {
+    return path + ".sha";
+}
+
+pub fn cas_write_sidecar(sys: &ProcessCap, dest: String, digest: String) -> Result[String, String] {
+    return sys_exec(sys, "sh", "-c", "printf '%s\\n' " + cas_sq(digest) + " > " + cas_sq(cas_sidecar(dest)));
+}
+
+pub fn cas_hit_valid(sys: &ProcessCap, fs: &FsReadCap, root: String, key: String) -> Bool {
+    let dest: String = cas_path(root, key);
+    if !path_exists(fs, dest) {
+        return false;
+    }
+    let side: String = cas_sidecar(dest);
+    if !path_exists(fs, side) {
+        return false;
+    }
+    let r: Result[String, String] = sys_exec(sys, "sh", "-c", "got=$(sha256sum " + cas_sq(dest) + " | awk '{print $1}'); want=$(tr -d '\\n\\r' < " + cas_sq(side) + "); test -n \"$got\" && test \"$got\" = \"$want\"");
+    if r.is_ok() {
+        return true;
+    }
+    return false;
+}
+
+pub fn cas_compiler_prefix_hash(fs: &FsReadCap, sys: &ProcessCap, compiler: String, tmp: String) -> Result[String, String] {
+    if !path_exists(fs, compiler) {
+        return Err("ERR\tcas\tcompiler");
+    }
+    let pref: String = tmp + "/compiler.pref";
+    let dd: Result[String, String] = sys_exec(sys, "sh", "-c", "dd if=" + compiler + " of=" + pref + " bs=4096 count=32 2>/dev/null");
+    if dd.is_err() {
+        return Err("ERR\tcas\tdd");
+    }
+    let body: Result[String, String] = read_file(fs, pref);
+    if body.is_err() {
+        return Err("ERR\tcas\tprefix");
+    }
+    let bytes: String = match body { Ok(s) => s, Err(_) => "" };
+    let szp: String = tmp + "/compiler.sz";
+    let szr: Result[String, String] = sys_exec(sys, "sh", "-c", "wc -c < " + compiler + " > " + szp);
+    if szr.is_err() {
+        return Err("ERR\tcas\tsize");
+    }
+    let szb: Result[String, String] = read_file(fs, szp);
+    let szs: String = match szb { Ok(s) => s, Err(_) => "0" };
+    return Ok(sha256(szs + ":" + sha256(bytes)));
+}
+
+pub fn cas_compiler_hash(fs: &FsReadCap, sys: &ProcessCap, compiler: String, tmp: String) -> Result[String, String] {
+    let prod: Result[String, String] = cas_file_digest(fs, compiler);
+    if prod.is_ok() {
+        return prod;
+    }
+    let outp: String = tmp + "/compiler.sha";
+    let hs: Result[String, String] = sys_exec(sys, "sh", "-c", "sha256sum " + cas_sq(compiler) + " | awk '{print $1}' > " + cas_sq(outp));
+    if hs.is_err() {
+        return Err("ERR\tcas\tcompiler");
+    }
+    let body: Result[String, String] = read_file(fs, outp);
+    if body.is_err() {
+        return Err("ERR\tcas\tcompiler");
+    }
+    let hex: String = match body { Ok(s) => s, Err(_) => "" };
+    if chars_len(hex) < 64 {
+        return Err("ERR\tcas\tcompiler");
+    }
+    return Ok(str_slice(hex, 0, 64));
+}
+
+pub fn cas_put_file(sys: &ProcessCap, fs: &FsReadCap, root: String, key: String, src: String) -> Result[String, String] {
+    if !path_exists(fs, src) {
+        return Err("ERR\tcas\tmissing bin");
+    }
+    let dest: String = cas_path(root, key);
+    let nh: Result[String, String] = cas_file_digest(fs, src);
+    if nh.is_err() {
+        return Err("ERR\tcas\tread src");
+    }
+    let newh: String = match nh { Ok(s) => s, Err(_) => "" };
+    if path_exists(fs, dest) {
+        let oh: Result[String, String] = cas_file_digest(fs, dest);
+        if oh.is_err() {
+            return Err("ERR\tcas\tread dest");
+        }
+        let oldh: String = match oh { Ok(s) => s, Err(_) => "" };
+        if oldh != newh {
+            return Err("ERR\tcas\tkey clash");
+        }
+        let _m: Result[String, String] = cas_chmod_exec(sys, dest);
+        let _s: Result[String, String] = cas_write_sidecar(sys, dest, oldh);
+        return Ok(oldh);
+    }
+    let cp: Result[String, String] = sys_exec(sys, "sh", "-c", "cp -f " + cas_sq(src) + " " + cas_sq(dest) + " && chmod 0755 " + cas_sq(dest));
+    if cp.is_err() {
+        return Err("ERR\tcas\tput file");
+    }
+    let _s2: Result[String, String] = cas_write_sidecar(sys, dest, newh);
+    return Ok(newh);
+}
+
+pub fn cas_flags(target: String, hermetic: Bool, want_repro: Bool) -> String {
+    let mut f: String = "target=" + target;
+    if hermetic {
+        f = f + ",hermetic";
+    }
+    if want_repro {
+        f = f + ",repro";
+    }
+    return f;
+}
+
+pub fn cas_ast_hash(fs: &FsReadCap, sys: &ProcessCap, oodac: String, src: String, tmp: String) -> Result[String, String] {
+    if !path_exists(fs, src) {
+        return Err("ERR\tcas\tsource");
+    }
+    let dump: String = tmp + "/ast.dump";
+    let errp: String = tmp + "/ast.err";
+    let em: Result[String, String] = sys_exec(sys, "sh", "-c", cas_sq(oodac) + " ast " + cas_sq(src) + " > " + cas_sq(dump) + " 2> " + cas_sq(errp));
+    if em.is_err() {
+        return Err("ERR\tcas\tast");
+    }
+    if !path_exists(fs, dump) {
+        return Err("ERR\tcas\tast");
+    }
+    let ast: Result[String, String] = read_file(fs, dump);
+    if ast.is_err() {
+        return Err("ERR\tcas\tast");
+    }
+    let t: String = match ast { Ok(s) => s, Err(_) => "" };
+    if chars_len(t) <= 0 {
+        return Err("ERR\tcas\tast");
+    }
+    return Ok(sha256(t));
+}

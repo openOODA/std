@@ -1,0 +1,90 @@
+// # Steering Actuator First-Order Lag & Rate Limiter
+//
+// Logline: Simulates electronic power steering (EPS) motor time constants, slew rate limits, and anti-windup saturation.
+//
+// Setup: Low-level actuator dynamics simulator converting ideal MPC commands into realistic physical steering responses.
+//
+// Beats:
+//   1. Model EPS motor first-order lag tau * d_delta/dt + delta = delta_cmd.
+//   2. Enforce maximum steering slew rate limits |d_delta/dt| <= max_slew_rate.
+//   3. Apply hard mechanical rack position limits [-delta_max, delta_max].
+//   4. Deliver discrete updated steering angle and actual achieved slew rate.
+
+type ActuatorParams = struct {
+    time_constant_tau: Float,
+    max_slew_rate_rad_s: Float,
+    max_angle_rad: Float
+};
+
+type ActuatorState = struct {
+    current_angle_rad: Float,
+    current_rate_rad_s: Float
+};
+
+pub fn actuator_params_default() -> ActuatorParams {
+    return ActuatorParams {
+        time_constant_tau: 0.05,
+        max_slew_rate_rad_s: 0.75, // ~43 deg/s
+        max_angle_rad: 0.65
+    };
+}
+
+pub fn actuator_state_new() -> ActuatorState {
+    return ActuatorState {
+        current_angle_rad: 0.0,
+        current_rate_rad_s: 0.0
+    };
+}
+
+pub fn step_actuator_dynamics(
+    state: ActuatorState,
+    cmd_angle_rad: Float,
+    dt: Float,
+    p: ActuatorParams
+) -> ActuatorState {
+    let tau: Float = p.time_constant_tau;
+    let mut safe_tau: Float = tau;
+
+    if tau < 0.01 {
+
+        safe_tau = 0.01;
+
+    }
+
+    // Desired rate from 1st-order lag
+    let raw_rate: Float = (cmd_angle_rad - state.current_angle_rad) / safe_tau;
+
+    // Rate limiting
+    let max_rate: Float = p.max_slew_rate_rad_s;
+    let mut clamped_rate: Float = raw_rate;
+    if raw_rate > max_rate {
+        clamped_rate = max_rate;
+    }
+
+    if raw_rate < (0.0 - max_rate) {
+
+        clamped_rate = 0.0 - max_rate;
+
+    }
+
+    // Euler step
+    let next_angle_raw: Float = state.current_angle_rad + (clamped_rate * dt);
+
+    // Position saturation
+    let max_ang: Float = p.max_angle_rad;
+    let mut next_angle: Float = next_angle_raw;
+    if next_angle_raw > max_ang {
+        next_angle = max_ang;
+    }
+
+    if next_angle_raw < (0.0 - max_ang) {
+
+        next_angle = 0.0 - max_ang;
+
+    }
+
+    return ActuatorState {
+        current_angle_rad: next_angle,
+        current_rate_rad_s: clamped_rate
+    };
+}

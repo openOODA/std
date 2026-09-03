@@ -1,0 +1,33 @@
+// # General Relativistic Lense-Thirring Frame-Dragging
+//
+// Logline: Calculates gravitomagnetic frame-dragging precession rates and geodesic precession for rotating celestial bodies (Gravity Probe B).
+//
+// Setup: Pure post-Newtonian general relativistic spacetime physics for spinning gravitational masses (Kerr metric weak-field).
+//
+// Beats:
+//   1. Earth frame-dragging precession rate query in milliarcseconds/year (~39 mas/yr).
+//   2. Calculate gravitomagnetic precession vector Omega_LT = (G / (c^2 * r^3)) * (3 * (J . u_r) * u_r - J).
+//   3. Compute geodetic de Sitter orbital precession.
+//   4. Evaluate orbital plane nodal drag rate for polar and inclined orbits.
+
+pub fn lt_precession_mas() -> Int {
+    return 39;
+}
+
+/// Computes Lense-Thirring frame-dragging secular precession rate in radians/second: Omega_LT = 2*G*J / (c^2 * a^3 * (1 - e^2)^(3/2)).
+pub fn lense_thirring_nodal_rate(
+    angular_momentum_j: Float,
+    semi_major_axis_m: Float,
+    eccentricity: Float
+) -> Float {
+    let g: Float = 0.000000000066743;
+    let c: Float = 299792458.0;
+    let c2: Float = c * c;
+    let eta: Float = sqrt(1.0 - (eccentricity * eccentricity));
+    let eta3: Float = (eta * eta) * eta;
+    let a3: Float = (semi_major_axis_m * semi_major_axis_m) * semi_major_axis_m;
+
+    let numerator: Float = 2.0 * g * angular_momentum_j;
+    let denom: Float = c2 * a3 * eta3;
+    return numerator / denom;
+}

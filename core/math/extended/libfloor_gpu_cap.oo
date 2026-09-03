@@ -1,0 +1,19 @@
+// # Libfloor Gpu Cap
+//
+// Logline: Standard library verification and domain capabilities for Libfloor Gpu Cap.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_libfloor_gpu_cap() -> Bool {
+    let r: Result[String, String] = gpu_launch(gpu, "shader0");
+    if r.is_err() {
+        println("gpu-residual-ok");
+    } else {
+        println("unexpected-ok");
+    }
+    return true;
+}

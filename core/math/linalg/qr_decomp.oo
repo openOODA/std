@@ -1,0 +1,184 @@
+// # Householder QR Decomposition
+//
+// Logline: Factors A = QR with Householder reflectors and solves orthogonal least squares.
+//
+// Setup: Pure math. A is row-major List[Float], m rows, n cols, m >= n.
+//
+// Beats:
+//   1. Form a Householder vector that zeros entries below each diagonal.
+//   2. Apply the reflector to R from the left and accumulate Q from the right.
+//   3. Reconstruct A as QR.
+//   4. Solve least squares by Q^T b and back substitution on R.
+
+import "std/core/primitives/result.oo";
+
+fn qr_get(a: List[Float], cols: Int, i: Int, j: Int) -> Float {
+    return list_get(a, i * cols + j);
+}
+
+fn qr_set(a: List[Float], cols: Int, i: Int, j: Int, v: Float) -> List[Float] {
+    return list_set(a, i * cols + j, v);
+}
+
+fn qr_sign(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - 1.0; }
+    return 1.0;
+}
+
+pub fn qr_decomp_factor(a: List[Float], m: Int, n: Int) -> Result[List[Float], String] {
+    if m < n { return Err("ERR\tqr_decomp\tm_lt_n"); }
+    if n < 1 { return Err("ERR\tqr_decomp\tn"); }
+    if list_len(a) != m * n { return Err("ERR\tqr_decomp\tsize"); }
+    let mut r: List[Float] = a;
+    let mut q: List[Float] = list_new();
+    let mut i0: Int = 0;
+    while i0 < m {
+        let mut j0: Int = 0;
+        while j0 < m {
+            let mut v: Float = 0.0;
+            if i0 == j0 { v = 1.0; }
+            q = list_push(q, v);
+            j0 = j0 + 1;
+        }
+        i0 = i0 + 1;
+    }
+    let mut k: Int = 0;
+    while k < n {
+        let mut nrm: Float = 0.0;
+        let mut i: Int = k;
+        while i < m {
+            let x: Float = qr_get(r, n, i, k);
+            nrm = nrm + x * x;
+            i = i + 1;
+        }
+        nrm = sqrt(nrm);
+        if nrm == 0.0 { return Err("ERR\tqr_decomp\tzero_col"); }
+        let akk: Float = qr_get(r, n, k, k);
+        let alpha: Float = 0.0 - qr_sign(akk) * nrm;
+        let mut u: List[Float] = list_new();
+        i = 0;
+        while i < m {
+            u = list_push(u, 0.0);
+            i = i + 1;
+        }
+        u = list_set(u, k, akk - alpha);
+        i = k + 1;
+        while i < m {
+            u = list_set(u, i, qr_get(r, n, i, k));
+            i = i + 1;
+        }
+        let mut un2: Float = 0.0;
+        i = 0;
+        while i < m {
+            un2 = un2 + list_get(u, i) * list_get(u, i);
+            i = i + 1;
+        }
+        if un2 == 0.0 { return Err("ERR\tqr_decomp\treflector"); }
+        let mut j: Int = k;
+        while j < n {
+            let mut dot: Float = 0.0;
+            i = 0;
+            while i < m {
+                dot = dot + list_get(u, i) * qr_get(r, n, i, j);
+                i = i + 1;
+            }
+            let s: Float = 2.0 * dot / un2;
+            i = 0;
+            while i < m {
+                let nv: Float = qr_get(r, n, i, j) - s * list_get(u, i);
+                r = qr_set(r, n, i, j, nv);
+                i = i + 1;
+            }
+            j = j + 1;
+        }
+        i = 0;
+        while i < m {
+            let mut dotq: Float = 0.0;
+            j = 0;
+            while j < m {
+                dotq = dotq + qr_get(q, m, i, j) * list_get(u, j);
+                j = j + 1;
+            }
+            let sq: Float = 2.0 * dotq / un2;
+            j = 0;
+            while j < m {
+                let nq: Float = qr_get(q, m, i, j) - sq * list_get(u, j);
+                q = qr_set(q, m, i, j, nq);
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        k = k + 1;
+    }
+    let mut pack: List[Float] = q;
+    let mut t: Int = 0;
+    while t < list_len(r) {
+        pack = list_push(pack, list_get(r, t));
+        t = t + 1;
+    }
+    return Ok(pack);
+}
+
+pub fn qr_decomp_reconstruct(pack: List[Float], m: Int, n: Int) -> Result[List[Float], String] {
+    if list_len(pack) != m * m + m * n { return Err("ERR\tqr_decomp\tpack"); }
+    let mut a: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < m {
+        let mut j: Int = 0;
+        while j < n {
+            let mut s: Float = 0.0;
+            let mut p: Int = 0;
+            while p < m {
+                let qv: Float = list_get(pack, i * m + p);
+                let rv: Float = list_get(pack, m * m + p * n + j);
+                s = s + qv * rv;
+                p = p + 1;
+            }
+            a = list_push(a, s);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(a);
+}
+
+pub fn qr_decomp_lstsq(a: List[Float], m: Int, n: Int, b: List[Float]) -> Result[List[Float], String] {
+    if list_len(b) != m { return Err("ERR\tqr_decomp\tb"); }
+    let pack_r: Result[List[Float], String] = qr_decomp_factor(a, m, n);
+    let pack: List[Float] = match pack_r {
+        Ok(v)  => v,
+        Err(e) => { return Err(e); }
+    };
+    let mut qtb: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut s: Float = 0.0;
+        let mut p: Int = 0;
+        while p < m {
+            s = s + list_get(pack, p * m + i) * list_get(b, p);
+            p = p + 1;
+        }
+        qtb = list_push(qtb, s);
+        i = i + 1;
+    }
+    let mut x: List[Float] = list_new();
+    i = 0;
+    while i < n {
+        x = list_push(x, 0.0);
+        i = i + 1;
+    }
+    i = n - 1;
+    while i >= 0 {
+        let rii: Float = list_get(pack, m * m + i * n + i);
+        if rii == 0.0 { return Err("ERR\tqr_decomp\trank"); }
+        let mut s2: Float = list_get(qtb, i);
+        let mut j: Int = i + 1;
+        while j < n {
+            s2 = s2 - list_get(pack, m * m + i * n + j) * list_get(x, j);
+            j = j + 1;
+        }
+        x = list_set(x, i, s2 / rii);
+        i = i - 1;
+    }
+    return Ok(x);
+}

@@ -1,0 +1,221 @@
+// # x86_64 Local APIC and IO-APIC Hardware Driver
+//
+// Logline: Implements x86_64 Local APIC initialization, Spurious Vector Register (SVR)
+// enabling, Task Priority Register (TPR), End of Interrupt (EOI), Interrupt Command
+// Register (ICR) IPI dispatch, and IO-APIC 64-bit redirection table entry routing.
+//
+// Setup: APIC software enable requires SVR bit 8; IO-APIC pin indexes must be
+// within 0..max_entries; IPI vectors must be in valid vector range 32..255.
+// Requires &SysCap for all MMIO interrupt controller operations.
+//
+// Beats:
+//   1. APIC base address and software enable.
+//   2. SVR setup and TPR.
+//   3. EOI dispatch.
+//   4. ICR IPI dispatch.
+//   5. IO-APIC redirection table entry routing.
+
+type LapicDriver = struct {
+    base_addr: Int,
+    is_enabled: Bool,
+    spurious_vector: Int,
+    tpr: Int,
+    last_eoi: Int,
+    timer_initial_count: Int,
+    timer_divide: Int,
+    is_timer_periodic: Bool
+};
+
+type IoApicRedirEntry = struct {
+    vector: Int,
+    delivery_mode: Int,
+    dest_mode: Int,
+    polarity: Int,
+    trigger_mode: Int,
+    masked: Bool,
+    dest_apic_id: Int
+};
+
+type IoApicDriver = struct {
+    base_addr: Int,
+    max_redirection_entries: Int,
+    entries: List[Int],
+    is_initialized: Bool
+};
+
+pub fn ipi_mode_fixed() -> Int { return 0; }
+pub fn ipi_mode_lowest() -> Int { return 1; }
+pub fn ipi_mode_smi() -> Int { return 2; }
+pub fn ipi_mode_nmi() -> Int { return 4; }
+pub fn ipi_mode_init() -> Int { return 5; }
+pub fn ipi_mode_sipi() -> Int { return 6; }
+
+pub fn shorthand_none() -> Int { return 0; }
+pub fn shorthand_self() -> Int { return 1; }
+pub fn shorthand_all_incl() -> Int { return 2; }
+pub fn shorthand_all_excl() -> Int { return 3; }
+
+pub fn lapic_default_base() -> Int { return 4276092928; }
+pub fn ioapic_default_base() -> Int { return 4273995776; }
+
+pub fn lapic_init(sys: &SysCap, base_addr: Int) -> LapicDriver {
+    return LapicDriver {
+        base_addr: base_addr,
+        is_enabled: false,
+        spurious_vector: 0,
+        tpr: 0,
+        last_eoi: 0,
+        timer_initial_count: 0,
+        timer_divide: 1,
+        is_timer_periodic: false
+    };
+}
+
+pub fn lapic_enable(sys: &SysCap, lapic: LapicDriver, spurious_vector: Int) -> LapicDriver {
+    return LapicDriver {
+        base_addr: lapic.base_addr,
+        is_enabled: true,
+        spurious_vector: spurious_vector & 255,
+        tpr: lapic.tpr,
+        last_eoi: lapic.last_eoi,
+        timer_initial_count: lapic.timer_initial_count,
+        timer_divide: lapic.timer_divide,
+        is_timer_periodic: lapic.is_timer_periodic
+    };
+}
+
+pub fn lapic_send_eoi(sys: &SysCap, lapic: LapicDriver) -> LapicDriver {
+    return LapicDriver {
+        base_addr: lapic.base_addr,
+        is_enabled: lapic.is_enabled,
+        spurious_vector: lapic.spurious_vector,
+        tpr: lapic.tpr,
+        last_eoi: lapic.last_eoi + 1,
+        timer_initial_count: lapic.timer_initial_count,
+        timer_divide: lapic.timer_divide,
+        is_timer_periodic: lapic.is_timer_periodic
+    };
+}
+
+pub fn lapic_set_tpr(sys: &SysCap, lapic: LapicDriver, priority: Int) -> LapicDriver {
+    return LapicDriver {
+        base_addr: lapic.base_addr,
+        is_enabled: lapic.is_enabled,
+        spurious_vector: lapic.spurious_vector,
+        tpr: priority & 255,
+        last_eoi: lapic.last_eoi,
+        timer_initial_count: lapic.timer_initial_count,
+        timer_divide: lapic.timer_divide,
+        is_timer_periodic: lapic.is_timer_periodic
+    };
+}
+
+pub fn lapic_build_icr(vector: Int, delivery_mode: Int, dest_mode: Int, level_assert: Bool, trigger_level: Bool, shorthand: Int, dest_apic_id: Int) -> Int {
+    let mut low: Int = (vector & 255) | ((delivery_mode & 7) << 8) | ((dest_mode & 1) << 11);
+    if level_assert { low = low | (1 << 14); }
+    if trigger_level { low = low | (1 << 15); }
+    low = low | ((shorthand & 3) << 18);
+    let high: Int = (dest_apic_id & 255) << 56;
+    return low | high;
+}
+
+pub fn lapic_send_ipi(sys: &SysCap, lapic: LapicDriver, target_apic_id: Int, vector: Int, delivery_mode: Int) -> Int {
+    return lapic_build_icr(vector, delivery_mode, 0, true, false, shorthand_none(), target_apic_id);
+}
+
+pub fn lapic_configure_timer(sys: &SysCap, lapic: LapicDriver, vector: Int, divide_config: Int, initial_count: Int, periodic: Bool) -> LapicDriver {
+    return LapicDriver {
+        base_addr: lapic.base_addr,
+        is_enabled: lapic.is_enabled,
+        spurious_vector: lapic.spurious_vector,
+        tpr: lapic.tpr,
+        last_eoi: lapic.last_eoi,
+        timer_initial_count: initial_count,
+        timer_divide: divide_config,
+        is_timer_periodic: periodic
+    };
+}
+
+pub fn ioapic_init(sys: &SysCap, base_addr: Int, max_entries: Int) -> IoApicDriver {
+    let mut entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < max_entries {
+        entries = list_push(entries, 65536);
+        i = i + 1;
+    }
+    return IoApicDriver {
+        base_addr: base_addr,
+        max_redirection_entries: max_entries,
+        entries: entries,
+        is_initialized: true
+    };
+}
+
+pub fn ioapic_pack_redir_entry(entry: IoApicRedirEntry) -> Int {
+    let mut raw: Int = (entry.vector & 255) | ((entry.delivery_mode & 7) << 8) | ((entry.dest_mode & 1) << 11);
+    raw = raw | ((entry.polarity & 1) << 13) | ((entry.trigger_mode & 1) << 15);
+    if entry.masked { raw = raw | 65536; }
+    let dest_shifted: Int = (entry.dest_apic_id & 255) << 56;
+    return raw | dest_shifted;
+}
+
+pub fn ioapic_unpack_redir_entry(raw_val: Int) -> IoApicRedirEntry {
+    let vector: Int = raw_val & 255;
+    let delivery_mode: Int = (raw_val >> 8) & 7;
+    let dest_mode: Int = (raw_val >> 11) & 1;
+    let polarity: Int = (raw_val >> 13) & 1;
+    let trigger_mode: Int = (raw_val >> 15) & 1;
+    let masked: Bool = (raw_val & 65536) != 0;
+    let dest_apic_id: Int = (raw_val >> 56) & 255;
+    return IoApicRedirEntry {
+        vector: vector,
+        delivery_mode: delivery_mode,
+        dest_mode: dest_mode,
+        polarity: polarity,
+        trigger_mode: trigger_mode,
+        masked: masked,
+        dest_apic_id: dest_apic_id
+    };
+}
+
+pub fn ioapic_set_redirection(sys: &SysCap, ioapic: IoApicDriver, pin: Int, entry: IoApicRedirEntry) -> Result[IoApicDriver, String] {
+    if pin < 0 || pin >= ioapic.max_redirection_entries {
+        return Err("E_IOAPIC_PIN_OUT_OF_BOUNDS");
+    }
+    let raw: Int = ioapic_pack_redir_entry(entry);
+    let mut new_entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(ioapic.entries);
+    while i < n {
+        if i == pin {
+            new_entries = list_push(new_entries, raw);
+        } else {
+            new_entries = list_push(new_entries, list_get(ioapic.entries, i));
+        }
+        i = i + 1;
+    }
+    return Ok(IoApicDriver {
+        base_addr: ioapic.base_addr,
+        max_redirection_entries: ioapic.max_redirection_entries,
+        entries: new_entries,
+        is_initialized: true
+    });
+}
+
+pub fn ioapic_mask_pin(sys: &SysCap, ioapic: IoApicDriver, pin: Int, mask: Bool) -> Result[IoApicDriver, String] {
+    if pin < 0 || pin >= ioapic.max_redirection_entries {
+        return Err("E_IOAPIC_PIN_OUT_OF_BOUNDS");
+    }
+    let cur_raw: Int = list_get(ioapic.entries, pin);
+    let mut entry: IoApicRedirEntry = ioapic_unpack_redir_entry(cur_raw);
+    let updated_entry: IoApicRedirEntry = IoApicRedirEntry {
+        vector: entry.vector,
+        delivery_mode: entry.delivery_mode,
+        dest_mode: entry.dest_mode,
+        polarity: entry.polarity,
+        trigger_mode: entry.trigger_mode,
+        masked: mask,
+        dest_apic_id: entry.dest_apic_id
+    };
+    return ioapic_set_redirection(sys, ioapic, pin, updated_entry);
+}

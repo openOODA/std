@@ -1,0 +1,86 @@
+// # Syscall overhead law
+//
+// Logline: A syscall costs user_to_kernel + work + kernel_to_user nanoseconds; vDSO-fast-path syscalls like gettimeofday bypass the ring transition and cost a small constant (around 30ns).
+//
+// Setup: Pure Int nanoseconds. All inputs are non-negative; negative inputs fail closed to -1. Hosts os_invariants.oo stem.
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. Ideal: syscall_cost = user_to_kernel + work + kernel_to_user when all three are >= 0.
+//   2. Non-ideal: vdso_fast_path(name) returns the vDSO bypass cost for known-fast syscalls (gettimeofday=30, clock_gettime=25, time=20) and -1 for non-fast syscalls.
+//   3. Hostile: any negative cost fails closed to -1.
+
+import "std/fs/os/os_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// 1 if env key is allowlisted.
+fn so_env_ok() -> Int {
+    return os_env_key_allowed("OODA_FS_WRITEDIR");
+}
+
+// Integer absolute value without abs_f.
+fn so_abs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+fn so_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn syscall_cost(user_to_kernel: Int, work: Int, kernel_to_user: Int) -> Result[Int, String] {
+    if user_to_kernel < 0 { return Err("ERR\tsyscall\tcost"); }
+    if work < 0 { return Err("ERR\tsyscall\tcost"); }
+    if kernel_to_user < 0 { return Err("ERR\tsyscall\tcost"); }
+    return Ok(user_to_kernel + work + kernel_to_user);
+}
+
+// Non-ideal: vDSO fast-path returns the bypass cost for known-fast syscalls.
+// Returns -1 if the syscall is not a vDSO-fast path.
+pub fn vdso_fast_path(name: String) -> Int {
+    if name == "gettimeofday" { return 30; }
+    if name == "clock_gettime" { return 25; }
+    if name == "time" { return 20; }
+    return 0 - 1;
+}
+
+// Domain certificate: holds 1 if the syscall cost decomposition is non-negative.
+pub fn syscall_overhead_holds(user_to_kernel: Int, work: Int, kernel_to_user: Int) -> DomainCert {
+    if so_env_ok() != 1 { return domain_cert("os", "syscall_overhead_law", 0); }
+    let cr: Result[Int, String] = syscall_cost(user_to_kernel, work, kernel_to_user);
+    if cr.is_ok() == false { return domain_cert("os", "syscall_overhead_law", 0); }
+    return domain_cert("os", "syscall_overhead_law", 1);
+}
+
+pub fn verify_syscall_overhead_law() -> Bool {
+    if so_got(syscall_cost(100, 50, 100)) != 250 { return false; }
+    if so_got(syscall_cost(100, 0, 100)) != 200 { return false; }
+    if so_got(syscall_cost(100, 1000, 100)) != 1200 { return false; }
+    if so_got(syscall_cost(0, 0, 0)) != 0 { return false; }
+    if syscall_cost(0 - 1, 50, 100).is_ok() { return false; }
+    if syscall_cost(100, 0 - 1, 100).is_ok() { return false; }
+    if syscall_cost(100, 50, 0 - 1).is_ok() { return false; }
+    if syscall_cost(0 - 100, 0 - 50, 0 - 100).is_ok() { return false; }
+    // Non-ideal: vDSO fast-path constants.
+    if vdso_fast_path("gettimeofday") != 30 { return false; }
+    if vdso_fast_path("clock_gettime") != 25 { return false; }
+    if vdso_fast_path("time") != 20 { return false; }
+    // Non-ideal: non-vDSO syscall returns -1.
+    if vdso_fast_path("read") != 0 - 1 { return false; }
+    if vdso_fast_path("write") != 0 - 1 { return false; }
+    if vdso_fast_path("open") != 0 - 1 { return false; }
+    if vdso_fast_path("") != 0 - 1 { return false; }
+    // Domain certificate round-trip.
+    let c1: DomainCert = syscall_overhead_holds(100, 50, 100);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "os" { return false; }
+    if c1.law_name != "syscall_overhead_law" { return false; }
+    let cn: DomainCert = syscall_overhead_holds(0 - 1, 0, 0);
+    if cn.holds != 0 { return false; }
+    // so_abs sanity (no abs_f).
+    if so_abs(0) != 0 { return false; }
+    if so_abs(7) != 7 { return false; }
+    if so_abs(0 - 7) != 7 { return false; }
+    return true;
+}

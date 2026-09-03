@@ -1,0 +1,133 @@
+// # TUI Status Bar & Notification Widget
+//
+// Logline: Bottom-docked status bar with left/right segmented status indicators and mode badges.
+//
+// Setup: Global application state, keybinding hints, and notification status footer.
+//
+// Beats:
+//   1. Define StatusSegment descriptors with text, colors, and layout alignments.
+//   2. Define WidgetStatusBar maintaining left and right aligned telemetry segments.
+//   3. Render full-width background bar and segmented status chips into screen buffer.
+
+import "std/app/ui/tui/tui_cell.oo";
+import "std/app/ui/tui/tui_buffer.oo";
+
+type StatusSegment = struct {
+    text: String,
+    fg: Int,
+    bg: Int,
+    align: Int // 0: Left, 1: Right
+};
+
+pub fn status_segment_new(text: String, fg: Int, bg: Int, align: Int) -> StatusSegment {
+    return StatusSegment {
+        text: text,
+        fg: fg,
+        bg: bg,
+        align: align
+    };
+}
+
+type WidgetStatusBar = struct {
+    id: Int,
+    area: BufferArea,
+    left_segments: List[StatusSegment],
+    right_segments: List[StatusSegment],
+    is_active: Bool
+};
+
+pub fn widget_statusbar_new(id: Int, area: BufferArea) -> WidgetStatusBar {
+    let l: List[StatusSegment] = list_new();
+    let r: List[StatusSegment] = list_new();
+    return WidgetStatusBar {
+        id: id,
+        area: area,
+        left_segments: l,
+        right_segments: r,
+        is_active: true
+    };
+}
+
+pub fn widget_statusbar_add_left(sb: WidgetStatusBar, seg: StatusSegment) -> WidgetStatusBar {
+    let mut l: List[StatusSegment] = sb.left_segments;
+    l = list_push(l, seg);
+    return WidgetStatusBar {
+        id: sb.id,
+        area: sb.area,
+        left_segments: l,
+        right_segments: sb.right_segments,
+        is_active: sb.is_active
+    };
+}
+
+pub fn widget_statusbar_add_right(sb: WidgetStatusBar, seg: StatusSegment) -> WidgetStatusBar {
+    let mut r: List[StatusSegment] = sb.right_segments;
+    r = list_push(r, seg);
+    return WidgetStatusBar {
+        id: sb.id,
+        area: sb.area,
+        left_segments: sb.left_segments,
+        right_segments: r,
+        is_active: sb.is_active
+    };
+}
+
+pub fn widget_statusbar_set_active(sb: WidgetStatusBar, active: Bool) -> WidgetStatusBar {
+    return WidgetStatusBar {
+        id: sb.id,
+        area: sb.area,
+        left_segments: sb.left_segments,
+        right_segments: sb.right_segments,
+        is_active: active
+    };
+}
+
+pub fn widget_statusbar_render(sb: WidgetStatusBar, buf: TuiBuffer) -> TuiBuffer {
+    if !(sb.is_active) {
+        return buf;
+    }
+    let a: BufferArea = sb.area;
+    if a.width < 1 || a.height < 1 {
+        return buf;
+    }
+
+    let default_bg: Int = 4; // Blue/Dark background
+    let default_fg: Int = 15;
+    let mut out: TuiBuffer = buf;
+
+    // 1. Fill base status line
+    let mut x: Int = a.x;
+    while x < (a.x + a.width) {
+        out = tui_buffer_set_cell(out, x, a.y, tui_cell_new(32, default_fg, default_bg));
+        x = x + 1;
+    }
+
+    // 2. Render Left Segments
+    let num_left: Int = list_len(sb.left_segments);
+    let mut cur_x: Int = a.x;
+    let mut i: Int = 0;
+    while i < num_left && cur_x < (a.x + a.width) {
+        let seg: StatusSegment = list_get(sb.left_segments, i);
+        let chip: String = " " + seg.text + " ";
+        let chip_len: Int = chip.len();
+        out = tui_buffer_write_string(out, cur_x, a.y, chip, seg.fg, seg.bg, 1);
+        cur_x = cur_x + chip_len;
+        i = i + 1;
+    }
+
+    // 3. Render Right Segments (from right to left)
+    let num_right: Int = list_len(sb.right_segments);
+    let mut cur_rx: Int = a.x + a.width;
+    let mut j: Int = 0;
+    while j < num_right && cur_rx > cur_x {
+        let seg: StatusSegment = list_get(sb.right_segments, j);
+        let chip: String = " " + seg.text + " ";
+        let chip_len: Int = chip.len();
+        cur_rx = cur_rx - chip_len;
+        if cur_rx >= cur_x {
+            out = tui_buffer_write_string(out, cur_rx, a.y, chip, seg.fg, seg.bg, 1);
+        }
+        j = j + 1;
+    }
+    return out;
+}

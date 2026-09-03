@@ -1,0 +1,101 @@
+// # ZFS copy-on-write snapshot law
+//
+// Logline: A ZFS snapshot is space-efficient (zero overhead on creation) until data is modified; the space overhead of a snapshot equals exactly the modified bytes (COW = Copy-on-Write: only allocates a new block on write).
+//
+// Setup: Pure Int. ZFS = Zettabyte File System (Sun Microsystems 2004+, OpenZFS 2024). Snapshot overhead = 0 on creation, grows only with modifications. The pool version for OpenZFS 2.2.3 (2024) is 5000.
+//
+// Beats:
+//   1. zfs_snapshot_initial_overhead() = 0 bytes (instant creation).
+//   2. zfs_snapshot_space_overhead(initial, modified) = modified (COW only on write).
+//   3. Golden: 1GB snapshot, 0 modified -> 0 overhead; 1MB modified -> 1MB overhead.
+//   4. Hostile: negative modified -> fail closed (return -1 sentinel).
+//   5. Coupled: BTRFS uses the same COW principle (cross-filesystem COW).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Initial snapshot overhead 0 bytes (instant creation). Sun Microsystems 2004+ ZFS design, OpenZFS 2024, "snapshots are space-efficient until data is modified."
+pub fn zfs_snapshot_initial_overhead() -> Int {
+    return 0;
+}
+
+// ZFS pool version 5000 (OpenZFS 2.2.3, 2024). OpenZFS project documentation, https://openzfs.org/wiki/Release_History.
+pub fn zfs_pool_version() -> Int {
+    return 5000;
+}
+
+// OpenZFS major release version 2.2.3 (encoded as 223 = 2*100 + 2*10 + 3). OpenZFS 2.2.3, 2024.
+pub fn openzfs_2_2_3() -> Int {
+    return 223;
+}
+
+// BTRFS is a COW filesystem. BTRFS documentation, https://btrfs.readthedocs.io/en/latest/Intro.html, "BTRFS is a copy-on-write (COW) filesystem."
+pub fn btrfs_is_cow() -> Int {
+    return 1;
+}
+
+// 1 GB = 1073741824 bytes. SI binary definition.
+pub fn zfs_one_gb() -> Int {
+    return 1073741824;
+}
+
+// 1 MB = 1048576 bytes. SI binary definition.
+pub fn zfs_one_mb() -> Int {
+    return 1048576;
+}
+
+// Compute the space overhead of a ZFS snapshot given the modified bytes.
+// COW = Copy-on-Write: ZFS allocates a new block only when a block is modified.
+// initial_bytes: total size of the snapshot (informational).
+// modified_bytes: bytes modified since snapshot creation.
+// Returns modified_bytes for valid input; returns -1 if modified_bytes < 0 (fail closed).
+pub fn zfs_snapshot_space_overhead(initial_bytes: Int, modified_bytes: Int) -> Int {
+    if modified_bytes < 0 { return 0 - 1; }
+    return modified_bytes;
+}
+
+// DomainCert for ZFS snapshot law. Holds iff 1GB snapshot, 0 modified -> 0 overhead.
+pub fn zfs_snapshots_law() -> DomainCert {
+    let overhead: Int = zfs_snapshot_space_overhead(1073741824, 0);
+    let mut ok: Int = 0;
+    if overhead == 0 {
+        ok = 1;
+    }
+    return domain_cert("archive", "zfs_snapshots", ok);
+}
+
+pub fn verify_zfs_snapshots_law() -> Bool {
+    // Golden: 1GB snapshot, 0 modified -> 0 overhead (COW instant creation).
+    if zfs_snapshot_space_overhead(1073741824, 0) != 0 { return false; }
+    // Golden: 1GB snapshot, 1MB modified -> 1MB overhead.
+    if zfs_snapshot_space_overhead(1073741824, 1048576) != 1048576 { return false; }
+    // Golden: 1GB snapshot, 1GB modified -> 1GB overhead.
+    if zfs_snapshot_space_overhead(1073741824, 1073741824) != 1073741824 { return false; }
+    // Golden: 1GB snapshot, 100 bytes modified -> 100 bytes overhead.
+    if zfs_snapshot_space_overhead(1073741824, 100) != 100 { return false; }
+    // Golden: 1GB snapshot, 1 byte modified -> 1 byte overhead.
+    if zfs_snapshot_space_overhead(1073741824, 1) != 1 { return false; }
+    // Golden: initial overhead constant.
+    if zfs_snapshot_initial_overhead() != 0 { return false; }
+    // Golden: ZFS pool version constant (OpenZFS 2.2.3, 2024).
+    if zfs_pool_version() != 5000 { return false; }
+    // Golden: OpenZFS 2.2.3 release encoding.
+    if openzfs_2_2_3() != 223 { return false; }
+    // Golden: BTRFS is COW (cross-filesystem COW coupling).
+    if btrfs_is_cow() != 1 { return false; }
+    // Golden: 1 GB and 1 MB byte constants.
+    if zfs_one_gb() != 1073741824 { return false; }
+    if zfs_one_mb() != 1048576 { return false; }
+    // Hostile: negative modified -> fail closed (return -1).
+    if zfs_snapshot_space_overhead(1073741824, -1) != 0 - 1 { return false; }
+    // Hostile: large negative modified -> fail closed.
+    if zfs_snapshot_space_overhead(1073741824, -100) != 0 - 1 { return false; }
+    if zfs_snapshot_space_overhead(1073741824, -1073741824) != 0 - 1 { return false; }
+    // Coupled: BTRFS is also COW (cross-filesystem COW coupling).
+    if btrfs_is_cow() != 1 { return false; }
+    // DomainCert: holds for the canonical case.
+    let c: DomainCert = zfs_snapshots_law();
+    if c.holds != 1 { return false; }
+    if c.domain != "archive" { return false; }
+    if c.law_name != "zfs_snapshots" { return false; }
+    return true;
+}

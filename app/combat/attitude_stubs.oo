@@ -1,0 +1,51 @@
+// # Attitude Hardware Sensor & Actuator Stubs
+//
+// Logline: Provides fail-closed security stubs for star tracker cameras, gyroscopes, and reaction wheel FFI.
+//
+// Setup: Requires SysCap capability; terminates fail-closed for unverified native attitude sensors.
+//
+// Beats:
+//   1. Guard star tracker optical centroiding and pattern matching FFI routines.
+//   2. Guard hardware rate gyroscope SPI/I2C sensor readouts.
+//   3. Enforce fail-closed termination on reaction wheel torque driver FFI.
+
+import "./attitude_engine.oo";
+
+type QuaternionAttitude = struct {
+    w: Float,
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+pub fn quat_identity() -> QuaternionAttitude {
+    return QuaternionAttitude { w: 1.0, x: 0.0, y: 0.0, z: 0.0 };
+}
+
+// Tiny marker so importers do not see pure-verify-only unit.
+pub fn attitude_module_ready() -> Bool {
+    return true;
+}
+
+pub fn attitude_engine_marker() -> Int {
+    return 1;
+}
+
+pub fn attitude_stubs_marker() -> Int {
+    return 1;
+}
+
+pub fn wahba_quest_solver_raw(weights_ptr: Int, ref_vecs_ptr: Int, obs_vecs_ptr: Int, count: Int) -> QuaternionAttitude {
+    process_exit(1);
+    return quat_identity();
+}
+
+pub fn mekf_filter_step_raw(state_ptr: Int, cov_ptr: Int, gyro_meas_ptr: Int, star_tracker_meas_ptr: Int) -> Int {
+    process_exit(1);
+    return 0;
+}
+
+pub fn attitude_hardware_star_tracker_read(cap: &SysCap, sensor_id: Int) -> QuaternionAttitude {
+    process_exit(1);
+    return quat_identity();
+}

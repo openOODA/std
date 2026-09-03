@@ -1,0 +1,110 @@
+// # AI/ML Activation Functions and Derivatives
+//
+// Logline: Comprehensive elementwise neural activations including ReLU, LeakyReLU, Sigmoid, Tanh, GELU, SiLU, Softplus, and Softmax.
+//
+// Setup: Imports tensor_types.oo for tensor structures.
+//
+// Beats:
+//   1. Elementwise standard nonlinearities (ReLU, Sigmoid, Tanh).
+//   2. Modern transformer activations (GELU, SiLU/Swish, Softplus).
+//   3. High-precision vector Softmax and Log-Softmax with numerical stability shift.
+
+import "tensor_types.oo";
+
+pub fn act_relu(x: Float) -> Float {
+    if x > 0.0 { return x; }
+    return 0.0;
+}
+
+pub fn act_relu_grad(x: Float) -> Float {
+    if x > 0.0 { return 1.0; }
+    return 0.0;
+}
+
+pub fn act_leaky_relu(x: Float, alpha: Float) -> Float {
+    if x > 0.0 { return x; }
+    return alpha * x;
+}
+
+pub fn act_leaky_relu_grad(x: Float, alpha: Float) -> Float {
+    if x > 0.0 { return 1.0; }
+    return alpha;
+}
+
+pub fn act_sigmoid(x: Float) -> Float {
+    if x < 0.0 - 40.0 { return 0.0; }
+    if x > 40.0 { return 1.0; }
+    return 1.0 / (1.0 + exp(0.0 - x));
+}
+
+pub fn act_sigmoid_grad(x: Float) -> Float {
+    let s: Float = act_sigmoid(x);
+    return s * (1.0 - s);
+}
+
+pub fn act_tanh(x: Float) -> Float {
+    if x < 0.0 - 20.0 { return 0.0 - 1.0; }
+    if x > 20.0 { return 1.0; }
+    let e_pos: Float = exp(x);
+    let e_neg: Float = exp(0.0 - x);
+    return (e_pos - e_neg) / (e_pos + e_neg);
+}
+
+pub fn act_tanh_grad(x: Float) -> Float {
+    let t: Float = act_tanh(x);
+    return 1.0 - (t * t);
+}
+
+pub fn act_gelu(x: Float) -> Float {
+    let sqrt_2_over_pi: Float = 0.7978845608;
+    let coeff: Float = 0.044715;
+    let inner: Float = sqrt_2_over_pi * (x + (coeff * ((x * x) * x)));
+    return 0.5 * x * (1.0 + act_tanh(inner));
+}
+
+pub fn act_silu(x: Float) -> Float {
+    return x * act_sigmoid(x);
+}
+
+pub fn act_softplus(x: Float) -> Float {
+    if x > 20.0 { return x; }
+    return ln(1.0 + exp(x));
+}
+
+pub fn act_softmax_element(logits: Tensor1D, idx: Int) -> Float {
+    let n: Int = logits.size;
+    if n == 0 || idx < 0 || idx >= n {
+        return 0.0;
+    }
+    let mut max_val: Float = tensor_1d_get(logits, 0);
+    let mut i: Int = 1;
+    while i < n {
+        let v: Float = tensor_1d_get(logits, i);
+        if v > max_val {
+            max_val = v;
+        }
+        i = i + 1;
+    }
+
+    let mut sum_exp: Float = 0.0;
+    let mut j: Int = 0;
+    while j < n {
+        sum_exp = sum_exp + exp(tensor_1d_get(logits, j) - max_val);
+        j = j + 1;
+    }
+
+    let ev: Float = exp(tensor_1d_get(logits, idx) - max_val);
+    return ev / sum_exp;
+}
+
+pub fn act_log_softmax_element(logits: Tensor1D, idx: Int) -> Float {
+    let p: Float = act_softmax_element(logits, idx);
+    if p <= 0.0 {
+        return 0.0 - 100.0;
+    }
+    return ln(p);
+}
+
+pub fn activation_ops_marker() -> Int {
+    return 1;
+}

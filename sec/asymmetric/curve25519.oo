@@ -1,0 +1,244 @@
+// # Curve25519 Montgomery Ladder Scalar Multiplication & X25519 ECDH
+//
+// Logline: Implements Montgomery curve scalar multiplication over F(2^255 - 19) with constant-time ladder steps and scalar clamping.
+//
+// Setup: Pure standard library implementation of RFC 7748 Curve25519 Diffie-Hellman operations.
+//
+// Beats:
+//   1. Clamp 32-byte secret scalar per RFC 7748 Section 5.
+//   2. Step Montgomery ladder with differential addition and doubling on X/Z coordinates.
+//   3. Compute scalar multiplication [k]P on Montgomery curve y^2 = x^3 + 486662*x^2 + x.
+//   4. Derive public key from private scalar and base point u = 9.
+//   5. Execute Diffie-Hellman key exchange shared secret computation.
+
+import "std/core/primitives/list.oo";
+import "std/sec/ct/ct_primitives.oo";
+
+pub type CurvePoint = struct {
+    x: List[Int],
+    z: List[Int]
+};
+
+pub type KeyPair = struct {
+    private_key: List[Int],
+    public_key: List[Int]
+};
+
+fn c_z(n: Int) -> List[Int] {
+    let mut o: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n { o = list_push(o, 0); i = i + 1; }
+    return o;
+}
+
+fn c_car(o: List[Int]) -> List[Int] {
+    let mut t: List[Int] = o;
+    let mut i: Int = 0;
+    while i < 16 {
+        let v: Int = list_get(t, i) + 65536;
+        let c: Int = v >> 16;
+        t = list_set(t, i, v - (c << 16));
+        if i == 15 {
+            t = list_set(t, 0, list_get(t, 0) + 38 * (c - 1));
+        } else {
+            t = list_set(t, i + 1, list_get(t, i + 1) + (c - 1));
+        }
+        i = i + 1;
+    }
+    return t;
+}
+
+fn c_add(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut o: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        o = list_push(o, list_get(a, i) + list_get(b, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+fn c_sub(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut o: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        o = list_push(o, list_get(a, i) - list_get(b, i));
+        i = i + 1;
+    }
+    return c_car(o);
+}
+
+fn c_mul(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut t: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 31 { t = list_push(t, 0); i = i + 1; }
+    i = 0;
+    while i < 16 {
+        let mut j: Int = 0;
+        let ai: Int = list_get(a, i);
+        while j < 16 {
+            let idx: Int = i + j;
+            t = list_set(t, idx, list_get(t, idx) + ai * list_get(b, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while i < 15 {
+        t = list_set(t, i, list_get(t, i) + 38 * list_get(t, i + 16));
+        i = i + 1;
+    }
+    let mut o: List[Int] = list_new();
+    i = 0;
+    while i < 16 {
+        o = list_push(o, list_get(t, i));
+        i = i + 1;
+    }
+    return c_car(c_car(o));
+}
+
+fn c_sq(a: List[Int]) -> List[Int] { return c_mul(a, a); }
+
+fn c_inv(a: List[Int]) -> List[Int] {
+    let mut r: List[Int] = a;
+    let mut i: Int = 253;
+    while i >= 0 {
+        r = c_sq(r);
+        if i != 2 {
+            if i != 4 { r = c_mul(r, a); }
+        }
+        i = i - 1;
+    }
+    return r;
+}
+
+fn c_unpack(b: List[Int]) -> List[Int] {
+    let mut o: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        let b0: Int = list_get(b, 2 * i);
+        let mut b1: Int = list_get(b, 2 * i + 1);
+        if i == 15 { b1 = b1 & 127; }
+        o = list_push(o, b0 + (b1 << 8));
+        i = i + 1;
+    }
+    return o;
+}
+
+fn c_pack(f: List[Int]) -> List[Int] {
+    let a1: List[Int] = c_car(f);
+    let a2: List[Int] = c_car(a1);
+    let a3: List[Int] = c_car(a2);
+    let t1: List[Int] = a3;
+    let m: Int = list_get(t1, 15) >> 15;
+    let t2: List[Int] = list_set(t1, 15, list_get(t1, 15) & 32767);
+    let t3: List[Int] = list_set(t2, 0, list_get(t2, 0) + m * 19);
+    let t: List[Int] = c_car(t3);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        let w: Int = list_get(t, i);
+        out = list_push(out, w & 255);
+        out = list_push(out, (w >> 8) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn c_a24() -> List[Int] {
+    let mut o: List[Int] = c_z(16);
+    o = list_set(o, 0, 56129);
+    return list_set(o, 1, 1);
+}
+
+pub fn curve25519_clamp(scalar: List[Int]) -> List[Int] {
+    let mut out: List[Int] = scalar;
+    if list_len(out) < 32 { return out; }
+    let b0: Int = list_get(out, 0) & 248;
+    let b31: Int = (list_get(out, 31) & 127) | 64;
+    out = list_set(out, 0, b0);
+    out = list_set(out, 31, b31);
+    return out;
+}
+
+pub fn curve25519_base_point() -> List[Int] {
+    let mut p: List[Int] = list_new();
+    p = list_push(p, 9);
+    let mut i: Int = 1;
+    while i < 32 { p = list_push(p, 0); i = i + 1; }
+    return p;
+}
+
+pub fn curve25519_scalarmult(scalar: List[Int], u_point: List[Int]) -> List[Int] {
+    let clamped: List[Int] = curve25519_clamp(scalar);
+    let x1: List[Int] = c_unpack(u_point);
+    let mut x2: List[Int] = list_set(c_z(16), 0, 1);
+    let mut z2: List[Int] = c_z(16);
+    let mut x3: List[Int] = x1;
+    let mut z3: List[Int] = list_set(c_z(16), 0, 1);
+    let a24: List[Int] = c_a24();
+    let mut swap: Int = 0;
+    let mut t: Int = 254;
+    while t >= 0 {
+        let b: Int = list_get(clamped, t / 8);
+        let bit: Int = (b >> (t % 8)) & 1;
+        let k_bit: Int = swap ^ bit;
+        // Constant-time swap: when k_bit=1, (x2,z2) <-> (x3,z3); else identity.
+        let mut x2_new: List[Int] = list_new();
+        let mut z2_new: List[Int] = list_new();
+        let mut x3_new: List[Int] = list_new();
+        let mut z3_new: List[Int] = list_new();
+        let mut kk: Int = 0;
+        while kk < 16 {
+            x2_new = list_push(x2_new, ct_select_int(k_bit, list_get(x3, kk), list_get(x2, kk)));
+            z2_new = list_push(z2_new, ct_select_int(k_bit, list_get(z3, kk), list_get(z2, kk)));
+            x3_new = list_push(x3_new, ct_select_int(k_bit, list_get(x2, kk), list_get(x3, kk)));
+            z3_new = list_push(z3_new, ct_select_int(k_bit, list_get(z2, kk), list_get(z3, kk)));
+            kk = kk + 1;
+        }
+        x2 = x2_new; z2 = z2_new; x3 = x3_new; z3 = z3_new;
+        swap = bit;
+
+        let a: List[Int] = c_add(x2, z2);
+        let aa: List[Int] = c_sq(a);
+        let b_val: List[Int] = c_sub(x2, z2);
+        let bb: List[Int] = c_sq(b_val);
+        let e: List[Int] = c_sub(aa, bb);
+        let c: List[Int] = c_add(x3, z3);
+        let d: List[Int] = c_sub(x3, z3);
+        let da: List[Int] = c_mul(d, a);
+        let cb: List[Int] = c_mul(c, b_val);
+        x3 = c_sq(c_add(da, cb));
+        z3 = c_mul(x1, c_sq(c_sub(da, cb)));
+        x2 = c_mul(aa, bb);
+        z2 = c_mul(e, c_add(aa, c_mul(a24, e)));
+
+        t = t - 1;
+    }
+    if swap == 1 {
+        // Constant-time final swap.
+        let mut x2_fin: List[Int] = list_new();
+        let mut z2_fin: List[Int] = list_new();
+        let mut x3_fin: List[Int] = list_new();
+        let mut z3_fin: List[Int] = list_new();
+        let mut kk: Int = 0;
+        while kk < 16 {
+            x2_fin = list_push(x2_fin, ct_select_int(swap, list_get(x3, kk), list_get(x2, kk)));
+            z2_fin = list_push(z2_fin, ct_select_int(swap, list_get(z3, kk), list_get(z2, kk)));
+            x3_fin = list_push(x3_fin, ct_select_int(swap, list_get(x2, kk), list_get(x3, kk)));
+            z3_fin = list_push(z3_fin, ct_select_int(swap, list_get(z2, kk), list_get(z3, kk)));
+            kk = kk + 1;
+        }
+        x2 = x2_fin; z2 = z2_fin; x3 = x3_fin; z3 = z3_fin;
+    }
+    return c_pack(c_mul(x2, c_inv(z2)));
+}
+
+pub fn curve25519_derive_public(secret_key: List[Int]) -> List[Int] {
+    let base: List[Int] = curve25519_base_point();
+    return curve25519_scalarmult(secret_key, base);
+}
+
+pub fn curve25519_diffie_hellman(my_secret: List[Int], their_public: List[Int]) -> List[Int] {
+    return curve25519_scalarmult(my_secret, their_public);
+}

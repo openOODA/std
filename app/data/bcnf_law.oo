@@ -1,0 +1,72 @@
+// # Boyce-Codd Normal Form Law
+//
+// Logline: A relation is in BCNF if every non-trivial functional dependency has a superkey on the left.
+//
+// Setup: Pure Int. Functional dependency is (lhs_attrs, rhs_attr). LHS must be a superkey for BCNF. Hosts data_invariants.oo stem.
+//
+// Beats:
+//   1. Superkey test: candidate key covers the candidate attribute set.
+//   2. Functional dependency validity: a dependency is trivial if rhs is in lhs.
+//   3. BCNF check: a relation satisfies BCNF iff every non-trivial fd has a superkey lhs.
+//   4. Hosts data_invariants.oo stem for cross-law correlation.
+
+import "std/app/data/data_invariants.oo";
+
+// Trivial fd test: 1 if rhs is a subset of lhs; 0 otherwise.
+pub fn bcnf_trivial(lhs_attrs: Int, rhs_attr: Int) -> Int {
+    if lhs_attrs <= 0 { return 0; }
+    if rhs_attr <= 0 { return 0; }
+    let covered: Int = lhs_attrs & rhs_attr;
+    if covered == rhs_attr { return 1; }
+    return 0;
+}
+
+// Superkey test: 1 if candidate key covers the candidate attribute set.
+pub fn bcnf_superkey(candidate_key: Int, candidate_attrs: Int) -> Bool {
+    if candidate_key <= 0 { return false; }
+    if candidate_attrs <= 0 { return false; }
+    let covered: Int = candidate_key & candidate_attrs;
+    if covered == candidate_attrs { return true; }
+    return false;
+}
+
+// BCNF holds if all functional dependencies are either trivial or have a superkey lhs.
+pub fn bcnf_relation_holds(
+    fd_lhs: Int,
+    fd_rhs: Int,
+    is_superkey: Int,
+    trivial: Int
+) -> Int {
+    if fd_lhs <= 0 { return 0; }
+    if fd_rhs <= 0 { return 0; }
+    if is_superkey == 1 { return 1; }
+    if trivial == 1 { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for the BCNF law.
+pub fn verify_bcnf_law() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    if bcnf_trivial(7, 5) != 1 { return false; }
+    if bcnf_trivial(7, 7) != 1 { return false; }
+    if bcnf_trivial(7, 8) != 0 { return false; }
+    if bcnf_trivial(0, 0) != 0 { return false; }
+    if bcnf_trivial(0 - 1, 1) != 0 { return false; }
+    if bcnf_trivial(1, 0 - 1) != 0 { return false; }
+    if bcnf_superkey(7, 3) == false { return false; }
+    if bcnf_superkey(7, 7) == false { return false; }
+    if bcnf_superkey(3, 7) == true { return false; }
+    if bcnf_superkey(0, 0) == true { return false; }
+    if bcnf_superkey(0 - 1, 1) == true { return false; }
+    if bcnf_superkey(1, 0 - 1) == true { return false; }
+    if bcnf_relation_holds(7, 4, 1, 0) != 1 { return false; }
+    if bcnf_relation_holds(7, 4, 0, 1) != 1 { return false; }
+    if bcnf_relation_holds(7, 4, 0, 0) != 0 { return false; }
+    if bcnf_relation_holds(0, 1, 0, 0) != 0 { return false; }
+    if bcnf_relation_holds(0 - 1, 1, 1, 0) != 0 { return false; }
+    if bcnf_relation_holds(7, 0 - 1, 1, 0) != 0 { return false; }
+    if bcnf_relation_holds(7, 4, 2, 0) != 0 { return false; }
+    if bcnf_relation_holds(7, 4, 0, 2) != 0 { return false; }
+    return true;
+}

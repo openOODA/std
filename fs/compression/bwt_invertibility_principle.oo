@@ -1,0 +1,203 @@
+// # Burrows-Wheeler transform invertibility principle
+//
+// Logline: The Burrows-Wheeler transform (BWT) of a string is invertible via the LF-mapping; the inverse BWT recovers the original string exactly when a unique sentinel is appended.
+//
+// Setup: Pure Int. Symbols are byte values 0..255. Input must not contain the sentinel (0). The encoder sorts all n+1 rotations and takes the last column. The decoder uses the LF-mapping to walk back to the front.
+//
+// Beats:
+//   1. bwt_invertible(input) returns 1 when inverse matches the input.
+//   2. golden: inverse(bwt("banana")) = "banana".
+//   3. hostile: input containing the sentinel fails closed to 0; empty input fails closed to 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn bwt_sentinel() -> Int { return 0; }
+
+pub fn bwt_has_sentinel(input: List[Int]) -> Int {
+    let n: Int = list_len(input);
+    let s: Int = bwt_sentinel();
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(input, i) == s { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+// Cyclic string of length m=n+1 is [input[0..n), sentinel].
+// rotation[k] at off = cyclic_string[(off + k) mod m].
+fn bwt_rot_sym(input: List[Int], off: Int, k: Int, n: Int) -> Int {
+    let s: Int = bwt_sentinel();
+    let m: Int = n + 1;
+    let mut kk: Int = k;
+    while kk >= m { kk = kk - m; }
+    let mut idx: Int = off + kk;
+    while idx >= m { idx = idx - m; }
+    if idx == n { return s; }
+    return list_get(input, idx);
+}
+
+fn bwt_compare_rotations(input: List[Int], a: Int, b: Int, n: Int) -> Int {
+    let m: Int = n + 1;
+    let mut k: Int = 0;
+    while k < m {
+        let vak: Int = bwt_rot_sym(input, a, k, n);
+        let vbj: Int = bwt_rot_sym(input, b, k, n);
+        if vak < vbj { return 0 - 1; }
+        if vak > vbj { return 1; }
+        k = k + 1;
+    }
+    return 0;
+}
+
+fn bwt_rotations_order(input: List[Int]) -> List[Int] {
+    let n: Int = list_len(input);
+    let m: Int = n + 1;
+    let mut order: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < m { order = list_push(order, i); i = i + 1; }
+    let mut i2: Int = 0;
+    while i2 < m {
+        let mut j: Int = i2 + 1;
+        while j < m {
+            let ai: Int = list_get(order, i2);
+            let aj: Int = list_get(order, j);
+            if bwt_compare_rotations(input, ai, aj, n) > 0 {
+                order = list_set(order, i2, aj);
+                order = list_set(order, j, ai);
+            }
+            j = j + 1;
+        }
+        i2 = i2 + 1;
+    }
+    return order;
+}
+
+pub fn compression_bwt_transform(input: List[Int]) -> List[Int] {
+    let n: Int = list_len(input);
+    if n < 1 { return list_new(); }
+    if bwt_has_sentinel(input) == 1 { return list_new(); }
+    let order: List[Int] = bwt_rotations_order(input);
+    let m: Int = n + 1;
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < m {
+        let off: Int = list_get(order, i);
+        out = list_push(out, bwt_rot_sym(input, off, m - 1, n));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn compression_bwt_inverse(transformed: List[Int]) -> List[Int] {
+    let m: Int = list_len(transformed);
+    if m < 2 { return list_new(); }
+    let n: Int = m - 1;
+    let s: Int = bwt_sentinel();
+    let mut lf: List[Int] = list_new();
+    let mut a: Int = 0;
+    while a < m {
+        let v: Int = list_get(transformed, a);
+        let mut lt: Int = 0;
+        let mut p: Int = 0;
+        while p < m { if list_get(transformed, p) < v { lt = lt + 1; } p = p + 1; }
+        let mut rk: Int = 0;
+        let mut q: Int = 0;
+        while q <= a { if list_get(transformed, q) == v { rk = rk + 1; } q = q + 1; }
+        lf = list_push(lf, lt + rk - 1);
+        a = a + 1;
+    }
+    let mut sentinel_row: Int = 0;
+    let mut found: Int = 0;
+    let mut b: Int = 0;
+    while b < m {
+        if list_get(transformed, b) == s { sentinel_row = b; found = 1; }
+        b = b + 1;
+    }
+    if found == 0 { return list_new(); }
+    let mut out: List[Int] = list_new();
+    let mut cur: Int = list_get(lf, sentinel_row);
+    let mut step: Int = 0;
+    while step < n {
+        let v: Int = list_get(transformed, cur);
+        if v != s { out = list_push(out, v); }
+        cur = list_get(lf, cur);
+        step = step + 1;
+    }
+    let len_out: Int = list_len(out);
+    let mut rev: List[Int] = list_new();
+    let mut r: Int = len_out - 1;
+    while r >= 0 { rev = list_push(rev, list_get(out, r)); r = r - 1; }
+    if list_len(rev) != n { return list_new(); }
+    return rev;
+}
+
+pub fn compression_bwt_invertible(original: List[Int]) -> DomainCert {
+    let n: Int = list_len(original);
+    if n < 1 { return domain_cert("compression", "bwt_invertible", 0); }
+    if bwt_has_sentinel(original) == 1 { return domain_cert("compression", "bwt_invertible", 0); }
+    let tr: List[Int] = compression_bwt_transform(original);
+    if list_len(tr) != n + 1 { return domain_cert("compression", "bwt_invertible", 0); }
+    let inv: List[Int] = compression_bwt_inverse(tr);
+    if list_len(inv) != n { return domain_cert("compression", "bwt_invertible", 0); }
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(inv, i) != list_get(original, i) {
+            return domain_cert("compression", "bwt_invertible", 0);
+        }
+        i = i + 1;
+    }
+    return domain_cert("compression", "bwt_invertible", 1);
+}
+
+pub fn verify_compression_bwt_invertibility_principle() -> Bool {
+    let mut banana: List[Int] = list_new();
+    banana = list_push(banana, 98); banana = list_push(banana, 97);
+    banana = list_push(banana, 110); banana = list_push(banana, 97);
+    banana = list_push(banana, 110); banana = list_push(banana, 97);
+    if cert_holds(compression_bwt_invertible(banana)) != 1 { return false; }
+    let mut abcd: List[Int] = list_new();
+    abcd = list_push(abcd, 97); abcd = list_push(abcd, 98);
+    abcd = list_push(abcd, 99); abcd = list_push(abcd, 100);
+    if cert_holds(compression_bwt_invertible(abcd)) != 1 { return false; }
+    let mut aaaa: List[Int] = list_new();
+    aaaa = list_push(aaaa, 97); aaaa = list_push(aaaa, 97);
+    aaaa = list_push(aaaa, 97); aaaa = list_push(aaaa, 97);
+    if cert_holds(compression_bwt_invertible(aaaa)) != 1 { return false; }
+    let mut empty: List[Int] = list_new();
+    if cert_holds(compression_bwt_invertible(empty)) != 0 { return false; }
+    let mut with_sentinel: List[Int] = list_new();
+    with_sentinel = list_push(with_sentinel, 97);
+    with_sentinel = list_push(with_sentinel, 0);
+    if cert_holds(compression_bwt_invertible(with_sentinel)) != 0 { return false; }
+    let tr: List[Int] = compression_bwt_transform(banana);
+    let tr_len: Int = list_len(tr);
+    let mut corr_idx: Int = 0;
+    let mut found_idx: Int = 0;
+    let mut ki: Int = 0;
+    while ki < tr_len {
+        if found_idx == 0 {
+            if list_get(tr, ki) != 0 { corr_idx = ki; found_idx = 1; }
+        }
+        ki = ki + 1;
+    }
+    if found_idx == 1 {
+        let original_val: Int = list_get(tr, corr_idx);
+        let mut new_val: Int = original_val + 1;
+        if new_val > 254 { new_val = 200; }
+        let corrupted: List[Int] = list_set(tr, corr_idx, new_val);
+        let inv_corr: List[Int] = compression_bwt_inverse(corrupted);
+        let mut eq_to_banana: Int = 1;
+        if list_len(inv_corr) != list_len(banana) {
+            eq_to_banana = 0;
+        } else {
+            let mut m: Int = 0;
+            while m < list_len(banana) {
+                if list_get(inv_corr, m) != list_get(banana, m) { eq_to_banana = 0; }
+                m = m + 1;
+            }
+        }
+        if eq_to_banana == 1 { return false; }
+    }
+    return true;
+}

@@ -1,0 +1,66 @@
+// # FormalProofs Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard formal_proofs domain library. Re-exports a stable formal_proofs_mod_* surface for the most-used public API (compactness theorem, Curry-Howard, natural deduction, Lean 4 metaprogramming, HoTT univalence, Iris higher-order separation). Private siblings (literature KATs) remain non-public.
+//
+// Setup: Imports private formal_proofs siblings; no caps required for proof-theoretic verifiers (return Int 0/1 for "holds").
+//
+// Beats:
+//   1. Re-export the compactness theorem surface as formal_proofs_mod_compactness_*.
+//   2. Re-export the Curry-Howard correspondence surface as formal_proofs_mod_ch_*.
+//   3. Re-export the natural-deduction surface as formal_proofs_mod_nd_*.
+//   4. Re-export the Lean 4 metaprogramming, HoTT univalence, and Iris higher-order separation surface as formal_proofs_mod_lean4_*, formal_proofs_mod_univalence_*, formal_proofs_mod_iris_*.
+//   5. Document the private siblings (literature KATs).
+
+import "compactness_theorem.oo";
+import "curry_howard_principle.oo";
+import "natural_deduction_theory.oo";
+import "lean4_metaprogramming_theory.oo";
+import "hott_univalence_principle.oo";
+import "iris_higher_order_separation_principle.oo";
+
+// Public compactness theorem surface: formal_proofs_mod_compactness_*
+pub fn formal_proofs_mod_compactness_subset_sat(
+    ) -> Int { return theory_subset_sat(); }
+pub fn formal_proofs_mod_compactness_all_finite_sat(c0: Int, c1: Int, c2: Int, c3: Int) -> Int { return theory_all_finite_sat(c0, c1, c2, c3); }
+pub fn formal_proofs_mod_compactness_sat(c0: Int, c1: Int, c2: Int, c3: Int) -> Int { return theory_sat(c0, c1, c2, c3); }
+pub fn formal_proofs_mod_compactness_consistent(c0: Int, c1: Int, c2: Int, c3: Int) -> Int { return theory_consistent(c0, c1, c2, c3); }
+pub fn formal_proofs_mod_compactness_ideal(c0: Int, c1: Int, c2: Int, c3: Int) -> Int { return compactness_ideal(c0, c1, c2, c3); }
+
+// Public Curry-Howard surface: formal_proofs_mod_ch_*
+pub fn formal_proofs_mod_ch_combinator_is_id(c: Int) -> Int { return ch_combinator_is_id(c); }
+pub fn formal_proofs_mod_ch_program_is_identity(p0: Int, p1: Int, p2: Int, p3: Int) -> Int { return ch_program_is_identity(p0, p1, p2, p3); }
+pub fn formal_proofs_mod_ch_program_is_k(p0: Int, p1: Int, p2: Int, p3: Int) -> Int { return ch_program_is_k(p0, p1, p2, p3); }
+pub fn formal_proofs_mod_ch_proof_to_program(proof: List[Int]) -> List[Int] { return ch_proof_to_program(proof); }
+pub fn formal_proofs_mod_ch_corresponds(proof: List[Int], program: List[Int]) -> Int { return ch_corresponds(proof, program); }
+
+// Public natural-deduction surface: formal_proofs_mod_nd_*
+pub fn formal_proofs_mod_nd_is_valid_rule(rule_id: Int) -> Int { return nd_is_valid_rule(rule_id); }
+pub fn formal_proofs_mod_nd_and_intro(p: Int, q: Int) -> Int { return nd_and_intro(p, q); }
+pub fn formal_proofs_mod_nd_and_elim(p_and_q: Int, which_proj: Int) -> Int { return nd_and_elim(p_and_q, which_proj); }
+pub fn formal_proofs_mod_nd_or_intro(p: Int, q: Int, which_inj: Int) -> Int { return nd_or_intro(p, q, which_inj); }
+pub fn formal_proofs_mod_nd_imp_intro(p: Int, q: Int) -> Int { return nd_imp_intro(p, q); }
+
+// Public Lean 4 metaprogramming surface: formal_proofs_mod_lean4_*
+pub fn formal_proofs_mod_lean4_is_valid_attribute(attr_id: Int) -> Int { return lean4_is_valid_attribute(attr_id); }
+pub fn formal_proofs_mod_lean4_attribute_count(attr_id: Int) -> Int { return lean4_attribute_count(attr_id); }
+pub fn formal_proofs_mod_lean4_macros_count() -> Int { return lean4_macros_count(); }
+pub fn formal_proofs_mod_lean4_tactic_monadic() -> Int { return lean4_tactic_monadic(); }
+pub fn formal_proofs_mod_lean4_tactic_associative(t1: Int, t2: Int, t3: Int) -> Int { return lean4_tactic_associative(t1, t2, t3); }
+
+// Public HoTT univalence surface: formal_proofs_mod_univalence_*
+pub fn formal_proofs_mod_univalence_is_valid_kind(kind: Int) -> Int { return univalence_is_valid_kind(kind); }
+pub fn formal_proofs_mod_univalence_id_from_equiv(
+    ) -> Int { return univalence_id_from_equiv(); }
+pub fn formal_proofs_mod_univalence_kind_dependent_elim(kind: Int) -> Int { return univalence_kind_dependent_elim(kind); }
+
+// Public Iris higher-order separation surface: formal_proofs_mod_iris_*
+pub fn formal_proofs_mod_iris_is_valid_invariant_name(name_id: Int) -> Int { return iris_is_valid_invariant_name(name_id); }
+pub fn formal_proofs_mod_iris_invariant_ok(name_id: Int, declared: Int, well_formed: Int) -> Int { return iris_invariant_ok(name_id, declared, well_formed); }
+pub fn formal_proofs_mod_iris_sep_conj_count() -> Int { return iris_sep_conj_count(); }
+pub fn formal_proofs_mod_iris_view_shift(p_id: Int, q_id: Int, mask: Int) -> Int { return iris_view_shift(p_id, q_id, mask); }
+pub fn formal_proofs_mod_iris_ghost_state(authority_id: Int) -> Int { return iris_ghost_state(authority_id); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _principle files (e.g. curry_howard_principle.oo, hott_univalence_principle.oo, iris_higher_order_separation_principle.oo)
+//   _theory files (e.g. lean4_metaprogramming_theory.oo, natural_deduction_theory.oo)
+//   _kat files (e.g. formal_proofs_kat.oo, literature_kat.oo)

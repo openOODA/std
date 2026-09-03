@@ -1,0 +1,144 @@
+// # Net Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard net domain library. Re-exports a stable net_mod_* surface for the most-used public API (modules, is_available, http, tcp, tls, udp, dns, url, mime). Phase 3.3 reorg: this domain is now composed of:
+//
+//   net/protocol/  ← was net/wire/ + net/web_protocols/ + net/http3/ + net/advanced/  (wire + app protocols)
+//   net/transport/ ← was net/telecom/ + net/telecom_5g/ + net/telecom_6g/                (telecom/DSP merged)
+//   net/mesh/      ← was net/p2p_mesh/ + net/edge/                                       (mesh networking merged)
+//   net/telemetry/ ← was net/telecom/ telemetry subset (net/packet capture, ids, dpi)
+//   net/sync/      ← was std/sync/                                                       (concurrency primitives)
+//   net/actor/     ← was std/actor/                                                      (actor model)
+//
+// Setup: Imports private net siblings; effectful ops take NetCap / HttpCap / TcpCap / UdpCap at the call site. Pure parser helpers take no caps.
+//
+// Beats:
+//   1. Beat 1: Import the public-API siblings and re-export the modules + is_available surface as net_mod_modules_*, net_mod_is_available.
+//   2. Beat 2: Re-export the http surface as net_mod_http_*.
+//   3. Beat 3: Re-export the tcp/tls surface as net_mod_tcp_*, net_mod_tls_*.
+//   4. Beat 4: Re-export the udp/url/mime surface as net_mod_udp_*, net_mod_url_*, net_mod_mime_*.
+//   5. Beat 5: Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _literature_kat, pay_*, swarm_*, x402_*.
+
+import "bbr_bottleneck_bandwidth_principle.oo";
+import "cidr.oo";
+import "cookies.oo";
+import "dns.oo";
+import "tcp.oo";
+import "tls.oo";
+import "udp.oo";
+import "dns_client.oo";
+import "dns_packet.oo";
+import "dns_resolution_theory.oo";
+import "end_to_end_principle.oo";
+import "headers.oo";
+import "hourglass_principle.oo";
+import "http2_frame.oo";
+import "http2_stream.oo";
+import "http3_frame.oo";
+import "http_cap.oo";
+import "http_client.oo";
+import "http_isolation.oo";
+import "http_req.oo";
+import "http_request.oo";
+import "http_resp.oo";
+import "http_resp_parse.oo";
+import "http_response.oo";
+import "http_server.oo";
+import "http_stream.oo";
+import "ip_addr.oo";
+import "ip_cidr.oo";
+import "ip_cidr_parse.oo";
+import "little_law.oo";
+import "max_flow_min_cut_theory.oo";
+import "mime.oo";
+import "mm1_queue_theory.oo";
+import "net.oo";
+import "net_error.oo";
+import "net_invariants.oo";
+import "net_kat.oo";
+import "net_literature_kat.oo";
+import "network_calculus_arrival_curve_law.oo";
+import "nyquist_sampling_law.oo";
+import "org_src_net.oo";
+import "pay_cap.oo";
+import "pay_early.oo";
+import "pay_json.oo";
+import "pay_offer.oo";
+import "pay_pass.oo";
+import "pay_pin.oo";
+import "pay_work.oo";
+import "postel_principle.oo";
+import "qos_priority_principle.oo";
+import "quic_packet.oo";
+import "quic_packet_format_theory.oo";
+import "shannon_hartley_law.oo";
+import "socket_opts.oo";
+import "tcp_congestion_law.oo";
+import "tls_record.oo";
+import "tls_session.oo";
+import "udp_conn.oo";
+import "unix_socket.oo";
+import "url.oo";
+import "url_parse_full.oo";
+import "url_parser.oo";
+import "websocket.oo";
+import "websocket_frame.oo";
+import "wireguard.oo";
+import "http.oo";
+import "quic.oo";
+import "swarm.oo";
+import "swarm_proto.oo";
+import "tcp_conn.oo";
+import "x402.oo";
+import "x402_spend.oo";
+
+pub fn net_mod_modules_count() -> Int {
+    return net_modules_count();
+}
+
+pub fn net_mod_is_available(name: String) -> Bool {
+    return net_is_module_available(name);
+}
+
+pub fn net_mod_http_get(http: &HttpCap, url: String) -> Result[String, String] {
+    return net_http_get(http, url);
+}
+
+pub fn net_mod_http_post(http: &HttpCap, url: String) -> Result[String, String] {
+    return net_http_post(http, url);
+}
+
+pub fn net_mod_dns_resolve(net: &NetCap, host: String) -> Result[String, String] {
+    return net_dns_resolve(net, host);
+}
+
+pub fn net_mod_tcp_connect(tcp: &TcpCap, host: String, port: Int) -> Result[String, String] {
+    return net_tcp_connect(tcp, host, port);
+}
+
+pub fn net_mod_tcp_write(tcp: &TcpCap, fd: Int, data: String) -> Result[String, String] {
+    return net_tcp_write(tcp, fd, data);
+}
+
+pub fn net_mod_tcp_read(tcp: &TcpCap, fd: Int) -> Result[String, String] {
+    return net_tcp_read(tcp, fd);
+}
+
+pub fn net_mod_tls_connect(tcp: &TcpCap, host: String, port: Int) -> Result[String, String] {
+    return net_tls_connect(tcp, host, port);
+}
+
+pub fn net_mod_udp_bind(udp: &UdpCap, port: Int) -> Result[String, String] {
+    return net_udp_bind(udp, port);
+}
+
+pub fn net_mod_udp_recv(udp: &UdpCap, fd: Int) -> Result[String, String] {
+    return net_udp_recv(udp, fd);
+}
+
+pub fn net_mod_url_default_port(scheme: String) -> Int {
+    return url_default_port(scheme);
+}
+
+pub fn net_mod_mime_from_path(path: String) -> String {
+    return mime_from_path(path);
+}

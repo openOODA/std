@@ -1,0 +1,223 @@
+// # Levenshtein edit distance law
+//
+// Logline: d(a, b) = 1 + min(d(a-1, b), d(a, b-1), d(a-1, b-1) + (a[-1] != b[-1])) for the classic insertion/deletion/substitution metric; Damerau adds an adjacent-transposition cost.
+//
+// Setup: Pure Int. Operates on character sequences via char_at / chars_len. a == b returns 0; either empty returns the length of the other. The non-ideal (Damerau) variant allows ab->ba at cost 1.
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. Golden: "kitten" vs "sitting" = 3.
+//   2. Golden: "" vs "abc" = 3; "abc" vs "" = 3; "abc" vs "abc" = 0.
+//   3. Non-ideal: with adjacent transpositions, "abcd" vs "acbd" = 1 (Damerau) vs 2 (classic).
+//   4. Coupled: for equal-length strings, classic Levenshtein <= Hamming distance.
+
+import "std/core/text/text_invariants.oo";
+import "std/core/text/hamming_distance.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Integer absolute value without abs_f.
+fn lev_abs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+// Min of three Ints.
+fn lev_min3(a: Int, b: Int, c: Int) -> Int {
+    let mut m: Int = a;
+    if b < m { m = b; }
+    if c < m { m = c; }
+    return m;
+}
+
+// 1 if c1 == c2 as single-char strings, else 0.
+fn lev_char_eq(c1: String, c2: String) -> Int {
+    if c1 == c2 { return 1; }
+    return 0;
+}
+
+// Classic Levenshtein: insert/delete/substitute, no transpositions.
+pub fn levenshtein_distance(a: String, b: String) -> Int {
+    let na: Int = chars_len(a);
+    let nb: Int = chars_len(b);
+    if na == 0 { return nb; }
+    if nb == 0 { return na; }
+    // Allocate two rolling rows of length (nb+1) each, row[0..nb] inclusive.
+    let mut prev: List[Int] = list_new();
+    let mut j: Int = 0;
+    while j <= nb {
+        prev = list_push(prev, j);
+        j = j + 1;
+    }
+    let mut cur: List[Int] = list_new();
+    let mut i: Int = 1;
+    while i <= na {
+        cur = list_new();
+        cur = list_push(cur, i);
+        let mut jj: Int = 1;
+        while jj <= nb {
+            let ca: String = str_slice(a, i - 1, i);
+            let cb: String = str_slice(b, jj - 1, jj);
+            let cost_sub: Int = 1 - lev_char_eq(ca, cb);  // 0 if equal, 1 if different
+            let del: Int = list_get(cur, jj - 1) + 1;
+            let ins: Int = list_get(prev, jj) + 1;
+            let sub: Int = list_get(prev, jj - 1) + cost_sub;
+            let best: Int = lev_min3(del, ins, sub);
+            cur = list_push(cur, best);
+            jj = jj + 1;
+        }
+        prev = cur;
+        i = i + 1;
+    }
+    return list_get(prev, nb);
+}
+
+// Damerau-Levenshtein: classic + adjacent transpositions (ab/ba swap) at cost 1.
+// Falls back to classic when rows are not big enough for the swap check.
+pub fn levenshtein_damerau_distance(a: String, b: String) -> Int {
+    let na: Int = chars_len(a);
+    let nb: Int = chars_len(b);
+    if na == 0 { return nb; }
+    if nb == 0 { return na; }
+    if na == 1 && nb == 1 {
+        if str_slice(a, 0, 1) == str_slice(b, 0, 1) { return 0; }
+        return 1;
+    }
+    // Allocate one big (na+1) x (nb+1) matrix flattened row-major.
+    let cols: Int = nb + 1;
+    let rows: Int = na + 1;
+    let total: Int = rows * cols;
+    let mut m: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < total {
+        m = list_push(m, 0);
+        k = k + 1;
+    }
+    // First row: 0..nb
+    let mut jj: Int = 0;
+    while jj <= nb {
+        m = list_set(m, jj, jj);
+        jj = jj + 1;
+    }
+    // First column: 0..na
+    let mut ii: Int = 0;
+    while ii <= na {
+        m = list_set(m, ii * cols, ii);
+        ii = ii + 1;
+    }
+    ii = 1;
+    while ii <= na {
+        jj = 1;
+        while jj <= nb {
+            let ca: String = str_slice(a, ii - 1, ii);
+            let cb: String = str_slice(b, jj - 1, jj);
+            let cost_sub: Int = 1 - lev_char_eq(ca, cb);
+            let delv: Int = list_get(m, (ii - 1) * cols + jj) + 1;
+            let insv: Int = list_get(m, ii * cols + (jj - 1)) + 1;
+            let subv: Int = list_get(m, (ii - 1) * cols + (jj - 1)) + cost_sub;
+            let mut best: Int = lev_min3(delv, insv, subv);
+            // Adjacent transposition: if a[i-2]==b[j-1] and a[i-1]==b[j-2], consider swap cost.
+            if ii > 1 && jj > 1 {
+                let a_i2: String = str_slice(a, ii - 2, ii - 1);
+                let b_j1: String = str_slice(b, jj - 1, jj);
+                let a_i1: String = str_slice(a, ii - 1, ii);
+                let b_j2: String = str_slice(b, jj - 2, jj - 1);
+                if a_i2 == b_j1 {
+                    if a_i1 == b_j2 {
+                        let swapv: Int = list_get(m, (ii - 2) * cols + (jj - 2)) + 1;
+                        if swapv < best {
+                            best = swapv;
+                        }
+                    }
+                }
+            }
+            m = list_set(m, ii * cols + jj, best);
+            jj = jj + 1;
+        }
+        ii = ii + 1;
+    }
+    return list_get(m, na * cols + nb);
+}
+
+// Domain certificate: 1 if levenshtein(a, b) is non-negative and <= max(len(a), len(b)).
+pub fn levenshtein_holds(a: String, b: String) -> DomainCert {
+    let d: Int = levenshtein_distance(a, b);
+    let na: Int = chars_len(a);
+    let nb: Int = chars_len(b);
+    let mut hi: Int = na;
+    if nb > hi { hi = nb; }
+    if d < 0 { return domain_cert("text", "levenshtein_distance_law", 0); }
+    if d > hi { return domain_cert("text", "levenshtein_distance_law", 0); }
+    return domain_cert("text", "levenshtein_distance_law", 1);
+}
+
+pub fn verify_levenshtein_distance_law() -> Bool {
+    // Golden: classic kitten/sitting = 3.
+    if levenshtein_distance("kitten", "sitting") != 3 { return false; }
+    // Golden: empty vs non-empty = length of non-empty.
+    if levenshtein_distance("", "abc") != 3 { return false; }
+    if levenshtein_distance("abc", "") != 3 { return false; }
+    // Golden: identical = 0.
+    if levenshtein_distance("abc", "abc") != 0 { return false; }
+    if levenshtein_distance("", "") != 0 { return false; }
+    // Golden: single substitution.
+    if levenshtein_distance("a", "b") != 1 { return false; }
+    if levenshtein_distance("cat", "bat") != 1 { return false; }
+    // Golden: single insertion / deletion.
+    if levenshtein_distance("cat", "cats") != 1 { return false; }
+    if levenshtein_distance("cats", "cat") != 1 { return false; }
+    // Non-ideal: Damerau finds the transposition cheaper.
+    if levenshtein_distance("abcd", "acbd") != 2 { return false; }
+    if levenshtein_damerau_distance("abcd", "acbd") != 1 { return false; }
+    // Coupled: classic Levenshtein <= Hamming for equal-length strings.
+    let h1r: Result[Int, String] = hamming_distance_str("karolin", "kathrin");
+    let mut h1: Int = 0;
+    let mut h1_ok: Int = 0;
+    match h1r {
+        Ok(v) => {
+            h1 = v;
+            h1_ok = 1;
+        }
+        Err(e) => {
+            h1_ok = 0;
+        }
+    }
+    let l1: Int = levenshtein_distance("karolin", "kathrin");
+    if h1_ok != 1 { return false; }
+    if l1 > h1 { return false; }
+    // Another equal-length pair.
+    let h2r: Result[Int, String] = hamming_distance_str("abc", "abd");
+    let mut h2: Int = 0;
+    let mut h2_ok: Int = 0;
+    match h2r {
+        Ok(v) => {
+            h2 = v;
+            h2_ok = 1;
+        }
+        Err(e) => {
+            h2_ok = 0;
+        }
+    }
+    let l2: Int = levenshtein_distance("abc", "abd");
+    if h2_ok != 1 { return false; }
+    if l2 != 1 { return false; }
+    if l2 > h2 { return false; }
+    // Symmetry: d(a,b) == d(b,a).
+    if levenshtein_distance("kitten", "sitting") != levenshtein_distance("sitting", "kitten") { return false; }
+    if levenshtein_distance("flaw", "lawn") != levenshtein_distance("lawn", "flaw") { return false; }
+    // Triangle-ish: d(a,c) <= d(a,b) + d(b,c) (small smoke).
+    let dab: Int = levenshtein_distance("kitten", "smitten");
+    let dbc: Int = levenshtein_distance("smitten", "sitting");
+    let dac: Int = levenshtein_distance("kitten", "sitting");
+    if dac > dab + dbc { return false; }
+    // Domain certificate round-trip.
+    let c1: DomainCert = levenshtein_holds("kitten", "sitting");
+    if c1.holds != 1 { return false; }
+    if c1.domain != "text" { return false; }
+    if c1.law_name != "levenshtein_distance_law" { return false; }
+    // lev_abs sanity (no abs_f).
+    if lev_abs(0) != 0 { return false; }
+    if lev_abs(5) != 5 { return false; }
+    if lev_abs(0 - 5) != 5 { return false; }
+    return true;
+}

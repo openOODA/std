@@ -1,0 +1,186 @@
+// # Discrete Measure Theory on Finite Sets
+//
+// Logline: Provide sigma-algebras on finite sets, probability measures, the Lebesgue integral on finite discrete measure spaces, measurability checks, and a dominated-convergence verifier.
+//
+// Setup: Pure finite set measure theory. The universe is a list of elements indexed 0..n-1; subsets are encoded as Int bitmasks of width n. Measure values are Floats.
+//
+// Beats:
+//   1. sigma_algebra_new builds an empty sigma-algebra on a given universe.
+//   2. sa_add_set registers a subset mask; duplicates collapse to the existing entry.
+//   3. sa_is_subset reports membership; sa_size counts registered masks.
+//   4. sa_is_sigma_algebra verifies empty set, full universe, complement closure, and pairwise union closure.
+//   5. measure_new attaches per-atom Floats; measure_total sums them.
+//   6. measure_is_probability is true when the total lies within tol of 1.0.
+//   7. measure_atom returns mu of a single-atom mask or 0.0.
+//   8. integrate computes the Lebesgue integral sum f(x_i) times mu(x_i).
+//   9. is_measurable checks every preimage mask belongs to the sigma-algebra.
+//   10. outer_measure_counting returns 1.0 per atom.
+//   11. dominated_conv_verifier checks |f_n| <= g and convergence of the last term to 0 within tol.
+//
+// residual: Continuous sigma-algebras and uncountable constructions are out of scope; finite discrete measure spaces only.
+
+type SigmaAlgebra = struct { universe: List[Int], subsets: List[Int] };
+type Measure = struct { sa: SigmaAlgebra, mu: List[Float] };
+
+pub fn sigma_algebra_new(universe: List[Int]) -> SigmaAlgebra {
+    return SigmaAlgebra { universe: universe, subsets: list_new() };
+}
+
+pub fn sa_universe_mask(sa: SigmaAlgebra) -> Int {
+    let n: Int = list_len(sa.universe);
+    let mut m: Int = 0;
+    let mut i: Int = 0;
+    while i < n { m = m + (1 << i); i = i + 1; }
+    return m;
+}
+
+pub fn sa_add_set(sa: SigmaAlgebra, mask: Int) -> SigmaAlgebra {
+    if sa_is_subset(sa, mask) { return sa; }
+    let mut subs: List[Int] = sa.subsets;
+    subs = list_push(subs, mask);
+    return SigmaAlgebra { universe: sa.universe, subsets: subs };
+}
+
+pub fn sa_is_subset(sa: SigmaAlgebra, mask: Int) -> Bool {
+    let n: Int = list_len(sa.subsets);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(sa.subsets, i) == mask { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn sa_size(sa: SigmaAlgebra) -> Int {
+    return list_len(sa.subsets);
+}
+
+pub fn mask_complement(universe_size: Int, mask: Int) -> Int {
+    let mut full: Int = 0;
+    let mut i: Int = 0;
+    while i < universe_size { full = full + (1 << i); i = i + 1; }
+    return full - mask;
+}
+
+pub fn mask_or(a: Int, b: Int) -> Int { return a | b; }
+
+pub fn sa_is_sigma_algebra(sa: SigmaAlgebra) -> Bool {
+    let n: Int = list_len(sa.universe);
+    let full: Int = sa_universe_mask(sa);
+    if sa_is_subset(sa, 0) == false { return false; }
+    if sa_is_subset(sa, full) == false { return false; }
+    let m: Int = list_len(sa.subsets);
+    let mut i: Int = 0;
+    while i < m {
+        let a: Int = list_get(sa.subsets, i);
+        let comp: Int = mask_complement(n, a);
+        if sa_is_subset(sa, comp) == false { return false; }
+        let mut j: Int = 0;
+        while j < m {
+            let b: Int = list_get(sa.subsets, j);
+            let u: Int = mask_or(a, b);
+            if sa_is_subset(sa, u) == false { return false; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn measure_new(sa: SigmaAlgebra, mu_values: List[Float]) -> Measure {
+    return Measure { sa: sa, mu: mu_values };
+}
+
+pub fn measure_total(m: Measure) -> Float {
+    let n: Int = list_len(m.mu);
+    let mut acc: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n { acc = acc + list_get(m.mu, i); i = i + 1; }
+    return acc;
+}
+
+pub fn approx_equal(x: Float, y: Float, tol: Float) -> Bool {
+    let diff: Float = x - y;
+    if diff < 0.0 {
+        if (0.0 - diff) < tol { return true; }
+    } else {
+        if diff < tol { return true; }
+    }
+    return false;
+}
+
+pub fn measure_is_probability(m: Measure) -> Bool {
+    let total: Float = measure_total(m);
+    return approx_equal(total, 1.0, 0.0001);
+}
+
+pub fn measure_atom(m: Measure, mask: Int) -> Float {
+    let n: Int = list_len(m.sa.universe);
+    if n < 1 { return 0.0; }
+    let mut k: Int = 0;
+    while k < n {
+        let bit: Int = (mask >> k) & 1;
+        if bit == 1 {
+            let other: Int = mask - (1 << k);
+            if other == 0 { return list_get(m.mu, k); }
+            return 0.0;
+        }
+        k = k + 1;
+    }
+    return 0.0;
+}
+
+pub fn integrate(m: Measure, f_values: List[Float]) -> Result[Float, String] {
+    let n: Int = list_len(m.mu);
+    let f_len: Int = list_len(f_values);
+    if f_len != n { return Err("ERR\tmeasure\tlen"); }
+    let mut acc: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let fv: Float = list_get(f_values, i);
+        let mv: Float = list_get(m.mu, i);
+        acc = acc + fv * mv;
+        i = i + 1;
+    }
+    return Ok(acc);
+}
+
+pub fn is_measurable(sa: SigmaAlgebra, f_values: List[Float], preimage_masks: List[Int]) -> Bool {
+    let n: Int = list_len(preimage_masks);
+    let mut i: Int = 0;
+    while i < n {
+        let mask: Int = list_get(preimage_masks, i);
+        if sa_is_subset(sa, mask) == false { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn outer_measure_counting(m: Measure) -> Float {
+    let n: Int = list_len(m.mu);
+    let mut acc: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n { acc = acc + 1.0; i = i + 1; }
+    return acc;
+}
+
+pub fn abs_le(x: Float, y: Float, tol: Float) -> Bool {
+    let mut ax: Float = x;
+    if ax < 0.0 { ax = 0.0 - ax; }
+    if ax < y + tol { return true; }
+    return false;
+}
+
+pub fn dominated_conv_verifier(f_n_values: List[Float], g: Float, n_terms: Int, tol: Float) -> Bool {
+    if n_terms <= 0 { return false; }
+    let n: Int = list_len(f_n_values);
+    if n < n_terms { return false; }
+    let mut i: Int = 0;
+    while i < n_terms {
+        let v: Float = list_get(f_n_values, i);
+        if abs_le(v, g, 0.0001) == false { return false; }
+        i = i + 1;
+    }
+    let last: Float = list_get(f_n_values, n_terms - 1);
+    return approx_equal(last, 0.0, tol);
+}

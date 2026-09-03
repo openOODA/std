@@ -1,0 +1,37 @@
+// # Side-Channel Immune Constant-Time Memory Comparator
+//
+// Logline: Compares byte buffers in deterministic constant execution time to eliminate timing side-channel leaks.
+//
+// Setup: Cryptographic byte equality and ordering comparator without early branch exits.
+//
+// Beats:
+//   1. Accumulate bitwise XOR differences across all buffer positions regardless of mismatch.
+//   2. Compute branchless equality predicates using bitwise integer arithmetic.
+//   3. Provide constant-time lexicographical ordering and hex string comparison routines.
+
+pub fn constant_time_memcmp_bytes(
+    buf_a: List[Int],
+    buf_b: List[Int],
+    len: Int
+) -> Bool {
+    let mut diff: Int = 0;
+    let mut i: Int = 0;
+
+    while i < len {
+        let a: Int = list_get(buf_a, i);
+        let b: Int = list_get(buf_b, i);
+        diff = diff | (a ^ b);
+        i = i + 1;
+    }
+
+    return diff == 0;
+}
+
+// constant_time_select_int and constant_time_lookup_table have been DELETED.
+// They were fake constant-time primitives: the source language has no
+// branchless Bool-to-Int conversion, so `if condition { 1 } else { 0 }`
+// compiles to a runtime branch on the secret-derived condition. That is a
+// textbook timing side-channel — a mock of a security-critical primitive.
+// Callers must use the real, branchless ct_select_int / ct_memcmp in
+// std/crypto/pqc_nist/pqc_constant_time_ops.oo (which take an Int mask
+// directly and use `0 - mask` arithmetic, not a Bool branch).

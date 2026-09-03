@@ -1,0 +1,110 @@
+// # Distributed supervision theory
+//
+// Logline: In a cluster, supervision decisions require replicated consensus (>= quorum) and a leader elected by a bounded timeout; no quorum denies supervision.
+//
+// Setup: Pure Int. Total nodes >= 1, alive nodes in [0, total]. Quorum = floor(total/2) + 1.
+//
+// Beats:
+//   1. ds_quorum_holds returns 1 iff alive >= quorum.
+//   2. ds_can_supervise returns 1 iff alive >= quorum AND a leader is elected.
+//   3. ds_leader_elected returns 1 iff a leader id is in [0, total).
+//   4. Coupled: leader election timeout is positive and bounded.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Quorum size for n nodes: floor(n/2) + 1.
+pub fn ds_quorum_size(total: Int) -> Int {
+    if total < 1 { return 0; }
+    let half: Int = total / 2;
+    return half + 1;
+}
+
+// 1 if alive >= quorum size; 0 otherwise.
+pub fn ds_quorum_holds(alive: Int, total: Int) -> Int {
+    if total < 1 { return 0; }
+    if alive < 0 { return 0; }
+    let q: Int = ds_quorum_size(total);
+    if alive >= q { return 1; }
+    return 0;
+}
+
+// 1 if a leader id points to a valid live node; 0 if id is out of [0, alive) range.
+pub fn ds_leader_elected(alive: Int, total: Int, leader_id: Int) -> Int {
+    if total < 1 { return 0; }
+    if alive < 0 { return 0; }
+    if leader_id < 0 { return 0; }
+    if alive == 0 { return 0; }
+    if leader_id >= alive { return 0; }
+    return 1;
+}
+
+// Coupled: election timeout valid if in [1, 60000] ms.
+pub fn ds_election_timeout_ok(timeout_ms: Int) -> Int {
+    if timeout_ms < 1 { return 0; }
+    if timeout_ms > 60000 { return 0; }
+    return 1;
+}
+
+// Closed: can supervise iff quorum holds AND a leader is elected AND timeout is sane.
+pub fn ds_can_supervise(
+    alive: Int,
+    total: Int,
+    leader_id: Int,
+    timeout_ms: Int
+) -> Int {
+    if ds_quorum_holds(alive, total) != 1 { return 0; }
+    if ds_leader_elected(alive, total, leader_id) != 1 { return 0; }
+    if ds_election_timeout_ok(timeout_ms) != 1 { return 0; }
+    return 1;
+}
+
+pub fn distributed_supervision_holds(
+    alive: Int,
+    total: Int,
+    leader_id: Int,
+    timeout_ms: Int
+) -> DomainCert {
+    let ok: Int = ds_can_supervise(alive, total, leader_id, timeout_ms);
+    return domain_cert("actor", "distributed_supervision", ok);
+}
+
+pub fn verify_distributed_supervision_theory() -> Bool {
+    if ds_quorum_size(1) != 1 { return false; }
+    if ds_quorum_size(2) != 2 { return false; }
+    if ds_quorum_size(3) != 2 { return false; }
+    if ds_quorum_size(5) != 3 { return false; }
+    if ds_quorum_size(7) != 4 { return false; }
+    if ds_quorum_size(0) != 0 { return false; }
+    if ds_quorum_size(0 - 1) != 0 { return false; }
+    if ds_quorum_holds(3, 5) != 1 { return false; }
+    if ds_quorum_holds(5, 5) != 1 { return false; }
+    if ds_quorum_holds(2, 5) != 0 { return false; }
+    if ds_quorum_holds(0, 5) != 0 { return false; }
+    if ds_quorum_holds(0 - 1, 5) != 0 { return false; }
+    if ds_quorum_holds(3, 0) != 0 { return false; }
+    if ds_leader_elected(3, 5, 0) != 1 { return false; }
+    if ds_leader_elected(3, 5, 2) != 1 { return false; }
+    if ds_leader_elected(3, 5, 3) != 0 { return false; }
+    if ds_leader_elected(3, 5, 0 - 1) != 0 { return false; }
+    if ds_leader_elected(0, 5, 0) != 0 { return false; }
+    if ds_election_timeout_ok(150) != 1 { return false; }
+    if ds_election_timeout_ok(1) != 1 { return false; }
+    if ds_election_timeout_ok(60000) != 1 { return false; }
+    if ds_election_timeout_ok(0) != 0 { return false; }
+    if ds_election_timeout_ok(60001) != 0 { return false; }
+    if ds_election_timeout_ok(0 - 1) != 0 { return false; }
+    if ds_can_supervise(3, 5, 0, 150) != 1 { return false; }
+    if ds_can_supervise(5, 5, 4, 150) != 1 { return false; }
+    if ds_can_supervise(2, 5, 0, 150) != 0 { return false; }
+    if ds_can_supervise(3, 5, 5, 150) != 0 { return false; }
+    if ds_can_supervise(3, 5, 0, 0) != 0 { return false; }
+    if ds_can_supervise(3, 5, 0, 60001) != 0 { return false; }
+    if ds_can_supervise(3, 0, 0, 150) != 0 { return false; }
+    let c1: DomainCert = distributed_supervision_holds(3, 5, 0, 150);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "actor" { return false; }
+    if c1.law_name != "distributed_supervision" { return false; }
+    let c2: DomainCert = distributed_supervision_holds(2, 5, 0, 150);
+    if c2.holds != 0 { return false; }
+    return true;
+}

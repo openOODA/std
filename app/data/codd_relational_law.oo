@@ -1,0 +1,109 @@
+// # Codd's Relational Model Rules
+//
+// Logline: A relation is a set of tuples; information is represented by values, not by position.
+//
+// Setup: Pure Int bitmask. Each rule is one bit; all-zero or out-of-range fails closed. Hosts data_invariants.oo stem.
+//
+// Beats:
+//   1. Information rule: data is represented as values in tables.
+//   2. Guaranteed access: every value is reachable by table, key, column.
+//   3. Systematic null support: missing info is distinct from zero or empty.
+//   4. Dynamic online catalog: schema is queryable like ordinary data.
+
+import "std/app/data/data_invariants.oo";
+
+// Codd rule bits: 1 info, 2 access, 4 null, 8 catalog, 16 dml, 32 view, 64 set, 128 physical.
+pub fn codd_info_bit() -> Int {
+    return 1;
+}
+
+pub fn codd_access_bit() -> Int {
+    return 2;
+}
+
+pub fn codd_null_bit() -> Int {
+    return 4;
+}
+
+pub fn codd_catalog_bit() -> Int {
+    return 8;
+}
+
+pub fn codd_dml_bit() -> Int {
+    return 16;
+}
+
+pub fn codd_view_bit() -> Int {
+    return 32;
+}
+
+pub fn codd_set_bit() -> Int {
+    return 64;
+}
+
+pub fn codd_physical_bit() -> Int {
+    return 128;
+}
+
+// True if the rule bit is set in the conformance mask.
+pub fn codd_rule_holds(mask: Int, rule_bit: Int) -> Bool {
+    if mask < 0 { return false; }
+    if rule_bit < 0 { return false; }
+    let combined: Int = mask & rule_bit;
+    if combined == 0 { return false; }
+    return true;
+}
+
+// Number of rules held in the conformance mask.
+fn cdc_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn codd_rules_held_count(mask: Int) -> Result[Int, String] {
+    if mask < 0 { return Err("ERR\tcdc\tdomain"); }
+    let mut count: Int = 0;
+    if codd_rule_holds(mask, codd_info_bit()) { count = count + 1; }
+    if codd_rule_holds(mask, codd_access_bit()) { count = count + 1; }
+    if codd_rule_holds(mask, codd_null_bit()) { count = count + 1; }
+    if codd_rule_holds(mask, codd_catalog_bit()) { count = count + 1; }
+    if codd_rule_holds(mask, codd_dml_bit()) { count = count + 1; }
+    if codd_rule_holds(mask, codd_view_bit()) { count = count + 1; }
+    if codd_rule_holds(mask, codd_set_bit()) { count = count + 1; }
+    if codd_rule_holds(mask, codd_physical_bit()) { count = count + 1; }
+    return Ok(count);
+}
+
+// KAT and hostile cases for Codd's relational model rules.
+pub fn verify_codd_relational_law() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    if codd_rule_holds(255, codd_info_bit()) == false { return false; }
+    if codd_rule_holds(255, codd_access_bit()) == false { return false; }
+    if codd_rule_holds(255, codd_null_bit()) == false { return false; }
+    if codd_rule_holds(255, codd_catalog_bit()) == false { return false; }
+    if codd_rule_holds(255, codd_dml_bit()) == false { return false; }
+    if codd_rule_holds(255, codd_view_bit()) == false { return false; }
+    if codd_rule_holds(255, codd_set_bit()) == false { return false; }
+    if codd_rule_holds(255, codd_physical_bit()) == false { return false; }
+    if codd_rule_holds(0, codd_info_bit()) == true { return false; }
+    if codd_rule_holds(127, codd_physical_bit()) == true { return false; }
+    if codd_rule_holds(63, codd_set_bit()) == true { return false; }
+    if codd_rule_holds(0 - 1, codd_info_bit()) == true { return false; }
+    if codd_rule_holds(255, 0 - 1) == true { return false; }
+    if cdc_got(codd_rules_held_count(255)) != 8 { return false; }
+    let zcodd: Result[Int, String] = codd_rules_held_count(0);
+    if zcodd.is_ok() == false { return false; }
+    if cdc_got(zcodd) != 0 { return false; }
+    if cdc_got(codd_rules_held_count(1)) != 1 { return false; }
+    if cdc_got(codd_rules_held_count(15)) != 4 { return false; }
+    if codd_rules_held_count(0 - 1).is_ok() { return false; }
+    if codd_info_bit() != 1 { return false; }
+    if codd_access_bit() != 2 { return false; }
+    if codd_null_bit() != 4 { return false; }
+    if codd_catalog_bit() != 8 { return false; }
+    if codd_dml_bit() != 16 { return false; }
+    if codd_view_bit() != 32 { return false; }
+    if codd_set_bit() != 64 { return false; }
+    if codd_physical_bit() != 128 { return false; }
+    return true;
+}

@@ -1,0 +1,94 @@
+// # Planck blackbody peak (Wien's displacement) law
+//
+// Logline: λ_max * T = b. b = 2.897771955e-3 m·K. T<=0 returns Err.
+//
+// Setup: Pure Float. Coupled with Stefan-Boltzmann total flux.
+//
+// Beats:
+//   1. λ_max = b / T in meters for T > 0.
+//   2. Peak spectral radiance grows as T^5 (Rayleigh-Jeans scaling at low freq).
+//   3. DomainCert holds when T > 0.
+
+import "std/core/principles/physical_constants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn pk_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn wien_constant() -> Float {
+    return 0.002897771955;
+}
+
+pub fn planck_peak_wavelength(T: Float) -> Result[Float, String] {
+    if T <= 0.0 { return Err("ERR\tpk\tT"); }
+    let b: Float = wien_constant();
+    return Ok(b / T);
+}
+
+pub fn planck_peak_frequency(T: Float) -> Result[Float, String] {
+    if T <= 0.0 { return Err("ERR\tpk\tT"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let c_val: Float = pc.speed_of_light;
+    let b: Float = wien_constant();
+    return Ok((c_val * T) / b);
+}
+
+pub fn stefan_boltzmann_flux_total(T: Float) -> Result[Float, String] {
+    if T <= 0.0 { return Err("ERR\tpk\tT"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let sigma: Float = pc.stefan_boltzmann;
+    let t2: Float = T * T;
+    let t4: Float = t2 * t2;
+    return Ok(sigma * t4);
+}
+
+pub fn phys_planck_blackbody_peak_law(T: Float) -> DomainCert {
+    let r: Result[Float, String] = planck_peak_wavelength(T);
+    let mut h: Int = 0;
+    match r {
+        Ok(lam) => {
+            let b: Float = wien_constant();
+            let want: Float = b / T;
+            let mut d: Float = lam - want;
+            if d < 0.0 { d = 0.0 - d; }
+            if d <= 0.0000000001 { h = 1; }
+        },
+        Err(_)  => { }
+    }
+    return domain_cert("phys", "planck_blackbody_peak", h);
+}
+
+pub fn verify_planck_blackbody_peak_law() -> Bool {
+    let t_sun: Float = 5778.0;
+    let lam: Float = pk_got(planck_peak_wavelength(t_sun));
+    let target: Float = 0.000000502;
+    let mut d: Float = lam - target;
+    if d < 0.0 { d = 0.0 - d; }
+    let bound: Float = target * 0.005;
+    if d > bound { return false; }
+    let b: Float = wien_constant();
+    let b_check: Float = lam * t_sun;
+    let mut dbc: Float = b_check - b;
+    if dbc < 0.0 { dbc = 0.0 - dbc; }
+    let dbc_pct: Float = (dbc * 100.0) / b;
+    if dbc_pct > 0.01 { return false; }
+    if planck_peak_wavelength(0.0).is_ok() { return false; }
+    if planck_peak_wavelength(0.0 - 100.0).is_ok() { return false; }
+    if planck_peak_frequency(0.0).is_ok() { return false; }
+    if stefan_boltzmann_flux_total(0.0).is_ok() { return false; }
+    let j: Float = pk_got(stefan_boltzmann_flux_total(t_sun));
+    let t5: Float = (t_sun * t_sun * t_sun * t_sun) * t_sun;
+    let r1: Float = j / t5;
+    let pc: PhysicalConstants = constants_codata_2022();
+    let sigma: Float = pc.stefan_boltzmann;
+    let r1_target: Float = sigma / t_sun;
+    let mut dr1: Float = r1 - r1_target;
+    if dr1 < 0.0 { dr1 = 0.0 - dr1; }
+    let dr1_pct: Float = (dr1 * 100.0) / r1_target;
+    if dr1_pct > 0.01 { return false; }
+    if j <= 0.0 { return false; }
+    if phys_planck_blackbody_peak_law(t_sun).holds != 1 { return false; }
+    if phys_planck_blackbody_peak_law(0.0).holds != 0 { return false; }
+    return true;
+}

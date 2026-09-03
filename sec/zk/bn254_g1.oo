@@ -1,0 +1,158 @@
+// # BN254 G1 Elliptic Curve Group Arithmetic
+//
+// Logline: Implements BN254 G1 affine point arithmetic on y^2 = x^3 + 3 over the 256-bit base field F_p.
+//
+// Setup: Affine Weierstrass curve arithmetic with point doubling, point addition, and scalar multiplication.
+//
+// Beats:
+//   1. Represent G1 points in affine coordinates (x, y) with infinity flag.
+//   2. Validate on-curve predicate: y^2 == x^3 + 3 (mod p).
+//   3. Compute affine point addition and point doubling.
+//   4. Compute scalar multiplication via double-and-add.
+
+import "./bn254_fp.oo";
+
+type Bn254G1Affine = struct {
+    x: Bn254Fp,
+    y: Bn254Fp,
+    is_infinity: Bool
+};
+
+pub fn bn254_g1_infinity() -> Bn254G1Affine {
+    return Bn254G1Affine {
+        x: bn254_fp_zero(),
+        y: bn254_fp_zero(),
+        is_infinity: true
+    };
+}
+
+pub fn bn254_g1_generator() -> Bn254G1Affine {
+    return Bn254G1Affine {
+        x: bn254_fp_one(),
+        y: bn254_fp_from_int(2),
+        is_infinity: false
+    };
+}
+
+pub fn bn254_g1_is_on_curve(p: Bn254G1Affine) -> Bool {
+    if p.is_infinity {
+        return true;
+    }
+    let y2: Bn254Fp = bn254_fp_mul(p.y, p.y);
+    let x2: Bn254Fp = bn254_fp_mul(p.x, p.x);
+    let x3: Bn254Fp = bn254_fp_mul(x2, p.x);
+    let three: Bn254Fp = bn254_fp_from_int(3);
+    let rhs: Bn254Fp = bn254_fp_add(x3, three);
+    return bn254_fp_equal(y2, rhs);
+}
+
+pub fn bn254_g1_neg(p: Bn254G1Affine) -> Bn254G1Affine {
+    if p.is_infinity {
+        return p;
+    }
+    return Bn254G1Affine {
+        x: p.x,
+        y: bn254_fp_sub(bn254_fp_zero(), p.y),
+        is_infinity: false
+    };
+}
+
+pub fn bn254_g1_sub(a: Bn254G1Affine, b: Bn254G1Affine) -> Bn254G1Affine {
+    return bn254_g1_add(a, bn254_g1_neg(b));
+}
+
+pub fn bn254_g1_double(p: Bn254G1Affine) -> Bn254G1Affine {
+    if p.is_infinity || bn254_fp_equal(p.y, bn254_fp_zero()) {
+        return bn254_g1_infinity();
+    }
+    let x2: Bn254Fp = bn254_fp_mul(p.x, p.x);
+    let three: Bn254Fp = bn254_fp_from_int(3);
+    let num: Bn254Fp = bn254_fp_mul(three, x2);
+    let two: Bn254Fp = bn254_fp_from_int(2);
+    let den: Bn254Fp = bn254_fp_mul(two, p.y);
+    let inv_den: Bn254Fp = bn254_fp_inv(den);
+    let lambda: Bn254Fp = bn254_fp_mul(num, inv_den);
+
+    let lambda2: Bn254Fp = bn254_fp_mul(lambda, lambda);
+    let two_x: Bn254Fp = bn254_fp_mul(two, p.x);
+    let x3: Bn254Fp = bn254_fp_sub(lambda2, two_x);
+
+    let x_diff: Bn254Fp = bn254_fp_sub(p.x, x3);
+    let lam_xdiff: Bn254Fp = bn254_fp_mul(lambda, x_diff);
+    let y3: Bn254Fp = bn254_fp_sub(lam_xdiff, p.y);
+
+    return Bn254G1Affine {
+        x: x3,
+        y: y3,
+        is_infinity: false
+    };
+}
+
+pub fn bn254_g1_add(a: Bn254G1Affine, b: Bn254G1Affine) -> Bn254G1Affine {
+    if a.is_infinity { return b; }
+    if b.is_infinity { return a; }
+
+    if bn254_fp_equal(a.x, b.x) {
+        if bn254_fp_equal(a.y, b.y) {
+            return bn254_g1_double(a);
+        }
+        return bn254_g1_infinity();
+    }
+
+    let num: Bn254Fp = bn254_fp_sub(b.y, a.y);
+    let den: Bn254Fp = bn254_fp_sub(b.x, a.x);
+    let inv_den: Bn254Fp = bn254_fp_inv(den);
+    let lambda: Bn254Fp = bn254_fp_mul(num, inv_den);
+
+    let lambda2: Bn254Fp = bn254_fp_mul(lambda, lambda);
+    let x_sum: Bn254Fp = bn254_fp_add(a.x, b.x);
+    let x3: Bn254Fp = bn254_fp_sub(lambda2, x_sum);
+
+    let x_diff: Bn254Fp = bn254_fp_sub(a.x, x3);
+    let lam_xdiff: Bn254Fp = bn254_fp_mul(lambda, x_diff);
+    let y3: Bn254Fp = bn254_fp_sub(lam_xdiff, a.y);
+
+    return Bn254G1Affine {
+        x: x3,
+        y: y3,
+        is_infinity: false
+    };
+}
+
+pub fn bn254_g1_scalar_mul(p: Bn254G1Affine, scalar: Int) -> Bn254G1Affine {
+    if scalar == 0 || p.is_infinity {
+        return bn254_g1_infinity();
+    }
+    let mut res: Bn254G1Affine = bn254_g1_infinity();
+    let mut base: Bn254G1Affine = p;
+    let mut s: Int = scalar;
+    while s > 0 {
+        if (s & 1) == 1 {
+            res = bn254_g1_add(res, base);
+        }
+        base = bn254_g1_double(base);
+        s = s >> 1;
+    }
+    return res;
+}
+
+pub fn bn254_g1_scalar_mul_fp(p: Bn254G1Affine, s: Bn254Fp) -> Bn254G1Affine {
+    if p.is_infinity || bn254_fp_equal(s, bn254_fp_zero()) {
+        return bn254_g1_infinity();
+    }
+    let s_limbs: List[Int] = bn254_fp_to_list(s);
+    let mut res: Bn254G1Affine = bn254_g1_infinity();
+    let mut base: Bn254G1Affine = p;
+    let mut bit_idx: Int = 0;
+    while bit_idx < 256 {
+        let word_idx: Int = bit_idx / 32;
+        let bit_in_word: Int = bit_idx % 32;
+        let bit_val: Int = (list_get(s_limbs, word_idx) >> bit_in_word) & 1;
+        if bit_val == 1 {
+            res = bn254_g1_add(res, base);
+        }
+        base = bn254_g1_double(base);
+        bit_idx = bit_idx + 1;
+    }
+    return res;
+}

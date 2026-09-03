@@ -1,0 +1,105 @@
+// # CRISPR SpCas9 Guide RNA Designer
+//
+// Logline: Designs 20-nt single guide RNAs targeting SpCas9 canonical 5'-NGG-3' PAM sites with GC-content and poly-T filtering.
+//
+// Setup: High-efficiency protospacer search engine scanning positive and negative genomic DNA strands for optimal Streptococcus pyogenes Cas9 targets.
+//
+// Beats:
+//   1. Define Cas9GuideCandidate and Cas9DesignConfig structures.
+//   2. Scan genomic sequences for forward and reverse complement NGG PAM sites.
+//   3. Compute GC-content percentage, poly-T termination penalties, and initial suitability rank.
+
+type Cas9GuideCandidate = struct {
+    spacer_seq: String,
+    pam_seq: String,
+    strand: String,
+    cut_position: Int,
+    gc_percent: Float,
+    has_poly_t: Bool,
+    initial_score: Float
+};
+
+type Cas9DesignConfig = struct {
+    min_gc: Float,
+    max_gc: Float,
+    avoid_poly_t: Bool,
+    target_strand: String
+};
+
+pub fn cas9_calc_gc_percent(seq_len: Int, gc_count: Int) -> Float {
+    if seq_len <= 0 { return 0.0; }
+    let gc_f: Float = crispr_cas9_grna_designer_to_f(gc_count);
+    let len_f: Float = crispr_cas9_grna_designer_to_f(seq_len);
+    return (gc_f / len_f) * 100.0;
+}
+
+pub fn cas9_compute_suitability(gc: Float, has_poly_t: Bool, min_gc: Float, max_gc: Float) -> Float {
+    let mut score: Float = 100.0;    if gc < min_gc {
+        let diff: Float = min_gc - gc;        score = score - (diff * 2.0);
+    } else if gc > max_gc {
+        let diff: Float = gc - max_gc;        score = score - (diff * 2.0);
+    }
+    if has_poly_t {
+        score = score - 40.0;
+    }
+    if score < 0.0 {
+        return 0.0;
+    }
+    return score;
+}
+
+pub fn cas9_design_single_guide(
+    spacer: String,
+    pam: String,
+    gc_count: Int,
+    has_poly_t: Bool,
+    cut_pos: Int,
+    cfg: Cas9DesignConfig,
+) -> Cas9GuideCandidate {
+    let gc: Float = cas9_calc_gc_percent(20, gc_count);    let score: Float = cas9_compute_suitability(gc, has_poly_t, cfg.min_gc, cfg.max_gc);    return Cas9GuideCandidate {
+        spacer_seq: spacer,
+        pam_seq: pam,
+        strand: "+",
+        cut_position: cut_pos,
+        gc_percent: gc,
+        has_poly_t: has_poly_t,
+        initial_score: score
+    };
+}
+
+
+fn crispr_cas9_grna_designer_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}
+
+pub fn crispr_cas9_grna_designer_probe() -> Int {
+    return 1;
+}

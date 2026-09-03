@@ -1,0 +1,124 @@
+// # AES round theory
+//
+// Logline: AES-128 applies 10 rounds plus a final AddRoundKey, so it needs 11 round keys; the toy round(plain,key)=xor(plain*2,key) composes N rounds and the closed round count lives in [0,14].
+//
+// Setup: Pure Int. FIPS 197 AES-128 has 10 rounds with one extra final AddRoundKey; toy cipher uses shift-left-by-1 then xor with the key, so it is reversible when the key is known.
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and ^.
+//
+// Beats:
+//   1. crypto_aes_round_count returns 10 (AES-128 standard).
+//   2. crypto_aes_round_keys returns 11 (10 rounds + 1 final).
+//   3. crypto_aes_is_valid_round_count holds when round_count is in [0,14].
+//   4. crypto_aes_toy_round(plain, key) = (plain * 2) ^ key  (closed, one round).
+//   5. crypto_aes_toy_encrypt(plain, key, n) composes n toy rounds (coupled, full AES-128 = 10 rounds).
+//   6. Hostile round_count < 0 or round_count > 14 fails closed; hostile negative rounds returns 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+// AES-128 standard round count. FIPS 197 section 5.1.
+pub fn crypto_aes_round_count() -> Int {
+    return 10;
+}
+
+// AES-128 round-key count: rounds + 1 final AddRoundKey.
+pub fn crypto_aes_round_keys() -> Int {
+    return 11;
+}
+
+// 1 if round_count is in [0,14] (AES key-schedule range for AES-128/192/256); 0 otherwise.
+pub fn crypto_aes_is_valid_round_count(rc: Int) -> Int {
+    if rc < 0 { return 0; }
+    if rc > 14 { return 0; }
+    return 1;
+}
+
+// Closed (one round): shift left by 1 then xor with key.
+pub fn crypto_aes_toy_round(plain: Int, key: Int) -> Int {
+    return (plain * 2) ^ key;
+}
+
+fn aest_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Coupled (N rounds): compose toy_round n times. rounds=0 is Ok(plain). rounds<0 is Err.
+pub fn crypto_aes_toy_encrypt(plain: Int, key: Int, rounds: Int) -> Result[Int, String] {
+    if rounds < 0 { return Err("ERR\taest\tdomain"); }
+    let mut s: Int = plain;
+    let mut i: Int = 0;
+    while i < rounds {
+        s = crypto_aes_toy_round(s, key);
+        i = i + 1;
+    }
+    return Ok(s);
+}
+
+// domain_cert wrapper: holds=1 iff round_count is in [0,14].
+pub fn aes_round_holds(round_count: Int) -> DomainCert {
+    let ok: Int = crypto_aes_is_valid_round_count(round_count);
+    return domain_cert("crypto", "aes_round_theory", ok);
+}
+
+pub fn verify_aes_round_theory() -> Bool {
+    // Golden: AES-128 has 10 rounds and 11 round keys.
+    if crypto_aes_round_count() != 10 { return false; }
+    if crypto_aes_round_keys() != 11 { return false; }
+    // Coupled: 10 rounds + 1 final = 11 round keys.
+    if crypto_aes_round_count() + 1 != crypto_aes_round_keys() { return false; }
+
+    // Golden: is_valid_round_count for the closed AES range [0,14].
+    if crypto_aes_is_valid_round_count(0) != 1 { return false; }
+    if crypto_aes_is_valid_round_count(1) != 1 { return false; }
+    if crypto_aes_is_valid_round_count(7) != 1 { return false; }
+    if crypto_aes_is_valid_round_count(10) != 1 { return false; }
+    if crypto_aes_is_valid_round_count(14) != 1 { return false; }
+
+    // Golden: toy round(plain, key) = (plain * 2) ^ key.
+    if crypto_aes_toy_round(0, 0) != 0 { return false; }
+    if crypto_aes_toy_round(0, 255) != 255 { return false; }
+    if crypto_aes_toy_round(1, 0) != 2 { return false; }
+    if crypto_aes_toy_round(1, 255) != 253 { return false; }  // 2 ^ 255 = 253
+    if crypto_aes_toy_round(3, 5) != 3 { return false; }      // 6 ^ 5 = 3
+    if crypto_aes_toy_round(4, 4) != 12 { return false; }     // 8 ^ 4 = 12
+    if crypto_aes_toy_round(16, 0) != 32 { return false; }
+    if crypto_aes_toy_round(43, 21) != 67 { return false; }   // 86 ^ 21 = 71? recompute: 86=0b01010110, 21=0b00010101, xor=0b01000011=67
+
+    // Golden: 0-round encryption is the identity.
+    let zenc: Result[Int, String] = crypto_aes_toy_encrypt(66, 153, 0);
+    if zenc.is_ok() == false { return false; }
+    if aest_got(zenc) != 66 { return false; }
+    // Golden: 1-round encryption equals one toy round.
+    if aest_got(crypto_aes_toy_encrypt(16, 7, 1)) != 39 { return false; }
+    // Golden: 2-round composition is deterministic.
+    let s1: Int = aest_got(crypto_aes_toy_encrypt(32, 7, 1));
+    let s2: Int = aest_got(crypto_aes_toy_encrypt(s1, 7, 1));
+    if aest_got(crypto_aes_toy_encrypt(32, 7, 2)) != s2 { return false; }
+    // Golden: 10-round composition is deterministic and stable across calls.
+    let ten_a: Int = aest_got(crypto_aes_toy_encrypt(1807859426, 729683222, 10));
+    let ten_b: Int = aest_got(crypto_aes_toy_encrypt(1807859426, 729683222, 10));
+    if ten_a != ten_b { return false; }
+    // Sanity: full 10-round output is not the identity (toy cipher actually mixes).
+    if ten_a == 1807859426 { return false; }
+
+    // Hostile: round_count < 0 fails closed.
+    if crypto_aes_is_valid_round_count(0 - 1) != 0 { return false; }
+    if crypto_aes_is_valid_round_count(0 - 100) != 0 { return false; }
+    // Hostile: round_count > 14 fails closed.
+    if crypto_aes_is_valid_round_count(15) != 0 { return false; }
+    if crypto_aes_is_valid_round_count(100) != 0 { return false; }
+    // Hostile: negative rounds on toy encryption is Err (0 is in-band ciphertext).
+    if crypto_aes_toy_encrypt(66, 153, 0 - 1).is_ok() { return false; }
+
+    // Coupled: domain_cert holds=1 for valid round count and 0 for hostile.
+    let c1: DomainCert = aes_round_holds(10);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "crypto" { return false; }
+    if c1.law_name != "aes_round_theory" { return false; }
+    let c2: DomainCert = aes_round_holds(0 - 1);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = aes_round_holds(15);
+    if c3.holds != 0 { return false; }
+
+    return true;
+}

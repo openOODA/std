@@ -1,0 +1,142 @@
+// # PID control theory
+//
+// Logline: Discrete PID u = Kp e + Ki integral(e) + Kd (e - e_prev)/dt with anti-windup integral clamp and output clamp.
+//
+// Setup: Pure Float. Kp, Ki, Kd must be non-negative. dt must be positive. Output limits define [limit_min, limit_max].
+//
+// Beats:
+//   1. pid_create builds a fresh PidState with zeroed error history.
+//   2. pid_step returns a new PidState with updated integral and e_prev.
+//   3. Anti-windup clamps the integral to keep the i_term within the output band.
+//   4. Hostile negative gains, non-positive dt, or reversed limits fail closed to a zero state.
+
+pub type PidState = struct {
+    kp: Float,
+    ki: Float,
+    kd: Float,
+    e_prev: Float,
+    integral: Float,
+    output_limit_min: Float,
+    output_limit_max: Float
+};
+
+fn pid_got(r: Result[PidState, String]) -> PidState {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return PidState { kp: 0.0 - 1.0, ki: 0.0, kd: 0.0, e_prev: 0.0, integral: 0.0, output_limit_min: 0.0, output_limit_max: 0.0 }; }
+    }
+}
+
+pub fn pid_create(
+    kp: Float,
+    ki: Float,
+    kd: Float,
+    limit_min: Float,
+    limit_max: Float
+) -> Result[PidState, String] {
+    if kp < 0.0 { return Err("ERR\tpid\tdomain"); }
+    if ki < 0.0 { return Err("ERR\tpid\tdomain"); }
+    if kd < 0.0 { return Err("ERR\tpid\tdomain"); }
+    if limit_max < limit_min { return Err("ERR\tpid\tdomain"); }
+    return Ok(PidState { kp: kp, ki: ki, kd: kd, e_prev: 0.0, integral: 0.0, output_limit_min: limit_min, output_limit_max: limit_max });
+}
+
+pub fn pid_step(state: PidState, error: Float, dt: Float) -> Result[PidState, String] {
+    if state.kp < 0.0 { return Err("ERR\tpid\tdomain"); }
+    if state.ki < 0.0 { return Err("ERR\tpid\tdomain"); }
+    if state.kd < 0.0 { return Err("ERR\tpid\tdomain"); }
+    if dt <= 0.0 { return Err("ERR\tpid\tdomain"); }
+    if state.output_limit_max < state.output_limit_min { return Err("ERR\tpid\tdomain"); }
+    let mut new_integral: Float = state.integral + (error * dt);
+    // Anti-windup: clamp the integral so the i_term (ki * integral) stays inside the output band.
+    let mut int_min: Float = state.output_limit_min;
+    let mut int_max: Float = state.output_limit_max;
+    if state.ki > 0.0 {
+        int_min = state.output_limit_min / state.ki;
+        int_max = state.output_limit_max / state.ki;
+    }
+    if new_integral > int_max {
+        new_integral = int_max;
+    }
+    if new_integral < int_min {
+        new_integral = int_min;
+    }
+    return Ok(PidState {
+        kp: state.kp,
+        ki: state.ki,
+        kd: state.kd,
+        e_prev: error,
+        integral: new_integral,
+        output_limit_min: state.output_limit_min,
+        output_limit_max: state.output_limit_max
+    });
+}
+
+pub fn verify_pid_control_theory() -> Bool {
+    // Golden: Kp=1, Ki=0.1, Kd=0.01, limits [-10, 10].
+    let s0: PidState = pid_got(pid_create(1.0, 0.1, 0.01, 0.0 - 10.0, 10.0));
+    let mut d: Float = s0.kp - 1.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s0.ki - 0.1;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s0.kd - 0.01;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s0.e_prev - 0.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s0.integral - 0.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s0.output_limit_min - (0.0 - 10.0);
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s0.output_limit_max - 10.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    // Step: error=2.0, dt=0.1 -> integral = 0 + 2.0*0.1 = 0.2, e_prev = 2.0.
+    let s1: PidState = pid_got(pid_step(s0, 2.0, 0.1));
+    d = s1.integral - 0.2;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s1.e_prev - 2.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    // Step again: error=3.0, dt=0.1 -> integral = 0.2 + 0.3 = 0.5.
+    let s2: PidState = pid_got(pid_step(s1, 3.0, 0.1));
+    d = s2.integral - 0.5;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s2.e_prev - 3.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    // Anti-windup: with ki=0.1 and limit_max=10, integral should clamp to 10/0.1 = 100.
+    let s3: PidState = pid_got(pid_step(s0, 10000.0, 0.1));
+    d = s3.integral - 100.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+    d = s3.e_prev - 10000.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    // Anti-windup lower bound: large negative error clamps integral to limit_min/ki = -100.
+    let s4: PidState = pid_got(pid_step(s0, 0.0 - 10000.0, 0.1));
+    d = s4.integral - (0.0 - 100.0);
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    let zpid: PidState = pid_got(pid_create(0.0, 0.0, 0.0, 0.0 - 10.0, 10.0));
+    d = zpid.kp - 0.0; if d < 0.0 { d = 0.0 - d; } if d > 0.0000001 { return false; }
+    if pid_create(0.0 - 1.0, 0.1, 0.01, 0.0 - 10.0, 10.0).is_ok() { return false; }
+    if pid_create(1.0, 0.0 - 0.1, 0.01, 0.0 - 10.0, 10.0).is_ok() { return false; }
+    if pid_create(1.0, 0.1, 0.0 - 0.01, 0.0 - 10.0, 10.0).is_ok() { return false; }
+    if pid_step(s0, 5.0, 0.0 - 0.1).is_ok() { return false; }
+    if pid_step(s0, 5.0, 0.0).is_ok() { return false; }
+    if pid_create(1.0, 0.1, 0.01, 10.0, 0.0 - 10.0).is_ok() { return false; }
+    return true;
+}

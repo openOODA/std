@@ -1,0 +1,94 @@
+// # Denavit-Hartenberg (DH) Joint Parameters
+//
+// Logline: Defines DH joint types, homogeneous pose types, and the standard DH link transformation matrix.
+//
+// Setup: Pure 6-DoF serial manipulator kinematics. No capability tokens.
+//
+// Beats:
+//   1. Define DhJoint, Pose6D, and Matrix4x4Homogeneous product types.
+//   2. Provide identity and 4x4 homogeneous matrix multiplication.
+//   3. Compute the standard DH transformation for one joint.
+//   4. Export primitive helpers used by the forward chain and Jacobian.
+// residual: Modified DH convention and dual-quaternion frames are residual.
+
+pub type DhJoint = struct {
+    theta_rad: Float,
+    d_offset: Float,
+    a_length: Float,
+    alpha_rad: Float
+};
+
+pub type Pose6D = struct {
+    x: Float,
+    y: Float,
+    z: Float,
+    roll: Float,
+    pitch: Float,
+    yaw: Float
+};
+
+pub type Matrix4x4Homogeneous = struct {
+    r11: Float, r12: Float, r13: Float, tx: Float,
+    r21: Float, r22: Float, r23: Float, ty: Float,
+    r31: Float, r32: Float, r33: Float, tz: Float
+};
+
+pub fn dh_joint_new(theta_rad: Float, d_offset: Float, a_length: Float, alpha_rad: Float) -> DhJoint {
+    return DhJoint {
+        theta_rad: theta_rad,
+        d_offset: d_offset,
+        a_length: a_length,
+        alpha_rad: alpha_rad
+    };
+}
+
+pub fn matrix4x4_identity() -> Matrix4x4Homogeneous {
+    return Matrix4x4Homogeneous {
+        r11: 1.0, r12: 0.0, r13: 0.0, tx: 0.0,
+        r21: 0.0, r22: 1.0, r23: 0.0, ty: 0.0,
+        r31: 0.0, r32: 0.0, r33: 1.0, tz: 0.0
+    };
+}
+
+pub fn matrix4x4_multiply(
+    a: Matrix4x4Homogeneous,
+    b: Matrix4x4Homogeneous
+) -> Matrix4x4Homogeneous {
+    return Matrix4x4Homogeneous {
+        r11: (a.r11 * b.r11) + (a.r12 * b.r21) + (a.r13 * b.r31),
+        r12: (a.r11 * b.r12) + (a.r12 * b.r22) + (a.r13 * b.r32),
+        r13: (a.r11 * b.r13) + (a.r12 * b.r23) + (a.r13 * b.r33),
+        tx:  (a.r11 * b.tx)  + (a.r12 * b.ty)  + (a.r13 * b.tz)  + a.tx,
+        r21: (a.r21 * b.r11) + (a.r22 * b.r21) + (a.r23 * b.r31),
+        r22: (a.r21 * b.r12) + (a.r22 * b.r22) + (a.r23 * b.r32),
+        r23: (a.r21 * b.r13) + (a.r22 * b.r23) + (a.r23 * b.r33),
+        ty:  (a.r21 * b.tx)  + (a.r22 * b.ty)  + (a.r23 * b.tz)  + a.ty,
+        r31: (a.r31 * b.r11) + (a.r32 * b.r21) + (a.r33 * b.r31),
+        r32: (a.r31 * b.r12) + (a.r32 * b.r22) + (a.r33 * b.r32),
+        r33: (a.r31 * b.r13) + (a.r32 * b.r23) + (a.r33 * b.r33),
+        tz:  (a.r31 * b.tx)  + (a.r32 * b.ty)  + (a.r33 * b.tz)  + a.tz
+    };
+}
+
+pub fn dh_joint_matrix(joint: &DhJoint) -> Matrix4x4Homogeneous {
+    let ct: Float = cos(joint.theta_rad);
+    let st: Float = sin(joint.theta_rad);
+    let ca: Float = cos(joint.alpha_rad);
+    let sa: Float = sin(joint.alpha_rad);
+    let a: Float = joint.a_length;
+    let d: Float = joint.d_offset;
+    return Matrix4x4Homogeneous {
+        r11: ct,
+        r12: 0.0 - (st * ca),
+        r13: st * sa,
+        tx:  a * ct,
+        r21: st,
+        r22: ct * ca,
+        r23: 0.0 - (ct * sa),
+        ty:  a * st,
+        r31: 0.0,
+        r32: sa,
+        r33: ca,
+        tz:  d
+    };
+}

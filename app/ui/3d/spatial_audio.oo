@@ -1,0 +1,16 @@
+// # Spatial Audio Facade
+//
+// Logline: Destubbed onto ./spatial_audio_types.oo Int-floor API.
+//
+// Setup: Companion types destubbed; keep fail-closed real calls.
+//
+// Beats:
+//   1. Import destubbed companion.
+//   2. Wrap constructor and Int query.
+//   3. Deterministic work helper for prove.
+
+import "./spatial_audio_types.oo";
+
+pub fn spatial_audio_init(x: Int, y: Int, z: Int, volume: Int) -> AudioSource {
+    return audio_source_new(x, y, z, volume);
+}

@@ -1,0 +1,171 @@
+// # Landlock Path/Net Evaluation & Work Metrics
+//
+// Logline: Evaluate target paths and ports against a LandlockRuleset; record stats and denial reasons.
+//
+// Setup: Imports landlock_ruleset.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. landlock_check_path_prefix: gate target against allowed prefix.
+//   2. landlock_ruleset_eval_path: walk path_rules and return first allowed or denial.
+//   3. landlock_ruleset_eval_net: walk net_rules and return first allowed or denial.
+//   4. landlock_engine_work_metrics: emit rules_evaluations and denials counters.
+//
+// residual: live kernel landlock_add_rule is process_exit in landlock_stubs.
+
+// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
+// RULES.oot 1.3: Fail-closed residual for unimplemented builtins.
+
+import "std/sec/path_scope.oo";
+import "std/sec/sys/landlock_ruleset.oo";
+
+pub fn landlock_check_path_prefix(allowed_prefix: String, target_path: String) -> Bool {
+    return path_scope_allows(allowed_prefix, target_path);
+}
+
+pub fn landlock_ruleset_eval_path(
+    ruleset: &mut LandlockRuleset,
+    target_path: String,
+    requested_access: Int
+) -> LandlockEvaluationResult {
+    let mut ruleset: mut LandlockRuleset = ruleset;
+    let old_evals: Int = ruleset.stats_evaluations;
+    ruleset.stats_evaluations = old_evals + 1;
+
+    let paths: List[PathBeneathAttr] = ruleset.path_rules;
+    let n: Int = list_len(paths);
+    let mut i: Int = 0;
+    while i < n {
+        let path_rule: PathBeneathAttr = list_get(paths, i);
+        if landlock_check_path_prefix(path_rule.path, target_path) {
+            let has_access: Bool = access_rights_has_fs_permission(path_rule.allowed_access, requested_access);
+            if has_access {
+                return LandlockEvaluationResult {
+                    allowed: true,
+                    target: target_path,
+                    requested_access: requested_access,
+                    matched_rule_index: i,
+                    denial_reason: ""
+                };
+            } else {
+                let old_denials: Int = ruleset.stats_denials;
+                ruleset.stats_denials = old_denials + 1;
+                return LandlockEvaluationResult {
+                    allowed: false,
+                    target: target_path,
+                    requested_access: requested_access,
+                    matched_rule_index: i,
+                    denial_reason: "Requested filesystem access rights exceed allowed rule rights for path: " + target_path
+                };
+            }
+        }
+        i = i + 1;
+    }
+
+    // Handled access check: if the access type is handled by the ruleset, default is deny
+    let is_handled: Bool = access_rights_has_fs_permission(ruleset.handled_access_fs, requested_access);
+    if is_handled {
+        let old_denials: Int = ruleset.stats_denials;
+        ruleset.stats_denials = old_denials + 1;
+        return LandlockEvaluationResult {
+            allowed: false,
+            target: target_path,
+            requested_access: requested_access,
+            matched_rule_index: -1,
+            denial_reason: "Access handled by Landlock ruleset but no matching path rule permitted it: " + target_path
+        };
+    }
+
+    return LandlockEvaluationResult {
+        allowed: true,
+        target: target_path,
+        requested_access: requested_access,
+        matched_rule_index: -1,
+        denial_reason: ""
+    };
+}
+
+pub fn landlock_ruleset_eval_net(
+    ruleset: &mut LandlockRuleset,
+    port: Int,
+    requested_access: Int
+) -> LandlockEvaluationResult {
+    let mut ruleset: mut LandlockRuleset = ruleset;
+    let old_evals: Int = ruleset.stats_evaluations;
+    ruleset.stats_evaluations = old_evals + 1;
+
+    let nets: List[NetPortAttr] = ruleset.net_rules;
+    let n: Int = list_len(nets);
+    let mut i: Int = 0;
+    while i < n {
+        let net_rule: NetPortAttr = list_get(nets, i);
+        if net_rule.port == port {
+            let mut has_access: Bool = false;
+            if requested_access > 0 {
+                has_access = (net_rule.allowed_access / requested_access) % 2 != 0;
+            }
+            if has_access {
+                return LandlockEvaluationResult {
+                    allowed: true,
+                    target: "port_" + port.to_string(),
+                    requested_access: requested_access,
+                    matched_rule_index: i,
+                    denial_reason: ""
+                };
+            } else {
+                let old_denials: Int = ruleset.stats_denials;
+                ruleset.stats_denials = old_denials + 1;
+                return LandlockEvaluationResult {
+                    allowed: false,
+                    target: "port_" + port.to_string(),
+                    requested_access: requested_access,
+                    matched_rule_index: i,
+                    denial_reason: "Requested net access rights exceed allowed rule rights for port: " + port.to_string()
+                };
+            }
+        }
+        i = i + 1;
+    }
+
+    let mut is_handled: Bool = false;
+    if requested_access > 0 {
+        is_handled = (ruleset.handled_access_net / requested_access) % 2 != 0;
+    }
+    if is_handled {
+        let old_denials: Int = ruleset.stats_denials;
+        ruleset.stats_denials = old_denials + 1;
+        return LandlockEvaluationResult {
+            allowed: false,
+            target: "port_" + port.to_string(),
+            requested_access: requested_access,
+            matched_rule_index: -1,
+            denial_reason: "Network access handled by Landlock ruleset but no matching port rule permitted it: " + port.to_string()
+        };
+    }
+
+    return LandlockEvaluationResult {
+        allowed: true,
+        target: "port_" + port.to_string(),
+        requested_access: requested_access,
+        matched_rule_index: -1,
+        denial_reason: ""
+    };
+}
+
+pub fn landlock_ruleset_reset_stats(ruleset: &mut LandlockRuleset) {
+    let mut ruleset: mut LandlockRuleset = ruleset;
+    ruleset.stats_evaluations = 0;
+    ruleset.stats_denials = 0;
+}
+
+pub fn landlock_ruleset_do_work(ruleset: &LandlockRuleset) -> Int {
+    let r_added: Int = ruleset.stats_rules_added;
+    let r_evals: Int = ruleset.stats_evaluations;
+    let r_denials: Int = ruleset.stats_denials;
+    let n_paths: Int = ruleset.stats_rules_added;
+    let n_nets: Int = ruleset.stats_rules_added;
+    let s1: Int = r_added + r_evals;
+    let s2: Int = r_denials + n_paths;
+    let sum1: Int = s1 + s2;
+    return sum1 + n_nets;
+}
+

@@ -1,0 +1,122 @@
+// # Matrix Exponential by Scaling and Squaring
+//
+// Logline: Forms exp(A) by scaling A, a truncated Taylor series, and repeated squaring.
+//
+// Setup: Pure math. A is square row-major List[Float], n at most 4.
+//
+// Beats:
+//   1. Reject a non-square payload.
+//   2. Scale A by 1/2 until the inf-norm is below one half.
+//   3. Sum twelve Taylor terms of exp(A / 2^s).
+//   4. Square the result s times.
+
+import "std/core/primitives/result.oo";
+
+fn expm_get(a: List[Float], n: Int, i: Int, j: Int) -> Float {
+    return list_get(a, i * n + j);
+}
+
+fn expm_id(n: Int) -> List[Float] {
+    let mut q: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut v: Float = 0.0;
+            if i == j { v = 1.0; }
+            q = list_push(q, v);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return q;
+}
+
+fn expm_mul(a: List[Float], b: List[Float], n: Int) -> List[Float] {
+    let mut o: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut s: Float = 0.0;
+            let mut k: Int = 0;
+            while k < n {
+                s = s + expm_get(a, n, i, k) * expm_get(b, n, k, j);
+                k = k + 1;
+            }
+            o = list_push(o, s);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return o;
+}
+
+fn expm_add(a: List[Float], b: List[Float], n: Int) -> List[Float] {
+    let mut o: List[Float] = list_new();
+    let mut t: Int = 0;
+    while t < n * n {
+        o = list_push(o, list_get(a, t) + list_get(b, t));
+        t = t + 1;
+    }
+    return o;
+}
+
+fn expm_scale(a: List[Float], s: Float, n: Int) -> List[Float] {
+    let mut o: List[Float] = list_new();
+    let mut t: Int = 0;
+    while t < n * n {
+        o = list_push(o, s * list_get(a, t));
+        t = t + 1;
+    }
+    return o;
+}
+
+fn expm_infnorm(a: List[Float], n: Int) -> Float {
+    let mut best: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let mut s: Float = 0.0;
+        let mut j: Int = 0;
+        while j < n {
+            let mut v: Float = expm_get(a, n, i, j);
+            if v < 0.0 { v = 0.0 - v; }
+            s = s + v;
+            j = j + 1;
+        }
+        if s > best { best = s; }
+        i = i + 1;
+    }
+    return best;
+}
+
+pub fn expm(a: List[Float], n: Int) -> Result[List[Float], String] {
+    if n < 1 { return Err("ERR\texpm\tn"); }
+    if list_len(a) != n * n { return Err("ERR\texpm\tsize"); }
+    let mut nrm: Float = expm_infnorm(a, n);
+    let mut s: Int = 0;
+    let mut scale: Float = 1.0;
+    while nrm > 0.5 {
+        nrm = nrm * 0.5;
+        scale = scale * 0.5;
+        s = s + 1;
+        if s > 16 { return Err("ERR\texpm\tscale"); }
+    }
+    let as: List[Float] = expm_scale(a, scale, n);
+    let mut t: List[Float] = expm_id(n);
+    let mut term: List[Float] = expm_id(n);
+    let mut k: Int = 1;
+    let mut kf: Float = 1.0;
+    while k <= 12 {
+        term = expm_scale(expm_mul(term, as, n), 1.0 / kf, n);
+        t = expm_add(t, term, n);
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    let mut p: Int = 0;
+    while p < s {
+        t = expm_mul(t, t, n);
+        p = p + 1;
+    }
+    return Ok(t);
+}

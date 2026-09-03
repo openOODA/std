@@ -1,0 +1,33 @@
+// # OS env-key allowlist law
+//
+// Logline: Env keys must use the OODA_ or OO_ prefix. PATH is not allowed.
+//
+// Setup: Pure. Imports domain_cert.oo. No EnvCap. Prefix check only.
+//
+// Beats:
+//   1. os_env_key_allowed("PATH") is 0.
+//   2. os_env_key_allowed("OODA_FS_WRITEDIR") is 1.
+//   3. OO_ prefix is also allowed.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn os_env_key_allowed(key: String) -> Int {
+    let n: Int = chars_len(key);
+    if n >= 5 {
+        let p5: String = str_slice(key, 0, 5);
+        if p5 == "OODA_" {
+            return 1;
+        }
+    }
+    if n >= 3 {
+        let p3: String = str_slice(key, 0, 3);
+        if p3 == "OO_" {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn os_env_allow_cert(key: String) -> DomainCert {
+    return domain_cert("os", "env_key_allowed", os_env_key_allowed(key));
+}

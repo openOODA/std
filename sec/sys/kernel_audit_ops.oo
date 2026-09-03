@@ -1,0 +1,16 @@
+// # Linux Kernel Audit Operations & Filtering
+//
+// Logline: standardized onto ./kernel_audit_types.oo Int-floor API.
+//
+// Setup: Companion types standardized; keep fail-closed real calls.
+//
+// Beats:
+//   1. Import standardized companion.
+//   2. Wrap constructor and Int query.
+//   3. Deterministic work helper for prove.
+
+import "std/sec/sys/kernel_audit_types.oo";
+
+pub fn kernel_audit_ops_init(perm_mask: Int, action: Int) -> AuditRule {
+    return audit_rule_new(perm_mask, action);
+}

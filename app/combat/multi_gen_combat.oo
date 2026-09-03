@@ -1,0 +1,255 @@
+// # Multi-Generation Combat Flight Models (Gen 1 to Gen 4)
+//
+// Logline: Aerodynamic specifications, weapons envelopes, and E-M combat evaluation across Fighter Generations 1 through 4.
+//
+// Setup: Pure aerodynamic physics module with zero ambient authority, modeling guns-only to advanced BVR multi-role fighters.
+//
+// Beats:
+//   1. Define multi-generation fighter specifications (Gen 1 to Gen 4).
+//   2. Provide standard specifications factories (F-86 Sabre, F-104 Starfighter, F-4 Phantom II, F-14 Tomcat, F-16 Falcon).
+//   3. Evaluate weapons engagement envelopes (guns, AIM-9B rear-aspect IR, AIM-7 SARH BVR, AIM-54 Phoenix).
+//   4. Compute complete combat maneuver state, Specific Excess Power (Ps), turn rates, and sustained G-limits.
+//   5. Evaluate generation superiority metrics and energy conservation flags.
+
+import "std/app/combat/atmosphere.oo";
+import "std/app/combat/boyd_em.oo";
+
+type FighterSpecs = struct {
+    generation: Int,
+    name_code: Int,
+    mass_coeff: Float,
+    combat_weight_lbs: Float,
+    thrust_dry_lbf: Float,
+    thrust_ab_lbf: Float,
+    wing_area_sqft: Float,
+    aspect_ratio: Float,
+    oswald_e: Float,
+    cd0: Float,
+    m_crit: Float,
+    max_mach: Float,
+    max_g_limit: Float,
+    gun_effective_range_ft: Float,
+    has_bvr_missiles: Bool,
+    ir_seeker_rear_only: Bool,
+    ir_seeker_max_aspect_deg: Float
+};
+
+type CombatManeuverResult = struct {
+    ps_fps: Float,
+    drag_lbf: Float,
+    turn_rate_deg: Float,
+    turn_radius_ft: Float,
+    max_sustained_g: Float,
+    energy_height_ft: Float,
+    is_energy_positive: Bool
+};
+
+pub fn gen1_f86_sabre_specs() -> FighterSpecs {
+    return FighterSpecs {
+        generation: 1,
+        name_code: 86,
+        mass_coeff: 0.65,
+        combat_weight_lbs: 15000.0,
+        thrust_dry_lbf: 5500.0,
+        thrust_ab_lbf: 5500.0,
+        wing_area_sqft: 288.0,
+        aspect_ratio: 4.8,
+        oswald_e: 0.78,
+        cd0: 0.0160,
+        m_crit: 0.85,
+        max_mach: 0.92,
+        max_g_limit: 7.0,
+        gun_effective_range_ft: 2000.0,
+        has_bvr_missiles: false,
+        ir_seeker_rear_only: false,
+        ir_seeker_max_aspect_deg: 0.0
+    };
+}
+
+pub fn gen2_f104_starfighter_specs() -> FighterSpecs {
+    return FighterSpecs {
+        generation: 2,
+        name_code: 104,
+        mass_coeff: 0.75,
+        combat_weight_lbs: 17500.0,
+        thrust_dry_lbf: 10000.0,
+        thrust_ab_lbf: 15800.0,
+        wing_area_sqft: 196.1,
+        aspect_ratio: 2.45,
+        oswald_e: 0.65,
+        cd0: 0.0170,
+        m_crit: 0.88,
+        max_mach: 2.20,
+        max_g_limit: 7.33,
+        gun_effective_range_ft: 2500.0,
+        has_bvr_missiles: false,
+        ir_seeker_rear_only: true,
+        ir_seeker_max_aspect_deg: 34.0
+    };
+}
+
+pub fn gen3_f4_phantom_specs() -> FighterSpecs {
+    return FighterSpecs {
+        generation: 3,
+        name_code: 4,
+        mass_coeff: 1.80,
+        combat_weight_lbs: 42000.0,
+        thrust_dry_lbf: 23740.0,
+        thrust_ab_lbf: 35800.0,
+        wing_area_sqft: 530.0,
+        aspect_ratio: 2.82,
+        oswald_e: 0.72,
+        cd0: 0.0210,
+        m_crit: 0.84,
+        max_mach: 2.23,
+        max_g_limit: 8.5,
+        gun_effective_range_ft: 2500.0,
+        has_bvr_missiles: true,
+        ir_seeker_rear_only: false,
+        ir_seeker_max_aspect_deg: 45.0
+    };
+}
+
+pub fn gen4_f14_tomcat_baseline_specs() -> FighterSpecs {
+    return FighterSpecs {
+        generation: 4,
+        name_code: 14,
+        mass_coeff: 2.20,
+        combat_weight_lbs: 61000.0,
+        thrust_dry_lbf: 24500.0,
+        thrust_ab_lbf: 41800.0,
+        wing_area_sqft: 565.0,
+        aspect_ratio: 7.28,
+        oswald_e: 0.85,
+        cd0: 0.0195,
+        m_crit: 0.74,
+        max_mach: 2.34,
+        max_g_limit: 7.5,
+        gun_effective_range_ft: 3000.0,
+        has_bvr_missiles: true,
+        ir_seeker_rear_only: false,
+        ir_seeker_max_aspect_deg: 90.0
+    };
+}
+
+pub fn gen4_f16_falcon_baseline_specs() -> FighterSpecs {
+    return FighterSpecs {
+        generation: 4,
+        name_code: 16,
+        mass_coeff: 1.10,
+        combat_weight_lbs: 25000.0,
+        thrust_dry_lbf: 17155.0,
+        thrust_ab_lbf: 29000.0,
+        wing_area_sqft: 300.0,
+        aspect_ratio: 3.20,
+        oswald_e: 0.82,
+        cd0: 0.0180,
+        m_crit: 0.86,
+        max_mach: 2.05,
+        max_g_limit: 9.0,
+        gun_effective_range_ft: 3000.0,
+        has_bvr_missiles: true,
+        ir_seeker_rear_only: false,
+        ir_seeker_max_aspect_deg: 90.0
+    };
+}
+
+pub fn eval_gun_envelope(range_ft: Float, bore_angle_deg: Float, max_range_ft: Float) -> Bool {
+    if range_ft <= 0.0 || range_ft > max_range_ft {
+        return false;
+    }
+    if bore_angle_deg < 0.0 {
+        if (0.0 - bore_angle_deg) > 6.0 {
+            return false;
+        }
+    } else {
+        if bore_angle_deg > 6.0 {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn eval_aim9b_ir_envelope(range_ft: Float, aspect_angle_deg: Float, launch_g: Float) -> Bool {
+    if range_ft < 3000.0 || range_ft > 15000.0 {
+        return false;
+    }
+    if launch_g > 2.50 {
+        return false;
+    }
+    if aspect_angle_deg < 0.0 {
+        if (0.0 - aspect_angle_deg) > 34.0 {
+            return false;
+        }
+    } else {
+        if aspect_angle_deg > 34.0 {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn eval_aim7_sarh_envelope(range_nm: Float, target_in_radar_cone: Bool, radar_lock_maintained: Bool) -> Bool {
+    if range_nm < 1.0 || range_nm > 25.0 {
+        return false;
+    }
+    if !target_in_radar_cone || !radar_lock_maintained {
+        return false;
+    }
+    return true;
+}
+
+pub fn eval_aim54_phoenix_envelope(range_nm: Float, target_altitude_ft: Float) -> Bool {
+    if range_nm < 3.0 || range_nm > 100.0 {
+        return false;
+    }
+    if target_altitude_ft < 100.0 || target_altitude_ft > 85000.0 {
+        return false;
+    }
+    return true;
+}
+
+pub fn evaluate_combat_maneuver(
+    specs: FighterSpecs,
+    altitude_ft: Float,
+    velocity_fps: Float,
+    mach: Float,
+    density_slug_ft3: Float,
+    afterburner: Bool,
+    load_factor_g: Float
+) -> CombatManeuverResult {
+    let mut thrust: Float = specs.thrust_dry_lbf;
+    if afterburner {
+        thrust = specs.thrust_ab_lbf;
+    }
+    let q: Float = calculate_dynamic_pressure(density_slug_ft3, velocity_fps);
+    let cl_val: Float = calculate_lift_coefficient(specs.combat_weight_lbs, load_factor_g, q, specs.wing_area_sqft);
+    let cdi_val: Float = calculate_induced_drag(cl_val, specs.aspect_ratio, specs.oswald_e);
+    let cdw_val: Float = calculate_wave_drag(mach, specs.m_crit, 1.8);
+    let cd_tot: Float = calculate_total_drag_coefficient(specs.cd0, cdi_val, cdw_val);
+    let drag_tot: Float = calculate_total_drag_force(q, specs.wing_area_sqft, cd_tot);
+    let ps_val: Float = calculate_ps(thrust, drag_tot, specs.combat_weight_lbs, velocity_fps);
+    let tr_deg: Float = calculate_turn_rate_deg(velocity_fps, load_factor_g);
+    let rad_ft: Float = calculate_turn_radius_ft(velocity_fps, load_factor_g);
+    let sustained_g: Float = calculate_max_sustained_g(
+        thrust,
+        specs.cd0,
+        specs.aspect_ratio,
+        specs.oswald_e,
+        q,
+        specs.wing_area_sqft,
+        specs.combat_weight_lbs
+    );
+    let he: Float = calculate_specific_energy(altitude_ft, velocity_fps);
+    let is_pos: Bool = ps_val >= 0.0;
+
+    return CombatManeuverResult {
+        ps_fps: ps_val,
+        drag_lbf: drag_tot,
+        turn_rate_deg: tr_deg,
+        turn_radius_ft: rad_ft,
+        max_sustained_g: sustained_g,
+        energy_height_ft: he,
+        is_energy_positive: is_pos
+    };
+}

@@ -1,0 +1,44 @@
+// # CLI argc-positive law
+//
+// Logline: argv always has at least one element: the program name at index 0.
+//
+// Setup: Pure Int. C, POSIX, and Rust main signatures all guarantee argc >= 1.
+//
+// Beats:
+//   1. cli_argc_valid(n) holds for n >= 1.
+//   2. cli_argc_valid(0) fails closed; zero argv entries is impossible.
+//   3. Negative argc is impossible and fails closed.
+
+pub fn cli_argc_valid(argc: Int) -> Int {
+    if argc >= 1 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_cli_argc_law() -> Bool {
+    // golden: argc >= 1 holds.
+    if cli_argc_valid(1) != 1 {
+        return false;
+    }
+    if cli_argc_valid(2) != 1 {
+        return false;
+    }
+    if cli_argc_valid(5) != 1 {
+        return false;
+    }
+    if cli_argc_valid(64) != 1 {
+        return false;
+    }
+    // hostile: argc < 1 fails closed.
+    if cli_argc_valid(0) != 0 {
+        return false;
+    }
+    if cli_argc_valid(-1) != 0 {
+        return false;
+    }
+    if cli_argc_valid(-100) != 0 {
+        return false;
+    }
+    return true;
+}

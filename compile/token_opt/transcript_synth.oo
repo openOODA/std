@@ -1,0 +1,132 @@
+// # Synthetic JSONL Transcript Generator for Chronos Tests
+//
+// Logline: Generate realistic synthetic JSONL transcripts for parser, telemetry, and counterfactual test fixtures.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) D7 synthetic transcript generator.
+//
+// Beats:
+//   1. Define SyntheticStepConfig and SyntheticTranscriptResult structures.
+//   2. Emit N JSONL lines mixing USER_INPUT, PLANNER_RESPONSE, and TOOL_CALL.
+//   3. Vary prompt and completion sizes per step type.
+//   4. Compute aggregate stats and emit a deterministic transcript.
+
+type SyntheticStepConfig = struct {
+    n_user_input: Int,
+    n_planner_response: Int,
+    n_tool_call: Int,
+    avg_prompt_bytes: Int,
+    avg_completion_bytes: Int,
+    avg_tool_payload_bytes: Int,
+    avg_thinking_ms: Int
+};
+
+type SyntheticTranscriptResult = struct {
+    jsonl_text: String,
+    total_lines: Int,
+    total_prompt_bytes: Int,
+    total_completion_bytes: Int,
+    total_tool_payload_bytes: Int,
+    total_thinking_ms: Int
+};
+
+pub fn synthetic_step_config_default() -> SyntheticStepConfig {
+    return SyntheticStepConfig {
+        n_user_input: 2,
+        n_planner_response: 3,
+        n_tool_call: 4,
+        avg_prompt_bytes: 200,
+        avg_completion_bytes: 400,
+        avg_tool_payload_bytes: 300,
+        avg_thinking_ms: 150
+    };
+}
+
+pub fn synth_pad(s: String, target: Int) -> String {
+    let mut out: String = s;
+    while out.len() < target {
+        out = out + "x";
+    }
+    return out;
+}
+
+pub fn synth_line(
+    idx: Int,
+    stype: String,
+    prompt: String,
+    completion: String,
+    tool_payload: String,
+    thinking_ms: Int
+) -> String {
+    let mut out: String = "{\"step\":";
+    out = out + idx.to_string();
+    out = out + ",\"type\":\"";
+    out = out + stype;
+    out = out + "\",\"prompt\":\"";
+    out = out + prompt;
+    out = out + "\",\"completion\":\"";
+    out = out + completion;
+    out = out + "\",\"tool_payload\":\"";
+    out = out + tool_payload;
+    out = out + "\",\"thinking_ms\":";
+    out = out + thinking_ms.to_string();
+    out = out + "}";
+    return out;
+}
+
+pub fn synthetic_transcript_generate(cfg: SyntheticStepConfig) -> SyntheticTranscriptResult {
+    let mut text: String = "";
+    let mut idx: Int = 0;
+    let mut total_p: Int = 0;
+    let mut total_c: Int = 0;
+    let mut total_t: Int = 0;
+    let mut total_th: Int = 0;
+
+    let mut i: Int = 0;
+    while i < cfg.n_user_input {
+        let p: String = synth_pad("user prompt " + idx.to_string() + " ", cfg.avg_prompt_bytes);
+        let line: String = synth_line(idx, "USER_INPUT", p, "", "", 50);
+        if idx > 0 { text = text + "\n"; }
+        text = text + line;
+        total_p = total_p + p.len();
+        total_th = total_th + 50;
+        idx = idx + 1;
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < cfg.n_planner_response {
+        let p: String = synth_pad("planner ctx " + idx.to_string() + " ", cfg.avg_prompt_bytes);
+        let c: String = synth_pad("plan output " + idx.to_string() + " ", cfg.avg_completion_bytes);
+        let line: String = synth_line(idx, "PLANNER_RESPONSE", p, c, "", cfg.avg_thinking_ms);
+        text = text + "\n" + line;
+        total_p = total_p + p.len();
+        total_c = total_c + c.len();
+        total_th = total_th + cfg.avg_thinking_ms;
+        idx = idx + 1;
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < cfg.n_tool_call {
+        let p: String = synth_pad("tool ctx " + idx.to_string() + " ", cfg.avg_prompt_bytes);
+        let c: String = synth_pad("tool out " + idx.to_string() + " ", cfg.avg_completion_bytes);
+        let t: String = synth_pad("payload " + idx.to_string() + " ", cfg.avg_tool_payload_bytes);
+        let line: String = synth_line(idx, "TOOL_CALL", p, c, t, cfg.avg_thinking_ms / 2);
+        text = text + "\n" + line;
+        total_p = total_p + p.len();
+        total_c = total_c + c.len();
+        total_t = total_t + t.len();
+        total_th = total_th + cfg.avg_thinking_ms / 2;
+        idx = idx + 1;
+        i = i + 1;
+    }
+
+    return SyntheticTranscriptResult {
+        jsonl_text: text,
+        total_lines: idx,
+        total_prompt_bytes: total_p,
+        total_completion_bytes: total_c,
+        total_tool_payload_bytes: total_t,
+        total_thinking_ms: total_th
+    };
+}

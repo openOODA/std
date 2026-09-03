@@ -1,0 +1,40 @@
+// # Solar Types and Photovoltaic Array Specifications
+//
+// Logline: Data structures representing PV solar arrays, module specs, and daily yield calculation metrics.
+//
+// Setup: Pure energy modeling data representations for solar installations.
+//
+// Beats:
+//   1. Define PvArray structure with panel count, power rating, and degradation metrics.
+//   2. Define SolarYieldMetrics structure holding calculated environmental and energy outputs.
+//   3. Implement array constructor and property accessors.
+
+type PvArray = struct {
+    array_id: Int,
+    panel_count: Int,
+    peak_power_kw: Float,
+    degradation_pct: Float,
+    status: Int
+};
+
+type SolarYieldMetrics = struct {
+    daily_yield_kwh: Float,
+    peak_power_kw: Float,
+    capacity_factor_pct: Float,
+    performance_ratio_pct: Float,
+    co2_saved_kg: Float
+};
+
+pub fn pv_array_new(array_id: Int, panel_count: Int) -> PvArray {
+    return PvArray {
+        array_id: array_id,
+        panel_count: panel_count,
+        peak_power_kw: 200.0,
+        degradation_pct: 0.5,
+        status: 1
+    };
+}
+
+pub fn pv_array_panels(a: PvArray) -> Int {
+    return a.panel_count;
+}

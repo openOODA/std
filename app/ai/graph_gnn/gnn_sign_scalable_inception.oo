@@ -1,0 +1,113 @@
+// # SIGN Scalable Inception Graph Neural Networks
+//
+// Logline: Implements SIGN precomputed multi-hop graph diffusion operators for fast, scalable inductive node classification.
+//
+// Setup: Decoupled GNN architecture computing diffused feature banks prior to neural layer training.
+//
+// Beats:
+//   1. Precompute multi-hop normalized adjacency diffusions during data ingestion.
+//   2. Concatenate distinct graph diffusion operator feature representations.
+//   3. Apply multi-branch dense feedforward layers with residual inception blending.
+
+type SIGNConfig = struct {
+    in_features: Int,
+    hidden_features: Int,
+    out_features: Int,
+    num_diffusions: Int
+};
+
+pub fn sign_config_new(
+    in_f: Int,
+    hid_f: Int,
+    out_f: Int,
+    k_diff: Int
+) -> SIGNConfig {
+    return SIGNConfig {
+        in_features: in_f,
+        hidden_features: hid_f,
+        out_features: out_f,
+        num_diffusions: k_diff
+    };
+}
+
+pub fn sign_init_weights(total_w: Int, seed_val: Int) -> List[Int] {
+    let mut w_mat: List[Int] = list_new();
+    let mut state: Int = seed_val;
+    let mut i: Int = 0;
+    while i < total_w {
+        state = (state * 1103515245 + 12345) % 2147483647;
+        if state < 0 { state = 0 - state; }
+        let val: Int = (state % 2000) - 1000;
+        w_mat = list_push(w_mat, val);
+        i = i + 1;
+    }
+    return w_mat;
+}
+
+pub fn sign_forward_node(
+    cfg: SIGNConfig,
+    branch_weights: List[Int],
+    final_weight: List[Int],
+    final_bias: List[Int],
+    diffused_features: List[Int]
+) -> List[Int] {
+    let in_f: Int = cfg.in_features;
+    let hid_f: Int = cfg.hidden_features;
+    let out_f: Int = cfg.out_features;
+    let num_d: Int = cfg.num_diffusions;
+
+    // Step 1: Process each diffusion branch with ReLU(X_k * W_k)
+    let mut concat_hid: List[Int] = list_new();
+    let mut b_idx: Int = 0;
+    while b_idx < num_d {
+        let in_off: Int = b_idx * in_f;
+        let mut w_off: Int = b_idx * in_f;
+        w_off = w_off * hid_f;
+
+        let mut h: Int = 0;
+        while h < hid_f {
+            let mut dot: Int = 0;
+            let mut c: Int = 0;
+            while c < in_f {
+                let x: Int = list_get(diffused_features, in_off + c);
+                let mut w_idx: Int = c * hid_f;
+                w_idx = w_off + w_idx;
+                w_idx = w_idx + h;
+                let w: Int = list_get(branch_weights, w_idx);
+                dot = dot + (x * w);
+                c = c + 1;
+            }
+            let mut act: Int = 0;
+
+            if dot > 0 {
+
+                act = dot;
+
+            }
+            concat_hid = list_push(concat_hid, act);
+            h = h + 1;
+        }
+        b_idx = b_idx + 1;
+    }
+
+    // Step 2: Final linear classification layer
+    let total_hid_dim: Int = num_d * hid_f;
+    let mut out_logits: List[Int] = list_new();
+    let mut o: Int = 0;
+    while o < out_f {
+        let b_val: Int = list_get(final_bias, o);
+        let mut dot2: Int = 0;
+        let mut idx: Int = 0;
+        while idx < total_hid_dim {
+            let h_val: Int = list_get(concat_hid, idx);
+            let mut w_idx2: Int = idx * out_f;
+            w_idx2 = w_idx2 + o;
+            let w_val: Int = list_get(final_weight, w_idx2);
+            dot2 = dot2 + (h_val * w_val);
+            idx = idx + 1;
+        }
+        out_logits = list_push(out_logits, dot2 + b_val);
+        o = o + 1;
+    }
+    return out_logits;
+}

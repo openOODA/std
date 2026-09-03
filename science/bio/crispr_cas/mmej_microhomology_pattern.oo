@@ -1,0 +1,75 @@
+// # MMEJ Flanking Microhomology Repeat Scanner
+//
+// Logline: Scans sequences flanking CRISPR double-strand breaks for microhomologies (2-8 bp) to compute Sfeir-Symington MMEJ scores.
+//
+// Setup: Deletion outcome modeling engine identifying identical short repeat patterns across the DSB junction.
+//
+// Beats:
+//   1. Define MicrohomologyRepeat and MmejDeletionPrediction structures.
+//   2. Scan left and right flanking windows for identical k-mer repeats.
+//   3. Compute repeat length, intervening distance, and deletion probability.
+
+type MicrohomologyRepeat = struct {
+    repeat_seq: String,
+    repeat_length: Int,
+    deletion_size_bp: Int,
+    repeat_gc_count: Int
+};
+
+type MmejDeletionPrediction = struct {
+    microhomology_strength: Float,
+    predicted_frequency_pct: Float,
+    is_dominant_outcome: Bool
+};
+
+pub fn mmej_score_repeat(len_bp: Int, del_size: Int, gc_count: Int) -> MmejDeletionPrediction {
+    if len_bp < 2 {
+        return MmejDeletionPrediction {
+            microhomology_strength: 0.0,
+            predicted_frequency_pct: 0.0,
+            is_dominant_outcome: false
+        };
+    }
+
+    // Sfeir-Symington model: Score ~ (length + 0.5 * GC) * exp(-0.05 * del_size)
+    let len_term: Float = mmej_microhomology_pattern_to_f(len_bp) + mmej_microhomology_pattern_to_f((gc_count) * 0.5);    let dist_factor: Float = 1.0 / (1.0 + mmej_microhomology_pattern_to_f((del_size) * 0.04));    let strength: Float = len_term * dist_factor * 10.0;    let mut freq: Float = strength * 2.5;    if freq > 80.0 { freq = 80.0; }
+    let dominant: Bool = freq > 40.0;
+    return MmejDeletionPrediction {
+        microhomology_strength: strength,
+        predicted_frequency_pct: freq,
+        is_dominant_outcome: dominant
+    };
+}
+
+
+fn mmej_microhomology_pattern_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

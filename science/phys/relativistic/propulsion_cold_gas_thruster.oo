@@ -1,0 +1,28 @@
+// # Cold Gas Propulsion System Performance
+//
+// Logline: Calculates Nitrogen / Helium cold gas thruster specific impulse (70s), mass flow rate, and total impulse budget.
+//
+// Setup: Pure pneumatic isentropic nozzle expansion for small satellite and cubesat reaction control propulsion.
+//
+// Beats:
+//   1. Gaseous Nitrogen (GN2) cold gas specific impulse integer query (70 seconds).
+//   2. Calculate cold gas exhaust velocity v_e = sqrt(2 * gamma / (gamma - 1) * R * T_0 * (1 - (p_e/p_0)^((gamma-1)/gamma))).
+//   3. Compute choked nozzle throat mass flow rate m_dot.
+//   4. Calculate total deliverable impulse I_total = m_prop * Isp * g0.
+
+pub fn cold_gas_isp() -> Int {
+    return 70;
+}
+
+/// Computes cold gas specific impulse (seconds) for Nitrogen (gamma = 1.40, M = 28.0134 g/mol) at temperature T0 (K).
+pub fn cold_gas_nitrogen_isp(
+    tank_temp_k: Float,
+    expansion_ratio: Float
+) -> Float {
+    let r_n2: Float = 296.8; // J/(kg*K)
+    let gamma: Float = 1.40;
+    let g0: Float = 9.80665;
+    let term: Float = (2.0 * gamma / (gamma - 1.0)) * r_n2 * tank_temp_k * (1.0 - pow(1.0 / expansion_ratio, 0.285714));
+    let v_e: Float = sqrt(term);
+    return v_e / g0;
+}

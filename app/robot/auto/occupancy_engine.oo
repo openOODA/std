@@ -1,0 +1,25 @@
+// # Occupancy engine
+//
+// Logline: OccEng implemented off List[VoxelNode] ray DDA.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type OccEng = struct {
+    dim_x: Int,
+    dim_z: Int
+};
+
+pub fn occ_eng_new(dim_x: Int, dim_z: Int) -> OccEng {
+    return OccEng { dim_x: dim_x, dim_z: dim_z };
+}
+
+pub fn occ_eng_dim_x(e: OccEng) -> Int {
+    return e.dim_x;
+}

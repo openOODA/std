@@ -1,0 +1,97 @@
+// # AArch64 ELF Image Assertions
+//
+// Logline: Checks compiled images for ELF64 EM_AARCH64 magic, STP/SVC, PASS tag, and no stub.
+//
+// Setup: Uses linker u16 reader. process_exec sources must contain execve and wait4 encodings.
+//
+// Beats:
+//   1. Reject short buffers, bad magic, x86 e_machine 62, and missing STP/SVC.
+//   2. Require the suite tag PASS string and reject __stub.
+//   3. When source mentions process_exec, require execve 221 and wait4 260.
+//   4. Return 0 on success or 1 after printing FAIL.
+
+import "std/hw/silicon/aarch64_linker.oo";
+
+fn a64_chk_boom(label: String) -> Int {
+    println("FAIL " + label);
+    return 1;
+}
+
+fn a64_chk_has4(hay: List[Int], a: Int, b: Int, c: Int, d: Int) -> Bool {
+    let n: Int = list_len(hay);
+    let mut i: Int = 0;
+    while i + 3 < n {
+        if list_get(hay, i) == a && list_get(hay, i + 1) == b && list_get(hay, i + 2) == c && list_get(hay, i + 3) == d {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn a64_chk_has_str(elf: List[Int], s: String) -> Bool {
+    let n: Int = list_len(elf);
+    let m: Int = bytes_len(s);
+    if m == 0 || m > n {
+        return false;
+    }
+    let mut i: Int = 0;
+    while i + m <= n {
+        let mut ok: Bool = true;
+        let mut k: Int = 0;
+        while k < m {
+            if (list_get(elf, i + k) & 255) != (byte_at(s, k) & 255) {
+                ok = false;
+            }
+            k = k + 1;
+        }
+        if ok {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn a64_check_elf(elf: List[Int], tag: String, src: String) -> Int {
+    if list_len(elf) < 124 {
+        return a64_chk_boom(tag + " elf_short");
+    }
+    if list_get(elf, 0) != 127 || list_get(elf, 1) != 69 || list_get(elf, 2) != 76 || list_get(elf, 3) != 70 {
+        return a64_chk_boom(tag + " magic");
+    }
+    if list_get(elf, 4) != 2 {
+        return a64_chk_boom(tag + " ei_class");
+    }
+    let mach: Int = 0 + a64_elf_read_u16(elf, 18);
+    if mach == 62 {
+        return a64_chk_boom(tag + " e_machine_x86");
+    }
+    if mach != 183 {
+        return a64_chk_boom(tag + " e_machine");
+    }
+    if (0 + a64_elf_read_u16(elf, 16)) != 2 {
+        return a64_chk_boom(tag + " e_type");
+    }
+    if !a64_chk_has4(elf, 253, 123, 191, 169) {
+        return a64_chk_boom(tag + " stp");
+    }
+    if !a64_chk_has4(elf, 1, 0, 0, 212) {
+        return a64_chk_boom(tag + " svc");
+    }
+    if !a64_chk_has_str(elf, tag + ": PASS") {
+        return a64_chk_boom(tag + " missing_pass_bytes");
+    }
+    if a64_chk_has_str(elf, "__stub") {
+        return a64_chk_boom(tag + " stub_symbol");
+    }
+    if src.contains("process_exec") {
+        if !a64_chk_has4(elf, 168, 27, 128, 210) {
+            return a64_chk_boom(tag + " missing_execve");
+        }
+        if !a64_chk_has4(elf, 136, 32, 128, 210) {
+            return a64_chk_boom(tag + " missing_wait4");
+        }
+    }
+    return 0;
+}

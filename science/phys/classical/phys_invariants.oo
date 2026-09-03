@@ -1,0 +1,34 @@
+// # Physics energy-conservation product invariants
+//
+// Logline: Energy non-conservation fail-closes; conserved energy holds.
+//
+// Setup: Wraps std/phys/conservation_laws.oo. Does not copy the conservation body.
+//
+// Beats:
+//   1. phys_energy_ok is 0 when |e_final - e_initial| exceeds tolerance.
+//   2. phys_energy_ok is 1 when energy is conserved within tolerance.
+//   3. phys_energy_cert boxes the law into DomainCert.holds.
+
+import "std/science/phys/classical/conservation_laws.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn bool_to_hold(v: Bool) -> Int {
+    if v {
+        return 1;
+    }
+    return 0;
+}
+
+// Fail-closed Int wrapper over conservation_check_energy.
+pub fn phys_energy_ok(e_initial: Float, e_final: Float, tolerance: Float) -> Int {
+    let conserved: Bool = conservation_check_energy(e_initial, e_final, tolerance);
+    return bool_to_hold(conserved);
+}
+
+pub fn phys_energy_cert(e_initial: Float, e_final: Float, tolerance: Float) -> DomainCert {
+    return DomainCert {
+        domain: "phys",
+        law_name: "energy_conservation",
+        holds: phys_energy_ok(e_initial, e_final, tolerance)
+    };
+}

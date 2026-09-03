@@ -1,0 +1,121 @@
+// # Diag Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard diag (diagnostics) domain library. Re-exports a stable diag_mod_* surface for the most-used public API (backtrace, breadcrumb tree, event timeline, health check, invariant eval, log levels, log formatters, metrics, panic hook, stopwatch, telemetry, tracer). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private diag siblings; time-bound ops take TimeCap at the call site. Most pure diagnostic types and constructors take no caps.
+//
+// Beats:
+//   1. Re-export the backtrace, breadcrumb_tree, and event_timeline surface as diag_mod_backtrace_*, diag_mod_breadcrumb_*, diag_mod_event_*.
+//   2. Re-export the health_check and invariant_eval surface as diag_mod_health_*, diag_mod_invariant_*.
+//   3. Re-export the log levels and formatters (text, json, logfmt, ansi) surface as diag_mod_log_*.
+//   4. Re-export the metrics (counter, gauge, histogram, registry) and panic_hook surface as diag_mod_metric_*, diag_mod_panic_*.
+//   5. Re-export the stopwatch, telemetry, tracer, and counterexample surface. Document the private siblings.
+
+import "diag.oo";
+import "backtrace.oo";
+import "breadcrumb_tree.oo";
+import "event_timeline.oo";
+import "health_check_registry.oo";
+import "invariant_eval.oo";
+import "log.oo";
+import "log_formatter.oo";
+import "logger_structured_json.oo";
+import "metrics_counter.oo";
+import "metrics_gauge.oo";
+import "metrics_histogram.oo";
+import "metrics_registry.oo";
+import "panic_hook_registry.oo";
+import "stopwatch_time.oo";
+import "telemetry_ndjson.oo";
+import "telemetry_sink.oo";
+import "tracer_span.oo";
+import "trace_span.oo";
+import "counterexample_capture.oo";
+
+// Public backtrace surface: diag_mod_backtrace_*
+pub fn diag_mod_backtrace_new(time_cap: &TimeCap) -> Backtrace { return backtrace_new(time_cap); }
+pub fn diag_mod_backtrace_add_frame(bt: Backtrace, frame_str: String) -> Backtrace { return backtrace_add_frame(bt, frame_str); }
+pub fn diag_mod_backtrace_depth(bt: Backtrace) -> Int { return backtrace_depth(bt); }
+
+// Public breadcrumb tree surface: diag_mod_breadcrumb_*
+pub fn diag_mod_breadcrumb_status_badge(status: Int) -> String { return breadcrumb_status_badge(status); }
+pub fn diag_mod_breadcrumb_format_span(span: &TraceSpan) -> String { return breadcrumb_format_span(span); }
+pub fn diag_mod_breadcrumb_render(spans: List[TraceSpan]) -> String { return breadcrumb_tree_render(spans); }
+
+// Public event timeline surface: diag_mod_event_*
+pub fn diag_mod_event_timeline_new(capacity: Int) -> EventTimeline { return event_timeline_new(capacity); }
+pub fn diag_mod_event_timeline_record(t: EventTimeline, event_name: String) -> EventTimeline { return event_timeline_record(t, event_name); }
+pub fn diag_mod_event_timeline_count(t: EventTimeline) -> Int { return event_timeline_count(t); }
+
+// Public health-check surface: diag_mod_health_*
+pub fn diag_mod_health_registry_new() -> HealthRegistry { return health_registry_new(); }
+pub fn diag_mod_health_report_ok(reg: HealthRegistry, comp_name: String) -> HealthRegistry { return health_report_ok(reg, comp_name); }
+pub fn diag_mod_health_report_failed(reg: HealthRegistry, comp_name: String) -> HealthRegistry { return health_report_failed(reg, comp_name); }
+pub fn diag_mod_health_is_healthy(reg: HealthRegistry) -> Bool { return health_is_healthy(reg); }
+
+// Public invariant surface: diag_mod_invariant_*
+pub fn diag_mod_invariant_rule_gt(name: String, target: Int) -> InvariantRule { return invariant_rule_gt(name, target); }
+pub fn diag_mod_invariant_rule_lt(name: String, target: Int) -> InvariantRule { return invariant_rule_lt(name, target); }
+pub fn diag_mod_invariant_rule_between(name: String, min_v: Int, max_v: Int) -> InvariantRule { return invariant_rule_between(name, min_v, max_v); }
+pub fn diag_mod_invariant_eval_int(rule: &InvariantRule, actual: Int) -> Result[Bool, String] { return invariant_eval_int(rule, actual); }
+
+// Public log levels: diag_mod_log_*
+pub fn diag_mod_log_trace() -> Int { return log_level_trace(); }
+pub fn diag_mod_log_debug() -> Int { return log_level_debug(); }
+pub fn diag_mod_log_info() -> Int { return log_level_info(); }
+pub fn diag_mod_log_warn() -> Int { return log_level_warn(); }
+pub fn diag_mod_log_error() -> Int { return log_level_error(); }
+
+// Public log formatters: diag_mod_format_*
+pub fn diag_mod_format_text(rec: LogRecord) -> String { return format_text(rec); }
+pub fn diag_mod_format_json(rec: LogRecord) -> String { return format_json(rec); }
+pub fn diag_mod_format_logfmt(rec: LogRecord) -> String { return format_logfmt(rec); }
+pub fn diag_mod_format_ansi(rec: LogRecord) -> String { return format_ansi(rec); }
+pub fn diag_mod_log_json_format(level: String, msg: String, target: String) -> String { return log_json_format(level, msg, target); }
+pub fn diag_mod_log_json_info(msg: String) -> String { return log_json_info(msg); }
+pub fn diag_mod_log_json_error(msg: String) -> String { return log_json_error(msg); }
+
+// Public metrics surface: diag_mod_metric_*
+pub fn diag_mod_metric_counter_new(name: String) -> MetricsCounter { return metrics_counter_new(name); }
+pub fn diag_mod_metric_counter_inc(c: MetricsCounter) -> MetricsCounter { return metrics_counter_inc(c); }
+pub fn diag_mod_metric_counter_get(c: MetricsCounter) -> Int { return metrics_counter_get(c); }
+pub fn diag_mod_metric_gauge_new(name: String, initial: Int) -> MetricsGauge { return metrics_gauge_new(name, initial); }
+pub fn diag_mod_metric_gauge_get(g: MetricsGauge) -> Int { return metrics_gauge_get(g); }
+pub fn diag_mod_metric_hist_new(name: String) -> MetricsHist { return metrics_hist_new(name); }
+pub fn diag_mod_metric_hist_count(h: MetricsHist) -> Int { return metrics_hist_count(h); }
+pub fn diag_mod_metric_registry_new() -> MetricsRegistry { return registry_new(); }
+pub fn diag_mod_metric_registry_len(reg: MetricsRegistry) -> Int { return registry_len(reg); }
+
+// Public panic hook surface: diag_mod_panic_*
+pub fn diag_mod_panic_registry_new() -> PanicRegistry { return panic_registry_new(); }
+pub fn diag_mod_panic_register(reg: PanicRegistry, name: String) -> PanicRegistry { return panic_register_hook(reg, name); }
+pub fn diag_mod_panic_has_hooks(reg: PanicRegistry) -> Bool { return panic_has_hooks(reg); }
+
+// Public stopwatch surface: diag_mod_stopwatch_*
+pub fn diag_mod_stopwatch_start(time_cap: &TimeCap) -> Stopwatch { return stopwatch_start(time_cap); }
+pub fn diag_mod_stopwatch_stop(time_cap: &TimeCap, sw: Stopwatch) -> Stopwatch { return stopwatch_stop(time_cap, sw); }
+pub fn diag_mod_stopwatch_elapsed_ms(time_cap: &TimeCap, sw: Stopwatch) -> Int { return stopwatch_elapsed_ms(time_cap, sw); }
+pub fn diag_mod_stopwatch_lap_count(sw: Stopwatch) -> Int { return stopwatch_lap_count(sw); }
+
+// Public telemetry surface: diag_mod_telemetry_*
+pub fn diag_mod_telemetry_sanitize(input: String) -> String { return sanitize_telemetry_str(input); }
+pub fn diag_mod_telemetry_span_to_ndjson(span: &TraceSpan) -> String { return telemetry_span_to_ndjson(span); }
+pub fn diag_mod_telemetry_sink_new(capacity: Int) -> TelemetrySink { return telemetry_sink_new(capacity); }
+pub fn diag_mod_telemetry_sink_push(sink: TelemetrySink, event: String) -> TelemetrySink { return telemetry_sink_push(sink, event); }
+
+// Public tracer surface: diag_mod_tracer_*
+pub fn diag_mod_tracer_span_new(trace_id: String, span_id: String, name: String, start_ms: Int) -> TraceSpan { return trace_span_new(trace_id, span_id, name, start_ms); }
+pub fn diag_mod_tracer_span_finish(span: TraceSpan, end_ms: Int) -> TraceSpan { return trace_span_finish(span, end_ms); }
+pub fn diag_mod_tracer_span_duration(span: TraceSpan) -> Int { return trace_span_duration(span); }
+
+// Public counterexample surface: diag_mod_counterexample_*
+pub fn diag_mod_counterexample_new(name: String, loc: String) -> CounterexampleState { return counterexample_capture_new(name, loc); }
+pub fn diag_mod_counterexample_format(ce: &CounterexampleState) -> String { return counterexample_format(ce); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. error_severity_monotonic_law.oo, tracing_span_law.oo, w3c_trace_context_law.oo)
+//   _theory files (e.g. ebpf_probe_theory.oo, log_structured_theory.oo, metrics_aggregation_theory.oo)
+//   _principle files (e.g. heartbeat_principle.oo, log_level_ordering_principle.oo, red_use_principle.oo)
+//   _invariants files (e.g. diag_invariants.oo)
+//   _kat files (e.g. diag_kat.oo)
+//   _stubs (e.g. backtrace_stub.oo, profiler_sampling_stub.oo)

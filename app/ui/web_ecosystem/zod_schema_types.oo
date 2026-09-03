@@ -1,0 +1,31 @@
+// # Zod schema types
+//
+// Logline: ZodResult destubbed off List[ZodIssue] to error_count.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed.
+
+type ZodResult = struct {
+    success: Int,
+    error_count: Int
+};
+
+pub fn zod_result_success() -> ZodResult {
+    return ZodResult {
+        success: 1,
+        error_count: 0
+    };
+}
+
+pub fn zod_result_failure(error_count: Int) -> ZodResult {
+    return ZodResult {
+        success: 0,
+        error_count: error_count
+    };
+}

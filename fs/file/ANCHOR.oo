@@ -1,0 +1,61 @@
+// # FS File Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fs/file (file primitives) subdir of the fs domain library. Re-exports a stable fs_mod_* surface for the most-used public API (Path, FileInfo, FileReader, FileWriter, FsJail, Glob, TempFile, DirEntry, FsWatcher, FdStream). Private siblings (filesystem-specific laws like btrfs/ext4/zfs, journaling, inode/dentry cache, path separator) remain non-public.
+//
+// Setup: Imports private file siblings; most operations take FsReadCap / FsWriteCap / SysCap at the call site. Path string operations and pure path utilities take no caps.
+//
+// Beats:
+//   1. Re-export the Path public surface (new, to_string, is_absolute) as fs_mod_path_*.
+//   2. Re-export the FileInfo, FileReader, and FileWriter surface as fs_mod_file_info_*, fs_mod_reader_*, fs_mod_writer_*.
+//   3. Re-export the FsJail, Glob, and DirEntry surface as fs_mod_jail_*, fs_mod_glob_*, fs_mod_dir_*.
+//   4. Re-export the TempFile, FdStream, and FsWatcher surface as fs_mod_temp_*, fs_mod_fd_*, fs_mod_watch_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat files.
+
+import "path.oo";
+import "file_info.oo";
+import "file_reader.oo";
+import "file_writer.oo";
+import "jail.oo";
+import "glob.oo";
+import "dir_entry.oo";
+import "tempfile.oo";
+import "stream.oo";
+import "watch.oo";
+import "fs_ops.oo";
+import "src_fs.oo";
+
+// Public Path surface: fs_mod_path_*
+pub fn fs_mod_path_new(raw_str: String) -> Path { return path_new(raw_str); }
+pub fn fs_mod_path_to_string(path_obj: Path) -> String { return path_to_string(path_obj); }
+pub fn fs_mod_path_is_absolute(path_str: String) -> Bool { return path_is_absolute(path_str); }
+
+// Public FileInfo surface: fs_mod_file_info_*
+pub fn fs_mod_file_info_get(fs: &FsReadCap, path: String) -> FileInfo { return file_info_get(fs, path); }
+pub fn fs_mod_file_info_is_empty(info: FileInfo) -> Bool { return file_info_is_empty(info); }
+
+// Public FsJail surface: fs_mod_jail_*
+pub fn fs_mod_jail_clean_path(path: String) -> String { return fs_jail_clean_path(path); }
+pub fn fs_mod_jail_new(root_path: String, read_only: Bool) -> FsJail { return fs_jail(root_path, read_only); }
+pub fn fs_mod_jail_is_allowed(jail: FsJail, path: String) -> Bool { return fs_jail_is_allowed(jail, path); }
+
+// Public Glob surface: fs_mod_glob_*
+pub fn fs_mod_glob_new(pattern: String) -> GlobPattern { return glob_new(pattern); }
+pub fn fs_mod_glob_has_wildcards(pattern: String) -> Bool { return glob_has_wildcards(pattern); }
+
+// Public DirEntry surface: fs_mod_dir_*
+pub fn fs_mod_dir_entry_new(path: String, is_dir: Bool, size: Int, modified: Int) -> DirEntry { return dir_entry_new(path, is_dir, size, modified); }
+
+// Public TempFile surface: fs_mod_temp_*
+pub fn fs_mod_tempfile_generate_name(prefix: String, counter: Int, suffix: String) -> String { return tempfile_generate_name(prefix, counter, suffix); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. btrfs_cow_law.oo, inode_dirent_law.oo, journaling_law.oo)
+//   _theory files (e.g. ext4_inode_theory.oo, f2fs_log_structure_theory.oo, dentry_cache_principle.oo, path_separator_principle.oo, zfs_raid_z_principle.oo)
+//   _invariants files (e.g. fs_invariants.oo)
+//   _kat files (e.g. fs_kat.oo)
+//
+// Note: file_reader.oo, file_writer.oo, and watch.oo also expose
+// FsReadCap / FsWriteCap / FsWatcher surface; they are imported by
+// this mod.oo so external callers can use the cap-bound operations
+// via fs_mod_reader_open / fs_mod_writer_open / fs_mod_watch_* when
+// added in future batch.

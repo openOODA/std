@@ -1,0 +1,44 @@
+// # CLI exit code zero-success law
+//
+// Logline: An exit code of 0 means success; any other exit code is a failure.
+//
+// Setup: Pure Int. POSIX exit convention: 0 is success; 1..255 are error codes.
+//
+// Beats:
+//   1. cli_exit_is_success(0) holds.
+//   2. cli_exit_is_success(n) for n != 0 fails closed.
+//   3. Negative or out-of-range codes also fail closed.
+
+pub fn cli_exit_is_success(code: Int) -> Int {
+    if code == 0 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_cli_exit_code_law() -> Bool {
+    // golden: 0 is the only success code.
+    if cli_exit_is_success(0) != 1 {
+        return false;
+    }
+    // hostile: any non-zero code is not success.
+    if cli_exit_is_success(1) != 0 {
+        return false;
+    }
+    if cli_exit_is_success(2) != 0 {
+        return false;
+    }
+    if cli_exit_is_success(127) != 0 {
+        return false;
+    }
+    if cli_exit_is_success(255) != 0 {
+        return false;
+    }
+    if cli_exit_is_success(-1) != 0 {
+        return false;
+    }
+    if cli_exit_is_success(-100) != 0 {
+        return false;
+    }
+    return true;
+}

@@ -1,0 +1,39 @@
+// # Continuous Low-Thrust Orbital Spiral Dynamics
+//
+// Logline: Calculates continuous low-thrust ion/electric spiral orbit raising delta-v, revolution count, and transfer time.
+//
+// Setup: Pure Edelbaum analytical low-thrust trajectory model for quasi-circular electric propulsion orbit raising.
+//
+// Beats:
+//   1. Nominal LEO-to-GEO spiral revolutions integer query (~120 revs).
+//   2. Calculate Edelbaum delta-v for combined altitude and inclination change.
+//   3. Compute continuous thrust acceleration a_thrust = F / m.
+//   4. Calculate total spiral burn duration t_transfer = Delta_v / a_thrust.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astro_advanced_low_thrust_spiral() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn spiral_revs() -> Int {
+    return 120;
+}
+
+/// Computes Edelbaum low-thrust delta-v (m/s) between circular velocities v1 and v2 with plane change Delta_i (rad).
+pub fn edelbaum_low_thrust_delta_v(
+    v1: Float,
+    v2: Float,
+    delta_inc_rad: Float
+) -> Float {
+    let cos_half_inc: Float = cos(0.5 * circ_pi_std_phys_astro_advanced_low_thrust_spiral() * delta_inc_rad);
+    let term: Float = (v1 * v1) - (2.0 * v1 * v2 * cos_half_inc) + (v2 * v2);
+    return sqrt(term);
+}
+
+/// Computes total spiral transfer duration in seconds: t = Delta_v / a_accel.
+pub fn low_thrust_transfer_time(
+    delta_v_m_s: Float,
+    thrust_n: Float,
+    mass_kg: Float
+) -> Float {
+    let accel: Float = thrust_n / mass_kg;
+    if accel <= 0.000000001 { return 0.0; }
+    return delta_v_m_s / accel;
+}

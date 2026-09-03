@@ -1,0 +1,75 @@
+// # AArch64 Integer To String Runtime
+//
+// Logline: Emits to_string as signed decimal C string on the bump heap with patched branches.
+//
+// Setup: A64R from xrt. Zero uses interned "0"; other values write digits backward into 32 bump bytes.
+//
+// Beats:
+//   1. Record the sign and negate a negative argument.
+//   2. Intern "0" for a zero value.
+//   3. Repeated SDIV/MSUB by 10 stores ASCII digits.
+//   4. Prefix '-' when the original value was negative.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_case.oo";
+
+pub fn a64rt_itoa(r0: A64R) -> A64R {
+    if a64rt_has(r0, "to_string") {
+        return a64rt_cases(r0);
+    }
+    let mut r: A64R = a64rt_fn(r0, "to_string");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_movz(10, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(9, 31));
+    let bge: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0));
+    x = a64x_emit(x, arm64_word_movz(10, 1, 0));
+    x = a64x_emit(x, arm64_word_neg(9, 9));
+    let skipn: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bge, arm64_word_b_cond(arm64_cond_ge(), skipn - bge)));
+    x = a64x_emit(x, arm64_word_cmp_reg(9, 31));
+    let bnz: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0));
+    x = a64x_intern(x, "0");
+    x = a64x_str_ref(x);
+    let jz: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let conv: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bnz, arm64_word_b_cond(arm64_cond_ne(), conv - bnz)));
+    x = a64x_emit(x, arm64_word_mov_reg(11, 28));
+    x = a64x_emit(x, arm64_word_add_imm(28, 28, 32));
+    x = a64x_emit(x, arm64_word_add_imm(12, 11, 31));
+    x = a64x_emit(x, arm64_word_strb_reg(31, 12, 31));
+    x = a64x_emit(x, arm64_word_sub_imm(12, 12, 1));
+    let loop: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(1, 10, 0));
+    x = a64x_emit(x, arm64_word_sdiv(2, 9, 1));
+    x = a64x_emit(x, arm64_word_msub(3, 2, 1, 9));
+    x = a64x_emit(x, arm64_word_add_imm(3, 3, 48));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 12, 31));
+    x = a64x_emit(x, arm64_word_sub_imm(12, 12, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(9, 2));
+    x = a64x_emit(x, arm64_word_cmp_reg(9, 31));
+    let bne: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), loop - bne));
+    x = a64x_emit(x, arm64_word_cmp_reg(10, 31));
+    let beq: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_movz(3, 45, 0));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 12, 31));
+    x = a64x_emit(x, arm64_word_sub_imm(12, 12, 1));
+    let nneg: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, beq, arm64_word_b_cond(arm64_cond_eq(), nneg - beq)));
+    x = a64x_emit(x, arm64_word_add_imm(0, 12, 1));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, jz, arm64_word_b(done - jz)));
+    r = a64rt_setx(r, a64rt_epi(x));
+    return a64rt_cases(r);
+}

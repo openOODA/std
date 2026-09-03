@@ -1,0 +1,154 @@
+// # 2x2 Normal-Form Nash Equilibrium Solver
+//
+// Logline: Solve a 2x2 two-player normal-form game for the mixed-strategy Nash equilibrium via indifference conditions.
+//
+// Setup: Pure math. Payoff matrices are flat lists of 4 row-major Floats. Player A rows, Player B columns. Payoff tuple (A, B) at each cell.
+//
+// Beats:
+//   1. mixed_strategy_2x2 returns (p, q) where p is A's row-mix and q is B's col-mix.
+//   2. Indifference conditions: A's expected payoff from row 0 equals row 1; B's expected payoff from col 0 equals col 1.
+//   3. dominant_strategy returns "row0", "row1", "col0", "col1", or "none" via strict-dominance elimination.
+//   4. is_nash_equilibrium verifies that (p, q) is a fixed point of best response.
+//
+// residual: Only 2x2 games; pure strategy support included via degenerate mixed strategies (p in {0,1}).
+
+pub type PayoffMatrix = struct {
+    a: List[Float],
+    b: List[Float]
+};
+
+fn epa_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn payoff_new(a: List[Float], b: List[Float]) -> PayoffMatrix {
+    return PayoffMatrix { a: a, b: b };
+}
+
+// Compute A's expected payoff from row r when B plays column-mix q.
+pub fn expected_payoff_a(pm: PayoffMatrix, row: Int, q: Float) -> Result[Float, String] {
+    if q < 0.0 { return Err("ERR\tepa\tdomain"); }
+    if q > 1.0 { return Err("ERR\tepa\tdomain"); }
+    if row < 0 { return Err("ERR\tepa\tdomain"); }
+    let col0: Float = list_get(pm.a, row * 2);
+    let col1: Float = list_get(pm.a, row * 2 + 1);
+    let q_other: Float = 1.0 - q;
+    return Ok(q_other * col0 + q * col1);
+}
+
+pub fn expected_payoff_b(pm: PayoffMatrix, col: Int, p: Float) -> Result[Float, String] {
+    if p < 0.0 { return Err("ERR\tepa\tdomain"); }
+    if p > 1.0 { return Err("ERR\tepa\tdomain"); }
+    if col < 0 { return Err("ERR\tepa\tdomain"); }
+    let row0: Float = list_get(pm.b, col);
+    let row1: Float = list_get(pm.b, col + 2);
+    let p_other: Float = 1.0 - p;
+    return Ok(p_other * row0 + p * row1);
+}
+
+// A's row-mix p that makes A indifferent: payoff_a(0, q) == payoff_a(1, q) for the same q.
+// Standard 2x2 formula derived from indifference condition.
+// p = (a22 - a12) / (a11 - a21 - a12 + a22)
+pub fn a_mixed_strategy(pm: PayoffMatrix) -> Float {
+    let a11: Float = list_get(pm.a, 0);
+    let a12: Float = list_get(pm.a, 1);
+    let a21: Float = list_get(pm.a, 2);
+    let a22: Float = list_get(pm.a, 3);
+    let num: Float = a22 - a12;
+    let den: Float = a11 - a21 - a12 + a22;
+    if den == 0.0 {
+        return 0.5;
+    }
+    let mut p: Float = num / den;
+    if p < 0.0 {
+        p = 0.0;
+    }
+    if p > 1.0 {
+        p = 1.0;
+    }
+    return p;
+}
+
+// B's column-mix q that makes B indifferent.
+// q = (b22 - b21) / (b11 - b12 - b21 + b22)
+pub fn b_mixed_strategy(pm: PayoffMatrix) -> Float {
+    let b11: Float = list_get(pm.b, 0);
+    let b12: Float = list_get(pm.b, 1);
+    let b21: Float = list_get(pm.b, 2);
+    let b22: Float = list_get(pm.b, 3);
+    let num: Float = b22 - b21;
+    let den: Float = b11 - b12 - b21 + b22;
+    if den == 0.0 {
+        return 0.5;
+    }
+    let mut q: Float = num / den;
+    if q < 0.0 {
+        q = 0.0;
+    }
+    if q > 1.0 {
+        q = 1.0;
+    }
+    return q;
+}
+
+// Returns true when A is indifferent between rows at q and B is indifferent between cols at p.
+pub fn is_nash_equilibrium(pm: PayoffMatrix, p: Float, q: Float) -> Bool {
+    let a0r: Result[Float, String] = expected_payoff_a(pm, 0, q);
+    let a1r: Result[Float, String] = expected_payoff_a(pm, 1, q);
+    if a0r.is_ok() == false { return false; }
+    if a1r.is_ok() == false { return false; }
+    let a0: Float = epa_got(a0r);
+    let a1: Float = epa_got(a1r);
+    let diff_a: Float = a0 - a1;
+    if diff_a < 0.0 {
+        let pos: Float = 0.0 - diff_a;
+        if pos > 0.0001 {
+            return false;
+        }
+    } else {
+        if diff_a > 0.0001 {
+            return false;
+        }
+    }
+    let b0r: Result[Float, String] = expected_payoff_b(pm, 0, p);
+    let b1r: Result[Float, String] = expected_payoff_b(pm, 1, p);
+    if b0r.is_ok() == false { return false; }
+    if b1r.is_ok() == false { return false; }
+    let b0: Float = epa_got(b0r);
+    let b1: Float = epa_got(b1r);
+    let diff_b: Float = b0 - b1;
+    if diff_b < 0.0 {
+        let pos: Float = 0.0 - diff_b;
+        if pos > 0.0001 {
+            return false;
+        }
+    } else {
+        if diff_b > 0.0001 {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Best response: A's best row given B's column-mix q. Returns 0 or 1.
+pub fn best_response_a(pm: PayoffMatrix, q: Float) -> Int {
+    let a0r: Result[Float, String] = expected_payoff_a(pm, 0, q);
+    let a1r: Result[Float, String] = expected_payoff_a(pm, 1, q);
+    if a0r.is_ok() == false { return 0; }
+    if a1r.is_ok() == false { return 0; }
+    if epa_got(a1r) > epa_got(a0r) {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn best_response_b(pm: PayoffMatrix, p: Float) -> Int {
+    let b0r: Result[Float, String] = expected_payoff_b(pm, 0, p);
+    let b1r: Result[Float, String] = expected_payoff_b(pm, 1, p);
+    if b0r.is_ok() == false { return 0; }
+    if b1r.is_ok() == false { return 0; }
+    if epa_got(b1r) > epa_got(b0r) {
+        return 1;
+    }
+    return 0;
+}

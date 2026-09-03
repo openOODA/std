@@ -1,0 +1,255 @@
+// # AArch64 Constrained Expression Lowering
+//
+// Logline: Lowers integer lets, arithmetic, compares, if, and return in fn main to AArch64 instruction words.
+//
+// Setup: Scanner in aarch64_parse.oo. Results live in x0. Locals use STR/LDR [x29, #offset].
+//
+// Beats:
+//   1. Require fn main and emit STP/MOV frame prologue plus a 64-byte local area.
+//   2. Lower let and assign to stack slots at [x29, #offset].
+//   3. Lower binary ALU and if-compare to CMP plus inverted B.cond.
+//   4. Lower return to LDP post-index epilogue and RET.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_regs.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+
+fn a64_frame() -> Int {
+    return 64;
+}
+
+fn a64_binop_word(op: Int, xd: Int, xn: Int, xm: Int) -> Int {
+    if op < 1 || op > 9 { return 0 - 1; }
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    if op == 1 { return arm64_word_add_reg(xd, xn, xm); }
+    if op == 2 { return arm64_word_sub_reg(xd, xn, xm); }
+    if op == 3 { return arm64_word_mul(xd, xn, xm); }
+    if op == 4 { return arm64_word_sdiv(xd, xn, xm); }
+    if op == 5 { return arm64_word_and_reg(xd, xn, xm); }
+    if op == 6 { return arm64_word_orr_reg(xd, xn, xm); }
+    if op == 7 { return arm64_word_eor_reg(xd, xn, xm); }
+    if op == 8 { return arm64_word_lsl_reg(xd, xn, xm); }
+    if op == 9 { return arm64_word_asr_reg(xd, xn, xm); }
+    return 0 - 1;
+}
+
+fn a64_take_binop(p0: A64P) -> A64P {
+    let p: A64P = a64_skip(p0);
+    if p.err != "" { return p; }
+    let b: Int = a64_peek(p);
+    let mut b2: Int = -1;
+    if p.i + 1 < bytes_len(p.src) {
+        b2 = byte_at(p.src, p.i + 1);
+    }
+    if b == 60 && b2 == 60 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, 8, p.text);
+    }
+    if b == 62 && b2 == 62 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, 9, p.text);
+    }
+    if b == 43 { return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, 1, p.text); }
+    if b == 45 { return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, 2, p.text); }
+    if b == 42 { return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, 3, p.text); }
+    if b == 47 { return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, 4, p.text); }
+    if b == 38 { return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, 5, p.text); }
+    if b == 124 { return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, 6, p.text); }
+    if b == 94 { return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, 7, p.text); }
+    return a64p(p, p.i, p.words, p.names, p.offs, p.next_off, 0, p.text);
+}
+
+fn a64_take_relop(p0: A64P) -> A64P {
+    let p: A64P = a64_skip(p0);
+    if p.text != "" && p.i < 0 { return p; }
+    let b: Int = a64_peek(p);
+    let mut b2: Int = -1;
+    if p.i + 1 < bytes_len(p.src) {
+        b2 = byte_at(p.src, p.i + 1);
+    }
+    if b == 61 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_ne(), p.text);
+    }
+    if b == 33 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_eq(), p.text);
+    }
+    if b == 60 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_gt(), p.text);
+    }
+    if b == 62 && b2 == 61 {
+        return a64p(p, p.i + 2, p.words, p.names, p.offs, p.next_off, arm64_cond_lt(), p.text);
+    }
+    if b == 60 {
+        return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, arm64_cond_ge(), p.text);
+    }
+    if b == 62 {
+        return a64p(p, p.i + 1, p.words, p.names, p.offs, p.next_off, arm64_cond_le(), p.text);
+    }
+    return a64_fail(p, "ERR\ta64_relop");
+}
+
+fn a64_primary(p0: A64P) -> A64P {
+    let mut p: A64P = a64_skip(p0);
+    if p.err != "" { return p; }
+    let b: Int = a64_peek(p);
+    if b == 45 {
+        p = a64_at(p, p.i + 1);
+        p = a64_primary(p);
+        if p.err != "" { return p; }
+        let w: Int = arm64_word_neg(0, 0);
+        if w == 0 - 1 { return a64_fail(p, "ERR\ta64_neg_range"); }
+        return a64_emit(p, w);
+    }
+    if a64_is_digit(b) {
+        p = a64_num(p);
+        if p.ival < 0 || p.ival > 65535 { return a64_fail(p, "ERR\ta64_imm_range"); }
+        let w: Int = arm64_word_movz(0, p.ival, 0);
+        if w == 0 - 1 { return a64_fail(p, "ERR\ta64_movz_range"); }
+        return a64_emit(p, w);
+    }
+    if a64_is_alpha(b) {
+        p = a64_ident(p);
+        let off: Int = 0 + a64_lookup_parse(p.names, p.offs, p.text);
+        if off < 0 { return a64_fail(p, "ERR\ta64_unknown"); }
+        if off < 0 || off > 504 { return a64_fail(p, "ERR\ta64_off_range"); }
+        let w: Int = arm64_word_ldr(0, abi_fp_reg(), off);
+        if w == 0 - 1 { return a64_fail(p, "ERR\ta64_ldr_range"); }
+        return a64_emit(p, w);
+    }
+    if b == 40 {
+        p = a64_eat(p, 40);
+        p = a64_expr(p);
+        return a64_eat(p, 41);
+    }
+    return a64_fail(p, "ERR\ta64_primary");
+}
+
+fn a64_expr(p0: A64P) -> A64P {
+    let mut p: A64P = a64_primary(p0);
+    while p.err == "" {
+        let q: A64P = a64_take_binop(p);
+        if q.ival == 0 { return p; }
+        let op: Int = q.ival;
+        if op < 1 || op > 9 { return a64_fail(q, "ERR\ta64_binop_unknown"); }
+        let w: Int = a64_binop_word(op, 0, 1, 0);
+        if w == 0 - 1 { return a64_fail(q, "ERR\ta64_binop_unknown"); }
+        p = a64_emit(q, arm64_word_mov_reg(1, 0));
+        p = a64_primary(p);
+        p = a64_emit(p, w);
+    }
+    return p;
+}
+
+fn a64_epilogue(p: A64P) -> A64P {
+    let mut q: A64P = a64_emit(p, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16));
+    q = a64_emit(q, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), a64_frame()));
+    q = a64_emit(q, arm64_word_ret());
+    return q;
+}
+
+fn a64_let_stmt(p0: A64P) -> A64P {
+    let mut p: A64P = a64_eat_kw(p0, "let");
+    p = a64_ident(p);
+    let name: String = p.text;
+    p = a64_eat(p, 58);
+    p = a64_eat_kw(p, "Int");
+    p = a64_eat(p, 61);
+    p = a64_expr(p);
+    p = a64_eat(p, 59);
+    if p.err != "" { return p; }
+    if p.next_off < 16 || p.next_off + 8 > a64_frame() { return a64_fail(p, "ERR\ta64_frame_overflow"); }
+    p = a64_bind(p, name);
+    if p.ival < 0 || p.ival > 504 { return a64_fail(p, "ERR\ta64_bind_range"); }
+    let w: Int = arm64_word_str(0, abi_fp_reg(), p.ival);
+    if w == 0 - 1 { return a64_fail(p, "ERR\ta64_str_range"); }
+    return a64_emit(p, w);
+}
+
+fn a64_if_stmt(p0: A64P) -> A64P {
+    let mut p: A64P = a64_eat_kw(p0, "if");
+    p = a64_expr(p);
+    p = a64_emit(p, arm64_word_mov_reg(1, 0));
+    p = a64_take_relop(p);
+    let inv: Int = p.ival;
+    if inv < 0 || inv > 15 { return a64_fail(p, "ERR\ta64_cond_range"); }
+    p = a64_expr(p);
+    let cmp_w: Int = arm64_word_cmp_reg(1, 0);
+    if cmp_w == 0 - 1 { return a64_fail(p, "ERR\ta64_cmp_range"); }
+    p = a64_emit(p, cmp_w);
+    let br: Int = list_len(p.words);
+    p = a64_emit(p, 0 + arm64_word_b_cond(inv, 0));
+    p = a64_eat(p, 123);
+    p = a64_stmts(p);
+    p = a64_eat(p, 125);
+    if p.err != "" { return p; }
+    let off: Int = list_len(p.words) - br;
+    if off < 0 || off > 524287 { return a64_fail(p, "ERR\ta64_bcond_off"); }
+    let w: Int = 0 + arm64_word_b_cond(inv, off);
+    let words: List[Int] = a64_wset(p.words, br, w);
+    return a64p(p, p.i, words, p.names, p.offs, p.next_off, p.ival, p.text);
+}
+
+fn a64_ret_stmt(p0: A64P) -> A64P {
+    let mut p: A64P = a64_eat_kw(p0, "return");
+    p = a64_expr(p);
+    p = a64_epilogue(p);
+    return a64_eat(p, 59);
+}
+
+fn a64_stmt(p0: A64P) -> A64P {
+    let p: A64P = a64_skip(p0);
+    if a64_starts(p, "let") { return a64_let_stmt(p); }
+    if a64_starts(p, "if") { return a64_if_stmt(p); }
+    if a64_starts(p, "return") { return a64_ret_stmt(p); }
+    return a64_fail(p, "ERR\ta64_stmt");
+}
+
+fn a64_stmts(p0: A64P) -> A64P {
+    let mut p: A64P = p0;
+    while p.err == "" {
+        p = a64_skip(p);
+        let b: Int = a64_peek(p);
+        if b == 125 || b < 0 { return p; }
+        p = a64_stmt(p);
+    }
+    return p;
+}
+
+fn a64_prologue(p: A64P) -> A64P {
+    let sub_w: Int = arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), a64_frame());
+    if sub_w == 0 - 1 { return a64_fail(p, "ERR\ta64_frame_imm"); }
+    let mut q: A64P = a64_emit(p, sub_w);
+    q = a64_emit(q, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16));
+    q = a64_emit(q, arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+    return q;
+}
+
+pub fn aarch64_lower_main(src: String) -> List[Int] {
+    if bytes_len(src) == 0 { return list_new(); }
+    if bytes_len(src) > 8192 { return list_new(); }
+    let mut p: A64P = a64_new(src);
+    p = a64_skip(p);
+    if a64_starts(p, "pub") {
+        p = a64_eat_kw(p, "pub");
+    }
+    p = a64_eat_kw(p, "fn");
+    p = a64_ident(p);
+    if p.err != "" || p.text != "main" { return list_new(); }
+    p = a64_eat(p, 40);
+    p = a64_eat(p, 41);
+    p = a64_skip(p);
+    if a64_peek(p) == 45 {
+        p = a64_eat(p, 45);
+        p = a64_eat(p, 62);
+        p = a64_eat_kw(p, "Int");
+    }
+    p = a64_eat(p, 123);
+    p = a64_prologue(p);
+    p = a64_stmts(p);
+    p = a64_eat(p, 125);
+    if p.err != "" { return list_new(); }
+    if list_len(p.words) == 0 { return list_new(); }
+    p = a64_skip(p);
+    if a64_peek(p) != -1 { return list_new(); }
+    return arm64_words_to_bytes(p.words);
+}

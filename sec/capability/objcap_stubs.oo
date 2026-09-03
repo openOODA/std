@@ -1,0 +1,47 @@
+// # Object Capability Fail-Closed Stubs
+//
+// Logline: Fail-closed process_exit residuals for kernel descriptor map, HMAC bearer verify, proxy membrane install, and remote RPC marshal.
+//
+// Setup: Default-deny per RULES.oot 1.4. Imports ./engine.oo. oodac lacks Linux Kernel Capability Descriptor Table, HMAC-SHA256 bitwise FFI, and zero-copy RPC serialization.
+//
+// Beats:
+//   1. objcap_kernel_descriptor_map: refuse kernel CDT / seccomp-bpf privilege wrap.
+//   2. objcap_crypto_verify_mac_signature: refuse HMAC-SHA256 bearer token validation.
+//   3. objcap_membrane_install_interceptor_trap: refuse dynamic proxy membrane reflection.
+//   4. objcap_remote_rpc_marshal_capability: refuse zero-copy RPC capability marshal.
+//   5. fail-closed error: default-deny on unbuilt kernel / FFI surface.
+//
+// residual: not a real object-capability runtime; integrate a vetted kernel capability layer.
+
+import "engine.oo";
+
+pub fn objcap_kernel_descriptor_map(sys: &SysCap, cap_ref: &ObjectCapability) -> Result[Int, String] {
+    // COMPILER LIMITATION: openOODA compiler lacks Linux Kernel Capability Descriptor Table (CDT),
+    // seccomp-bpf privilege wrapping, and raw file descriptor handle lowering in oodac check stage.
+    // Keeping fail-closed stub.
+    return Err("Kernel capability descriptor mapping requires FFI interface");
+}
+
+pub fn objcap_crypto_verify_mac_signature(cap_ref: &ObjectCapability, secret_key: String) -> Bool {
+    // COMPILER LIMITATION: Cryptographic HMAC-SHA256 bearer token validation requires primitive bitwise vector
+    // instructions and key schedule routines not currently lowered in AST check stage.
+    // Keeping fail-closed stub.
+    return false;
+}
+
+pub fn objcap_membrane_install_interceptor_trap(
+    membrane_id_val: String,
+    trap_func_name_val: String
+) -> Result[Bool, String] {
+    // COMPILER LIMITATION: Dynamic proxy membrane reflection traps and dynamic function pointer redirection
+    // are not supported by the openOODA static typechecker IR.
+    // Keeping fail-closed stub.
+    return Err("Proxy membrane interceptor traps require runtime VM reflection");
+}
+
+pub fn objcap_remote_rpc_marshal_capability(cap_ref: &ObjectCapability) -> Result[String, String] {
+    // COMPILER LIMITATION: Zero-copy RPC object capability descriptor network serialization over TLS channels
+    // is unsupported in oodac compiler check stage.
+    // Keeping fail-closed stub.
+    return Err("RPC capability network serialization unsupported");
+}

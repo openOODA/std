@@ -1,0 +1,256 @@
+// # Streaming JSON Tokenizer and Recursive DOM Parser
+//
+// Logline: Incremental RFC 8259 JSON tokenizer and a one-shot recursive DOM parser that returns a tree of JsonValue objects, arrays, strings, numbers, booleans, and nulls.
+//
+// Setup: Pure. Streams carry input, position, done, and err. The DOM parser is split: json_parse returns Result[Int, String] (status only) and json_parse_at returns the JsonValue directly so smoke fixtures do not have to bind a Result[Struct, String] (Bug B). On parse failure json_parse_at returns a JsonValue with kind "error".
+//
+// Beats:
+//   1. Push a new input chunk into the stream without re-parsing prior events.
+//   2. Walk whitespace and dispatch on the next non-space byte.
+//   3. Emit a structured event with start and end positions in the input.
+//   4. Mark the stream as done when a top-level value is fully consumed.
+//   5. Recursively parse a string into a JsonValue tree with byte-offset children for aggregates.
+
+import "std/core/primitives/result.oo";
+
+type JsonStream = struct {
+    input: String,
+    pos: Int,
+    done: Bool,
+    err: String
+};
+
+pub fn json_stream_new() -> JsonStream {
+    return JsonStream { input: "", pos: 0, done: false, err: "" };
+}
+
+pub fn json_stream_push(p: JsonStream, chunk: String) -> JsonStream {
+    if p.done == true { return p; }
+    return JsonStream { input: p.input + chunk, pos: p.pos, done: p.done, err: p.err };
+}
+
+pub fn json_stream_eof(p: JsonStream) -> Bool { return p.done; }
+pub fn json_stream_error(p: JsonStream) -> String { return p.err; }
+
+fn js_skip_ws(s: String, i: Int) -> Int {
+    let n: Int = chars_len(s);
+    let mut j: Int = i;
+    while j < n {
+        let c: String = char_at(s, j);
+        if c == " " || c == "\t" || c == "\n" || c == "\r" { j = j + 1; }
+        else { return j; }
+    }
+    return j;
+}
+
+fn js_digit(c: String) -> Int {
+    let b: Int = byte_at(c, 0);
+    if b < 48 { return 0 - 1; }
+    if b > 57 { return 0 - 1; }
+    return b - 48;
+}
+
+fn js_read_string(s: String, i: Int) -> Result[String, String] {
+    if i < 0 || i >= chars_len(s) { return Err("ERR\tjson\tbad_string"); }
+    if char_at(s, i) != "\"" { return Err("ERR\tjson\tstring_expected"); }
+    let n: Int = chars_len(s);
+    let mut j: Int = i + 1;
+    while j < n {
+        let c: String = char_at(s, j);
+        if c == "\"" { return Ok(str_slice(s, i, j + 1)); }
+        if c == "\\" {
+            if j + 1 >= n { return Err("ERR\tjson\tunterminated_escape"); }
+            j = j + 2;
+        } else { j = j + 1; }
+    }
+    return Err("ERR\tjson\tunterminated_string");
+}
+
+fn js_read_number(s: String, i: Int) -> Result[String, String] {
+    let n: Int = chars_len(s);
+    let mut j: Int = i;
+    if j < n && char_at(s, j) == "-" { j = j + 1; }
+    if j >= n { return Err("ERR\tjson\tnum_eof"); }
+    let c1: String = char_at(s, j);
+    if c1 == "0" { j = j + 1; }
+    else {
+        if js_digit(c1) < 1 { return Err("ERR\tjson\tnum_lead"); }
+        while j < n && js_digit(char_at(s, j)) >= 0 { j = j + 1; }
+    }
+    if j < n && char_at(s, j) == "." {
+        j = j + 1;
+        if j >= n { return Err("ERR\tjson\tnum_frac_eof"); }
+        if js_digit(char_at(s, j)) < 0 { return Err("ERR\tjson\tnum_frac_digit"); }
+        while j < n && js_digit(char_at(s, j)) >= 0 { j = j + 1; }
+    }
+    if j < n && (char_at(s, j) == "e" || char_at(s, j) == "E") {
+        j = j + 1;
+        if j < n && (char_at(s, j) == "+" || char_at(s, j) == "-") { j = j + 1; }
+        if j >= n { return Err("ERR\tjson\tnum_exp_eof"); }
+        if js_digit(char_at(s, j)) < 0 { return Err("ERR\tjson\tnum_exp_digit"); }
+        while j < n && js_digit(char_at(s, j)) >= 0 { j = j + 1; }
+    }
+    return Ok(str_slice(s, i, j));
+}
+
+fn js_match_lit(s: String, i: Int, lit: String) -> Result[Int, String] {
+    let ln: Int = chars_len(lit);
+    let sn: Int = chars_len(s);
+    if i + ln > sn { return Err("ERR\tjson\tliteral_partial"); }
+    if str_slice(s, i, i + ln) != lit { return Err("ERR\tjson\tliteral_mismatch"); }
+    return Ok(i + ln);
+}
+
+fn js_emit(s: String, pos: Int, done: Bool, err: String) -> JsonStream {
+    return JsonStream { input: s, pos: pos, done: done, err: err };
+}
+
+fn js_consume_lit(p: JsonStream, s: String, start: Int, lit: String) -> JsonStream {
+    if js_match_lit(s, start, lit).is_err() { return p; }
+    return js_emit(s, start + chars_len(lit), false, "");
+}
+
+pub fn json_stream_next(p: JsonStream) -> JsonStream {
+    if p.done == true { return p; }
+    let s: String = p.input;
+    let start: Int = js_skip_ws(s, p.pos);
+    let n: Int = chars_len(s);
+    if start >= n { return js_emit(s, start, false, ""); }
+    let c: String = char_at(s, start);
+    if c == "{" || c == "[" || c == ":" || c == "," { return js_emit(s, start + 1, false, ""); }
+    if c == "}" || c == "]" { return js_emit(s, start + 1, true, ""); }
+    if c == "\"" {
+        let r: Result[String, String] = js_read_string(s, start);
+        if r.is_err() { return p; }
+        let v: String = res_unwrap_or(r, "");
+        return js_emit(s, start + chars_len(v), false, "");
+    }
+    if c == "-" || js_digit(c) >= 0 {
+        let r2: Result[String, String] = js_read_number(s, start);
+        if r2.is_err() { return p; }
+        let v2: String = res_unwrap_or(r2, "");
+        return js_emit(s, start + chars_len(v2), false, "");
+    }
+    if c == "t" { return js_consume_lit(p, s, start, "true"); }
+    if c == "f" { return js_consume_lit(p, s, start, "false"); }
+    if c == "n" { return js_consume_lit(p, s, start, "null"); }
+    return js_emit(s, start, true, "ERR\tjson\tunexpected_char");
+}
+
+// JsonValue tree. kind: "object", "array", "string", "number", "bool",
+// "null", "error". num holds the bool value or array/object count. str
+// holds the string/number literal or the err message when kind is
+// "error". children holds byte-offset pairs.
+type JsonValue = struct {
+    kind: String,
+    num: Int,
+    str: String,
+    children: List[Int]
+};
+
+pub fn json_kind(v: JsonValue) -> String { return v.kind; }
+pub fn json_num(v: JsonValue) -> Int { return v.num; }
+pub fn json_str(v: JsonValue) -> String { return v.str; }
+pub fn json_children(v: JsonValue) -> List[Int] { return v.children; }
+
+// Recursive DOM parser. Returns the parsed JsonValue directly; on
+// failure returns a JsonValue with kind "error" (no Result wrapping).
+// The caller checks json_kind(v) == "error" to detect parse failure.
+// This signature avoids Result[Struct, String] so smoke fixtures do not
+// have to bind a boxed-struct Result (Bug B). The recursive call also
+// returns JsonValue directly; an "error" child is propagated up.
+fn json_parse_at(s: String, pos: Int) -> JsonValue {
+    let p: Int = js_skip_ws(s, pos);
+    if p >= chars_len(s) { return JsonValue { kind: "error", num: 0, str: "empty", children: list_new() }; }
+    let c: String = char_at(s, p);
+    if c == "{" {
+        let mut kids: List[Int] = list_new();
+        let mut cur: Int = p + 1;
+        cur = js_skip_ws(s, cur);
+        if cur < chars_len(s) && char_at(s, cur) == "}" { return JsonValue { kind: "object", num: 0, str: "", children: kids }; }
+        while true {
+            cur = js_skip_ws(s, cur);
+            let kr: Result[String, String] = js_read_string(s, cur);
+            if kr.is_err() { return JsonValue { kind: "error", num: 0, str: "key_expected", children: list_new() }; }
+            let ks: String = res_unwrap_or(kr, "");
+            let ke: Int = cur + chars_len(ks);
+            kids = list_push(kids, cur);
+            kids = list_push(kids, ke);
+            cur = js_skip_ws(s, ke);
+            if cur >= chars_len(s) || char_at(s, cur) != ":" { return JsonValue { kind: "error", num: 0, str: "colon_expected", children: list_new() }; }
+            cur = cur + 1;
+            let vv: JsonValue = json_parse_at(s, cur);
+            if json_kind(vv) == "error" { return vv; }
+            let ve: Int = cur + json_val_len(s, cur, vv);
+            kids = list_push(kids, cur);
+            kids = list_push(kids, ve);
+            cur = js_skip_ws(s, ve);
+            if cur < chars_len(s) && char_at(s, cur) == "," { cur = cur + 1; continue; }
+            if cur < chars_len(s) && char_at(s, cur) == "}" { return JsonValue { kind: "object", num: list_len(kids) / 4, str: "", children: kids }; }
+            return JsonValue { kind: "error", num: 0, str: "object_close", children: list_new() };
+        }
+    }
+    if c == "[" {
+        let mut kids2: List[Int] = list_new();
+        let mut cur2: Int = p + 1;
+        cur2 = js_skip_ws(s, cur2);
+        if cur2 < chars_len(s) && char_at(s, cur2) == "]" { return JsonValue { kind: "array", num: 0, str: "", children: kids2 }; }
+        while true {
+            let vv2: JsonValue = json_parse_at(s, cur2);
+            if json_kind(vv2) == "error" { return vv2; }
+            let ve2: Int = cur2 + json_val_len(s, cur2, vv2);
+            kids2 = list_push(kids2, cur2);
+            kids2 = list_push(kids2, ve2);
+            cur2 = js_skip_ws(s, ve2);
+            if cur2 < chars_len(s) && char_at(s, cur2) == "," { cur2 = cur2 + 1; continue; }
+            if cur2 < chars_len(s) && char_at(s, cur2) == "]" { return JsonValue { kind: "array", num: list_len(kids2) / 2, str: "", children: kids2 }; }
+            return JsonValue { kind: "error", num: 0, str: "array_close", children: list_new() };
+        }
+    }
+    if c == "\"" {
+        let r3: Result[String, String] = js_read_string(s, p);
+        if r3.is_err() { return JsonValue { kind: "error", num: 0, str: "bad_string", children: list_new() }; }
+        return JsonValue { kind: "string", num: 0, str: res_unwrap_or(r3, ""), children: list_new() };
+    }
+    if c == "-" || js_digit(c) >= 0 {
+        let r4: Result[String, String] = js_read_number(s, p);
+        if r4.is_err() { return JsonValue { kind: "error", num: 0, str: "bad_number", children: list_new() }; }
+        return JsonValue { kind: "number", num: 0, str: res_unwrap_or(r4, ""), children: list_new() };
+    }
+    if c == "t" {
+        if js_match_lit(s, p, "true").is_err() { return JsonValue { kind: "error", num: 0, str: "bad_bool", children: list_new() }; }
+        return JsonValue { kind: "bool", num: 1, str: "true", children: list_new() };
+    }
+    if c == "f" {
+        if js_match_lit(s, p, "false").is_err() { return JsonValue { kind: "error", num: 0, str: "bad_bool", children: list_new() }; }
+        return JsonValue { kind: "bool", num: 0, str: "false", children: list_new() };
+    }
+    if c == "n" {
+        if js_match_lit(s, p, "null").is_err() { return JsonValue { kind: "error", num: 0, str: "bad_null", children: list_new() }; }
+        return JsonValue { kind: "null", num: 0, str: "null", children: list_new() };
+    }
+    return JsonValue { kind: "error", num: 0, str: "bad_start", children: list_new() };
+}
+
+fn json_val_len(s: String, pos: Int, v: JsonValue) -> Int {
+    let k: String = v.kind;
+    if k == "string" { return chars_len(v.str); }
+    if k == "number" { return chars_len(v.str); }
+    if k == "bool" { if v.num == 1 { return 4; } return 5; }
+    if k == "null" { return 4; }
+    let ch: List[Int] = v.children;
+    let n: Int = list_len(ch);
+    if n < 1 { return 2; }
+    return list_get(ch, n - 1) - pos + 1;
+}
+
+// Status-only parse. Returns Ok(1) on a valid JSON document whose
+// trailing whitespace is exactly consumed, Err on any parse failure or
+// trailing input.
+pub fn json_parse(s: String) -> Result[Int, String] {
+    let v: JsonValue = json_parse_at(s, 0);
+    if json_kind(v) == "error" { return Err(json_str(v)); }
+    let total: Int = json_val_len(s, 0, v);
+    if js_skip_ws(s, total) != chars_len(s) { return Err("ERR\tjson_parse\textra"); }
+    return Ok(1);
+}

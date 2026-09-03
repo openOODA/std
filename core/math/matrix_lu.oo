@@ -1,0 +1,243 @@
+// # Int Scaled Matrix LU Decomposition and Linear Solver Module
+//
+// Logline: Square row-major Int fixed-point (scaled by 1000) matrix Gaussian elimination with zero-pivot row swapping, forward/back substitution linear solver, and determinant.
+//
+// Setup: Pure math module. Stores square matrices in flat row-major List[Int] arrays. Fractional values use 1.0 = 1000 fixed-point scaling; intermediate products are divided by 1000 to stay in the same scaled space.
+//
+// Beats:
+//   1. Construct zero-filled Matrix with row-major flat storage.
+//   2. Row-major element indexing (r * cols + c) with immutable matrix_set rebuilds.
+//   3. In-place Gaussian elimination producing packed L (lower, below diagonal) and U (upper, on/above diagonal) with zero-pivot row swapping and Int-truncated ratios.
+//   4. Forward substitution L * y = b and back substitution U * x = y returning scaled x.
+//   5. Determinant as product of U diagonal entries with pivot-swap sign.
+// residual: matrix_lu_decompose returns Result[List[Int], String] (flat data) due to a codegen bug where match on Result[Matrix, String] emits oo_str_release on a Matrix local. Caller wraps via matrix_from_data. L diagonal is implicit (1.0, not stored) to avoid conflicting with the U diagonal. matrix_det inlines the elimination core to keep the public surface free of Result[Struct, String] types.
+
+import "std/core/primitives/result.oo";
+import "std/core/primitives/list.oo";
+
+type Matrix = struct { rows: Int, cols: Int, data: List[Int] };
+
+pub fn matrix_scale() -> Int { return 1000; }
+
+pub fn matrix_new(rows: Int, cols: Int) -> Matrix {
+    let total: Int = rows * cols;
+    let mut d: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        d = list_push(d, 0);
+        i = i + 1;
+    }
+    return Matrix { rows: rows, cols: cols, data: d };
+}
+
+pub fn matrix_from_data(rows: Int, cols: Int, data: List[Int]) -> Matrix {
+    return Matrix { rows: rows, cols: cols, data: data };
+}
+
+pub fn matrix_get(m: Matrix, r: Int, c: Int) -> Int {
+    return list_get(m.data, r * m.cols + c);
+}
+
+pub fn matrix_set(m: Matrix, r: Int, c: Int, v: Int) -> Matrix {
+    let out: List[Int] = list_set(m.data, r * m.cols + c, v);
+    return Matrix { rows: m.rows, cols: m.cols, data: out };
+}
+
+fn swap_rows_flat(data: List[Int], n: Int, r1: Int, r2: Int) -> List[Int] {
+    if r1 == r2 { return data; }
+    let mut out: List[Int] = data;
+    let mut c: Int = 0;
+    while c < n {
+        let a: Int = list_get(out, r1 * n + c);
+        let b: Int = list_get(out, r2 * n + c);
+        out = list_set(out, r1 * n + c, b);
+        out = list_set(out, r2 * n + c, a);
+        c = c + 1;
+    }
+    return out;
+}
+
+// In-place Gaussian elimination returning the packed (L below diagonal, U on/above diagonal) flat data.
+// L has unit diagonal (implicit, not stored); U holds the full diagonal values.
+pub fn matrix_lu_decompose(m: Matrix) -> Result[List[Int], String] {
+    let n: Int = m.rows;
+    if n != m.cols { return Err("ERR\tmatrix_lu\tnot_square"); }
+    if n < 1 { return Err("ERR\tmatrix_lu\tsize_zero"); }
+    let total: Int = n * n;
+    let mut work: List[Int] = m.data;
+    let mut col: Int = 0;
+    while col < n {
+        let diag_idx: Int = col * n + col;
+        let mut pivot: Int = list_get(work, diag_idx);
+        if pivot == 0 {
+            let mut swap_row: Int = 0 - 1;
+            let mut r: Int = col + 1;
+            while r < n {
+                let v: Int = list_get(work, r * n + col);
+                if v != 0 { swap_row = r; r = n; } else { r = r + 1; }
+            }
+            if swap_row < 0 { return Err("ERR\tmatrix_lu\tsingular"); }
+            work = swap_rows_flat(work, n, col, swap_row);
+            pivot = list_get(work, col * n + col);
+        }
+        let scale: Int = matrix_scale();
+        let mut row_i: Int = col + 1;
+        while row_i < n {
+            let old_uik: Int = list_get(work, row_i * n + col);
+            let l_val: Int = (old_uik * scale) / pivot;
+            let mut col_j: Int = col + 1;
+            while col_j < n {
+                let cur: Int = list_get(work, row_i * n + col_j);
+                let pivot_row: Int = list_get(work, col * n + col_j);
+                let numerator: Int = cur * pivot - old_uik * pivot_row;
+                let updated: Int = numerator / pivot;
+                work = list_set(work, row_i * n + col_j, updated);
+                col_j = col_j + 1;
+            }
+            work = list_set(work, row_i * n + col, l_val);
+            row_i = row_i + 1;
+        }
+        col = col + 1;
+    }
+    let _t: Int = total;
+    return Ok(work);
+}
+
+// Forward substitution L * y = b using a packed LU flat data list. L has implicit unit diagonal.
+fn forward_sub(n: Int, lu_data: List[Int], b: List[Int]) -> List[Int] {
+    let scale: Int = matrix_scale();
+    let mut y: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut acc: Int = list_get(b, i);
+        let mut j: Int = 0;
+        while j < i {
+            let l_ij: Int = list_get(lu_data, i * n + j);
+            let yj: Int = list_get(y, j);
+            acc = acc - (l_ij * yj) / scale;
+            j = j + 1;
+        }
+        y = list_push(y, acc);
+        i = i + 1;
+    }
+    return y;
+}
+
+// Back substitution U * x = y using a packed LU flat data list. Returns scaled x.
+fn back_sub(n: Int, lu_data: List[Int], y: List[Int]) -> Result[List[Int], String] {
+    let scale: Int = matrix_scale();
+    let mut x: List[Int] = list_new();
+    let mut k: Int = n - 1;
+    while k >= 0 {
+        let u_kk: Int = list_get(lu_data, k * n + k);
+        if u_kk == 0 { return Err("ERR\tmatrix_solve\tzero_pivot"); }
+        let yk: Int = list_get(y, k);
+        let mut acc: Int = yk * scale;
+        let mut j: Int = k + 1;
+        while j < n {
+            let u_kj: Int = list_get(lu_data, k * n + j);
+            let xj: Int = list_get(x, j - (k + 1));
+            acc = acc - u_kj * xj;
+            j = j + 1;
+        }
+        let xk: Int = acc / u_kk;
+        let mut new_x: List[Int] = list_new();
+        new_x = list_push(new_x, xk);
+        let mut m_idx: Int = 0;
+        while m_idx < list_len(x) {
+            new_x = list_push(new_x, list_get(x, m_idx));
+            m_idx = m_idx + 1;
+        }
+        x = new_x;
+        k = k - 1;
+    }
+    return Ok(x);
+}
+
+// Solve A * x = b using a packed LU flat data list (length n*n). Returns scaled x.
+pub fn matrix_solve(lu_data: List[Int], n: Int, b: List[Int]) -> Result[List[Int], String] {
+    if list_len(lu_data) != n * n { return Err("ERR\tmatrix_solve\tbad_lu_size"); }
+    if list_len(b) != n { return Err("ERR\tmatrix_solve\tbad_b_size"); }
+    let y: List[Int] = forward_sub(n, lu_data, b);
+    return back_sub(n, lu_data, y);
+}
+
+// Compute the determinant of a square matrix in scaled form with sign from swap count.
+// The Gaussian elimination core is inlined here to keep the public Result type as Int
+// (avoids Result[Struct, String] C-redefinition bug at the module boundary).
+pub fn matrix_det(m: Matrix) -> Result[Int, String] {
+    let n: Int = m.rows;
+    if n != m.cols { return Err("ERR\tmatrix_det\tnot_square"); }
+    let mut work: List[Int] = m.data;
+    let mut swaps: Int = 0;
+    let mut col: Int = 0;
+    while col < n {
+        let diag_idx: Int = col * n + col;
+        let mut pivot: Int = list_get(work, diag_idx);
+        if pivot == 0 {
+            let mut swap_row: Int = 0 - 1;
+            let mut r: Int = col + 1;
+            while r < n {
+                let v: Int = list_get(work, r * n + col);
+                if v != 0 { swap_row = r; r = n; } else { r = r + 1; }
+            }
+            if swap_row < 0 { return Err("ERR\tmatrix_lu\tsingular"); }
+            work = swap_rows_flat(work, n, col, swap_row);
+            swaps = swaps + 1;
+            pivot = list_get(work, col * n + col);
+        }
+        let scale: Int = matrix_scale();
+        let mut row_i: Int = col + 1;
+        while row_i < n {
+            let old_uik: Int = list_get(work, row_i * n + col);
+            let l_val: Int = (old_uik * scale) / pivot;
+            let mut col_j: Int = col + 1;
+            while col_j < n {
+                let cur: Int = list_get(work, row_i * n + col_j);
+                let pivot_row: Int = list_get(work, col * n + col_j);
+                let numerator: Int = cur * pivot - old_uik * pivot_row;
+                let updated: Int = numerator / pivot;
+                work = list_set(work, row_i * n + col_j, updated);
+                col_j = col_j + 1;
+            }
+            work = list_set(work, row_i * n + col, l_val);
+            row_i = row_i + 1;
+        }
+        col = col + 1;
+    }
+    let mut det: Int = 1;
+    let mut i: Int = 0;
+    while i < n {
+        let dv: Int = list_get(work, i * n + i);
+        det = det * dv;
+        i = i + 1;
+    }
+    let mut r2: Int = swaps - (swaps / 2) * 2;
+    if r2 != 0 {
+        det = 0 - det;
+    }
+    return Ok(det);
+}
+
+// Status projection of matrix_lu_decompose: Ok(1) if LU succeeded, Err("ERR") otherwise.
+// The underlying error message is intentionally discarded; callers needing a status
+// signal use is_ok() on the returned Result[Int, String] instead of unwrapping.
+pub fn matrix_lu_decompose_status(m: Matrix) -> Result[Int, String] {
+    let r: Result[List[Int], String] = matrix_lu_decompose(m);
+    if r.is_ok() { return Ok(1); }
+    return Err("ERR");
+}
+
+// Status projection of matrix_solve: Ok(1) if solve succeeded, Err("ERR") otherwise.
+pub fn matrix_solve_status(lu_data: List[Int], n: Int, b: List[Int]) -> Result[Int, String] {
+    let r: Result[List[Int], String] = matrix_solve(lu_data, n, b);
+    if r.is_ok() { return Ok(1); }
+    return Err("ERR");
+}
+
+// Status projection of matrix_det: Ok(1) if determinant computed, Err("ERR") otherwise.
+pub fn matrix_det_status(m: Matrix) -> Result[Int, String] {
+    let r: Result[Int, String] = matrix_det(m);
+    if r.is_ok() { return Ok(1); }
+    return Err("ERR");
+}

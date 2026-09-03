@@ -1,0 +1,35 @@
+// # Int Scaled Quaternion Inverse Module
+//
+// Logline: Multiplicative quaternion inverse returning Result[Quat, String] and a status projection that returns Result[Int, String] to avoid the Result[Struct, String] unwrap codegen bug at call sites.
+//
+// Setup: Pure math module. Imports the Quat struct and quat_norm_sq/quat_conjugate/quat_scale primitives from std/math/quaternion_ops.oo. Lives in a sibling module so consumers that only need identity/mul/conjugate/slerp do not pull Result[Quat, String] into their public type surface (which would trigger a C redefinition).
+//
+// Beats:
+//   1. quat_inverse: conjugate / norm_sq, Err if norm_sq is zero.
+//   2. quat_inverse_status: returns Ok(1) on success, Err("ERR") on failure, wrapping the inverse without unwrap.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/quaternion_ops.oo";
+
+// Multiplicative inverse: conjugate / norm_sq. Err if norm_sq is zero.
+pub fn quat_inverse(q: Quat) -> Result[Quat, String] {
+    let ns: Int = quat_norm_sq(q);
+    if ns == 0 { return Err("ERR\tquat_inverse\tzero_quaternion"); }
+    let scale: Int = quat_scale();
+    let conj: Quat = quat_conjugate(q);
+    return Ok(Quat {
+        w: conj.w * scale / ns,
+        x: conj.x * scale / ns,
+        y: conj.y * scale / ns,
+        z: conj.z * scale / ns
+    });
+}
+
+// Status projection of quat_inverse: Ok(1) if inverse succeeded, Err("ERR") otherwise.
+// The underlying error message is intentionally discarded; callers needing a status
+// signal use is_ok() on the returned Result[Int, String] instead of unwrapping.
+pub fn quat_inverse_status(q: Quat) -> Result[Int, String] {
+    let r: Result[Quat, String] = quat_inverse(q);
+    if r.is_ok() { return Ok(1); }
+    return Err("ERR");
+}

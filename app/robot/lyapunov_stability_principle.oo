@@ -1,0 +1,161 @@
+// # Lyapunov stability principle
+//
+// Logline: An energy-like function V(x) decreasing along trajectories implies asymptotic stability; quantitative check returns 1 iff V_now < V_prev.
+//
+// Setup: Pure Float. V_now, V_prev real. Coupled with PD control: V = 0.5 x^T P x with P solving A^T P + P A = -Q. Illegal or unstable P solves return Err. Zero is a valid P entry, so dummy 0 is not used.
+//
+// Beats:
+//   1. lyapunov_decrement_check returns 1 when V_now < V_prev, else 0.
+//   2. lyapunov_quadratic_value returns V = 0.5 x^T P x for a 2D state (x1, x2) and 2x2 P.
+//   3. lyapunov_residual_2x2 returns ||A^T P + P A + Q||_F (Frobenius norm).
+//   4. lyapunov_pd_p_1d returns p = q / (2 |a|) for scalar dynamics x_dot = a x with a < 0 and q > 0.
+//   5. lyapunov_stability_principle_cert reports DomainCert holds 1 only when the candidate V is non-negative and strictly decreasing.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn lyap_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn ly_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// 1 if V_now < V_prev, else 0. Equal values return 0 (no strict decrease).
+pub fn lyapunov_decrement_check(v_now: Float, v_prev: Float) -> Int {
+    if v_now < v_prev { return 1; }
+    return 0;
+}
+
+// V = 0.5 * x^T P x for 2D state (x1, x2) and 2x2 P stored as
+// (p11, p12; p21, p22). Symmetry P is expected: p12 == p21.
+pub fn lyapunov_quadratic_value(x1: Float, x2: Float, p11: Float, p12: Float, p22: Float) -> Float {
+    let v11: Float = p11 * x1 * x1;
+    let v12: Float = 2.0 * p12 * x1 * x2;
+    let v22: Float = p22 * x2 * x2;
+    return 0.5 * (v11 + v12 + v22);
+}
+
+// Lyapunov residual for 2x2 matrices: ||A^T P + P A + Q||_F (Frobenius).
+// Each matrix is stored as four Float fields in row-major order.
+// All 12 entries (a11..a22, p11..p22, q11..q22) are caller-supplied.
+pub fn lyapunov_residual_2x2(
+    a11: Float, a12: Float, a21: Float, a22: Float,
+    p11: Float, p12: Float, p21: Float, p22: Float,
+    q11: Float, q12: Float, q21: Float, q22: Float
+) -> Float {
+    let m11: Float = (a11 * p11) + (a21 * p21);
+    let m12: Float = (a11 * p12) + (a21 * p22);
+    let m21: Float = (a12 * p11) + (a22 * p21);
+    let m22: Float = (a12 * p12) + (a22 * p22);
+    let n11: Float = (p11 * a11) + (p12 * a21);
+    let n12: Float = (p11 * a12) + (p12 * a22);
+    let n21: Float = (p21 * a11) + (p22 * a21);
+    let n22: Float = (p21 * a12) + (p22 * a22);
+    let r11: Float = m11 + n11 + q11;
+    let r12: Float = m12 + n12 + q12;
+    let r21: Float = m21 + n21 + q21;
+    let r22: Float = m22 + n22 + q22;
+    let acc: Float = (r11 * r11) + (r12 * r12) + (r21 * r21) + (r22 * r22);
+    if acc <= 0.0 { return 0.0; }
+    return sqrt(acc);
+}
+
+// 1D PD control: scalar dynamics x_dot = a x. For a < 0 and q > 0, the
+// solution of 2 a p + q = 0 is p = -q / (2 a) = q / (2 |a|). Returns Err
+// on hostile (a >= 0 or q <= 0) inputs. p = 0 is a valid P entry.
+pub fn lyapunov_pd_p_1d(a: Float, q: Float) -> Result[Float, String] {
+    if a >= 0.0 { return Err("ERR\tlyap\ta"); }
+    if q <= 0.0 { return Err("ERR\tlyap\tq"); }
+    let two_abs_a: Float = 0.0 - (2.0 * a);
+    if two_abs_a <= 0.0 { return Err("ERR\tlyap\ta"); }
+    return Ok(q / two_abs_a);
+}
+
+// 2D diagonal A = diag(a11, a22), Q = diag(q11, q22), solve
+// A^T P + P A = -Q element-wise:
+//   2 a11 p11 = -q11 -> p11 = -q11 / (2 a11)
+//   2 a22 p22 = -q22 -> p22 = -q22 / (2 a22)
+// Returns 0.5 * (p11 + p22). Off-diagonal P is zero in the diagonal case.
+pub fn lyapunov_pd_p_diag_2d(a11: Float, a22: Float, q11: Float, q22: Float) -> Result[Float, String] {
+    if a11 >= 0.0 { return Err("ERR\tlyap\ta"); }
+    if a22 >= 0.0 { return Err("ERR\tlyap\ta"); }
+    if q11 <= 0.0 { return Err("ERR\tlyap\tq"); }
+    if q22 <= 0.0 { return Err("ERR\tlyap\tq"); }
+    let p11: Float = (0.0 - q11) / (2.0 * a11);
+    let p22: Float = (0.0 - q22) / (2.0 * a22);
+    if p11 < 0.0 { return Err("ERR\tlyap\tp"); }
+    if p22 < 0.0 { return Err("ERR\tlyap\tp"); }
+    return Ok(0.5 * (p11 + p22));
+}
+
+// DomainCert: holds 1 only when V_now is finite, V_prev is finite, and
+// V_now < V_prev (strict decrease) and both are non-negative.
+pub fn lyapunov_stability_principle_cert(v_now: Float, v_prev: Float) -> DomainCert {
+    if v_now < 0.0 { return domain_cert("robot", "lyapunov_stability_principle", 0); }
+    if v_prev < 0.0 { return domain_cert("robot", "lyapunov_stability_principle", 0); }
+    let dec: Int = lyapunov_decrement_check(v_now, v_prev);
+    if dec != 1 { return domain_cert("robot", "lyapunov_stability_principle", 0); }
+    return domain_cert("robot", "lyapunov_stability_principle", 1);
+}
+
+pub fn verify_lyapunov_stability_principle() -> Bool {
+    let tol: Float = 0.0000001;
+
+    if lyapunov_decrement_check(5.0, 10.0) != 1 { return false; }
+    if lyapunov_decrement_check(10.0, 5.0) != 0 { return false; }
+    if lyapunov_decrement_check(5.0, 5.0) != 0 { return false; }
+
+    // V = 0.5 x^T P x: x = (1, 0), P = I -> V = 0.5.
+    if lyap_abs(lyapunov_quadratic_value(1.0, 0.0, 1.0, 0.0, 1.0) - 0.5) > tol { return false; }
+    // V = 0.5 x^T P x: x = (1, 1), P = I -> V = 1.
+    if lyap_abs(lyapunov_quadratic_value(1.0, 1.0, 1.0, 0.0, 1.0) - 1.0) > tol { return false; }
+    // V = 0.5 x^T P x: x = (2, 0), P = diag(2, 1) -> V = 4.
+    if lyap_abs(lyapunov_quadratic_value(2.0, 0.0, 2.0, 0.0, 1.0) - 4.0) > tol { return false; }
+
+    // Coupled (PD 1D): A = -2, Q = 4 -> p = 1.
+    if lyap_abs(ly_got(lyapunov_pd_p_1d(0.0 - 2.0, 4.0)) - 1.0) > tol { return false; }
+    // Coupled (PD 1D): A = -1, Q = 2 -> p = 1.
+    if lyap_abs(ly_got(lyapunov_pd_p_1d(0.0 - 1.0, 2.0)) - 1.0) > tol { return false; }
+
+    // Coupled (PD 2D diagonal): A = diag(-1, -2), Q = diag(2, 4).
+    // p11 = 1, p22 = 1. Half-sum = 1.
+    if lyap_abs(ly_got(lyapunov_pd_p_diag_2d(0.0 - 1.0, 0.0 - 2.0, 2.0, 4.0)) - 1.0) > tol { return false; }
+
+    // P = diag(1, 1), A = diag(-1, -2), Q = diag(2, 4). Residual = 0.
+    let res_2d: Float = lyapunov_residual_2x2(
+        0.0 - 1.0, 0.0, 0.0, 0.0 - 2.0,
+        1.0, 0.0, 0.0, 1.0,
+        2.0, 0.0, 0.0, 4.0
+    );
+    if res_2d > tol { return false; }
+
+    // A = [[-1, 0.5], [0, -2]], P = I, Q = [[2, -0.5], [-0.5, 4]] -> residual 0.
+    let res_2d2: Float = lyapunov_residual_2x2(
+        0.0 - 1.0, 0.5, 0.0, 0.0 - 2.0,
+        1.0, 0.0, 0.0, 1.0,
+        2.0, 0.0 - 0.5, 0.0 - 0.5, 4.0
+    );
+    if res_2d2 > tol { return false; }
+
+    if lyapunov_pd_p_1d(1.0, 4.0).is_ok() { return false; }
+    if lyapunov_pd_p_1d(0.0, 4.0).is_ok() { return false; }
+    if lyapunov_pd_p_1d(0.0 - 1.0, 0.0).is_ok() { return false; }
+    if lyapunov_pd_p_1d(0.0 - 1.0, 0.0 - 4.0).is_ok() { return false; }
+    if lyapunov_pd_p_diag_2d(1.0, 0.0 - 1.0, 2.0, 2.0).is_ok() { return false; }
+    if lyapunov_pd_p_diag_2d(0.0 - 1.0, 1.0, 2.0, 2.0).is_ok() { return false; }
+    if lyapunov_pd_p_diag_2d(0.0 - 1.0, 0.0 - 1.0, 0.0, 2.0).is_ok() { return false; }
+    if lyapunov_pd_p_diag_2d(0.0 - 1.0, 0.0 - 1.0, 2.0, 0.0 - 1.0).is_ok() { return false; }
+
+    let c1: DomainCert = lyapunov_stability_principle_cert(5.0, 10.0);
+    if cert_holds(c1) != 1 { return false; }
+    let c2: DomainCert = lyapunov_stability_principle_cert(10.0, 5.0);
+    if cert_holds(c2) != 0 { return false; }
+    let c3: DomainCert = lyapunov_stability_principle_cert(5.0, 5.0);
+    if cert_holds(c3) != 0 { return false; }
+    let c4: DomainCert = lyapunov_stability_principle_cert(0.0 - 1.0, 10.0);
+    if cert_holds(c4) != 0 { return false; }
+
+    return true;
+}

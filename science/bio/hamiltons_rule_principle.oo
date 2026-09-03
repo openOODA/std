@@ -1,0 +1,113 @@
+// # Hamilton inclusive-fitness rule principle
+//
+// Logline: Altruism is favored by natural selection when r * b > c, where r is the relatedness coefficient, b is the benefit to the recipient, and c is the cost to the actor. Coupled to Wright F-statistics via F_ST as an estimator of r in structured populations. Hostile r outside [0, 1] or negative b or c fail closed.
+//
+// Setup: Pure Float. r (relatedness, [0, 1]), b (benefit, > 0), c (cost, > 0), F_ST (Wright fixation index, [0, 1]). The principle is unit-agnostic.
+//
+// Beats:
+//   1. Hamilton's rule: altruism favored iff r * b > c.
+//   2. Classify: 1 = favored, 0 = opposed, 2 = neutral equality.
+//   3. r_b_minus_c: r * b - c; positive favors altruism.
+//   4. Wright F_ST in [0, 1] estimates relatedness for population structure.
+//   5. Domain certificate via domain_cert("bio", "hamiltons_rule", holds).
+//   6. Reference: Hamilton 1964, J. Theor. Biol. 7, 1. Queller 2010, Science 330, 1600; arXiv:1012.2886.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn biabs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn biclose(got: Float, want: Float, tol: Float) -> Int {
+    let d: Float = biabs(got - want);
+    if d <= tol {
+        return 1;
+    }
+    return 0;
+}
+
+fn hr_inputs_valid(r: Float, b: Float, c: Float) -> Int {
+    if r < 0.0 { return 0; }
+    if r > 1.0 { return 0; }
+    if b <= 0.0 { return 0; }
+    if c <= 0.0 { return 0; }
+    return 1;
+}
+
+pub fn hamiltons_rbc(r: Float, b: Float, c: Float) -> Result[Float, String] {
+    if hr_inputs_valid(r, b, c) != 1 {
+        return Err("ERR\thr\tdomain");
+    }
+    return Ok((r * b) - c);
+}
+
+pub fn hamiltons_altruism_favored(r: Float, b: Float, c: Float) -> Result[Int, String] {
+    if hr_inputs_valid(r, b, c) != 1 {
+        return Err("ERR\thr\tdomain");
+    }
+    let diff: Float = (r * b) - c;
+    if diff > 0.0 {
+        return Ok(1);
+    }
+    if diff < 0.0 {
+        return Ok(0);
+    }
+    return Ok(2);
+}
+
+pub fn hamiltons_altruism_favored_unit(r: Float, b: Float, c: Float) -> Int {
+    let r2: Result[Int, String] = hamiltons_altruism_favored(r, b, c);
+    match r2 { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn wright_fst_relatedness_estimate(f_st: Float) -> Result[Float, String] {
+    if f_st < 0.0 { return Err("ERR\thr\tdomain"); }
+    if f_st > 1.0 { return Err("ERR\thr\tdomain"); }
+    return Ok(f_st);
+}
+
+fn hr_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn hamiltons_rule_cert(r: Float, b: Float, c: Float) -> DomainCert {
+    let h: Int = hamiltons_altruism_favored_unit(r, b, c);
+    return domain_cert("bio", "hamiltons_rule", h);
+}
+
+pub fn verify_hamiltons_rule_principle() -> Bool {
+    let v1: Float = hr_got(hamiltons_rbc(0.5, 4.0, 1.0));
+    if biclose(v1, 1.0, 0.00001) != 1 { return false; }
+    if hamiltons_altruism_favored_unit(0.5, 4.0, 1.0) != 1 { return false; }
+    if hamiltons_rule_cert(0.5, 4.0, 1.0).holds != 1 { return false; }
+
+    if hamiltons_altruism_favored_unit(0.1, 1.0, 2.0) != 0 { return false; }
+
+    let v_eq: Float = hr_got(hamiltons_rbc(0.5, 2.0, 1.0));
+    if biclose(v_eq, 0.0, 0.00001) != 1 { return false; }
+    if hamiltons_altruism_favored_unit(0.5, 2.0, 1.0) != 2 { return false; }
+
+    if hamiltons_altruism_favored_unit(1.0, 1.0, 1.0) != 2 { return false; }
+    if hamiltons_altruism_favored_unit(1.0, 2.0, 1.0) != 1 { return false; }
+    if hamiltons_altruism_favored_unit(0.0, 5.0, 1.0) != 0 { return false; }
+
+    let r_est: Float = hr_got(wright_fst_relatedness_estimate(0.15));
+    if biclose(r_est, 0.15, 0.00001) != 1 { return false; }
+    if hr_got(wright_fst_relatedness_estimate(0.0)) != 0.0 { return false; }
+    if hr_got(wright_fst_relatedness_estimate(1.0)) != 1.0 { return false; }
+
+    if hamiltons_rbc(0.0 - 0.1, 4.0, 1.0).is_ok() { return false; }
+    if hamiltons_rbc(1.1, 4.0, 1.0).is_ok() { return false; }
+    if hamiltons_rbc(0.5, 0.0, 1.0).is_ok() { return false; }
+    if hamiltons_rbc(0.5, 4.0, 0.0).is_ok() { return false; }
+    if hamiltons_altruism_favored(0.0 - 0.1, 4.0, 1.0).is_ok() { return false; }
+    if hamiltons_altruism_favored(0.5, 4.0, 0.0 - 1.0).is_ok() { return false; }
+    if wright_fst_relatedness_estimate(0.0 - 0.1).is_ok() { return false; }
+    if wright_fst_relatedness_estimate(1.1).is_ok() { return false; }
+    if hamiltons_rule_cert(0.0 - 0.1, 4.0, 1.0).holds != 0 { return false; }
+    if hamiltons_rule_cert(0.5, 4.0, 0.0).holds != 0 { return false; }
+    return true;
+}

@@ -1,0 +1,100 @@
+// # SafeStack Dual-Stack Memory Isolation
+//
+// Logline: Partitions execution into a safe stack (control flow data) and unsafe stack (addressed buffers) to eliminate stack-based ROP/smashing.
+//
+// Setup: Sovereign dual-stack layout configuration and memory boundary validator.
+//
+// Beats:
+//   1. Define DualStackContext, SafeStackFrame, and UnsafeStackBuffer descriptors.
+//   2. Configure independent safe stack (SP_s) and unsafe stack (SP_u) regions.
+//   3. Validate pointer containment and isolate return addresses from stack arrays.
+
+type SafeStackFrame = struct {
+    frame_id: Int,
+    safe_sp: Int,
+    return_address: Int,
+    saved_fp: Int
+};
+
+type UnsafeStackBuffer = struct {
+    buffer_id: Int,
+    unsafe_sp: Int,
+    size_bytes: Int,
+    is_addressed: Bool
+};
+
+type DualStackContext = struct {
+    safe_stack_base: Int,
+    safe_stack_size: Int,
+    unsafe_stack_base: Int,
+    unsafe_stack_size: Int,
+    safe_frames: List[SafeStackFrame],
+    safe_count: Int,
+    unsafe_buffers: List[UnsafeStackBuffer],
+    unsafe_count: Int
+};
+
+pub fn dual_stack_context_new(
+    safe_base: Int,
+    safe_sz: Int,
+    unsafe_base: Int,
+    unsafe_sz: Int
+) -> DualStackContext {
+    let empty_frames: List[SafeStackFrame] = list_new();
+    let empty_bufs: List[UnsafeStackBuffer] = list_new();
+    return DualStackContext {
+        safe_stack_base: safe_base,
+        safe_stack_size: safe_sz,
+        unsafe_stack_base: unsafe_base,
+        unsafe_stack_size: unsafe_sz,
+        safe_frames: empty_frames,
+        safe_count: 0,
+        unsafe_buffers: empty_bufs,
+        unsafe_count: 0
+    };
+}
+
+pub fn dual_stack_push_safe_frame(
+    ctx: DualStackContext,
+    sp: Int,
+    ret_addr: Int,
+    fp: Int
+) -> DualStackContext {
+    let s_base: Int = ctx.safe_stack_base;
+    let s_sz: Int = ctx.safe_stack_size;
+    if sp < s_base || sp > (s_base + s_sz) {
+        return ctx;
+    }
+    let frame_id: Int = ctx.safe_count + 1;
+    let f: SafeStackFrame = SafeStackFrame {
+        frame_id: frame_id,
+        safe_sp: sp,
+        return_address: ret_addr,
+        saved_fp: fp
+    };
+    let mut sf: List[SafeStackFrame] = ctx.safe_frames;
+    sf = list_push(sf, f);
+    let s_cnt: Int = ctx.safe_count;
+    return DualStackContext {
+        safe_stack_base: ctx.safe_stack_base,
+        safe_stack_size: ctx.safe_stack_size,
+        unsafe_stack_base: ctx.unsafe_stack_base,
+        unsafe_stack_size: ctx.unsafe_stack_size,
+        safe_frames: sf,
+        safe_count: s_cnt + 1,
+        unsafe_buffers: ctx.unsafe_buffers,
+        unsafe_count: ctx.unsafe_count
+    };
+}
+
+pub fn dual_stack_is_isolated(ctx: DualStackContext) -> Bool {
+    let s_start: Int = ctx.safe_stack_base;
+    let s_end: Int = ctx.safe_stack_base + ctx.safe_stack_size;
+    let u_start: Int = ctx.unsafe_stack_base;
+    let u_end: Int = ctx.unsafe_stack_base + ctx.unsafe_stack_size;
+
+    if s_end <= u_start || u_end <= s_start {
+        return true;
+    }
+    return false;
+}

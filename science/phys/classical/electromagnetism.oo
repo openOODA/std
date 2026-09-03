@@ -1,0 +1,52 @@
+// # Classical Electromagnetism and Maxwell Foundations
+//
+// Logline: Calculates Coulomb forces, Lorentz forces, electric/magnetic field energies, and vacuum wave impedance.
+//
+// Setup: Pure SI electromagnetic equations and exact vacuum constants.
+//
+// Beats:
+//   1. Exact vacuum permittivity ε_0 and permeability μ_0.
+//   2. Vacuum characteristic wave impedance Z_0 = sqrt(μ_0 / ε_0) (~376.73 Ω).
+//   3. Coulomb electrostatic force calculation F = (1 / 4πε_0) * (q1 * q2 / r^2).
+//   4. Lorentz force on charged particle F = q * (E + v x B).
+
+import "std/science/phys/classical/phys_constants.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_physics_electromagnetism() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+// Vacuum permittivity ε_0 in F/m (Farads per meter) (~8.8541878128 * 10^-12 F/m)
+pub fn em_vacuum_permittivity() -> Float {
+    return 8.8541878128 / 1000000000000.0;
+}
+
+// Vacuum permeability μ_0 in H/m (Henries per meter) (~1.25663706212 * 10^-6 H/m)
+pub fn em_vacuum_permeability() -> Float {
+    return 1.25663706212 / 1000000.0;
+}
+
+// Characteristic impedance of free space Z_0 in Ohms (Ω) (~376.730313668 Ω)
+pub fn em_vacuum_impedance() -> Float {
+    let mu0: Float = em_vacuum_permeability();
+    let eps0: Float = em_vacuum_permittivity();
+    return sqrt(mu0 / eps0);
+}
+
+// Coulomb electrostatic force (Newtons) between two charges q1, q2 at distance r (meters)
+pub fn em_coulomb_force(q1_coulombs: Float, q2_coulombs: Float, distance_meters: Float) -> Float {
+    if distance_meters <= 0.0 { return 0.0; }
+    let eps0: Float = em_vacuum_permittivity();
+    let pi: Float = circ_pi_std_phys_physics_electromagnetism();
+    let k_e: Float = 1.0 / (4.0 * pi * eps0); // Coulomb constant (~8.98755e9 N·m²/C²)
+    let r_sq: Float = distance_meters * distance_meters;
+    return k_e * (q1_coulombs * q2_coulombs) / r_sq;
+}
+
+// Lorentz electric force F_e = q * E (Newtons)
+pub fn em_electric_force(charge_coulombs: Float, electric_field_v_per_m: Float) -> Float {
+    return charge_coulombs * electric_field_v_per_m;
+}
+
+// Magnetic force magnitude on charge moving perpendicular to B field: F_b = q * v * B (Newtons)
+pub fn em_magnetic_force_perp(charge_coulombs: Float, velocity_m_per_s: Float, b_field_tesla: Float) -> Float {
+    return charge_coulombs * velocity_m_per_s * b_field_tesla;
+}

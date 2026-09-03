@@ -1,0 +1,81 @@
+// # Earth Oblateness J2 Gravitational Perturbations
+//
+// Logline: Calculates fail-closed secular J2 nodal and apsidal precession rates and Sun-synchronous inclination.
+//
+// Setup: Pure zonal harmonic perturbation theory. No capability tokens. Inputs in kilometers and seconds.
+//
+// Beats:
+//   1. Define J2DriftRate product type.
+//   2. Validate semi-major axis, eccentricity, and gravitational parameter.
+//   3. Compute RAAN and argument-of-periapsis secular drift rates.
+//   4. Solve for Sun-synchronous inclination with quadrant-resolved arccosine.
+// residual: Higher-order zonal harmonics and tesseral resonances are residual.
+
+import "std/core/math/fast_trig.oo";
+
+pub type J2DriftRate = struct {
+    raan_drift_rad_s: Float,
+    arg_periapsis_drift_rad_s: Float
+};
+
+fn j2_validate_ellipse(a_km: Float, e: Float, mu: Float) -> Int {
+    if a_km <= 0.0 { return 1; }
+    if mu <= 0.0 { return 1; }
+    if e < 0.0 || e >= 1.0 { return 1; }
+    return 0;
+}
+
+pub fn j2_perturbation_rates(
+    a_km: Float,
+    e: Float,
+    inc_rad: Float,
+    mu: Float,
+    re_km: Float,
+    j2: Float
+) -> Result[J2DriftRate, String] {
+    if j2_validate_ellipse(a_km, e, mu) != 0 {
+        return Err("ERR\tj2_perturbation_rates\tinvalid_ellipse");
+    }
+    if re_km <= 0.0 {
+        return Err("ERR\tj2_perturbation_rates\tinvalid_equatorial_radius");
+    }
+    let p: Float = a_km * (1.0 - (e * e));
+    if p <= 0.0 {
+        return Err("ERR\tj2_perturbation_rates\tsemi_latus_rectum_non_positive");
+    }
+    let n: Float = sqrt(mu / ((a_km * a_km) * a_km));
+    let re_over_p: Float = re_km / p;
+    let re_p2: Float = re_over_p * re_over_p;
+    let base: Float = j2 * re_p2 * n;
+    let cos_i: Float = cos(inc_rad);
+    let raan: Float = (0.0 - 1.5) * base * cos_i;
+    let apsidal: Float = 0.75 * base * ((5.0 * cos_i * cos_i) - 1.0);
+    return Ok(J2DriftRate {
+        raan_drift_rad_s: raan,
+        arg_periapsis_drift_rad_s: apsidal
+    });
+}
+
+pub fn sun_synchronous_inclination(
+    a_km: Float,
+    mu: Float,
+    re_km: Float,
+    j2: Float
+) -> Result[Float, String] {
+    if a_km <= 0.0 || mu <= 0.0 || re_km <= 0.0 {
+        return Err("ERR\tsun_synchronous_inclination\tinvalid_domain");
+    }
+    if j2 <= 0.0 {
+        return Err("ERR\tsun_synchronous_inclination\tinvalid_j2");
+    }
+    let n: Float = sqrt(mu / ((a_km * a_km) * a_km));
+    let re_over_a: Float = re_km / a_km;
+    let sun_sync_rate: Float = 0.000000199106;
+    let denom: Float = (0.0 - 1.5) * j2 * (re_over_a * re_over_a) * n;
+    let cos_inc: Float = sun_sync_rate / denom;
+    if cos_inc < -1.0 || cos_inc > 1.0 {
+        return Err("ERR\tsun_synchronous_inclination\tno_solution");
+    }
+    let sin_inc: Float = sqrt(1.0 - (cos_inc * cos_inc));
+    return Ok(fast_atan2(sin_inc, cos_inc));
+}

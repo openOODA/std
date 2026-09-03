@@ -1,0 +1,118 @@
+// # FIPS 203 ML-KEM Polynomial Ring Operations
+//
+// Logline: Implements polynomial ring R_q = Z_3329[X]/(X^256+1) addition, subtraction, scalar scaling, and zeroing.
+//
+// Setup: Pure algebraic operations on degree-256 integer coefficient arrays modulo 3329.
+//
+// Beats:
+//   1. Represent degree-256 polynomials in R_q with canonical modulo 3329 bounds.
+//   2. Compute coefficient-wise addition and subtraction in R_q.
+//   3. Compute scalar multiplication and scalar division.
+//   4. Validate polynomial degrees and coefficient invariants.
+
+type MlKemPoly = struct {
+    coeffs: List[Int],
+    degree: Int,
+    modulus: Int
+};
+
+pub fn ml_kem_poly_mod(x: Int) -> Int {
+    let mut v: Int = x % 3329;
+    if v < 0 {
+        v = v + 3329;
+    }
+    return v;
+}
+
+pub fn ml_kem_poly_zero() -> MlKemPoly {
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        c = list_push(c, 0);
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: c,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_poly_new(coeffs: List[Int]) -> MlKemPoly {
+    let n: Int = list_len(coeffs);
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let mut v: Int = 0;
+        if i < n {
+            v = ml_kem_poly_mod(list_get(coeffs, i));
+        }
+        c = list_push(c, v);
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: c,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_poly_add(a: MlKemPoly, b: MlKemPoly) -> MlKemPoly {
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        out = list_push(out, ml_kem_poly_mod(va + vb));
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: out,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_poly_sub(a: MlKemPoly, b: MlKemPoly) -> MlKemPoly {
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        out = list_push(out, ml_kem_poly_mod(va - vb));
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: out,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_poly_scale(a: MlKemPoly, scalar: Int) -> MlKemPoly {
+    let mut out: List[Int] = list_new();
+    let s: Int = ml_kem_poly_mod(scalar);
+    let mut i: Int = 0;
+    while i < 256 {
+        let va: Int = list_get(a.coeffs, i);
+        out = list_push(out, ml_kem_poly_mod(va * s));
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: out,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_poly_equal(a: MlKemPoly, b: MlKemPoly) -> Bool {
+    let mut diff: Int = 0;
+    let mut i: Int = 0;
+    while i < 256 {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        diff = diff | (va ^ vb);
+        i = i + 1;
+    }
+    return diff == 0;
+}

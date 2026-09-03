@@ -1,0 +1,109 @@
+// # DNP3 Secure Authentication Types, Constants, and Constructors
+//
+// Logline: Defines Dnp3Challenge, Dnp3SessionKey, Dnp3UserRole, Dnp3Auth, Dnp3AuthError, Dnp3Policy, and Dnp3Engine record types, plus auth mode, error, and permission constants, and constructors for each record.
+//
+// Setup: Imports dnp3_sec_types.oo. RULES.oot 1.4 default-deny; CAP-G6 DNP3 TCP prefers &TcpCap. RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. Auth mode constants, error code constants, permission bitmask constants.
+//   2. Dnp3Challenge / Dnp3SessionKey / Dnp3UserRole / Dnp3Auth / Dnp3AuthError / Dnp3Policy / Dnp3Engine record types.
+//   3. dnp3_challenge_new, dnp3_session_key_create, dnp3_user_role_create, dnp3_auth_create, dnp3_policy_default.
+//   4. int_to_str_basic_dnp3 helper for human-readable status.
+
+type Dnp3Challenge = struct {
+    challenge_id: String, challenge_bytes: String, issued_at: Int, sequence_number: Int
+};
+
+type Dnp3SessionKey = struct {
+    update_key: Int, session_key: Int, valid_from: Int, valid_until: Int, sequence_window: Int
+};
+
+type Dnp3UserRole = struct {
+    user_number: Int, role_name: String, permissions: Int, valid_until: Int
+};
+
+type Dnp3Auth = struct {
+    auth_id: String, user_number: Int, last_challenge_id: String,
+    last_seq: Int, last_auth_at: Int
+};
+
+type Dnp3AuthError = struct {
+    error_id: String, user_number: Int, code: Int, ts: Int, description: String
+};
+
+type Dnp3Policy = struct {
+    policy_id: String, mode: Int, min_session_window: Int, reject_after_failures: Int,
+    accept_critical_opcodes: List[Int], is_active: Bool
+};
+
+type Dnp3Engine = struct {
+    engine_id: String, user_roles: List[Dnp3UserRole], auth_errors: List[Dnp3AuthError],
+    total_auth_attempts: Int, total_auth_failures: Int, is_halted: Bool
+};
+
+// Auth Mode Constants
+pub fn dnp3_auth_mode_none() -> Int { return 0; }
+pub fn dnp3_auth_mode_aggressive() -> Int { return 1; }
+pub fn dnp3_auth_mode_normal() -> Int { return 2; }
+
+// Error Code Constants
+pub fn dnp3_err_unknown_user() -> Int { return 1; }
+pub fn dnp3_err_session_timeout() -> Int { return 2; }
+pub fn dnp3_err_bad_hmac() -> Int { return 3; }
+pub fn dnp3_err_sequence_mismatch() -> Int { return 4; }
+pub fn dnp3_err_key_expired() -> Int { return 5; }
+pub fn dnp3_err_challenge_failed() -> Int { return 6; }
+
+// Permission Bitmask Constants
+pub fn dnp3_perm_read() -> Int { return 1; }
+pub fn dnp3_perm_write() -> Int { return 2; }
+pub fn dnp3_perm_select_operate() -> Int { return 4; }
+pub fn dnp3_perm_direct_operate() -> Int { return 8; }
+pub fn dnp3_perm_config() -> Int { return 16; }
+
+// Constructors
+pub fn dnp3_challenge_new(challenge_id_val: String, bytes_val: String, ts: Int, seq: Int) -> Dnp3Challenge {
+    return Dnp3Challenge {
+        challenge_id: challenge_id_val, challenge_bytes: bytes_val,
+        issued_at: ts, sequence_number: seq
+    };
+}
+
+pub fn dnp3_session_key_create(update_key_v: Int, session_key_v: Int, valid_from_v: Int, valid_until_v: Int, seq_window: Int) -> Dnp3SessionKey {
+    return Dnp3SessionKey {
+        update_key: update_key_v, session_key: session_key_v,
+        valid_from: valid_from_v, valid_until: valid_until_v, sequence_window: seq_window
+    };
+}
+
+pub fn dnp3_user_role_create(user_num: Int, role_name_val: String, perms: Int, valid_until_v: Int) -> Dnp3UserRole {
+    return Dnp3UserRole {
+        user_number: user_num, role_name: role_name_val,
+        permissions: perms, valid_until: valid_until_v
+    };
+}
+
+pub fn dnp3_auth_create(auth_id_val: String, user_num: Int) -> Dnp3Auth {
+    return Dnp3Auth {
+        auth_id: auth_id_val, user_number: user_num, last_challenge_id: "",
+        last_seq: 0, last_auth_at: 0
+    };
+}
+
+pub fn dnp3_policy_default() -> Dnp3Policy {
+    return Dnp3Policy {
+        policy_id: "dnp3-default", mode: dnp3_auth_mode_normal(),
+        min_session_window: 30, reject_after_failures: 5,
+        accept_critical_opcodes: list_new(), is_active: true
+    };
+}
+
+pub fn int_to_str_basic_dnp3(value: Int) -> String {
+    if value == 0 { return "0"; }
+    if value == 1 { return "1"; }
+    if value == 2 { return "2"; }
+    if value == 3 { return "3"; }
+    if value == 4 { return "4"; }
+    if value == 5 { return "5"; }
+    return "N";
+}

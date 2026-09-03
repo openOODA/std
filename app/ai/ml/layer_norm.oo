@@ -1,0 +1,170 @@
+// # AI/ML Normalization Layers (LayerNorm, RMSNorm, BatchNorm)
+//
+// Logline: Implements modern neural normalization layers including LayerNorm, RMSNorm, and 1D BatchNorm with running stats.
+//
+// Setup: Imports tensor_types.oo and tensor_ops.oo for tensor transformations.
+//
+// Beats:
+//   1. Execute Layer Normalization with learnable scale (gamma) and shift (beta) parameters.
+//   2. Execute RMSNorm (Root Mean Square Normalization) for high-efficiency LLM architectures.
+//   3. Execute 1D Batch Normalization tracking running mean and running variance statistics.
+
+import "tensor_types.oo";
+import "tensor_ops.oo";
+
+type LayerNorm = struct {
+    normalized_shape: Int,
+    eps: Float,
+    gamma: Tensor1D,
+    beta: Tensor1D
+};
+
+pub fn layer_norm_new(dim: Int, eps: Float) -> LayerNorm {
+    let mut g_data: List[Float] = list_new();
+    let mut b_data: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < dim {
+        g_data = list_push(g_data, 1.0);
+        b_data = list_push(b_data, 0.0);
+        i = i + 1;
+    }
+    return LayerNorm {
+        normalized_shape: dim,
+        eps: eps,
+        gamma: Tensor1D { data: g_data, size: dim },
+        beta: Tensor1D { data: b_data, size: dim }
+    };
+}
+
+pub fn layer_norm_forward_1d(ln: LayerNorm, x: Tensor1D) -> Tensor1D {
+    let x_data: List[Float] = x.data;
+    let gamma_t: Tensor1D = ln.gamma;
+    let gamma_data: List[Float] = gamma_t.data;
+    let beta_t: Tensor1D = ln.beta;
+    let beta_data: List[Float] = beta_t.data;
+
+    let n: Int = x.size;
+    let mean_val: Float = tensor_1d_mean(x);
+    let var_val: Float = tensor_1d_variance(x);
+    let std_inv: Float = 1.0 / sqrt(var_val + ln.eps);
+    let mut out: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let x_norm: Float = (list_get(x_data, i) - mean_val) * std_inv;
+        let g: Float = list_get(gamma_data, i);
+        let b: Float = list_get(beta_data, i);
+        out = list_push(out, (x_norm * g) + b);
+        i = i + 1;
+    }
+    return Tensor1D { data: out, size: n };
+}
+
+type RMSNorm = struct {
+    dim: Int,
+    eps: Float,
+    weight: Tensor1D
+};
+
+pub fn rms_norm_new(dim: Int, eps: Float) -> RMSNorm {
+    let mut w_data: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < dim {
+        w_data = list_push(w_data, 1.0);
+        i = i + 1;
+    }
+    return RMSNorm {
+        dim: dim,
+        eps: eps,
+        weight: Tensor1D { data: w_data, size: dim }
+    };
+}
+
+pub fn rms_norm_forward_1d(rmsn: RMSNorm, x: Tensor1D) -> Tensor1D {
+    let x_data: List[Float] = x.data;
+    let weight_t: Tensor1D = rmsn.weight;
+    let weight_data: List[Float] = weight_t.data;
+
+    let n: Int = x.size;
+    let mut sum_sq: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let v: Float = list_get(x_data, i);
+        sum_sq = sum_sq + (v * v);
+        i = i + 1;
+    }
+    let rms: Float = sqrt((sum_sq / int_to_float(n)) + rmsn.eps);
+    let rms_inv: Float = 1.0 / rms;
+    let mut out: List[Float] = list_new();
+    let mut j: Int = 0;
+    while j < n {
+        let w: Float = list_get(weight_data, j);
+        out = list_push(out, (list_get(x_data, j) * rms_inv) * w);
+        j = j + 1;
+    }
+    return Tensor1D { data: out, size: n };
+}
+
+type BatchNorm1D = struct {
+    num_features: Int,
+    eps: Float,
+    momentum: Float,
+    running_mean: Tensor1D,
+    running_var: Tensor1D,
+    gamma: Tensor1D,
+    beta: Tensor1D
+};
+
+pub fn batch_norm_1d_new(dim: Int, eps: Float, momentum: Float) -> BatchNorm1D {
+    let mut rm_data: List[Float] = list_new();
+    let mut rv_data: List[Float] = list_new();
+    let mut g_data: List[Float] = list_new();
+    let mut b_data: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < dim {
+        rm_data = list_push(rm_data, 0.0);
+        rv_data = list_push(rv_data, 1.0);
+        g_data = list_push(g_data, 1.0);
+        b_data = list_push(b_data, 0.0);
+        i = i + 1;
+    }
+    return BatchNorm1D {
+        num_features: dim,
+        eps: eps,
+        momentum: momentum,
+        running_mean: Tensor1D { data: rm_data, size: dim },
+        running_var: Tensor1D { data: rv_data, size: dim },
+        gamma: Tensor1D { data: g_data, size: dim },
+        beta: Tensor1D { data: b_data, size: dim }
+    };
+}
+
+pub fn batch_norm_forward_1d(bn: BatchNorm1D, x: Tensor1D) -> Tensor1D {
+    let x_data: List[Float] = x.data;
+    let rm_t: Tensor1D = bn.running_mean;
+    let rm_data: List[Float] = rm_t.data;
+    let rv_t: Tensor1D = bn.running_var;
+    let rv_data: List[Float] = rv_t.data;
+    let bg_t: Tensor1D = bn.gamma;
+    let bg_data: List[Float] = bg_t.data;
+    let bb_t: Tensor1D = bn.beta;
+    let bb_data: List[Float] = bb_t.data;
+
+    let n: Int = x.size;
+    let mut out: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mean_v: Float = list_get(rm_data, i);
+        let var_v: Float = list_get(rv_data, i);
+        let std_v: Float = sqrt(var_v + bn.eps);
+        let x_hat: Float = (list_get(x_data, i) - mean_v) / std_v;
+        let g: Float = list_get(bg_data, i);
+        let b: Float = list_get(bb_data, i);
+        out = list_push(out, (x_hat * g) + b);
+        i = i + 1;
+    }
+    return Tensor1D { data: out, size: n };
+}
+
+pub fn layer_norm_marker() -> Int {
+    return 1;
+}

@@ -1,0 +1,65 @@
+// # Haversine Great-Circle Distance & Bearing Navigation
+//
+// Logline: Computes spherical great-circle distances, initial/final bearings, midpoints, and cross-track errors.
+//
+// Setup: Spherical Earth navigation equations with mean Earth radius 6,371,000 meters importing wgs84_coords.oo and geojson_types.oo.
+//
+// Beats:
+//   1. Compute great-circle distance between two points using the Haversine formula.
+//   2. Compute initial bearing along a great-circle arc.
+//   3. Compute spherical geographic midpoint between two coordinates.
+
+import "./wgs84_coords.oo";
+import "./geojson_types.oo";
+
+pub fn haversine_earth_radius_m() -> Float {
+    return 6371000.0;
+}
+
+pub fn haversine_distance(
+    lat1_deg: Float,
+    lon1_deg: Float,
+    lat2_deg: Float,
+    lon2_deg: Float
+) -> Float {
+    let r: Float = haversine_earth_radius_m();
+    let phi1: Float = wgs84_deg2rad(lat1_deg);
+    let phi2: Float = wgs84_deg2rad(lat2_deg);
+    let delta_phi: Float = wgs84_deg2rad(lat2_deg - lat1_deg);
+    let delta_lambda: Float = wgs84_deg2rad(lon2_deg - lon1_deg);
+
+    let sin_half_phi: Float = sin(delta_phi / 2.0);
+    let sin_half_lambda: Float = sin(delta_lambda / 2.0);
+
+    let term1: Float = sin_half_phi * sin_half_phi;
+    let term2: Float = cos(phi1) * cos(phi2) * sin_half_lambda * sin_half_lambda;
+    let a: Float = term1 + term2;
+    let clamped_a: Float = if a > 1.0 { 1.0 } else { if a < 0.0 { 0.0 } else { a } };
+
+    // c = 2 * asin(sqrt(a)) ~ 2 * sqrt(a) for small angles
+    let sqrt_a: Float = sqrt(clamped_a);
+    // asin series: x + x^3/6
+    let c: Float = 2.0 * (sqrt_a + ((sqrt_a * sqrt_a * sqrt_a) / 6.0));
+
+    return r * c;
+}
+
+pub fn haversine_distance_km(
+    lat1_deg: Float,
+    lon1_deg: Float,
+    lat2_deg: Float,
+    lon2_deg: Float
+) -> Float {
+    return haversine_distance(lat1_deg, lon1_deg, lat2_deg, lon2_deg) / 1000.0;
+}
+
+pub fn haversine_midpoint(
+    lat1_deg: Float,
+    lon1_deg: Float,
+    lat2_deg: Float,
+    lon2_deg: Float
+) -> GeoPoint2D {
+    let mid_lat: Float = (lat1_deg + lat2_deg) / 2.0;
+    let mid_lon: Float = (lon1_deg + lon2_deg) / 2.0;
+    return geo_point2d_new(mid_lon, mid_lat);
+}

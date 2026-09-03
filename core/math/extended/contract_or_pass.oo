@@ -1,0 +1,20 @@
+// # Contract Or Pass
+//
+// Logline: Standard library verification and domain capabilities for Contract Or Pass.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn pick(a: Int, b: Int) -> Int
+    requires a > 0 || b > 0
+{
+    return a + b;
+}
+
+pub fn verify_contract_or_pass() -> Bool {
+    println(pick(0, 3));
+    return true;
+}

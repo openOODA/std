@@ -1,0 +1,54 @@
+// # Keys Facade
+//
+// Logline: Re-exports Keys data types, operations, engine lifecycle, and fail-closed stubs.
+//
+// Setup: Pure module shim importing companion submodules.
+//
+// Beats:
+//   1. Import Keys companion modules.
+//   2. Re-export public symbols with typed shim markers.
+//   3. Maintain compatibility with downstream consumers.
+//
+// KEYSTORE INIT SHIM: shim_marker_keystore_init has been removed
+// outright along with keystore_init / keystore_unlock /
+// keystore_lock / keystore_is_locked (see keys_engine.oo). The
+// removed init path stored a 31-bit polynomial checksum as
+// master_key_hash and verified it with a non-constant-time
+// comparison — both trivially broken.
+
+import "./keys_stubs.oo";
+
+pub fn shim_marker_checksum() -> Int {
+    return key_calculate_checksum("abc");
+}
+
+pub fn shim_marker_type_to_string() -> String {
+    return key_type_to_string(0);
+}
+
+pub fn shim_marker_metadata_create() -> KeyMetadata {
+    return key_metadata_create("k1", "AES", 0, 256, 1, 0, 0);
+}
+
+pub fn shim_marker_secret_key_create() -> SecretKey {
+    let m: KeyMetadata = key_metadata_create("k1", "AES", 0, 256, 1, 0, 0);
+    return secret_key_create(m, "rawbytes");
+}
+
+pub fn shim_marker_bytes_to_hex() -> String {
+    return key_bytes_to_hex("ab");
+}
+
+pub fn shim_marker_policy_init() -> KeyStorePolicy {
+    return keystore_policy_init(false, 16, true, true);
+}
+
+pub fn shim_marker_keystore_do_work(store: &KeyStore) -> Int {
+    return keystore_do_work(store);
+}
+
+type Large = struct {};
+
+pub fn __keys_dummy() -> Int {
+    return 0;
+}

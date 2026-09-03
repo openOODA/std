@@ -1,0 +1,35 @@
+// # Liquid Rocket Engine Combustion Chamber Dynamics
+//
+// Logline: Calculates rocket combustion chamber pressure P_c, characteristic velocity c*, and throat area sizing.
+//
+// Setup: Pure chemical rocket combustion and thermochemical equilibrium modeling.
+//
+// Beats:
+//   1. Nominal chamber pressure query in Bar (~100 Bar).
+//   2. Calculate chamber pressure P_c = (m_dot * c*) / A_throat.
+//   3. Compute nozzle throat area A_throat for specified thrust and chamber pressure.
+//   4. Calculate characteristic chamber length L* = V_chamber / A_throat.
+
+pub fn chamber_pc_bar() -> Int {
+    return 100;
+}
+
+/// Computes chamber pressure in Pascals: P_c = (m_dot * c_star) / A_throat.
+pub fn chamber_pressure_pa(
+    mass_flow_kg_s: Float,
+    c_star_m_s: Float,
+    throat_area_m2: Float
+) -> Float {
+    if throat_area_m2 <= 0.000001 { return 0.0; }
+    return (mass_flow_kg_s * c_star_m_s) / throat_area_m2;
+}
+
+/// Computes required nozzle throat area A_throat (m^2) given mass flow, c*, and target chamber pressure (Pa).
+pub fn chamber_throat_area(
+    mass_flow_kg_s: Float,
+    c_star_m_s: Float,
+    target_pc_pa: Float
+) -> Float {
+    if target_pc_pa <= 1.0 { return 0.0; }
+    return (mass_flow_kg_s * c_star_m_s) / target_pc_pa;
+}

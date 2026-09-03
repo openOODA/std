@@ -1,0 +1,101 @@
+// # Capability Unforgeability Law
+//
+// Logline: An unforgeable capability carries a cryptographic tag the holder cannot reproduce without the issuer key.
+//
+// Setup: Pure String + Int. HMAC-SHA256 tag (ideal) and rotated-key version (non-ideal). Empty inputs fail closed.
+//
+// Beats:
+//   1. Ideal law: tag = HMAC(key, payload) binds payload to issuer key.
+//   2. Non-ideal: rotated key (key_id appended) yields a different valid tag.
+//   3. Verify accepts only the correct key; wrong key, empty payload, or empty key fail closed.
+//   4. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Ideal tag: HMAC-SHA256 of payload under the issuer key.
+pub fn capability_tag_ideal(key: String, payload: String) -> String {
+    return crypto_hmac_sha256_internal(key, payload);
+}
+
+// Non-ideal: rotated-key tag includes a key id so a rotated key produces a distinct valid tag.
+pub fn capability_tag_rotated(key: String, key_id: String, payload: String) -> String {
+    let stamped: String = payload + ":" + key_id;
+    return crypto_hmac_sha256_internal(key, stamped);
+}
+
+// Verify the ideal tag. Empty payload or empty key fail closed.
+pub fn capability_verify_ideal(key: String, payload: String, tag: String) -> Int {
+    if payload.len() == 0 { return 0; }
+    if key.len() == 0 { return 0; }
+    if tag.len() == 0 { return 0; }
+    let expect: String = capability_tag_ideal(key, payload);
+    if expect == tag { return 1; }
+    return 0;
+}
+
+// Verify the rotated tag. Empty inputs fail closed.
+pub fn capability_verify_rotated(key: String, key_id: String, payload: String, tag: String) -> Int {
+    if payload.len() == 0 { return 0; }
+    if key.len() == 0 { return 0; }
+    if key_id.len() == 0 { return 0; }
+    if tag.len() == 0 { return 0; }
+    let expect: String = capability_tag_rotated(key, key_id, payload);
+    if expect == tag { return 1; }
+    return 0;
+}
+
+// Constant-time-ish length sanity: a valid HMAC tag is exactly 64 hex chars.
+pub fn capability_tag_length_ok(tag: String) -> Int {
+    if tag.len() == 64 { return 1; }
+    return 0;
+}
+
+// Domain certificate for the ideal capability law.
+pub fn capability_ideal_law(key: String, payload: String, tag: String) -> DomainCert {
+    let h: Int = capability_verify_ideal(key, payload, tag);
+    return domain_cert("sec", "capability_unforgeability_ideal", h);
+}
+
+// Domain certificate for the rotated capability law.
+pub fn capability_rotated_law(key: String, key_id: String, payload: String, tag: String) -> DomainCert {
+    let h: Int = capability_verify_rotated(key, key_id, payload, tag);
+    return domain_cert("sec", "capability_unforgeability_rotated", h);
+}
+
+// KAT and hostile cases for the capability unforgeability law.
+pub fn verify_capability_unforgeability_law() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    let key: String = "issuer-key-v1";
+    let payload: String = "uri=fs:/x;rights=1";
+    let tag: String = capability_tag_ideal(key, payload);
+    let c1: DomainCert = capability_ideal_law(key, payload, tag);
+    if c1.holds != 1 { return false; }
+    if capability_tag_length_ok(tag) != 1 { return false; }
+    let wrong: String = capability_tag_ideal("other-key", payload);
+    let c2: DomainCert = capability_ideal_law("other-key", payload, wrong);
+    if c2.holds != 1 { return false; }
+    let c3: DomainCert = capability_ideal_law("other-key", payload, tag);
+    if c3.holds != 0 { return false; }
+    let c4: DomainCert = capability_ideal_law(key, "uri=fs:/x;rights=2", tag);
+    if c4.holds != 0 { return false; }
+    let c5: DomainCert = capability_ideal_law(key, "", "");
+    if c5.holds != 0 { return false; }
+    let c6: DomainCert = capability_ideal_law("", payload, tag);
+    if c6.holds != 0 { return false; }
+    let c7: DomainCert = capability_ideal_law(key, payload, "");
+    if c7.holds != 0 { return false; }
+    let rot1: String = capability_tag_rotated(key, "kid-2025-01", payload);
+    let cr1: DomainCert = capability_rotated_law(key, "kid-2025-01", payload, rot1);
+    if cr1.holds != 1 { return false; }
+    let rot2: String = capability_tag_rotated(key, "kid-2025-02", payload);
+    if rot1 == rot2 { return false; }
+    let cr2: DomainCert = capability_rotated_law(key, "kid-2025-02", payload, rot1);
+    if cr2.holds != 0 { return false; }
+    let cr3: DomainCert = capability_rotated_law("", "kid", payload, rot1);
+    if cr3.holds != 0 { return false; }
+    let cr4: DomainCert = capability_rotated_law(key, "", payload, rot1);
+    if cr4.holds != 0 { return false; }
+    return true;
+}

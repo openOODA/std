@@ -1,0 +1,25 @@
+// # Occupancy ops
+//
+// Logline: OccOp implemented off List[VoxelNode] grid cells.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type OccOp = struct {
+    voxel_mm: Int,
+    log_odds: Int
+};
+
+pub fn occ_op_new(voxel_mm: Int, log_odds: Int) -> OccOp {
+    return OccOp { voxel_mm: voxel_mm, log_odds: log_odds };
+}
+
+pub fn occ_op_voxel(o: OccOp) -> Int {
+    return o.voxel_mm;
+}

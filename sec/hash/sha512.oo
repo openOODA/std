@@ -1,0 +1,231 @@
+// # SHA-512 one-shot
+//
+// Logline: Hashes a byte string with one-shot FIPS 180-4 SHA-512 and returns the 512-bit state as 128 lowercase hex chars.
+//
+// Setup: Pure Int 32-bit halves. Imports sha512_core.oo and sha512_codec.oo.
+//
+// Beats:
+//   1. Pad to 128-byte blocks with 0x80 and 128-bit BE bit length.
+//   2. Schedule 80 words; run 80 rounds via a worker; add back to state.
+//   3. Emit the 8-word state as 128 lowercase hex chars.
+
+import "./sha512_codec.oo";
+
+type S5W = struct {
+    a: W64,
+    b: W64,
+    c: W64,
+    d: W64,
+    e: W64,
+    f: W64,
+    g: W64,
+    h: W64
+};
+
+pub fn s5_rnd(w: S5W, k: W64, x: W64) -> S5W {
+    let t1: W64 = s5_add(s5_add(s5_add(s5_add(w.h, s5_Sigma1(w.e)), s5_ch(w.e, w.f, w.g)), k), x);
+    let t2: W64 = s5_add(s5_Sigma0(w.a), s5_maj(w.a, w.b, w.c));
+    return S5W {
+        a: s5_add(t1, t2),
+        b: w.a,
+        c: w.b,
+        d: w.c,
+        e: s5_add(w.d, t1),
+        f: w.e,
+        g: w.f,
+        h: w.g
+    };
+}
+
+pub fn s5_get(s: S5W, i: Int) -> W64 {
+    if i == 0 { return s.a; }
+    if i == 1 { return s.b; }
+    if i == 2 { return s.c; }
+    if i == 3 { return s.d; }
+    if i == 4 { return s.e; }
+    if i == 5 { return s.f; }
+    if i == 6 { return s.g; }
+    return s.h;
+}
+
+pub fn s5_compress(w: S5W, data: String, n: Int, total: Int, base: Int) -> S5W {
+    let w0: W64 = s5_load(data, n, total, base, 0);
+    let w1: W64 = s5_load(data, n, total, base, 1);
+    let w2: W64 = s5_load(data, n, total, base, 2);
+    let w3: W64 = s5_load(data, n, total, base, 3);
+    let w4: W64 = s5_load(data, n, total, base, 4);
+    let w5: W64 = s5_load(data, n, total, base, 5);
+    let w6: W64 = s5_load(data, n, total, base, 6);
+    let w7: W64 = s5_load(data, n, total, base, 7);
+    let w8: W64 = s5_load(data, n, total, base, 8);
+    let w9: W64 = s5_load(data, n, total, base, 9);
+    let w10: W64 = s5_load(data, n, total, base, 10);
+    let w11: W64 = s5_load(data, n, total, base, 11);
+    let w12: W64 = s5_load(data, n, total, base, 12);
+    let w13: W64 = s5_load(data, n, total, base, 13);
+    let w14: W64 = s5_load(data, n, total, base, 14);
+    let w15: W64 = s5_load(data, n, total, base, 15);
+    let w16: W64 = s5_add(s5_add(s5_add(s5_sigma1(w14), w9), s5_sigma0(w1)), w0);
+    let w17: W64 = s5_add(s5_add(s5_add(s5_sigma1(w15), w10), s5_sigma0(w2)), w1);
+    let w18: W64 = s5_add(s5_add(s5_add(s5_sigma1(w16), w11), s5_sigma0(w3)), w2);
+    let w19: W64 = s5_add(s5_add(s5_add(s5_sigma1(w17), w12), s5_sigma0(w4)), w3);
+    let w20: W64 = s5_add(s5_add(s5_add(s5_sigma1(w18), w13), s5_sigma0(w5)), w4);
+    let w21: W64 = s5_add(s5_add(s5_add(s5_sigma1(w19), w14), s5_sigma0(w6)), w5);
+    let w22: W64 = s5_add(s5_add(s5_add(s5_sigma1(w20), w15), s5_sigma0(w7)), w6);
+    let w23: W64 = s5_add(s5_add(s5_add(s5_sigma1(w21), w16), s5_sigma0(w8)), w7);
+    let w24: W64 = s5_add(s5_add(s5_add(s5_sigma1(w22), w17), s5_sigma0(w9)), w8);
+    let w25: W64 = s5_add(s5_add(s5_add(s5_sigma1(w23), w18), s5_sigma0(w10)), w9);
+    let w26: W64 = s5_add(s5_add(s5_add(s5_sigma1(w24), w19), s5_sigma0(w11)), w10);
+    let w27: W64 = s5_add(s5_add(s5_add(s5_sigma1(w25), w20), s5_sigma0(w12)), w11);
+    let w28: W64 = s5_add(s5_add(s5_add(s5_sigma1(w26), w21), s5_sigma0(w13)), w12);
+    let w29: W64 = s5_add(s5_add(s5_add(s5_sigma1(w27), w22), s5_sigma0(w14)), w13);
+    let w30: W64 = s5_add(s5_add(s5_add(s5_sigma1(w28), w23), s5_sigma0(w15)), w14);
+    let w31: W64 = s5_add(s5_add(s5_add(s5_sigma1(w29), w24), s5_sigma0(w16)), w15);
+    let w32: W64 = s5_add(s5_add(s5_add(s5_sigma1(w30), w25), s5_sigma0(w17)), w16);
+    let w33: W64 = s5_add(s5_add(s5_add(s5_sigma1(w31), w26), s5_sigma0(w18)), w17);
+    let w34: W64 = s5_add(s5_add(s5_add(s5_sigma1(w32), w27), s5_sigma0(w19)), w18);
+    let w35: W64 = s5_add(s5_add(s5_add(s5_sigma1(w33), w28), s5_sigma0(w20)), w19);
+    let w36: W64 = s5_add(s5_add(s5_add(s5_sigma1(w34), w29), s5_sigma0(w21)), w20);
+    let w37: W64 = s5_add(s5_add(s5_add(s5_sigma1(w35), w30), s5_sigma0(w22)), w21);
+    let w38: W64 = s5_add(s5_add(s5_add(s5_sigma1(w36), w31), s5_sigma0(w23)), w22);
+    let w39: W64 = s5_add(s5_add(s5_add(s5_sigma1(w37), w32), s5_sigma0(w24)), w23);
+    let w40: W64 = s5_add(s5_add(s5_add(s5_sigma1(w38), w33), s5_sigma0(w25)), w24);
+    let w41: W64 = s5_add(s5_add(s5_add(s5_sigma1(w39), w34), s5_sigma0(w26)), w25);
+    let w42: W64 = s5_add(s5_add(s5_add(s5_sigma1(w40), w35), s5_sigma0(w27)), w26);
+    let w43: W64 = s5_add(s5_add(s5_add(s5_sigma1(w41), w36), s5_sigma0(w28)), w27);
+    let w44: W64 = s5_add(s5_add(s5_add(s5_sigma1(w42), w37), s5_sigma0(w29)), w28);
+    let w45: W64 = s5_add(s5_add(s5_add(s5_sigma1(w43), w38), s5_sigma0(w30)), w29);
+    let w46: W64 = s5_add(s5_add(s5_add(s5_sigma1(w44), w39), s5_sigma0(w31)), w30);
+    let w47: W64 = s5_add(s5_add(s5_add(s5_sigma1(w45), w40), s5_sigma0(w32)), w31);
+    let w48: W64 = s5_add(s5_add(s5_add(s5_sigma1(w46), w41), s5_sigma0(w33)), w32);
+    let w49: W64 = s5_add(s5_add(s5_add(s5_sigma1(w47), w42), s5_sigma0(w34)), w33);
+    let w50: W64 = s5_add(s5_add(s5_add(s5_sigma1(w48), w43), s5_sigma0(w35)), w34);
+    let w51: W64 = s5_add(s5_add(s5_add(s5_sigma1(w49), w44), s5_sigma0(w36)), w35);
+    let w52: W64 = s5_add(s5_add(s5_add(s5_sigma1(w50), w45), s5_sigma0(w37)), w36);
+    let w53: W64 = s5_add(s5_add(s5_add(s5_sigma1(w51), w46), s5_sigma0(w38)), w37);
+    let w54: W64 = s5_add(s5_add(s5_add(s5_sigma1(w52), w47), s5_sigma0(w39)), w38);
+    let w55: W64 = s5_add(s5_add(s5_add(s5_sigma1(w53), w48), s5_sigma0(w40)), w39);
+    let w56: W64 = s5_add(s5_add(s5_add(s5_sigma1(w54), w49), s5_sigma0(w41)), w40);
+    let w57: W64 = s5_add(s5_add(s5_add(s5_sigma1(w55), w50), s5_sigma0(w42)), w41);
+    let w58: W64 = s5_add(s5_add(s5_add(s5_sigma1(w56), w51), s5_sigma0(w43)), w42);
+    let w59: W64 = s5_add(s5_add(s5_add(s5_sigma1(w57), w52), s5_sigma0(w44)), w43);
+    let w60: W64 = s5_add(s5_add(s5_add(s5_sigma1(w58), w53), s5_sigma0(w45)), w44);
+    let w61: W64 = s5_add(s5_add(s5_add(s5_sigma1(w59), w54), s5_sigma0(w46)), w45);
+    let w62: W64 = s5_add(s5_add(s5_add(s5_sigma1(w60), w55), s5_sigma0(w47)), w46);
+    let w63: W64 = s5_add(s5_add(s5_add(s5_sigma1(w61), w56), s5_sigma0(w48)), w47);
+    let w64: W64 = s5_add(s5_add(s5_add(s5_sigma1(w62), w57), s5_sigma0(w49)), w48);
+    let w65: W64 = s5_add(s5_add(s5_add(s5_sigma1(w63), w58), s5_sigma0(w50)), w49);
+    let w66: W64 = s5_add(s5_add(s5_add(s5_sigma1(w64), w59), s5_sigma0(w51)), w50);
+    let w67: W64 = s5_add(s5_add(s5_add(s5_sigma1(w65), w60), s5_sigma0(w52)), w51);
+    let w68: W64 = s5_add(s5_add(s5_add(s5_sigma1(w66), w61), s5_sigma0(w53)), w52);
+    let w69: W64 = s5_add(s5_add(s5_add(s5_sigma1(w67), w62), s5_sigma0(w54)), w53);
+    let w70: W64 = s5_add(s5_add(s5_add(s5_sigma1(w68), w63), s5_sigma0(w55)), w54);
+    let w71: W64 = s5_add(s5_add(s5_add(s5_sigma1(w69), w64), s5_sigma0(w56)), w55);
+    let w72: W64 = s5_add(s5_add(s5_add(s5_sigma1(w70), w65), s5_sigma0(w57)), w56);
+    let w73: W64 = s5_add(s5_add(s5_add(s5_sigma1(w71), w66), s5_sigma0(w58)), w57);
+    let w74: W64 = s5_add(s5_add(s5_add(s5_sigma1(w72), w67), s5_sigma0(w59)), w58);
+    let w75: W64 = s5_add(s5_add(s5_add(s5_sigma1(w73), w68), s5_sigma0(w60)), w59);
+    let w76: W64 = s5_add(s5_add(s5_add(s5_sigma1(w74), w69), s5_sigma0(w61)), w60);
+    let w77: W64 = s5_add(s5_add(s5_add(s5_sigma1(w75), w70), s5_sigma0(w62)), w61);
+    let w78: W64 = s5_add(s5_add(s5_add(s5_sigma1(w76), w71), s5_sigma0(w63)), w62);
+    let w79: W64 = s5_add(s5_add(s5_add(s5_sigma1(w77), w72), s5_sigma0(w64)), w63);
+    let mut s: S5W = w;
+    s = s5_rnd(s, s5_k(0), w0); s = s5_rnd(s, s5_k(1), w1);
+    s = s5_rnd(s, s5_k(2), w2); s = s5_rnd(s, s5_k(3), w3);
+    s = s5_rnd(s, s5_k(4), w4); s = s5_rnd(s, s5_k(5), w5);
+    s = s5_rnd(s, s5_k(6), w6); s = s5_rnd(s, s5_k(7), w7);
+    s = s5_rnd(s, s5_k(8), w8); s = s5_rnd(s, s5_k(9), w9);
+    s = s5_rnd(s, s5_k(10), w10); s = s5_rnd(s, s5_k(11), w11);
+    s = s5_rnd(s, s5_k(12), w12); s = s5_rnd(s, s5_k(13), w13);
+    s = s5_rnd(s, s5_k(14), w14); s = s5_rnd(s, s5_k(15), w15);
+    s = s5_rnd(s, s5_k(16), w16); s = s5_rnd(s, s5_k(17), w17);
+    s = s5_rnd(s, s5_k(18), w18); s = s5_rnd(s, s5_k(19), w19);
+    s = s5_rnd(s, s5_k(20), w20); s = s5_rnd(s, s5_k(21), w21);
+    s = s5_rnd(s, s5_k(22), w22); s = s5_rnd(s, s5_k(23), w23);
+    s = s5_rnd(s, s5_k(24), w24); s = s5_rnd(s, s5_k(25), w25);
+    s = s5_rnd(s, s5_k(26), w26); s = s5_rnd(s, s5_k(27), w27);
+    s = s5_rnd(s, s5_k(28), w28); s = s5_rnd(s, s5_k(29), w29);
+    s = s5_rnd(s, s5_k(30), w30); s = s5_rnd(s, s5_k(31), w31);
+    s = s5_rnd(s, s5_k(32), w32); s = s5_rnd(s, s5_k(33), w33);
+    s = s5_rnd(s, s5_k(34), w34); s = s5_rnd(s, s5_k(35), w35);
+    s = s5_rnd(s, s5_k(36), w36); s = s5_rnd(s, s5_k(37), w37);
+    s = s5_rnd(s, s5_k(38), w38); s = s5_rnd(s, s5_k(39), w39);
+    s = s5_rnd(s, s5_k(40), w40); s = s5_rnd(s, s5_k(41), w41);
+    s = s5_rnd(s, s5_k(42), w42); s = s5_rnd(s, s5_k(43), w43);
+    s = s5_rnd(s, s5_k(44), w44); s = s5_rnd(s, s5_k(45), w45);
+    s = s5_rnd(s, s5_k(46), w46); s = s5_rnd(s, s5_k(47), w47);
+    s = s5_rnd(s, s5_k(48), w48); s = s5_rnd(s, s5_k(49), w49);
+    s = s5_rnd(s, s5_k(50), w50); s = s5_rnd(s, s5_k(51), w51);
+    s = s5_rnd(s, s5_k(52), w52); s = s5_rnd(s, s5_k(53), w53);
+    s = s5_rnd(s, s5_k(54), w54); s = s5_rnd(s, s5_k(55), w55);
+    s = s5_rnd(s, s5_k(56), w56); s = s5_rnd(s, s5_k(57), w57);
+    s = s5_rnd(s, s5_k(58), w58); s = s5_rnd(s, s5_k(59), w59);
+    s = s5_rnd(s, s5_k(60), w60); s = s5_rnd(s, s5_k(61), w61);
+    s = s5_rnd(s, s5_k(62), w62); s = s5_rnd(s, s5_k(63), w63);
+    s = s5_rnd(s, s5_k(64), w64); s = s5_rnd(s, s5_k(65), w65);
+    s = s5_rnd(s, s5_k(66), w66); s = s5_rnd(s, s5_k(67), w67);
+    s = s5_rnd(s, s5_k(68), w68); s = s5_rnd(s, s5_k(69), w69);
+    s = s5_rnd(s, s5_k(70), w70); s = s5_rnd(s, s5_k(71), w71);
+    s = s5_rnd(s, s5_k(72), w72); s = s5_rnd(s, s5_k(73), w73);
+    s = s5_rnd(s, s5_k(74), w74); s = s5_rnd(s, s5_k(75), w75);
+    s = s5_rnd(s, s5_k(76), w76); s = s5_rnd(s, s5_k(77), w77);
+    s = s5_rnd(s, s5_k(78), w78); s = s5_rnd(s, s5_k(79), w79);
+    return s;
+}
+
+pub fn s5_init() -> S5W {
+    return S5W {
+        a: W64 { hi: 1779033703, lo: 4089235720 },
+        b: W64 { hi: 3144134277, lo: 2227873595 },
+        c: W64 { hi: 1013904242, lo: 4271175723 },
+        d: W64 { hi: 2773480762, lo: 1595750129 },
+        e: W64 { hi: 1359893119, lo: 2917565137 },
+        f: W64 { hi: 2600822924, lo: 725511199 },
+        g: W64 { hi: 528734635, lo: 4215389547 },
+        h: W64 { hi: 1541459225, lo: 327033209 }
+    };
+}
+
+pub fn s5_addst(x: S5W, y: S5W) -> S5W {
+    return S5W {
+        a: s5_add(x.a, y.a), b: s5_add(x.b, y.b),
+        c: s5_add(x.c, y.c), d: s5_add(x.d, y.d),
+        e: s5_add(x.e, y.e), f: s5_add(x.f, y.f),
+        g: s5_add(x.g, y.g), h: s5_add(x.h, y.h)
+    };
+}
+
+pub fn sha512_hex(data: String) -> String {
+    let n: Int = data.len();
+    let rem: Int = n % 128;
+    let mut blocks: Int = n / 128;
+    if rem <= 111 {
+        blocks = blocks + 1;
+    } else {
+        blocks = blocks + 2;
+    }
+    let total: Int = blocks * 128;
+    let mut h: S5W = s5_init();
+    let mut blk: Int = 0;
+    while blk < blocks {
+        let base: Int = blk * 128;
+        let mut s: S5W = s5_compress(h, data, n, total, base);
+        s = s5_addst(h, s);
+        h = s;
+        blk = blk + 1;
+    }
+    let mut out: String = "";
+    out = out + s5_hexw(h.a);
+    out = out + s5_hexw(h.b);
+    out = out + s5_hexw(h.c);
+    out = out + s5_hexw(h.d);
+    out = out + s5_hexw(h.e);
+    out = out + s5_hexw(h.f);
+    out = out + s5_hexw(h.g);
+    out = out + s5_hexw(h.h);
+    return out;
+}
+
+pub fn sha512(data: String) -> String {
+    return sha512_hex(data);
+}

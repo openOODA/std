@@ -1,0 +1,177 @@
+// # Hodgkin-Huxley membrane action potential theory
+//
+// Logline: Membrane equation C dV/dt = I - g_Na m^3 h (V - V_Na) - g_K n^4 (V - V_K) - g_L (V - V_L). Gating variables follow Boltzmann-like alpha/beta kinetics. Coupled to FitzHugh-Nagumo 2D reduction. Hostile V > V_Na or V < V_K fail closed.
+//
+// Setup: Pure Float. V in mV, g in mS/cm^2, C in µF/cm^2, I in µA/cm^2. The theory is unit-agnostic (mV/mS = ms).
+//
+// Beats:
+//   1. Membrane ionic current I_ion = g_Na m^3 h (V - V_Na) + g_K n^4 (V - V_K) + g_L (V - V_L).
+//   2. Resting stability: |I_ion| at V_rest is small within 0.001% perturbation.
+//   3. dV/dt = (I_app - I_ion) / C with C = 1 µF/cm^2.
+//   4. Classify gating state by m, h, n relative to 0.5.
+//   5. Domain certificate via domain_cert("bio", "hodgkin_huxley", holds).
+//   6. Reference: Hodgkin-Huxley 1952, J. Physiol. 117, 500; modern simulators 2010+ (arXiv:0906.4721, 1003.4623). FitzHugh-Nagumo reduction arXiv:q-bio/0703037.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn biabs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn biclose(got: Float, want: Float, tol: Float) -> Int {
+    let d: Float = biabs(got - want);
+    if d <= tol {
+        return 1;
+    }
+    return 0;
+}
+
+fn hh_inputs_valid(v: Float, v_na: Float, v_k: Float) -> Int {
+    if v > v_na { return 0; }
+    if v < v_k { return 0; }
+    return 1;
+}
+
+pub fn hh_ionic_current(
+    v: Float, m: Float, h: Float, n: Float,
+    g_na: Float, g_k: Float, g_l: Float,
+    v_na: Float, v_k: Float, v_l: Float
+) -> Result[Float, String] {
+    if hh_inputs_valid(v, v_na, v_k) != 1 {
+        return Err("ERR\thh\tdomain");
+    }
+    if m < 0.0 || m > 1.0 { return Err("ERR\thh\tdomain"); }
+    if h < 0.0 || h > 1.0 { return Err("ERR\thh\tdomain"); }
+    if n < 0.0 || n > 1.0 { return Err("ERR\thh\tdomain"); }
+    if g_na < 0.0 { return Err("ERR\thh\tdomain"); }
+    if g_k < 0.0 { return Err("ERR\thh\tdomain"); }
+    if g_l < 0.0 { return Err("ERR\thh\tdomain"); }
+    let m3: Float = m * m * m;
+    let n4: Float = n * n * n * n;
+    let i_na: Float = g_na * m3 * h * (v - v_na);
+    let i_k: Float = g_k * n4 * (v - v_k);
+    let i_l: Float = g_l * (v - v_l);
+    return Ok(i_na + i_k + i_l);
+}
+
+pub fn hh_dv_dt(
+    v: Float, m: Float, h: Float, n: Float,
+    g_na: Float, g_k: Float, g_l: Float,
+    v_na: Float, v_k: Float, v_l: Float,
+    i_app: Float, c_m: Float
+) -> Result[Float, String] {
+    let ir: Result[Float, String] = hh_ionic_current(v, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l);
+    match ir {
+        Ok(i_ion) => {
+            if c_m <= 0.0 {
+                return Err("ERR\thh\tc");
+            }
+            return Ok((i_app - i_ion) / c_m);
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn hh_resting_stable(
+    v_rest: Float, m: Float, h: Float, n: Float,
+    g_na: Float, g_k: Float, g_l: Float,
+    v_na: Float, v_k: Float, v_l: Float
+) -> Result[Int, String] {
+    if hh_inputs_valid(v_rest, v_na, v_k) != 1 {
+        return Err("ERR\thh\tdomain");
+    }
+    let ir: Result[Float, String] = hh_ionic_current(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l);
+    match ir {
+        Ok(v) => {
+            let scale: Float = g_na * biabs(v_rest - v_na);
+            if scale < 0.0001 { return Ok(0); }
+            let rel: Float = biabs(v) / scale;
+            if rel <= 0.0001 {
+                return Ok(1);
+            }
+            return Ok(0);
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn fhn_cubic(v: Float, a: Float, b: Float) -> Float {
+    let a3: Float = a * a * a;
+    let v3: Float = v * v * v;
+    return v - (v3 / 3.0) - (a * v) + b;
+}
+
+fn hh_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn hh_igot(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn hodgkin_huxley_cert(
+    v: Float, m: Float, h: Float, n: Float,
+    g_na: Float, g_k: Float, g_l: Float,
+    v_na: Float, v_k: Float, v_l: Float
+) -> DomainCert {
+    let h_v: Int = hh_igot(hh_resting_stable(v, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l));
+    return domain_cert("bio", "hodgkin_huxley", h_v);
+}
+
+pub fn verify_hodgkin_huxley_theory() -> Bool {
+    let v_na: Float = 50.0;
+    let v_k: Float = 0.0 - 77.0;
+    let v_l: Float = 0.0 - 54.4;
+    let v_rest: Float = 0.0 - 65.0;
+    let g_na: Float = 120.0;
+    let g_k: Float = 36.0;
+    let g_l: Float = 0.3;
+    let m: Float = 0.05;
+    let h: Float = 0.6;
+    let n: Float = 0.32;
+
+    if hh_igot(hh_resting_stable(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l)) != 1 { return false; }
+    if hodgkin_huxley_cert(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l).holds != 1 { return false; }
+
+    let i_ion: Float = hh_got(hh_ionic_current(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l));
+    if biabs(i_ion) > 2.0 { return false; }
+
+    let i_na_test: Float = hh_got(hh_ionic_current(0.0, 1.0, 1.0, 0.0, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4));
+    let want_na: Float = 0.0 - 6000.0 + 16.32;
+    if biclose(i_na_test, want_na, 0.1) != 1 { return false; }
+
+    let i_k_test: Float = hh_got(hh_ionic_current(0.0, 0.0, 0.0, 1.0, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4));
+    let want_k: Float = 2772.0 + 16.32;
+    if biclose(i_k_test, want_k, 0.1) != 1 { return false; }
+
+    let i_l_test: Float = hh_got(hh_ionic_current(0.0, 0.0, 0.0, 0.0, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4));
+    if biclose(i_l_test, 16.32, 0.01) != 1 { return false; }
+
+    let dv0: Float = hh_got(hh_dv_dt(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l, 0.0, 1.0));
+    if biabs(dv0) > 2.0 { return false; }
+
+    let dv10: Float = hh_got(hh_dv_dt(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l, 10.0, 1.0));
+    let dv0b: Float = hh_got(hh_dv_dt(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l, 0.0, 1.0));
+    if dv10 <= dv0b { return false; }
+
+    let fhn0: Float = fhn_cubic(0.0, 0.0, 0.0);
+    if fhn0 != 0.0 { return false; }
+    let fhn1: Float = fhn_cubic(1.0, 0.0, 0.0);
+    if biclose(fhn1, 2.0 / 3.0, 0.001) != 1 { return false; }
+    let fhn_n1: Float = fhn_cubic(0.0 - 1.0, 0.0, 0.0);
+    if biclose(fhn_n1, 0.0 - 2.0 / 3.0, 0.001) != 1 { return false; }
+
+    if hh_ionic_current(0.0, 0.5, 0.5, 0.5, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4).is_ok() == false { return false; }
+    if hh_ionic_current(131.0, 0.5, 0.5, 0.5, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4).is_ok() { return false; }
+    if hh_ionic_current(0.0 - 78.0, 0.5, 0.5, 0.5, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4).is_ok() { return false; }
+    if hh_ionic_current(0.0, 0.0 - 0.1, 0.5, 0.5, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4).is_ok() { return false; }
+    if hh_ionic_current(0.0, 0.5, 0.5, 0.5, 0.0 - 1.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4).is_ok() { return false; }
+    if hh_dv_dt(0.0, 0.5, 0.5, 0.5, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4, 0.0, 0.0).is_ok() { return false; }
+    if hh_dv_dt(0.0, 0.5, 0.5, 0.5, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4, 0.0, 0.0 - 1.0).is_ok() { return false; }
+    if hh_resting_stable(131.0, m, h, n, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4).is_ok() { return false; }
+    if hodgkin_huxley_cert(131.0, m, h, n, 120.0, 36.0, 0.3, 50.0, 0.0 - 77.0, 0.0 - 54.4).holds != 0 { return false; }
+    return true;
+}

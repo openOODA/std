@@ -1,0 +1,138 @@
+// # SCADA / ICS Firewall Types & Anomaly Constants
+//
+// Logline: Define ScadaFlow, ScadaRule, ScadaPolicy, ScadaDecision, ScadaAnomaly, and ScadaEngine types, plus the standard anomaly tag constants and ScadaFlow / ScadaRule / ScadaPolicy constructors.
+//
+// Setup: Sovereign SCADA firewall domain types.
+//
+// Beats:
+//   1. ScadaFlow / ScadaRule / ScadaPolicy / ScadaDecision / ScadaAnomaly / ScadaEngine record types.
+//   2. Anomaly tag constants: unknown_protocol, unauth_write, recon_scan, protocol_violation, excessive_drops.
+//   3. scada_flow_create, scada_rule_create, scada_policy_create.
+//   4. scada_engine_init with rules, decisions, anomalies, and tally counters.
+// RULES.oot 1.4: Pure data structures.
+// RULES.oot 1.7: Under 256 lines.
+
+type ScadaFlow = struct {
+    flow_id: Int,
+    src_addr: String,
+    dst_addr: String,
+    src_port: Int,
+    dst_port: Int,
+    protocol: Int,
+    function_code: Int,
+    payload_len: Int,
+    ts: Int
+};
+
+type ScadaRule = struct {
+    rule_id: Int,
+    name: String,
+    protocol: Int,
+    src_addr_pattern: String,
+    dst_addr_pattern: String,
+    src_port: Int,
+    dst_port: Int,
+    function_code: Int,
+    action: Int,
+    priority: Int,
+    is_enabled: Bool
+};
+
+type ScadaPolicy = struct {
+    policy_id: Int,
+    name: String,
+    default_action: Int,
+    allowed_protocols: List[Int],
+    rate_limit_per_min: Int,
+    is_strict: Bool,
+    is_active: Bool
+};
+
+type ScadaDecision = struct {
+    decision_id: Int,
+    flow_id: Int,
+    matched_rule_id: Int,
+    action: Int,
+    is_anomaly: Bool,
+    anomaly_code: Int,
+    reason: String
+};
+
+type ScadaAnomaly = struct {
+    anomaly_id: Int,
+    code: Int,
+    flow_id: Int,
+    ts: Int,
+    description: String
+};
+
+type ScadaEngine = struct {
+    engine_id: String,
+    rules_count: Int,
+    decisions_count: Int,
+    anomalies_count: Int,
+    total_flows_inspected: Int,
+    total_anomalies: Int,
+    is_halted: Bool
+};
+
+// Anomaly Constants
+pub fn scada_anom_unknown_protocol() -> Int { return 1; }
+pub fn scada_anom_unauth_write() -> Int { return 2; }
+pub fn scada_anom_recon_scan() -> Int { return 3; }
+pub fn scada_anom_protocol_violation() -> Int { return 4; }
+pub fn scada_anom_excessive_drops() -> Int { return 5; }
+
+pub fn scada_flow_create(flow_id_v: Int, src_addr_v: String, dst_addr_v: String, src_port_v: Int, dst_port_v: Int, protocol_v: Int, function_code_v: Int, payload_len_v: Int, ts_v: Int) -> ScadaFlow {
+    return ScadaFlow {
+        flow_id: flow_id_v,
+        src_addr: src_addr_v,
+        dst_addr: dst_addr_v,
+        src_port: src_port_v,
+        dst_port: dst_port_v,
+        protocol: protocol_v,
+        function_code: function_code_v,
+        payload_len: payload_len_v,
+        ts: ts_v
+    };
+}
+
+pub fn scada_rule_create(rule_id_v: Int, name_v: String, protocol_v: Int, src_addr_pattern_v: String, dst_addr_pattern_v: String, src_port_v: Int, dst_port_v: Int, function_code_v: Int, action_v: Int, priority_v: Int, is_enabled_v: Bool) -> ScadaRule {
+    return ScadaRule {
+        rule_id: rule_id_v,
+        name: name_v,
+        protocol: protocol_v,
+        src_addr_pattern: src_addr_pattern_v,
+        dst_addr_pattern: dst_addr_pattern_v,
+        src_port: src_port_v,
+        dst_port: dst_port_v,
+        function_code: function_code_v,
+        action: action_v,
+        priority: priority_v,
+        is_enabled: is_enabled_v
+    };
+}
+
+pub fn scada_policy_create(policy_id_v: Int, name_v: String, default_action_v: Int, allowed_protocols_v: List[Int], rate_limit_v: Int, is_strict_v: Bool, is_active_v: Bool) -> ScadaPolicy {
+    return ScadaPolicy {
+        policy_id: policy_id_v,
+        name: name_v,
+        default_action: default_action_v,
+        allowed_protocols: allowed_protocols_v,
+        rate_limit_per_min: rate_limit_v,
+        is_strict: is_strict_v,
+        is_active: is_active_v
+    };
+}
+
+pub fn scada_engine_init(engine_id_v: String) -> ScadaEngine {
+    return ScadaEngine {
+        engine_id: engine_id_v,
+        rules_count: 0,
+        decisions_count: 0,
+        anomalies_count: 0,
+        total_flows_inspected: 0,
+        total_anomalies: 0,
+        is_halted: false
+    };
+}

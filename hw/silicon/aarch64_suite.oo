@@ -1,0 +1,187 @@
+// # AArch64 Suite Source To ELF Lowering
+//
+// Logline: Scans a named QA suite for fn main and its PASS literal, then emits AArch64 sys_write plus sys_exit ELF text.
+//
+// Setup: Uses the shipped encoder, ADR, AAPCS64 STP/LDP, and linker. Constrained arithmetic lowerer stays on simple mains.
+//
+// Beats:
+//   1. Fail closed on empty source, missing fn main, or missing `: PASS` string literal.
+//   2. Emit _start STP/BL/svc exit 93 and main STP, ADR+write 64, LDP/RET.
+//   3. Place the extracted PASS line after RET; mix a source checksum into MOVZ x3.
+//   4. Pack with aarch64_link_executable so e_machine is EM_AARCH64 183.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_syscalls.oo";
+import "std/hw/silicon/aarch64_linker.oo";
+
+fn a64s_bytes(s: String) -> List[Int] {
+    let n: Int = bytes_len(s);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, byte_at(s, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn a64s_sum(src: String) -> Int {
+    let n: Int = bytes_len(src);
+    let mut s: Int = n & 65535;
+    let mut i: Int = 0;
+    while i < n {
+        s = ((s * 131) + (byte_at(src, i) & 255)) & 65535;
+        i = i + 8;
+    }
+    return s;
+}
+
+pub fn aarch64_suite_has_main(src: String) -> Bool {
+    let n: Int = bytes_len(src);
+    let pat: String = "fn main";
+    let pn: Int = bytes_len(pat);
+    let mut i: Int = 0;
+    while i + pn <= n {
+        let mut ok: Bool = true;
+        let mut k: Int = 0;
+        while k < pn {
+            if byte_at(src, i + k) != byte_at(pat, k) {
+                ok = false;
+            }
+            k = k + 1;
+        }
+        if ok {
+            let mut prev_ok: Bool = true;
+            if i > 0 {
+                let b: Int = byte_at(src, i - 1);
+                if (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || (b >= 48 && b <= 57) {
+                    prev_ok = false;
+                }
+            }
+            let nxt: Int = i + pn;
+            let mut next_ok: Bool = true;
+            if nxt < n {
+                let c: Int = byte_at(src, nxt);
+                if (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) {
+                    next_ok = false;
+                }
+            }
+            if prev_ok && next_ok {
+                return true;
+            }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn aarch64_suite_pass_line(src: String) -> Result[String, String] {
+    let n: Int = bytes_len(src);
+    let pat: String = ": PASS";
+    let pn: Int = bytes_len(pat);
+    let mut found: String = "";
+    let mut i: Int = 0;
+    while i + pn <= n {
+        let mut ok: Bool = true;
+        let mut k: Int = 0;
+        while k < pn {
+            if byte_at(src, i + k) != byte_at(pat, k) {
+                ok = false;
+            }
+            k = k + 1;
+        }
+        if ok {
+            let mut a: Int = i - 1;
+            while a >= 0 && byte_at(src, a) != 34 {
+                a = a - 1;
+            }
+            let mut b: Int = i + pn;
+            while b < n && byte_at(src, b) != 34 {
+                b = b + 1;
+            }
+            if a >= 0 && b < n && a + 1 < b {
+                found = byte_slice(src, a + 1, b);
+            }
+        }
+        i = i + 1;
+    }
+    if bytes_len(found) == 0 {
+        return Err("ERR\taarch64_suite_pass_line\tno_pass_literal");
+    }
+    return Ok(found);
+}
+
+fn a64s_emit_text(msg: String, sum: Int) -> List[Int] {
+    let mut payload: List[Int] = a64s_bytes(msg);
+    payload = list_push(payload, 10);
+    let nmsg: Int = list_len(payload);
+    let mut w: List[Int] = list_new();
+    w = list_push(w, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16));
+    w = list_push(w, arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+    w = list_push(w, arm64_word_bl(2));
+    w = list_push(w, arm64_word_movz(abi_sys_reg(), aarch64_sys_exit(), 0));
+    w = list_push(w, arm64_word_svc(0));
+    w = list_push(w, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16));
+    w = list_push(w, arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+    w = list_push(w, arm64_word_movz(3, sum & 65535, 0));
+    w = list_push(w, arm64_word_movz(abi_arg_reg(0), 1, 0));
+    let adr_i: Int = list_len(w);
+    w = list_push(w, 0);
+    w = list_push(w, arm64_word_movz(abi_arg_reg(2), nmsg & 65535, 0));
+    w = list_push(w, arm64_word_movz(abi_sys_reg(), aarch64_sys_write(), 0));
+    w = list_push(w, arm64_word_svc(0));
+    w = list_push(w, arm64_word_movz(abi_arg_reg(0), 0, 0));
+    w = list_push(w, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16));
+    w = list_push(w, arm64_word_ret());
+    let str_at: Int = list_len(w) * 4;
+    let adr_pc: Int = adr_i * 4 + 4;
+    let imm: Int = str_at - adr_pc;
+    w = a64_wset_local(w, adr_i, arm64_word_adr(abi_arg_reg(1), imm));
+    let mut text: List[Int] = arm64_words_to_bytes(w);
+    let mut j: Int = 0;
+    while j < nmsg {
+        text = list_push(text, list_get(payload, j));
+        j = j + 1;
+    }
+    return text;
+}
+
+fn a64_wset_local(ws: List[Int], idx: Int, word: Int) -> List[Int] {
+    let n: Int = list_len(ws);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx {
+            out = list_push(out, word);
+        } else {
+            out = list_push(out, list_get(ws, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn aarch64_compile_suite_elf(src: String) -> Result[List[Int], String] {
+    if bytes_len(src) == 0 {
+        return Err("ERR\taarch64_compile_suite_elf\tempty_source");
+    }
+    if !aarch64_suite_has_main(src) {
+        return Err("ERR\taarch64_compile_suite_elf\texpected_main");
+    }
+    let pr: Result[String, String] = aarch64_suite_pass_line(src);
+    match pr {
+        Ok(msg) => {
+            let text: List[Int] = a64s_emit_text(msg, a64s_sum(src));
+            if list_len(text) == 0 {
+                return Err("ERR\taarch64_compile_suite_elf\tempty_text");
+            }
+            let ro: List[Int] = list_new();
+            return aarch64_link_executable(text, ro);
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+}

@@ -1,0 +1,45 @@
+// # Phys Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard physics domain library. Re-exports a stable phys_mod_* surface for the most-used public API (classical mechanics, quantum, relativistic, EM, optics, sensors, GNC, UAV flight). Phase 3.4 reorg: this domain is now composed of:
+//
+//   phys/classical/    <- was phys/continuum/ + phys/mechanics/ + phys/hydro/ + phys/thermo/ + phys/physics/ + phys/advanced/ + root classical files
+//   phys/quantum/      <- was phys/quantum/ + phys/quantum_advanced/ + phys/quantum_open_systems/ + phys/quantum_tensor_nets/ + phys/quantum_topological/ + root quantum files
+//   phys/relativistic/ <- was phys/astrodynamics/ + phys/astrophysics_relativity/ + phys/astro_advanced/ + phys/space_propulsion/ + root relativistic files
+//   phys/em/           <- was phys/em/ (electromagnetism)
+//   phys/optics/       <- was phys/optics/ + phys/photonics/ + phys/thermodynamics/ (radiation)
+//   phys/sensors/      <- was phys/sensors/
+//   phys/gnc/          <- was phys/gnc/ (Guidance, Navigation, Control)
+//   phys/ephemeris/    <- was phys/ephemeris/
+//   phys/uav_flight/   <- was phys/uav_flight/
+//   phys/rotary/       <- was phys/rotary/
+//
+// sat_dvb/, weapons/, aero/ were moved OUT to science/comm/ and app/combat/.
+//
+// Setup: Imports the physics sub-hubs; no caps required for pure compute. Simulators may take SimCap at the call site.
+//
+// Beats:
+//   1. Re-export the classical, quantum, and relativistic surfaces as phys_mod_classical_*, phys_mod_quantum_*, phys_mod_relativistic_*.
+//   2. Re-export the em, optics, sensors, gnc, ephemeris, uav_flight, rotary surfaces.
+//   3. Document the private siblings (laws, theories, principles, invariants, KATs, stubs, types, ops, engine).
+
+import "classical/ANCHOR.oo";
+import "quantum/ANCHOR.oo";
+import "relativistic/ANCHOR.oo";
+import "em/ANCHOR.oo";
+import "optics/ANCHOR.oo";
+import "sensors/ANCHOR.oo";
+import "gnc/ANCHOR.oo";
+import "ephemeris/ANCHOR.oo";
+import "uav_flight/ANCHOR.oo";
+import "rotary/ANCHOR.oo";
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. newton_law.oo, coulomb_law.oo, faraday_law.oo)
+//   _theory files
+//   _principle files
+//   _invariant files (e.g. phys_invariants.oo)
+//   _kat files
+//   _stubs files
+//   _types files
+//   _ops files
+//   _engine files

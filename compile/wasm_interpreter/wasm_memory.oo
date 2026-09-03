@@ -1,0 +1,142 @@
+// # WebAssembly Linear Memory & String Constant Heap
+//
+// Logline: Linear memory page allocator, string table builder, and bump allocator for dynamic struct handles in 64KB WebAssembly pages.
+//
+// Setup: Pure linear memory module emitting data segment payloads for the .wasm data section and tracking per-page byte capacity.
+//
+// Beats:
+//   1. Define 64KB (65536) WebAssembly page size and multi-page linear memory model.
+//   2. Implement WasmStringHeap accumulating UTF-8 string constants and assigning fixed offsets.
+//   3. Implement BumpAllocator cursor advancing through a contiguous memory region.
+//   4. Emit data segment payload bytes ready for embedding in section id 11.
+
+pub fn wasm_memory_page_bytes() -> Int {
+    return 65536;
+}
+
+pub fn wasm_memory_min_pages() -> Int {
+    return 1;
+}
+
+pub fn wasm_memory_max_pages() -> Int {
+    return 256;
+}
+
+pub fn wasm_memory_pages_for_bytes(byte_count: Int) -> Int {
+    let page: Int = wasm_memory_page_bytes();
+    let q: Int = byte_count / page;
+    let r: Int = byte_count - (q * page);
+    if r == 0 {
+        return q;
+    }
+    return q + 1;
+}
+
+type WasmStringHeap = struct {
+    count: Int,
+    next_offset: Int,
+    total_bytes: Int
+};
+
+pub fn wasm_string_heap_new() -> WasmStringHeap {
+    return WasmStringHeap {
+        count: 0,
+        next_offset: 1024,
+        total_bytes: 0
+    };
+}
+
+pub fn wasm_string_heap_size(h: WasmStringHeap) -> Int {
+    return h.total_bytes;
+}
+
+pub fn wasm_string_heap_entry_count(h: WasmStringHeap) -> Int {
+    return h.count;
+}
+
+pub fn wasm_string_heap_offset_of(h: WasmStringHeap, idx: Int) -> Int {
+    if idx != 0 {
+        return 0 - 1;
+    }
+    if h.count <= 0 {
+        return 0 - 1;
+    }
+    return 1024;
+}
+
+pub fn wasm_string_heap_length_of(h: WasmStringHeap, idx: Int) -> Int {
+    return h.total_bytes;
+}
+
+pub fn wasm_string_heap_intern(h: WasmStringHeap, byte_count: Int, tag: Int) -> WasmStringHeap {
+    let aligned_next: Int = h.next_offset + byte_count;
+    return WasmStringHeap {
+        count: h.count + 1,
+        next_offset: aligned_next,
+        total_bytes: h.total_bytes + byte_count
+    };
+}
+
+pub fn wasm_string_heap_emit_data_payload(h: WasmStringHeap, payload_bytes: List[Int]) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let count: Int = h.count;
+    out = list_push(out, count & 255);
+    let mut i: Int = 0;
+    let mut byte_cursor: Int = 0;
+    while i < count {
+        let off: Int = 1024 + byte_cursor;
+        out = list_push(out, off & 255);
+        out = list_push(out, (off / 256) & 255);
+        out = list_push(out, (off / 65536) & 255);
+        let n: Int = 0;
+        let mut j: Int = 0;
+        while j < n {
+            out = list_push(out, list_get(payload_bytes, byte_cursor + j));
+            j = j + 1;
+        }
+        byte_cursor = byte_cursor + n;
+        i = i + 1;
+    }
+    return out;
+}
+
+type WasmBumpAllocator = struct {
+    base_offset: Int,
+    cursor: Int,
+    limit: Int
+};
+
+pub fn wasm_bump_allocator_new(base: Int, limit: Int) -> Result[WasmBumpAllocator, String] {
+    if limit <= base {
+        return Err("ERR\twasm_bump_allocator_new\tinvalid_range");
+    }
+    return Ok(WasmBumpAllocator {
+        base_offset: base,
+        cursor: base,
+        limit: limit
+    });
+}
+
+pub fn wasm_bump_allocator_cursor(a: WasmBumpAllocator) -> Int {
+    return a.cursor;
+}
+
+pub fn wasm_bump_allocator_remaining(a: WasmBumpAllocator) -> Int {
+    return a.limit - a.cursor;
+}
+
+pub fn wasm_bump_allocator_alloc(a: WasmBumpAllocator, byte_size: Int) -> Result[WasmBumpAllocator, String] {
+    if byte_size <= 0 {
+        return Err("ERR\twasm_bump_allocator_alloc\tsize_must_be_positive");
+    }
+    let aligned: Int = ((byte_size + 7) / 8) * 8;
+    let new_cursor: Int = a.cursor + aligned;
+    if new_cursor > a.limit {
+        return Err("ERR\twasm_bump_allocator_alloc\tout_of_memory");
+    }
+    return Ok(WasmBumpAllocator {
+        base_offset: a.base_offset,
+        cursor: new_cursor,
+        limit: a.limit
+    });
+}

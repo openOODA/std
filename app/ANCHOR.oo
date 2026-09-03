@@ -1,0 +1,33 @@
+// # App Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard app domain library. Phase 3.5: this domain is now composed of:
+//
+//   app/ai/      <- was std/ai/  (tensors, transformer, quant, GGUF, scaling law; ml_lib/ merged into ml/; cognition+cybernetics merged into meta/; graph_networks split: CS algo -> ai/algo/, network routing -> net/protocol/routing/)
+//   app/robot/   <- was std/robot/  (robotics, ros2, mpc, auto, lidar, industrial_iot, predictive, digital_twin, iot_scada, auv)
+//   app/ui/      <- was std/ui/  (3d, game_engine, gui, media, media_codecs, media_dsp, multimedia, pbr_raytracing, tui, web_ecosystem, wui)
+//   app/data/    <- was std/data/  (database, dataframe, db, columnar, graph, storage, vector_ann, cloud, cloud_faas, k8s, enterprise, grid, gis_spatial, gis_topo; wire/ moved to core/encoding/wire/)
+//   app/agent/   <- was std/ai/{synthesizer, repair, evolution, pair_programmer, repl_engine}.oo
+//   app/combat/  <- was std/phys/weapons/ + std/phys/aero/  (military combat, missiles, formation, air combat)
+//
+// Setup: Imports the app sub-hubs. No caps required for pure compute. Simulators may take SimCap at the call site.
+//
+// Beats:
+//   1. Re-export the ai, robot, ui, data, agent, and combat surfaces as app_mod_ai_*, app_mod_robot_*, app_mod_ui_*, app_mod_data_*, app_mod_agent_*, app_mod_combat_*.
+
+import "ai/ANCHOR.oo";
+import "robot/ANCHOR.oo";
+import "ui/ANCHOR.oo";
+import "data/ANCHOR.oo";
+import "agent/ANCHOR.oo";
+import "combat/ANCHOR.oo";
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _engine files
+//   _types files
+//   _ops files
+//   _stubs files
+//   _law files
+//   _theory files
+//   _principle files
+//   _invariants files
+//   _kat files

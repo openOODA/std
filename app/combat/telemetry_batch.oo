@@ -1,0 +1,29 @@
+// # Telemetry batch
+//
+// Logline: TmBatch implemented off List[struct] packet batches.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type TmBatch = struct {
+    count: Int,
+    bytes: Int
+};
+
+pub fn tm_batch_new(count: Int, bytes: Int) -> TmBatch {
+    return TmBatch { count: count, bytes: bytes };
+}
+
+pub fn tm_batch_count(b: TmBatch) -> Int {
+    return b.count;
+}
+
+pub fn tm_batch_bytes(b: TmBatch) -> Int {
+    return b.bytes;
+}

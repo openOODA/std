@@ -1,0 +1,70 @@
+// # FHE Facade
+//
+// Logline: Re-exports FHE data types, operations, engine lifecycle, and fail-closed stubs.
+//
+// Setup: Pure module shim importing companion submodules.
+//
+// Beats:
+//   1. Import FHE companion modules.
+//   2. Re-export public symbols with typed shim markers.
+//   3. Maintain compatibility with downstream consumers.
+//
+// HOMOMORPHIC ARITHMETIC SHIM MARKERS: The earlier shim_marker_add /
+// shim_marker_sub / shim_marker_multiply / shim_marker_negate /
+// shim_marker_rotate / shim_marker_context_init /
+// shim_marker_context_do_work have been removed entirely. They
+// forwarded to symbolic-polynomial functions that returned tagged
+// tokens, not real RLWE ciphertexts. Real homomorphic computation
+// requires a vetted lattice-crypto FFI (OpenFHE / SEAL / Lattigo /
+// HElib); the openOODA compiler does not provide one.
+
+import "./fhe_stubs.oo";
+
+pub fn shim_marker_checksum() -> Int {
+    return fhe_calculate_checksum("abc");
+}
+
+pub fn shim_marker_params_create() -> FheParams {
+    return fhe_params_create("BFV", 4096, 1024, 60, 128);
+}
+
+pub fn shim_marker_params_validate(p: &FheParams) -> Bool {
+    return fhe_params_validate(p);
+}
+
+pub fn shim_marker_public_key_create() -> FhePublicKey {
+    return fhe_public_key_create("pk1", "pk0_poly", "pk1_poly");
+}
+
+pub fn shim_marker_secret_key_create() -> FheSecretKey {
+    return fhe_secret_key_create("sk1", "sk_poly");
+}
+
+pub fn shim_marker_eval_key_create() -> FheEvaluationKey {
+    return fhe_evaluation_key_create("ek1", "relin", "galois");
+}
+
+pub fn shim_marker_encode() -> FhePlaintext {
+    let p: FheParams = fhe_params_create("BFV", 4096, 1024, 60, 128);
+    return fhe_encode_int(42, p);
+}
+
+pub fn shim_marker_decode(pt: FhePlaintext) -> Result[Int, String] {
+    return fhe_decode_int(pt);
+}
+
+pub fn shim_marker_encrypt(pk: FhePublicKey, p: FheParams, pt: FhePlaintext) -> Result[FheCiphertext, String] {
+    return fhe_encrypt(pk, p, pt);
+}
+
+pub fn shim_marker_decrypt(sk: FheSecretKey, p: FheParams, ct: FheCiphertext) -> Result[FhePlaintext, String] {
+    return fhe_decrypt(sk, p, ct);
+}
+
+pub fn shim_marker_noise(sk: &FheSecretKey, ct: &FheCiphertext) -> Int {
+    return fhe_estimate_noise_budget(sk, ct);
+}
+
+pub fn shim_marker_npu(sys: &SysCap) -> Int {
+    return fhe_npu_hardware_bootstrap(sys, 0);
+}

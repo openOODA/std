@@ -1,0 +1,15 @@
+// # Bind underscore wildcard discard succeeds check
+//
+// Logline: let _ = discards a Result and must typecheck cleanly.
+//
+// Setup: OPEN-2 must-use. Check allows intentional wildcard discard.
+//
+// Beats:
+//   1. Declare verify function.
+//   2. Bind Ok to underscore.
+//   3. Return true.
+
+pub fn verify_open_let_underscore() -> Bool {
+    let _ = Ok("nope");
+    return true;
+}

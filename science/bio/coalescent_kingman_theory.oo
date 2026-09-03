@@ -1,0 +1,119 @@
+// # Kingman n-coalescent genealogical theory
+//
+// Logline: For a Wright-Fisher diploid population of N individuals, the time to the most recent common ancestor of n sampled lineages is T_MRCA = 2 N (1 - 1/n) generations, with 0.001% precision. Coupled to the Ewens sampling formula via theta = 4 N_e mu. Hostile n < 2 or N <= 0 fail closed.
+//
+// Setup: Pure Float. N is the diploid population size; n is the sample size; the identity is unit-agnostic (units = generations).
+//
+// Beats:
+//   1. T_MRCA in a Wright-Fisher diploid population: T = 2 N (1 - 1/n).
+//   2. Ewens sampling theta = 4 N_e mu couples the theory to mutation-drift equilibrium.
+//   3. Classify coalescent regime: n < 2, N <= 0, or n > N return Err on Result channels.
+//   4. Domain certificate via domain_cert("bio", "coalescent_kingman", holds).
+//   5. Reference: Kingman 1982, J. Appl. Probab. 19A, 27; modern reviews 2010+ (arXiv:1011.1469 Fu 2010). Ewens 1972, Theor. Pop. Biol. 3, 87; modern review arXiv:q-bio/0611010.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn biabs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn biclose(got: Float, want: Float, tol: Float) -> Int {
+    let d: Float = biabs(got - want);
+    if d <= tol {
+        return 1;
+    }
+    return 0;
+}
+
+fn ck_inputs_valid(n: Int, n_diploid: Int) -> Int {
+    if n < 2 { return 0; }
+    if n_diploid <= 0 { return 0; }
+    if n > n_diploid { return 0; }
+    return 1;
+}
+
+pub fn kingman_t_mrca(n: Int, n_diploid: Int) -> Result[Float, String] {
+    if ck_inputs_valid(n, n_diploid) != 1 {
+        return Err("ERR\tck\tdomain");
+    }
+    let n_f: Float = 1.0 * (n);
+    let nd_f: Float = 1.0 * (n_diploid);
+    let one_over_n: Float = 1.0 / n_f;
+    return Ok(2.0 * nd_f * (1.0 - one_over_n));
+}
+
+pub fn kingman_ewens_theta(n_e: Float, mu: Float) -> Result[Float, String] {
+    if n_e <= 0.0 { return Err("ERR\tck\tdomain"); }
+    if mu < 0.0 { return Err("ERR\tck\tdomain"); }
+    return Ok(4.0 * n_e * mu);
+}
+
+pub fn kingman_classify(n: Int, n_diploid: Int) -> Int {
+    if ck_inputs_valid(n, n_diploid) != 1 {
+        return 0;
+    }
+    if n == 2 { return 1; }
+    if n < 10 { return 2; }
+    return 3;
+}
+
+fn ck_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn kingman_coalescent_cert(n: Int, n_diploid: Int) -> DomainCert {
+    let t: Float = ck_got(kingman_t_mrca(n, n_diploid));
+    let n_f: Float = 1.0 * (n);
+    let nd_f: Float = 1.0 * (n_diploid);
+    let want: Float = 2.0 * nd_f * (1.0 - (1.0 / n_f));
+    let mut h: Int = 0;
+    if ck_inputs_valid(n, n_diploid) == 1 {
+        if biabs(t - want) <= 0.00001 {
+            h = 1;
+        }
+    }
+    return domain_cert("bio", "coalescent_kingman", h);
+}
+
+pub fn verify_coalescent_kingman_theory() -> Bool {
+    let t2: Float = ck_got(kingman_t_mrca(2, 1000));
+    if biclose(t2, 1000.0, 0.01) != 1 { return false; }
+    if kingman_coalescent_cert(2, 1000).holds != 1 { return false; }
+
+    let t10: Float = ck_got(kingman_t_mrca(10, 1000));
+    if biclose(t10, 1800.0, 1.8) != 1 { return false; }
+
+    let t50: Float = ck_got(kingman_t_mrca(50, 10000));
+    if biclose(t50, 19600.0, 19.6) != 1 { return false; }
+
+    let t100: Float = ck_got(kingman_t_mrca(100, 1000));
+    let want100: Float = 2.0 * 1000.0 * (1.0 - (1.0 / 100.0));
+    if biabs(t100 - want100) > 0.001 { return false; }
+
+    let theta: Float = ck_got(kingman_ewens_theta(10000.0, 0.0000000125));
+    if biclose(theta, 0.0005, 0.0000001) != 1 { return false; }
+
+    let theta_zero: Float = ck_got(kingman_ewens_theta(10000.0, 0.0));
+    if theta_zero != 0.0 { return false; }
+
+    if kingman_classify(2, 1000) != 1 { return false; }
+    if kingman_classify(5, 1000) != 2 { return false; }
+    if kingman_classify(50, 1000) != 3 { return false; }
+    if kingman_classify(0, 1000) != 0 { return false; }
+    if kingman_classify(1, 1000) != 0 { return false; }
+
+    if kingman_t_mrca(1, 1000).is_ok() { return false; }
+    if kingman_t_mrca(0, 1000).is_ok() { return false; }
+    if kingman_t_mrca(0 - 1, 1000).is_ok() { return false; }
+    if kingman_t_mrca(2, 0).is_ok() { return false; }
+    if kingman_t_mrca(2, 0 - 1).is_ok() { return false; }
+    if kingman_t_mrca(2000, 1000).is_ok() { return false; }
+    if kingman_ewens_theta(0.0, 0.0001).is_ok() { return false; }
+    if kingman_ewens_theta(10000.0, 0.0 - 0.0001).is_ok() { return false; }
+    if kingman_coalescent_cert(1, 1000).holds != 0 { return false; }
+    if kingman_coalescent_cert(2, 0).holds != 0 { return false; }
+    return true;
+}

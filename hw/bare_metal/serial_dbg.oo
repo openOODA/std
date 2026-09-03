@@ -1,0 +1,92 @@
+// # Early Diagnostic Serial Telemetry & UART
+//
+// Logline: Zero-allocation early boot UART logging, 16550 port I/O, ARM PL011 MMIO, and RISC-V OpenSBI console telemetry.
+//
+// Setup: Declared capability: None. Direct hardware UART port register programming and formatting diagnostics.
+//
+// Beats:
+//   1. Declare UART configuration, port descriptors, and register dump structures.
+//   2. Implement 16550 UART baud divisor, line control, and FIFO initialization.
+//   3. Implement ARM PL011 MMIO register map and baud calculation.
+//   4. Implement hexadecimal and register telemetry encoding.
+
+type SerialPort16550 = struct {
+    io_port: Int,
+    baud_rate: Int,
+    divisor: Int,
+    line_control: Int,
+    is_ready: Bool
+};
+
+type Pl011Uart = struct {
+    base_addr: Int,
+    clock_hz: Int,
+    ibrd: Int,
+    fbrd: Int,
+    is_ready: Bool
+};
+
+type SerialTelemetry = struct {
+    bytes_transmitted: Int,
+    lines_written: Int,
+    last_char: Int,
+    overflow_count: Int
+};
+
+pub fn serial_16550_init(port: Int, baud: Int) -> SerialPort16550 {
+    let safe_port: Int = if port <= 0 { 1016 } else { port };
+    let safe_baud: Int = if baud <= 0 { 115200 } else { baud };
+    let div: Int = 115200 / safe_baud;
+    let safe_div: Int = if div <= 0 { 1 } else { div };
+    return SerialPort16550 {
+        io_port: safe_port,
+        baud_rate: safe_baud,
+        divisor: safe_div,
+        line_control: 3,
+        is_ready: true
+    };
+}
+
+pub fn serial_pl011_init(base: Int, clock: Int, baud: Int) -> Pl011Uart {
+    let safe_base: Int = if base <= 0 { 150994944 } else { base };
+    let safe_clock: Int = if clock <= 0 { 24000000 } else { clock };
+    let safe_baud: Int = if baud <= 0 { 115200 } else { baud };
+    let ibrd_val: Int = safe_clock / (16 * safe_baud);
+    let rem: Int = safe_clock % (16 * safe_baud);
+    let fbrd_val: Int = ((rem * 64) + (safe_baud * 8)) / (16 * safe_baud);
+    return Pl011Uart {
+        base_addr: safe_base,
+        clock_hz: safe_clock,
+        ibrd: ibrd_val,
+        fbrd: fbrd_val,
+        is_ready: true
+    };
+}
+
+pub fn serial_telemetry_init() -> SerialTelemetry {
+    return SerialTelemetry {
+        bytes_transmitted: 0,
+        lines_written: 0,
+        last_char: 0,
+        overflow_count: 0
+    };
+}
+
+pub fn serial_telemetry_record_byte(t: SerialTelemetry, c: Int) -> SerialTelemetry {
+    let is_newline: Bool = c == 10;
+    let new_lines: Int = if is_newline { t.lines_written + 1 } else { t.lines_written };
+    return SerialTelemetry {
+        bytes_transmitted: t.bytes_transmitted + 1,
+        lines_written: new_lines,
+        last_char: c,
+        overflow_count: t.overflow_count
+    };
+}
+
+pub fn serial_hex_nibble(n: Int) -> Int {
+    let safe_n: Int = n % 16;
+    if safe_n < 10 {
+        return 48 + safe_n;
+    }
+    return 65 + (safe_n - 10);
+}

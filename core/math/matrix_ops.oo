@@ -1,0 +1,232 @@
+// # Matrix Linear Algebra Operations Module
+//
+// Logline: Matrix arithmetic, SIMD matrix multiplication, vector transformation, determinants, and inversion.
+//
+// Setup: Pure math module. Implements standard linear algebra operations over row-major Matrix structures with 8-lane and 4-lane SIMD vectorization.
+//
+// Beats:
+//   1. Element-wise matrix addition, subtraction, and scalar scaling.
+//   2. 8-lane f32x8_fma and 4-lane f64x4_fma matrix-matrix multiplication (matrix_mul, matrix_mul_f64x4) and matrix-vector products (matrix_vec_mul, matrix_vec_mul_f64x4).
+//   3. Matrix trace and exact 2x2 / 3x3 determinant evaluation (rule of Sarrus).
+//   4. 2x2 matrix inversion via adjugate and reciprocal determinant.
+
+import "std/core/primitives/result.oo";
+import "std/sec/simd/simd_vec8f.oo";
+import "std/sec/simd/simd_vec4d.oo";
+import "std/core/math/matrix.oo";
+
+pub fn matrix_add(a: Matrix, b: Matrix) -> Matrix {
+    let r_count: Int = a.rows;
+    let c_count: Int = a.cols;
+    let mut d: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < r_count {
+        let mut c: Int = 0;
+        while c < c_count {
+            d = list_push(d, matrix_get(a, r, c) + matrix_get(b, r, c));
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return Matrix { rows: r_count, cols: c_count, data: d };
+}
+
+pub fn matrix_sub(a: Matrix, b: Matrix) -> Matrix {
+    let r_count: Int = a.rows;
+    let c_count: Int = a.cols;
+    let mut d: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < r_count {
+        let mut c: Int = 0;
+        while c < c_count {
+            d = list_push(d, matrix_get(a, r, c) - matrix_get(b, r, c));
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return Matrix { rows: r_count, cols: c_count, data: d };
+}
+
+pub fn matrix_scale(m: Matrix, s: Float) -> Matrix {
+    let r_count: Int = m.rows;
+    let c_count: Int = m.cols;
+    let mut d: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < r_count {
+        let mut c: Int = 0;
+        while c < c_count {
+            d = list_push(d, matrix_get(m, r, c) * s);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return Matrix { rows: r_count, cols: c_count, data: d };
+}
+
+pub fn matrix_mul(a: Matrix, b: Matrix) -> Matrix {
+    let m_rows: Int = a.rows;
+    let k_dim: Int = a.cols;
+    let n_cols: Int = b.cols;
+    let mut d: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < m_rows {
+        let mut c: Int = 0;
+        while c < n_cols {
+            let mut k: Int = 0;
+            let mut vec_acc: f32x8 = f32x8_zero();
+            while (k + 8) <= k_dim {
+                let va: f32x8 = f32x8_new(
+                    matrix_get(a, r, k), matrix_get(a, r, k + 1), matrix_get(a, r, k + 2), matrix_get(a, r, k + 3),
+                    matrix_get(a, r, k + 4), matrix_get(a, r, k + 5), matrix_get(a, r, k + 6), matrix_get(a, r, k + 7)
+                );
+                let vb: f32x8 = f32x8_new(
+                    matrix_get(b, k, c), matrix_get(b, k + 1, c), matrix_get(b, k + 2, c), matrix_get(b, k + 3, c),
+                    matrix_get(b, k + 4, c), matrix_get(b, k + 5, c), matrix_get(b, k + 6, c), matrix_get(b, k + 7, c)
+                );
+                vec_acc = f32x8_fma(va, vb, vec_acc);
+                k = k + 8;
+            }
+            let mut dot: Float = f32x8_reduce_sum(vec_acc);
+            while k < k_dim {
+                dot = dot + matrix_get(a, r, k) * matrix_get(b, k, c);
+                k = k + 1;
+            }
+            d = list_push(d, dot);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return Matrix { rows: m_rows, cols: n_cols, data: d };
+}
+
+pub fn matrix_mul_f64x4(a: Matrix, b: Matrix) -> Matrix {
+    let m_rows: Int = a.rows;
+    let k_dim: Int = a.cols;
+    let n_cols: Int = b.cols;
+    let mut d: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < m_rows {
+        let mut c: Int = 0;
+        while c < n_cols {
+            let mut k: Int = 0;
+            let mut vec_acc: f64x4 = f64x4_zero();
+            while (k + 4) <= k_dim {
+                let va: f64x4 = f64x4_new(matrix_get(a, r, k), matrix_get(a, r, k + 1), matrix_get(a, r, k + 2), matrix_get(a, r, k + 3));
+                let vb: f64x4 = f64x4_new(matrix_get(b, k, c), matrix_get(b, k + 1, c), matrix_get(b, k + 2, c), matrix_get(b, k + 3, c));
+                vec_acc = f64x4_fma(va, vb, vec_acc);
+                k = k + 4;
+            }
+            let mut dot: Float = f64x4_reduce_sum(vec_acc);
+            while k < k_dim {
+                dot = dot + matrix_get(a, r, k) * matrix_get(b, k, c);
+                k = k + 1;
+            }
+            d = list_push(d, dot);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return Matrix { rows: m_rows, cols: n_cols, data: d };
+}
+
+pub fn matrix_vec_mul(m: Matrix, v: List[Float]) -> List[Float] {
+    let r_count: Int = m.rows;
+    let c_count: Int = m.cols;
+    let mut out: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < r_count {
+        let mut c: Int = 0;
+        let mut vec_acc: f32x8 = f32x8_zero();
+        while (c + 8) <= c_count {
+            let elem: f32x8 = f32x8_new(
+                matrix_get(m, r, c), matrix_get(m, r, c + 1), matrix_get(m, r, c + 2), matrix_get(m, r, c + 3),
+                matrix_get(m, r, c + 4), matrix_get(m, r, c + 5), matrix_get(m, r, c + 6), matrix_get(m, r, c + 7)
+            );
+            let vec_elem: f32x8 = f32x8_new(
+                list_get(v, c), list_get(v, c + 1), list_get(v, c + 2), list_get(v, c + 3),
+                list_get(v, c + 4), list_get(v, c + 5), list_get(v, c + 6), list_get(v, c + 7)
+            );
+            vec_acc = f32x8_fma(elem, vec_elem, vec_acc);
+            c = c + 8;
+        }
+        let mut dot: Float = f32x8_reduce_sum(vec_acc);
+        while c < c_count {
+            dot = dot + matrix_get(m, r, c) * list_get(v, c);
+            c = c + 1;
+        }
+        out = list_push(out, dot);
+        r = r + 1;
+    }
+    return out;
+}
+
+pub fn matrix_vec_mul_f64x4(m: Matrix, v: List[Float]) -> List[Float] {
+    let r_count: Int = m.rows;
+    let c_count: Int = m.cols;
+    let mut out: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < r_count {
+        let mut c: Int = 0;
+        let mut vec_acc: f64x4 = f64x4_zero();
+        while (c + 4) <= c_count {
+            let elem: f64x4 = f64x4_new(matrix_get(m, r, c), matrix_get(m, r, c + 1), matrix_get(m, r, c + 2), matrix_get(m, r, c + 3));
+            let vec_elem: f64x4 = f64x4_new(list_get(v, c), list_get(v, c + 1), list_get(v, c + 2), list_get(v, c + 3));
+            vec_acc = f64x4_fma(elem, vec_elem, vec_acc);
+            c = c + 4;
+        }
+        let mut dot: Float = f64x4_reduce_sum(vec_acc);
+        while c < c_count {
+            dot = dot + matrix_get(m, r, c) * list_get(v, c);
+            c = c + 1;
+        }
+        out = list_push(out, dot);
+        r = r + 1;
+    }
+    return out;
+}
+
+pub fn matrix_trace(m: Matrix) -> Float {
+    let n: Int = m.rows;
+    let mut sum: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        sum = sum + matrix_get(m, i, i);
+        i = i + 1;
+    }
+    return sum;
+}
+
+pub fn matrix_det2x2(m: Matrix) -> Float {
+    return matrix_get(m, 0, 0) * matrix_get(m, 1, 1) - matrix_get(m, 0, 1) * matrix_get(m, 1, 0);
+}
+
+pub fn matrix_det3x3(m: Matrix) -> Float {
+    let a: Float = matrix_get(m, 0, 0);
+    let b: Float = matrix_get(m, 0, 1);
+    let c: Float = matrix_get(m, 0, 2);
+    let term1: Float = a * (matrix_get(m, 1, 1) * matrix_get(m, 2, 2) - matrix_get(m, 1, 2) * matrix_get(m, 2, 1));
+    let term2: Float = b * (matrix_get(m, 1, 0) * matrix_get(m, 2, 2) - matrix_get(m, 1, 2) * matrix_get(m, 2, 0));
+    let term3: Float = c * (matrix_get(m, 1, 0) * matrix_get(m, 2, 1) - matrix_get(m, 1, 1) * matrix_get(m, 2, 0));
+    return term1 - term2 + term3;
+}
+
+pub fn matrix_inv2x2(m: Matrix) -> Result[Matrix, String] {
+    let det: Float = matrix_det2x2(m);
+    if det == 0.0 {
+        return Err("ERR\tmatrix\tsingular");
+    }
+    let a: Float = matrix_get(m, 0, 0);
+    let b: Float = matrix_get(m, 0, 1);
+    let c: Float = matrix_get(m, 1, 0);
+    let d: Float = matrix_get(m, 1, 1);
+    let mut inv_data: List[Float] = list_new();
+    inv_data = list_push(inv_data, d / det);
+    inv_data = list_push(inv_data, (0.0 - b) / det);
+    inv_data = list_push(inv_data, (0.0 - c) / det);
+    inv_data = list_push(inv_data, a / det);
+    return Ok(Matrix { rows: 2, cols: 2, data: inv_data });
+}
+
+pub fn matrix_ops_probe() -> Int {
+    return 0;
+}

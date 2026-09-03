@@ -1,0 +1,141 @@
+// # Core Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard core domain library. Re-exports a stable core_mod_* surface for the public API (Option, Result, List, Str, JSON, DomainCert, byte, byte_out, ast, macro, semver, basic hash). Private siblings (theories, laws, invariants, KATs) remain non-public.
+//
+// Setup: Imports private core siblings; no caps required for pure functions. Effectful operations take SysCap or FsReadCap / FsWriteCap explicitly at the call site.
+//
+// Beats:
+//   1. Re-export the Option and Result surface (opt_*, res_*) as core_mod_opt_* and core_mod_res_*.
+//   2. Re-export the List and Str surface (list_*, str_*) as core_mod_list_* and core_mod_str_*.
+//   3. Re-export the byte and byte_out surface as core_mod_byte_* and core_mod_byte_out_*.
+//   4. Re-export the AST and macro surface as core_mod_ast_* and core_mod_macro_*.
+//   5. Re-export the semver, JSON, DomainCert, and basic SHA-256 surface as core_mod_semver_*, core_mod_json_*, core_mod_cert_*, core_mod_hash_*.
+//   6. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _literature_kat files.
+
+import "list.oo";
+import "option.oo";
+import "result.oo";
+import "str.oo";
+import "byte.oo";
+import "byte_out.oo";
+import "macro.oo";
+import "semver_string.oo";
+import "json.oo";
+import "domain_cert.oo";
+import "crypto.oo";
+
+// Public Option surface: core_mod_opt_*
+pub fn core_mod_opt_some(v: String) -> Result[String, String] { return opt_some(v); }
+pub fn core_mod_opt_none() -> Result[String, String] { return opt_none(); }
+pub fn core_mod_opt_is_some(o: Result[String, String]) -> Bool { return opt_is_some(o); }
+pub fn core_mod_opt_is_none(o: Result[String, String]) -> Bool { return opt_is_none(o); }
+pub fn core_mod_opt_unwrap_or(o: Result[String, String], d: String) -> String { return opt_unwrap_or(o, d); }
+pub fn core_mod_opt_map(o: Result[String, String], suffix: String) -> Result[String, String] { return opt_map(o, suffix); }
+pub fn core_mod_opt_and_then(o: Result[String, String], next_val: String) -> Result[String, String] { return opt_and_then(o, next_val); }
+
+// Public Result surface: core_mod_res_*
+pub fn core_mod_res_ok(v: String) -> Result[String, String] { return res_ok(v); }
+pub fn core_mod_res_err(msg: String) -> Result[String, String] { return res_err(msg); }
+pub fn core_mod_res_is_ok(r: Result[String, String]) -> Bool { return res_is_ok(r); }
+pub fn core_mod_res_is_err(r: Result[String, String]) -> Bool { return res_is_err(r); }
+pub fn core_mod_res_unwrap_or(r: Result[String, String], d: String) -> String { return res_unwrap_or(r, d); }
+pub fn core_mod_res_map_err(r: Result[String, String], msg: String) -> Result[String, String] { return res_map_err(r, msg); }
+pub fn core_mod_res_map_ok_prefix(r: Result[String, String], pre: String) -> Result[String, String] { return res_map_ok_prefix(r, pre); }
+pub fn core_mod_res_ok_eq(r: Result[String, String], want: String) -> Bool { return res_ok_eq(r, want); }
+pub fn core_mod_res_map(r: Result[String, String], suffix: String) -> Result[String, String] { return res_map(r, suffix); }
+pub fn core_mod_res_and_then(r: Result[String, String], next_val: String) -> Result[String, String] { return res_and_then(r, next_val); }
+pub fn core_mod_res_or_else(r: Result[String, String], fallback: String) -> Result[String, String] { return res_or_else(r, fallback); }
+
+// Public List surface: core_mod_list_*
+pub fn core_mod_list_is_empty(xs: List[Int]) -> Bool { return list_is_empty(xs); }
+pub fn core_mod_list_first(xs: List[Int]) -> Result[Int, String] { return list_first(xs); }
+pub fn core_mod_list_last(xs: List[Int]) -> Result[Int, String] { return list_last(xs); }
+pub fn core_mod_list_set(xs: List[Int], idx: Int, val: Int) -> List[Int] { return list_set(xs, idx, val); }
+
+// Public String surface: core_mod_str_*
+pub fn core_mod_str_len(s: String) -> Int { return str_len(s); }
+pub fn core_mod_str_is_empty(s: String) -> Bool { return str_is_empty(s); }
+pub fn core_mod_str_eq(a: String, b: String) -> Bool { return str_eq(a, b); }
+pub fn core_mod_str_contains(s: String, sub: String) -> Bool { return str_contains(s, sub); }
+pub fn core_mod_str_concat(a: String, b: String) -> String { return str_concat(a, b); }
+pub fn core_mod_str_char_at(s: String, i: Int) -> String { return str_char_at(s, i); }
+pub fn core_mod_str_sub(s: String, start: Int, end: Int) -> String { return str_sub(s, start, end); }
+pub fn core_mod_str_starts_with(s: String, pre: String) -> Bool { return starts_with(s, pre); }
+pub fn core_mod_str_ends_with(s: String, suf: String) -> Bool { return ends_with(s, suf); }
+pub fn core_mod_str_index_of(s: String, sub: String) -> Int { return index_of(s, sub); }
+pub fn core_mod_str_repeat(s: String, n: Int) -> String { return repeat(s, n); }
+pub fn core_mod_str_to_uppercase(s: String) -> String { return to_uppercase(s); }
+pub fn core_mod_str_chr(cp: Int) -> String { return chr(cp); }
+pub fn core_mod_str_parse_int(s: String) -> Result[Int, String] { return parse_int(s); }
+pub fn core_mod_str_parse_int_digits(s: String) -> Int { return parse_int_digits(s); }
+pub fn core_mod_str_replace(s: String, old: String, new: String) -> String { return str_replace(s, old, new); }
+
+// Public byte surface: core_mod_byte_*
+pub fn core_mod_byte_clamp(v: Int) -> Int { return byte_clamp(v); }
+pub fn core_mod_byte_in_range(v: Int) -> Bool { return byte_in_range(v); }
+pub fn core_mod_byte_get(s: String, i: Int) -> Int { return byte_get(s, i); }
+pub fn core_mod_byte_ord(s: String) -> Int { return byte_ord(s); }
+pub fn core_mod_byte_len(s: String) -> Int { return byte_len(s); }
+pub fn core_mod_byte_sub(s: String, start: Int, end: Int) -> String { return byte_sub(s, start, end); }
+pub fn core_mod_byte_eq(a: String, b: String) -> Bool { return byte_eq(a, b); }
+pub fn core_mod_byte_view(s: String) -> String { return byte_view(s); }
+pub fn core_mod_byte_concat(a: String, b: String) -> String { return byte_concat(a, b); }
+pub fn core_mod_byte_buf_new() -> List[Int] { return byte_buf_new(); }
+pub fn core_mod_byte_buf_push(bs: List[Int], b: Int) -> List[Int] { return byte_buf_push(bs, b); }
+pub fn core_mod_byte_buf_get(bs: List[Int], i: Int) -> Int { return byte_buf_get(bs, i); }
+pub fn core_mod_byte_buf_to_str(bs: List[Int]) -> String { return byte_buf_to_str(bs); }
+pub fn core_mod_byte_chr(b: Int) -> String { return byte_chr(b); }
+
+// Public byte_out surface: core_mod_byte_out_*
+pub fn core_mod_byte_out_ok(b: List[Int]) -> ByteOut { return byte_out_ok(b); }
+pub fn core_mod_byte_out_err(m: String) -> ByteOut { return byte_out_err(m); }
+pub fn core_mod_byte_out_stat(o: ByteOut) -> Result[Int, String] { return byte_out_stat(o); }
+
+// Public AST surface: core_mod_ast_*
+pub fn core_mod_ast_node_new(id: Int, kind: String, val: String, line: Int, col: Int) -> AstNode { return ast_node_new(id, kind, val, line, col); }
+pub fn core_mod_ast_tree_new() -> AstTree { return ast_tree_new(); }
+pub fn core_mod_ast_tree_add_node(tree: &mut AstTree, node: AstNode) -> Int { return ast_tree_add_node(tree, node); }
+pub fn core_mod_ast_tree_get_node(tree: &AstTree, id: Int) -> AstNode { return ast_tree_get_node(tree, id); }
+pub fn core_mod_ast_tree_add_child(tree: &mut AstTree, parent_id: Int, child_id: Int) -> Bool { return ast_tree_add_child(tree, parent_id, child_id); }
+pub fn core_mod_ast_ident(tree: &mut AstTree, name: String) -> Int { return ast_ident(tree, name); }
+pub fn core_mod_ast_expr(tree: &mut AstTree, expr_kind: String, op_or_val: String, left_id: Int, right_id: Int) -> Int { return ast_expr(tree, expr_kind, op_or_val, left_id, right_id); }
+pub fn core_mod_ast_quote(code_str: String) -> AstQuote { return ast_quote(code_str); }
+pub fn core_mod_ast_unquote(q: &AstQuote, placeholder: String, replacement: String) -> AstQuote { return ast_unquote(q, placeholder, replacement); }
+pub fn core_mod_ast_splice(q: &AstQuote, placeholder: String, items: List[String]) -> AstQuote { return ast_splice(q, placeholder, items); }
+pub fn core_mod_ast_expand(env: &mut MacroEnv, tree: &mut AstTree, root_id: Int) -> Int { return ast_expand(env, tree, root_id); }
+
+// Public macro surface: core_mod_macro_*
+pub fn core_mod_macro_env_new() -> MacroEnv { return macro_env_new(); }
+pub fn core_mod_macro_gensym(env: &mut MacroEnv, prefix: String) -> String { return macro_gensym(env, prefix); }
+pub fn core_mod_macro_env_register_rule(env: &mut MacroEnv, rule: AstMacroRule) -> Bool { return macro_env_register_rule(env, rule); }
+
+// Public semver surface: core_mod_semver_*
+pub fn core_mod_semver_scan_num(s: String, start: Int, len: Int) -> Int { return semver_scan_num(s, start, len); }
+pub fn core_mod_semver_part(s: String, which: Int) -> String { return semver_part(s, which); }
+pub fn core_mod_semver_major(s: String) -> String { return semver_major(s); }
+pub fn core_mod_semver_minor(s: String) -> String { return semver_minor(s); }
+pub fn core_mod_semver_patch(s: String) -> String { return semver_patch(s); }
+pub fn core_mod_semver_is_valid(s: String) -> Bool { return semver_is_valid(s); }
+pub fn core_mod_semver_parse(s: String) -> Result[String, String] { return semver_parse(s); }
+
+// Public JSON surface: core_mod_json_*
+pub fn core_mod_json_parse(raw: String) -> Result[String, String] { return parse(raw); }
+pub fn core_mod_json_stringify(obj: String) -> String { return stringify(obj); }
+
+// Public DomainCert surface: core_mod_cert_*
+pub fn core_mod_cert_build(domain: String, law_name: String, holds: Int) -> DomainCert { return domain_cert(domain, law_name, holds); }
+pub fn core_mod_cert_holds(c: DomainCert) -> Int { return cert_holds(c); }
+
+// Public hash surface (CHS SHA-256 + HMAC forwarders): core_mod_hash_*
+pub fn core_mod_hash_sha256(data: String) -> String { return sha256(data); }
+pub fn core_mod_hash_hmac_sha256(key: String, message: String) -> String { return hmac_sha256(key, message); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. associativity_law.oo, monoid_identity_law.oo)
+//   _theory files (e.g. algebraic_effect_handler_theory.oo, total_function_theory.oo)
+//   _principle files (e.g. referential_transparency_principle.oo, dependent_type_universe_principle.oo)
+//   _invariants files (e.g. core_invariants.oo)
+//   _kat files (e.g. core_kat.oo, core_literature_kat.oo)
+//   _precision_law files (e.g. gradual_typing_precision_law.oo)
+//   _functor_composition_law files (e.g. functor_composition_law.oo)
+// External callers must import this mod.oo and use the core_mod_* surface.

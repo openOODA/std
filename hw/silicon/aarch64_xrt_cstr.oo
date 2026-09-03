@@ -1,0 +1,104 @@
+// # AArch64 C-String Runtime
+//
+// Logline: Emits strcmp, char_at, str_slice, str_index_of, str_replace, and ASCII char class tests.
+//
+// Setup: C strings on the bump heap. char_at writes a 2-byte [ch,0] cell. Aliases byte_len/byte_get.
+//
+// Beats:
+//   1. __strcmp returns 0 when two C strings match.
+//   2. char_at copies one byte into a fresh cell; str_slice copies [start, end).
+//   3. str_index_of returns the first byte index or -1; str_replace walks that scan.
+//   4. char_is_digit/alpha/space inspect the first byte of a 1-char string.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_cstr2.oo";
+
+fn a64rt_alias(r0: A64R, nm: String, tgt: String) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, nm);
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_bl(x, tgt);
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_strcmp(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__strcmp");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 9, 31));
+    x = a64x_emit(x, arm64_word_ldrb_reg(3, 10, 31));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 3));
+    let bne: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 31));
+    let beq: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_add_imm(9, 9, 1));
+    x = a64x_emit(x, arm64_word_add_imm(10, 10, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let diff: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    let jend: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let eq: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    let endp: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bne, arm64_word_b_cond(arm64_cond_ne(), diff - bne)));
+    x = a64x_set_words(x, a64_wset(x.p.words, beq, arm64_word_b_cond(arm64_cond_eq(), eq - beq)));
+    x = a64x_set_words(x, a64_wset(x.p.words, jend, arm64_word_b(endp - jend)));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_char_at(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "char_at");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 0, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_add_imm(28, 28, 2));
+    x = a64x_emit(x, arm64_word_strb_reg(2, 0, 31));
+    x = a64x_emit(x, arm64_word_movz(1, 1, 0));
+    x = a64x_emit(x, arm64_word_strb_reg(31, 0, 1));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_cis_digit(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "char_is_digit");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_ldrb_reg(0, 0, 31));
+    x = a64x_emit(x, arm64_word_movz(1, 48, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+    let blt: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_lt(), 0));
+    x = a64x_emit(x, arm64_word_movz(1, 57, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+    let bgt: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 0));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    let jok: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let no: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    let endp: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, blt, arm64_word_b_cond(arm64_cond_lt(), no - blt)));
+    x = a64x_set_words(x, a64_wset(x.p.words, bgt, arm64_word_b_cond(arm64_cond_gt(), no - bgt)));
+    x = a64x_set_words(x, a64_wset(x.p.words, jok, arm64_word_b(endp - jok)));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_cstr(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_strcmp(r0);
+    r = a64rt_char_at(r);
+    r = a64rt_cis_digit(r);
+    r = a64rt_alias(r, "byte_len", "bytes_len");
+    r = a64rt_alias(r, "byte_get", "byte_at");
+    r = a64rt_alias(r, "byte_slice", "str_slice");
+    return a64rt_cstr2(r);
+}

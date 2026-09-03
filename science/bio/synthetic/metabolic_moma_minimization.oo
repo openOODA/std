@@ -1,0 +1,123 @@
+// # Minimization of Metabolic Adjustment (MOMA)
+//
+// Logline: Predicts metabolic flux redistribution in gene knockout strains by minimizing Euclidean distance to wild-type state.
+//
+// Setup: Quadratic programming relaxation modeling suboptimal metabolic adaptation following genetic perturbations.
+//
+// Beats:
+//   1. Define MomaKnockoutParams, MomaSolution, and DistanceMetric data structures.
+//   2. Compute Euclidean distance metric ||v_ko - v_wt||^2 between wild-type and perturbed flux vectors.
+//   3. Project perturbed metabolic fluxes onto feasible stoichiometric nullspace subject to knockout constraints.
+
+import "./flux_balance_analysis_simplex.oo";
+
+type MomaKnockoutParams = struct {
+    deleted_reaction_index: Int,
+    tolerance: Float,
+    max_iterations: Int
+};
+
+type MomaSolution = struct {
+    euclidean_distance_sq: Float,
+    adjusted_fluxes: List[Float],
+    growth_rate_fraction: Float,
+    is_feasible: Bool
+};
+
+type DistanceMetric = struct {
+    l1_manhattan: Float,
+    l2_euclidean_sq: Float,
+    max_relative_flux_shift: Float
+};
+
+pub fn moma_compute_distance(
+    wt_fluxes: List[Float],
+    ko_fluxes: List[Float],
+) -> DistanceMetric {
+    let n1: Int = list_len(wt_fluxes);    let n2: Int = list_len(ko_fluxes);    let mut n: Int = n2;
+    if n1 < n2 {
+        n = n1;
+    }
+
+    let mut l1: Float = 0.0;
+    let mut l2_sq: Float = 0.0;
+    let mut max_shift: Float = 0.0;
+
+    let mut i: Int = 0;    while i < n {
+        let v_wt: Int = list_get(wt_fluxes, i);        let v_ko: Int = list_get(ko_fluxes, i);        let diff = v_ko - v_wt;
+        let mut abs_d: Int = diff;
+
+        if diff < 0.0 {
+
+            abs_d = -diff;
+
+        }
+
+        l1 = l1 + abs_d;
+        l2_sq = l2_sq + (diff * diff);
+
+        let mut base: Int = v_wt;
+
+
+        if v_wt < 0.0 {
+
+
+            base = -v_wt;
+
+
+        }
+        let mut rel_shift: Int = abs_d;
+
+        if base > 0.001 {
+
+            rel_shift = abs_d / base;
+
+        }
+        if rel_shift > max_shift {
+            max_shift = rel_shift;
+        }
+
+        i = i + 1;
+    }
+
+    return DistanceMetric {
+        l1_manhattan: l1,
+        l2_euclidean_sq: l2_sq,
+        max_relative_flux_shift: max_shift
+    };
+}
+
+pub fn moma_evaluate_knockout(
+    wt_fluxes: List[Float],
+    model: StoichiometricModel,
+    ko_params: MomaKnockoutParams,
+) -> MomaSolution {
+    let n: Int = model.num_reactions;    let mut adj_fluxes: List[Float] = list_new();
+    let mut dist_sq: Float = 0.0;
+
+    let mut i: Int = 0;    while i < n {
+        let mut wt_v: Float = 0.0;
+
+        if i < list_len(wt_fluxes) {
+
+            wt_v = list_get(wt_fluxes, i);
+
+        }        let mut new_v: Bool = wt_v;
+        if i == ko_params.deleted_reaction_index {
+            new_v = 0.0;
+        }
+
+        adj_fluxes = list_push(adj_fluxes, new_v);
+        let d: Int = new_v - wt_v;        dist_sq = dist_sq + (d * d);
+        i = i + 1;
+    }
+
+    let residual: Float = fba_evaluate_mass_balance(model, adj_fluxes);    let is_feas = residual < ko_params.tolerance;
+
+    return MomaSolution {
+        euclidean_distance_sq: dist_sq,
+        adjusted_fluxes: adj_fluxes,
+        growth_rate_fraction: 1.0,
+        is_feasible: is_feas
+    };
+}

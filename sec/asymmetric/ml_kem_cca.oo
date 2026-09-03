@@ -1,0 +1,221 @@
+// # FIPS 203 ML-KEM IND-CCA2 Key Encapsulation Mechanism
+//
+// Logline: Implements Fujisaki-Okamoto transform KeyGen, Encaps, and constant-time Decaps for ML-KEM-1024.
+//
+// Setup: FIPS 203 Algorithms 15, 16, and 17 with implicit rejection token fallback J(z || c).
+//
+// Beats:
+//   1. ML-KEM.KeyGen binding PKE keys, pk digest H(pk), and rejection seed z.
+//   2. ML-KEM.Encaps deriving shared secret K and randomness r via G(m || H(pk)).
+//   3. ML-KEM.Decaps with constant-time re-encryption check and fallback token J(z || c).
+//   4. Constant-time selection preventing timing oracle leakage.
+
+import "./ml_kem_params.oo";
+import "./ml_kem_symmetric.oo";
+import "./ml_kem_cpa_pke.oo";
+
+type MlKemEncapsOutcome = struct {
+    ciphertext: List[Int],
+    shared_secret: List[Int]
+};
+
+pub fn ml_kem_cca_keygen(d: List[Int], z: List[Int], k: Int) -> MlKemKeyPair {
+    let pke_kp: KPkeKeyPair = k_pke_keygen(d, k);
+    let pk_bytes: List[Int] = pke_kp.pk;
+    let sk_pke: List[Int] = pke_kp.sk;
+    let hpk: List[Int] = ml_kem_hash_h(pk_bytes);
+
+    let mut sk_full: List[Int] = list_new();
+    let sk_len: Int = list_len(sk_pke);
+    let mut i: Int = 0;
+    while i < sk_len {
+        sk_full = list_push(sk_full, list_get(sk_pke, i));
+        i = i + 1;
+    }
+    let pk_len: Int = list_len(pk_bytes);
+    i = 0;
+    while i < pk_len {
+        sk_full = list_push(sk_full, list_get(pk_bytes, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < 32 {
+        sk_full = list_push(sk_full, list_get(hpk, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < 32 {
+        sk_full = list_push(sk_full, list_get(z, i));
+        i = i + 1;
+    }
+
+    let mut rho: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        rho = list_push(rho, list_get(pk_bytes, 384 * k + i));
+        i = i + 1;
+    }
+
+    let pk_rec: MlKemPublicKey = MlKemPublicKey {
+        k: k,
+        seed_rho: rho,
+        t_coeffs: list_new(),
+        raw_bytes: pk_bytes,
+        is_valid: true
+    };
+
+    let sk_rec: MlKemPrivateKey = MlKemPrivateKey {
+        k: k,
+        s_coeffs: list_new(),
+        pk: pk_rec,
+        hpk: hpk,
+        z_rand: z,
+        raw_bytes: sk_full
+    };
+
+    let level: Int = if k == 2 { 1 } else { if k == 3 { 3 } else { 5 } };
+    return ml_kem_key_pair_new(pk_rec, sk_rec, level);
+}
+
+pub fn ml_kem_cca_encaps(pk_bytes: List[Int], m: List[Int], k: Int) -> MlKemEncapsOutcome {
+    let hpk: List[Int] = ml_kem_hash_h(pk_bytes);
+    let mut g_in: List[Int] = list_new();
+    let m_len: Int = list_len(m);
+    let mut i: Int = 0;
+    while i < m_len {
+        g_in = list_push(g_in, list_get(m, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < 32 {
+        g_in = list_push(g_in, list_get(hpk, i));
+        i = i + 1;
+    }
+    let g_out: List[Int] = ml_kem_hash_g(g_in);
+
+    let mut k_shared: List[Int] = list_new();
+    let mut r_rand: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        k_shared = list_push(k_shared, list_get(g_out, i));
+        r_rand = list_push(r_rand, list_get(g_out, i + 32));
+        i = i + 1;
+    }
+
+    let ct: List[Int] = k_pke_encrypt(pk_bytes, m, r_rand, k);
+    return MlKemEncapsOutcome {
+        ciphertext: ct,
+        shared_secret: k_shared
+    };
+}
+
+pub fn ml_kem_cca_decaps(sk_bytes: List[Int], ct_bytes: List[Int], k: Int) -> List[Int] {
+    let pke_sk_len: Int = 384 * k;
+    let pk_len: Int = 384 * k + 32;
+
+    let mut sk_pke: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < pke_sk_len {
+        sk_pke = list_push(sk_pke, list_get(sk_bytes, i));
+        i = i + 1;
+    }
+
+    let mut pk: List[Int] = list_new();
+    i = 0;
+    while i < pk_len {
+        pk = list_push(pk, list_get(sk_bytes, pke_sk_len + i));
+        i = i + 1;
+    }
+
+    let mut hpk: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        hpk = list_push(hpk, list_get(sk_bytes, pke_sk_len + pk_len + i));
+        i = i + 1;
+    }
+
+    let mut z: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        z = list_push(z, list_get(sk_bytes, pke_sk_len + pk_len + 32 + i));
+        i = i + 1;
+    }
+
+    let m_prime: List[Int] = k_pke_decrypt(sk_pke, ct_bytes, k);
+
+    let mut g_in: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        g_in = list_push(g_in, list_get(m_prime, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < 32 {
+        g_in = list_push(g_in, list_get(hpk, i));
+        i = i + 1;
+    }
+    let g_out: List[Int] = ml_kem_hash_g(g_in);
+
+    let mut k_prime: List[Int] = list_new();
+    let mut r_prime: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        k_prime = list_push(k_prime, list_get(g_out, i));
+        r_prime = list_push(r_prime, list_get(g_out, i + 32));
+        i = i + 1;
+    }
+
+    let ct_prime: List[Int] = k_pke_encrypt(pk, m_prime, r_prime, k);
+
+    let mut j_in: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        j_in = list_push(j_in, list_get(z, i));
+        i = i + 1;
+    }
+    let ct_len: Int = list_len(ct_bytes);
+    i = 0;
+    while i < ct_len {
+        j_in = list_push(j_in, list_get(ct_bytes, i));
+        i = i + 1;
+    }
+    let k_bar: List[Int] = ml_kem_hash_j(j_in);
+
+    let ct_prime_len: Int = list_len(ct_prime);
+    let mut diff: Int = 0;
+    if ct_len != ct_prime_len {
+        diff = 1;
+    }
+    i = 0;
+    while i < ct_len && i < ct_prime_len {
+        diff = diff | (list_get(ct_bytes, i) ^ list_get(ct_prime, i));
+        i = i + 1;
+    }
+
+    let is_equal: Int = if diff == 0 { 1 } else { 0 };
+    let mut k_final: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        let val_kp: Int = list_get(k_prime, i);
+        let val_kb: Int = list_get(k_bar, i);
+        let out_byte: Int = if is_equal == 1 { val_kp } else { val_kb };
+        k_final = list_push(k_final, out_byte);
+        i = i + 1;
+    }
+    return k_final;
+}
+
+pub fn ml_kem_1024_keygen(d: List[Int], z: List[Int]) -> MlKemKeyPair {
+    return ml_kem_cca_keygen(d, z, 4);
+}
+
+pub fn ml_kem_1024_encaps(pk: List[Int], m: List[Int]) -> MlKemCiphertext {
+    let outcome: MlKemEncapsOutcome = ml_kem_cca_encaps(pk, m, 4);
+    let mut ct_rec: MlKemCiphertext = ml_kem_ciphertext_new(4, 1568);
+    ct_rec.raw_bytes = outcome.ciphertext;
+    return ct_rec;
+}
+
+pub fn ml_kem_1024_decaps(sk: List[Int], ct: List[Int]) -> List[Int] {
+    return ml_kem_cca_decaps(sk, ct, 4);
+}

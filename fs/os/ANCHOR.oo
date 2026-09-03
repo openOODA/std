@@ -1,0 +1,116 @@
+// # FS OS Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fs/os (operating system primitives) subdir of the fs domain library. Re-exports a stable os_mod_* surface for the most-used public API (cmd, env, process, signal, thread, path, terminal, temp, gpu, cpu, fs, file mode, microvm, rlimit). Process-control re-exports (cmd, env, env_vars, process, signal, rlimit) cross-reference fs/process/ subdir. Private siblings (cgroups, eBPF, page table, scheduler, sel4, syscall, preemptive) remain non-public.
+//
+// Setup: Imports private os siblings; cap-bound ops take EnvCap / FsReadCap / FsWriteCap / ProcessCap / ThreadCap / SysCap at the call site. Pure path/temp/file-mode utilities take no caps.
+//
+// Beats:
+//   1. Re-export the cmd, env, and process surface as os_mod_cmd_*, os_mod_env_*, os_mod_process_*.
+//   2. Re-export the signal, thread, and rlimit surface as os_mod_signal_*, os_mod_thread_*, os_mod_rlimit_*.
+//   3. Re-export the path, temp, and file-mode surface as os_mod_path_*, os_mod_temp_*, os_mod_file_mode_*.
+//   4. Re-export the terminal, gpu, cpu, and fs surface as os_mod_terminal_*, os_mod_gpu_*, os_mod_cpu_*, os_mod_fs_*.
+//   5. Re-export the time/timespec surface and the microvm boot surface. Document the private siblings.
+
+import "os.oo";
+import "std/fs/process/cmd.oo";
+import "std/fs/process/env.oo";
+import "std/fs/process/env_vars.oo";
+import "std/fs/process/process.oo";
+import "std/fs/process/signal.oo";
+import "thread.oo";
+import "std/fs/process/rlimit.oo";
+import "path_canonicalize.oo";
+import "path_relative.oo";
+import "temp_dir.oo";
+import "temp_file_atomic.oo";
+import "file_mode_perms.oo";
+import "terminal_ansi.oo";
+import "gpu.oo";
+import "cpu_affinity.oo";
+import "fs.oo";
+import "uptime.oo";
+import "microvm_boot.oo";
+import "pipe_redirect.oo";
+
+// Public cmd surface: os_mod_cmd_*
+pub fn os_mod_cmd_new(prog: String) -> List[String] { return cmd_new(prog); }
+pub fn os_mod_cmd_arg(cmd: List[String], arg: String) -> List[String] { return cmd_arg(cmd, arg); }
+pub fn os_mod_cmd_execute(cmd: List[String], p: &ProcessCap) -> Result[String, String] { return cmd_execute(cmd, p); }
+
+// Public env surface: os_mod_env_*
+pub fn os_mod_env_get(cap: &EnvCap, key: String) -> Result[String, String] { return env_get(cap, key); }
+pub fn os_mod_env_map_new() -> EnvMap { return env_map_new(); }
+pub fn os_mod_env_map_len(m: EnvMap) -> Int { return env_map_len(m); }
+pub fn os_mod_env_map_get(m: EnvMap, key: String) -> Result[String, String] { return env_map_get(m, key); }
+pub fn os_mod_env_map_set(cap: &EnvCap, m: EnvMap, key: String, val: String) -> EnvMap { return env_map_set(cap, m, key, val); }
+
+// Public process surface: os_mod_process_*
+pub fn os_mod_process_args(p: &ProcessCap) -> List[String] { return process_args(p); }
+pub fn os_mod_process_spawn(p: &ProcessCap, cmd: String) -> Result[String, String] { return process_spawn(p, cmd); }
+pub fn os_mod_process_wait(p: &ProcessCap, pid: Int) -> Result[String, String] { return process_wait(p, pid); }
+pub fn os_mod_process_kill(p: &ProcessCap, pid: Int, sig: Int) -> Result[String, String] { return process_kill(p, pid, sig); }
+
+// Public signal surface: os_mod_signal_*
+pub fn os_mod_signal_sighup() -> Int { return signal_sighup(); }
+pub fn os_mod_signal_sigint() -> Int { return signal_sigint(); }
+pub fn os_mod_signal_sigkill() -> Int { return signal_sigkill(); }
+pub fn os_mod_signal_sigusr1() -> Int { return signal_sigusr1(); }
+
+// Public thread surface: os_mod_thread_*
+pub fn os_mod_thread_mutex_lock(thread: &ThreadCap, mid: Int) -> Result[String, String] { return thr_mutex_lock(thread, mid); }
+pub fn os_mod_thread_mutex_unlock(thread: &ThreadCap, mid: Int) -> Result[String, String] { return thr_mutex_unlock(thread, mid); }
+pub fn os_mod_thread_spawn(thread: &ThreadCap, name: String) -> Result[String, String] { return thr_spawn(thread, name); }
+pub fn os_mod_thread_join(thread: &ThreadCap, slot: Int) -> Result[String, String] { return thr_join(thread, slot); }
+
+// Public rlimit surface: os_mod_rlimit_*
+pub fn os_mod_rlimit_cpu() -> Int { return rlimit_cpu_limit(); }
+pub fn os_mod_rlimit_fsize() -> Int { return rlimit_fsize_limit(); }
+pub fn os_mod_rlimit_stack() -> Int { return rlimit_stack_limit(); }
+pub fn os_mod_rlimit_core() -> Int { return rlimit_core_limit(); }
+
+// Public path surface: os_mod_path_*
+pub fn os_mod_path_clean_slashes(path: String) -> String { return path_clean_slashes(path); }
+pub fn os_mod_path_is_absolute(path: String) -> Bool { return path_is_absolute(path); }
+pub fn os_mod_path_join_clean(base: String, child: String) -> String { return path_join_clean(base, child); }
+pub fn os_mod_path_relative_to(base: String, target: String) -> String { return path_relative_to(base, target); }
+
+// Public temp surface: os_mod_temp_*
+pub fn os_mod_temp_path_str(t: TempPath) -> String { return temp_path_str(t); }
+pub fn os_mod_temp_make_name(prefix: String, sequence: Int) -> String { return temp_file_make_name(prefix, sequence); }
+pub fn os_mod_temp_staging_path(target_path: String, sequence: Int) -> String { return temp_file_staging_path(target_path, sequence); }
+
+// Public file-mode surface: os_mod_file_mode_*
+pub fn os_mod_file_mode_has_owner_read(mode: Int) -> Bool { return file_mode_has_owner_read(mode); }
+pub fn os_mod_file_mode_has_owner_write(mode: Int) -> Bool { return file_mode_has_owner_write(mode); }
+pub fn os_mod_file_mode_to_string(mode: Int) -> String { return file_mode_to_string(mode); }
+
+// Public terminal surface: os_mod_terminal_*
+pub fn os_mod_terminal_ansi_pos(row: Int, col: Int) -> CursorPos { return ansi_cursor_pos(row, col); }
+pub fn os_mod_terminal_ansi_to(row: Int, col: Int) -> String { return ansi_cursor_to(row, col); }
+
+// Public GPU surface: os_mod_gpu_*
+pub fn os_mod_gpu_launch_shader(gpu: &GpuCap, shader: String) -> Result[String, String] { return gpu_launch_shader(gpu, shader); }
+
+// Public CPU surface: os_mod_cpu_*
+pub fn os_mod_cpu_set_new(num_cpus: Int) -> CpuSet { return cpu_set_new(num_cpus); }
+pub fn os_mod_cpu_set_all(num_cpus: Int) -> CpuSet { return cpu_set_all(num_cpus); }
+pub fn os_mod_cpu_set_is_set(cs: CpuSet, cpu_id: Int) -> Bool { return cpu_set_is_set(cs, cpu_id); }
+
+// Public fs surface: os_mod_fs_*
+pub fn os_mod_fs_write(fs: &FsWriteCap, path: String, content: String) -> Result[Void, String] { return fs_write_file(fs, path, content); }
+pub fn os_mod_fs_read(fs: &FsReadCap, path: String) -> Result[String, String] { return fs_read_file(fs, path); }
+pub fn os_mod_fs_exists(fs: &FsReadCap, path: String) -> Bool { return fs_path_exists(fs, path); }
+pub fn os_mod_fs_size(fs: &FsReadCap, path: String) -> Int { return fs_file_size(fs, path); }
+
+// Public time/timespec surface: os_mod_time_*
+pub fn os_mod_timespec_new(secs: Int, nanos: Int) -> TimeSpec { return timespec_new(secs, nanos); }
+pub fn os_mod_timespec_diff_seconds(t1: TimeSpec, t2: TimeSpec) -> Float { return timespec_diff_seconds(t1, t2); }
+pub fn os_mod_uptime_format_human(uptime_secs: Int) -> String { return uptime_format_human(uptime_secs); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. cgroups_v2_law.oo, os_process_law.oo, syscall_overhead_law.oo)
+//   _theory files (e.g. ebpf_in_kernel_safety_theory.oo, scheduler_cfs_theory.oo)
+//   _principle files (e.g. preemptive_principle.oo, sel4_iss_principle.oo)
+//   _invariants files (e.g. os_invariants.oo)
+//   _kat files (e.g. os_kat.oo, os_kat_strict.oo, literature_kat.oo)
+//   _page_table files (e.g. page_table_riscv.oo, page_table_x86.oo)

@@ -1,0 +1,69 @@
+// # Actor Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard actor domain library. Re-exports a stable actor_mod_* surface for the most-used public API (ActorRef, Mailbox, RestartStrategy, Supervisor, SupervisorTree, Worker). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private actor siblings; thread-bound ops take ThreadCap at the call site. Message-passing primitives are typed by cap.
+//
+// Beats:
+//   1. Re-export the ActorRef surface (new, send, tell, query, terminate) as actor_mod_ref_*.
+//   2. Re-export the Mailbox surface (new, len, capacity, push, pop, dead_letters) as actor_mod_mailbox_*.
+//   3. Re-export the RestartStrategy and ChildSpec surface (one_for_one, one_for_all, rest_for_one, should_restart, history) as actor_mod_strategy_*.
+//   4. Re-export the Supervisor and SupervisorTree surface (new, add_child, handle_failure, restart_all, crash) as actor_mod_supervisor_*.
+//   5. Re-export the Worker surface (new, start, call, cast, crash, restart, stop) as actor_mod_worker_*. Document the private siblings.
+
+import "actor_ref.oo";
+import "mailbox.oo";
+import "strategy.oo";
+import "supervisor.oo";
+import "supervisor_tree.oo";
+import "worker.oo";
+
+// Public ActorRef surface: actor_mod_ref_*
+pub fn actor_mod_ref_new(id: String, path: String, mailbox_slot: Int) -> ActorRef { return actor_ref_new(id, path, mailbox_slot); }
+pub fn actor_mod_ref_send(aref: ActorRef, msg: String) -> ActorRef { return actor_ref_send(aref, msg); }
+pub fn actor_mod_ref_tell(aref: ActorRef, msg: String) -> ActorRef { return actor_ref_tell(aref, msg); }
+pub fn actor_mod_ref_id(aref: ActorRef) -> String { return actor_ref_id(aref); }
+pub fn actor_mod_ref_is_alive(aref: ActorRef) -> Bool { return actor_ref_is_alive(aref); }
+pub fn actor_mod_ref_terminate(aref: ActorRef) -> ActorRef { return actor_ref_terminate(aref); }
+
+// Public Mailbox surface: actor_mod_mailbox_*
+pub fn actor_mod_mailbox_new(capacity: Int) -> Mailbox { return mailbox_new(capacity); }
+pub fn actor_mod_mailbox_len(mb: Mailbox) -> Int { return mailbox_len(mb); }
+pub fn actor_mod_mailbox_capacity(mb: Mailbox) -> Int { return mailbox_capacity(mb); }
+pub fn actor_mod_mailbox_is_empty(mb: Mailbox) -> Bool { return mailbox_is_empty(mb); }
+pub fn actor_mod_mailbox_is_full(mb: Mailbox) -> Bool { return mailbox_is_full(mb); }
+pub fn actor_mod_mailbox_pop(thread: &ThreadCap, mb: Mailbox) -> Result[String, String] { return mailbox_pop(thread, mb); }
+pub fn actor_mod_mailbox_dead_letters(mb: Mailbox) -> Int { return mailbox_dead_letters(mb); }
+
+// Public RestartStrategy surface: actor_mod_strategy_*
+pub fn actor_mod_strategy_one_for_one(max_restarts: Int, max_seconds: Int) -> RestartStrategy { return strategy_one_for_one(max_restarts, max_seconds); }
+pub fn actor_mod_strategy_one_for_all(max_restarts: Int, max_seconds: Int) -> RestartStrategy { return strategy_one_for_all(max_restarts, max_seconds); }
+pub fn actor_mod_strategy_rest_for_one(max_restarts: Int, max_seconds: Int) -> RestartStrategy { return strategy_rest_for_one(max_restarts, max_seconds); }
+pub fn actor_mod_strategy_should_restart(spec: ChildSpec, exit_reason: String) -> Bool { return strategy_should_restart(spec, exit_reason); }
+pub fn actor_mod_strategy_history_new() -> RestartHistory { return restart_history_new(); }
+
+// Public Supervisor surface: actor_mod_supervisor_*
+pub fn actor_mod_supervisor_new(name: String, strategy: String, max_failures: Int) -> Supervisor { return supervisor_new(name, strategy, max_failures); }
+pub fn actor_mod_supervisor_add_child(sup: Supervisor, child_id: String) -> Supervisor { return supervisor_add_child(sup, child_id); }
+pub fn actor_mod_supervisor_child_count(sup: Supervisor) -> Int { return supervisor_child_count(sup); }
+pub fn actor_mod_supervisor_failure_count(sup: Supervisor) -> Int { return supervisor_failure_count(sup); }
+pub fn actor_mod_supervisor_is_healthy(sup: Supervisor) -> Bool { return supervisor_is_healthy(sup); }
+pub fn actor_mod_supervisor_restart_all(thread: &ThreadCap, sup: Supervisor) -> Supervisor { return supervisor_restart_all(thread, sup); }
+
+// Public SupervisorTree surface: actor_mod_supervisor_tree_*
+pub fn actor_mod_supervisor_tree_new(name: String, strategy: RestartStrategy) -> SupervisorTree { return supervisor_create(name, strategy); }
+pub fn actor_mod_supervisor_tree_get_child_status(sup: SupervisorTree, child_id: String) -> String { return supervisor_get_child_status(sup, child_id); }
+
+// Public Worker surface: actor_mod_worker_*
+pub fn actor_mod_worker_new(id: String, name: String, init_state: String) -> Worker { return worker_new(id, name, init_state); }
+pub fn actor_mod_worker_start(thread: &ThreadCap, w: Worker) -> Result[Worker, String] { return worker_start(thread, w); }
+pub fn actor_mod_worker_crash(w: Worker, reason: String) -> Worker { return worker_crash(w, reason); }
+pub fn actor_mod_worker_stop(thread: &ThreadCap, w: Worker) -> Worker { return worker_stop(thread, w); }
+pub fn actor_mod_worker_is_alive(w: Worker) -> Bool { return worker_is_alive(w); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. actor_inbox_order_law.oo, actor_isolation_law.oo, mailbox_backpressure_law.oo, reactive_streams_backpressure_law.oo)
+//   _theory files (e.g. distributed_supervision_theory.oo, let_it_crash_theory.oo, pi_calculus_reaction_theory.oo)
+//   _principle files (e.g. message_ordering_principle.oo, session_type_principle.oo)
+//   _invariants files (e.g. actor_invariants.oo)
+//   _kat files (e.g. actor_kat.oo)

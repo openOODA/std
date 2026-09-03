@@ -1,0 +1,60 @@
+// # AArch64 SHA-256 W Fill Extend And H Copy
+//
+// Logline: Loads W[0..15], extends W[16..63], copies H, and adds work into H.
+//
+// Setup: Uses __sha_be4 and __sha_rotr. 32-bit results are masked with 0xFFFFFFFF.
+//
+// Beats:
+//   1. __sha_wfill loads 16 big-endian words from the current block.
+//   2. __sha_wext applies sigma0 and sigma1.
+//   3. __sha_hcopy copies eight H slots into work.
+//   4. __sha_hadd adds work into H.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_sha256q.oo";
+
+fn a64rt_wfill(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_wfill");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 32));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_str(1, 31, 8));
+    x = a64x_emit(x, arm64_word_str(2, 31, 16));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_str(0, 31, 24));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_ldr(11, 31, 24));
+    x = a64x_emit(x, arm64_word_movz(0, 16, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(11, 0));
+    let bd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 8));
+    x = a64x_emit(x, arm64_word_add_reg(0, 0, 1));
+    x = a64x_emit(x, arm64_word_movz(2, 2, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(2, 11, 2));
+    x = a64x_emit(x, arm64_word_add_reg(0, 0, 2));
+    x = a64x_bl(x, "__sha_be4");
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 16));
+    x = a64x_emit(x, arm64_word_movz(3, 3, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(3, 11, 3));
+    x = a64x_emit(x, arm64_word_add_reg(2, 2, 3));
+    x = a64x_emit(x, arm64_word_str(0, 2, 0));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    x = a64x_emit(x, arm64_word_str(11, 31, 24));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bd, arm64_word_b_cond(arm64_cond_eq(), done - bd)));
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 32));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_sha256r(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_wfill(r0);
+    return a64rt_sha256q(r);
+}

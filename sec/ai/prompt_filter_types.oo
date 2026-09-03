@@ -1,0 +1,69 @@
+// # Prompt Filter Types Module
+//
+// Logline: Data structures for AI prompt security, injection pattern recognition, and filtering.
+//
+// Setup: Pure .oo standard library module for AI prompt defense.
+//
+// Beats:
+//   1. Define InjectionPattern, PromptPolicy, and FilterResult structs.
+//   2. Define category and action helper constants.
+//
+// RULES.oot 1.4: Pure data structures.
+// RULES.oot 1.7: Under 256 lines.
+
+type PromptPolicy = struct {
+    min_confidence: Int,
+    block_threshold: Int,
+    fail_closed: Int
+};
+
+type InjectionPattern = struct {
+    id: String,
+    name: String,
+    regex_pattern: String,
+    severity: Int,
+    category: Int,
+    action: Int,
+    description: String
+};
+
+pub fn injection_cat_direct_override() -> Int { return 1; }
+pub fn injection_cat_jailbreak() -> Int { return 2; }
+pub fn injection_cat_role_play() -> Int { return 3; }
+pub fn injection_cat_indirect_injection() -> Int { return 4; }
+
+pub fn injection_action_allow() -> Int { return 0; }
+pub fn injection_action_warn() -> Int { return 1; }
+pub fn injection_action_block() -> Int { return 2; }
+
+pub fn injection_pattern_create(
+    id: String,
+    name: String,
+    regex_pattern: String,
+    severity: Int,
+    category: Int,
+    action: Int,
+    description: String
+) -> InjectionPattern {
+    return InjectionPattern {
+        id: id,
+        name: name,
+        regex_pattern: regex_pattern,
+        severity: severity,
+        category: category,
+        action: action,
+        description: description
+    };
+}
+
+pub fn prompt_policy_new(min_confidence: Int, block_threshold: Int, fail_closed: Int) -> PromptPolicy {
+    return PromptPolicy {
+        min_confidence: min_confidence,
+        block_threshold: block_threshold,
+        fail_closed: fail_closed
+    };
+}
+
+pub fn prompt_policy_block(p: PromptPolicy) -> Int {
+    return p.block_threshold;
+}

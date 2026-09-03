@@ -1,0 +1,53 @@
+// # Gravitational potential energy
+//
+// Logline: Uniform PE = m g h. Newtonian PE = -G M m / r.
+//
+// Setup: Pure Float. G and g are caller-supplied so the identity is unit-agnostic.
+//
+// Beats:
+//   1. mgh when mass > 0. Zero height is Ok(0).
+//   2. -GMm/r when r > 0 and masses > 0.
+//   3. Non-physical mass or r returns Err.
+
+pub fn gravity_uniform_pe(mass: Float, g: Float, height: Float) -> Result[Float, String] {
+    if mass <= 0.0 {
+        return Err("ERR\tgravity\tm");
+    }
+    return Ok(mass * g * height);
+}
+
+pub fn gravity_newton_pe(g_const: Float, m1: Float, m2: Float, r: Float) -> Result[Float, String] {
+    if g_const <= 0.0 || m1 <= 0.0 || m2 <= 0.0 || r <= 0.0 {
+        return Err("ERR\tgravity\tdomain");
+    }
+    return Ok((0.0 - (g_const * m1 * m2)) / r);
+}
+
+fn gp_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn verify_gravity_potential_law() -> Bool {
+    let u: Float = gp_got(gravity_uniform_pe(2.0, 9.80665, 10.0));
+    let mut d: Float = u - 196.133;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0001 {
+        return false;
+    }
+    if gp_got(gravity_uniform_pe(2.0, 9.80665, 0.0)) != 0.0 {
+        return false;
+    }
+    let n: Float = gp_got(gravity_newton_pe(1.0, 6.0, 4.0, 2.0));
+    d = n - (0.0 - 12.0);
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    if gravity_uniform_pe(0.0, 9.8, 10.0).is_ok() { return false; }
+    if gravity_newton_pe(1.0, 6.0, 4.0, 0.0).is_ok() { return false; }
+    return true;
+}

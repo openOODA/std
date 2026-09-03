@@ -1,0 +1,102 @@
+// # Groth16 Zero-Knowledge SNARK Proof Types
+//
+// Logline: Defines Groth16 proof, verifying key, and public input IC coordinate data structures over BN254 curve groups.
+//
+// Setup: Cryptographic types module providing G1/G2 coordinates for Groth16 SNARK verification circuits.
+//
+// Beats:
+//   1. Declare Groth16 proof record containing A in G1, B in G2, and C in G1.
+//   2. Declare Groth16 verifying key record containing alpha, beta, gamma, delta, and flat IC coordinate vector.
+//   3. Implement factory constructors for proof and verifying key objects.
+//   4. Implement IC coordinate packing and unpacking routines.
+
+import "./bn254_fp.oo";
+import "./bn254_g1.oo";
+import "./bn254_g2.oo";
+
+type Groth16Proof = struct {
+    a_g1: Bn254G1Affine,
+    b_g2: Bn254G2Affine,
+    c_g1: Bn254G1Affine,
+    is_valid: Bool
+};
+
+type Groth16VerifyingKey = struct {
+    alpha_g1: Bn254G1Affine,
+    beta_g2: Bn254G2Affine,
+    gamma_g2: Bn254G2Affine,
+    delta_g2: Bn254G2Affine,
+    ic_coords: List[Int],
+    num_inputs: Int
+};
+
+pub fn groth16_proof_new(a: Bn254G1Affine, b: Bn254G2Affine, c: Bn254G1Affine) -> Groth16Proof {
+    return Groth16Proof {
+        a_g1: a,
+        b_g2: b,
+        c_g1: c,
+        is_valid: true
+    };
+}
+
+pub fn groth16_ic_push_point(coords: List[Int], pt: Bn254G1Affine) -> List[Int] {
+    let mut c: List[Int] = coords;
+    c = list_push(c, (pt.x).l0); c = list_push(c, (pt.x).l1);
+    c = list_push(c, (pt.x).l2); c = list_push(c, (pt.x).l3);
+    c = list_push(c, (pt.x).l4); c = list_push(c, (pt.x).l5);
+    c = list_push(c, (pt.x).l6); c = list_push(c, (pt.x).l7);
+
+    c = list_push(c, (pt.y).l0); c = list_push(c, (pt.y).l1);
+    c = list_push(c, (pt.y).l2); c = list_push(c, (pt.y).l3);
+    c = list_push(c, (pt.y).l4); c = list_push(c, (pt.y).l5);
+    c = list_push(c, (pt.y).l6); c = list_push(c, (pt.y).l7);
+    return c;
+}
+
+pub fn groth16_ic_get_point(coords: List[Int], idx: Int) -> Bn254G1Affine {
+    let offset: Int = idx * 16;
+    let x_pt: Bn254Fp = Bn254Fp {
+        l0: list_get(coords, offset),
+        l1: list_get(coords, offset + 1),
+        l2: list_get(coords, offset + 2),
+        l3: list_get(coords, offset + 3),
+        l4: list_get(coords, offset + 4),
+        l5: list_get(coords, offset + 5),
+        l6: list_get(coords, offset + 6),
+        l7: list_get(coords, offset + 7)
+    };
+    let y_pt: Bn254Fp = Bn254Fp {
+        l0: list_get(coords, offset + 8),
+        l1: list_get(coords, offset + 9),
+        l2: list_get(coords, offset + 10),
+        l3: list_get(coords, offset + 11),
+        l4: list_get(coords, offset + 12),
+        l5: list_get(coords, offset + 13),
+        l6: list_get(coords, offset + 14),
+        l7: list_get(coords, offset + 15)
+    };
+    return Bn254G1Affine {
+        x: x_pt,
+        y: y_pt,
+        is_infinity: false
+    };
+}
+
+pub fn groth16_verifying_key_new(
+    alpha: Bn254G1Affine,
+    beta: Bn254G2Affine,
+    gamma: Bn254G2Affine,
+    delta: Bn254G2Affine,
+    ic_coords: List[Int]
+) -> Groth16VerifyingKey {
+    let total_pts: Int = list_len(ic_coords) / 16;
+    let n_in: Int = if total_pts > 0 { total_pts - 1 } else { 0 };
+    return Groth16VerifyingKey {
+        alpha_g1: alpha,
+        beta_g2: beta,
+        gamma_g2: gamma,
+        delta_g2: delta,
+        ic_coords: ic_coords,
+        num_inputs: n_in
+    };
+}

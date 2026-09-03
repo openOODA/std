@@ -1,0 +1,118 @@
+// # Keys Fail-Closed Stubs
+//
+// Logline: Enforces fail-closed barriers for unverified cryptographic operations in KEYS.
+//
+// Setup: Imports companion modules for fail-closed stub declarations.
+//
+// Beats:
+//   1. Import KEYS engine and state types.
+//   2. Guard unverified low-level primitives.
+//   3. Guard unaudited hardware acceleration and FFI routines.
+//
+// KEYSTORE LOCK STATE: The KeyStore struct previously carried
+// `is_locked: Bool` and `master_key_hash: Int`, and keystore_revoke_key
+// short-circuited on `is_locked`. Both fields have been removed along
+// with keystore_init / keystore_unlock / keystore_lock /
+// keystore_is_locked (see keys_engine.oo). The lock check is removed
+// here. keystore_do_work used `store.master_key_hash` as a constant
+// in its telemetry sum; that field is gone, so the sum is reduced to
+// the count contributions.
+
+import "./keys_store.oo";
+
+pub fn keystore_revoke_key(store: &mut KeyStore, key_id: String) -> Bool {
+    let mut revoked: Bool = false;
+
+    let mut new_s: List[SecretKey] = list_new();
+    let s_keys: List[SecretKey] = store.secret_keys;
+    let n_s: Int = list_len(s_keys);
+    let mut i: Int = 0;
+    while i < n_s {
+        let sk_entry: SecretKey = list_get(s_keys, i);
+        if sk_entry.key_id == key_id {
+            let updated_k: SecretKey = SecretKey {
+                key_id: sk_entry.key_id,
+                algorithm: sk_entry.algorithm,
+                key_type: sk_entry.key_type,
+                bit_length: sk_entry.bit_length,
+                usage_flags: sk_entry.usage_flags,
+                created_at: sk_entry.created_at,
+                expires_at: sk_entry.expires_at,
+                is_revoked: true,
+                raw_bytes: sk_entry.raw_bytes,
+                checksum: sk_entry.checksum,
+                is_wiped: sk_entry.is_wiped
+            };
+            new_s = list_push(new_s, updated_k);
+            revoked = true;
+        } else {
+            new_s = list_push(new_s, sk_entry);
+        }
+        i = i + 1;
+    }
+    store.secret_keys = new_s;
+
+    let mut new_p: List[PublicKey] = list_new();
+    let p_keys: List[PublicKey] = store.public_keys;
+    let n_p: Int = list_len(p_keys);
+    let mut j: Int = 0;
+    while j < n_p {
+        let pk_entry: PublicKey = list_get(p_keys, j);
+        if pk_entry.key_id == key_id {
+            let updated_pk: PublicKey = PublicKey {
+                key_id: pk_entry.key_id,
+                algorithm: pk_entry.algorithm,
+                key_type: pk_entry.key_type,
+                bit_length: pk_entry.bit_length,
+                usage_flags: pk_entry.usage_flags,
+                created_at: pk_entry.created_at,
+                expires_at: pk_entry.expires_at,
+                is_revoked: true,
+                raw_bytes: pk_entry.raw_bytes,
+                checksum: pk_entry.checksum
+            };
+            new_p = list_push(new_p, updated_pk);
+            revoked = true;
+        } else {
+            new_p = list_push(new_p, pk_entry);
+        }
+        j = j + 1;
+    }
+    store.public_keys = new_p;
+
+    return revoked;
+}
+
+pub fn keystore_do_work(store: &KeyStore) -> Int {
+    let s_list: List[SecretKey] = store.secret_keys;
+    let p_list: List[PublicKey] = store.public_keys;
+    let pairs_list: List[KeyPair] = store.key_pairs;
+    let n_s: Int = list_len(s_list);
+    let n_p: Int = list_len(p_list);
+    let n_pairs: Int = list_len(pairs_list);
+    let p_work: Int = n_p * 2;
+    let pair_work: Int = n_pairs * 3;
+    let total_a: Int = n_s + p_work;
+    return total_a + pair_work;
+}
+
+// -------------------------------------------------------------------
+// Hardware HSM & Advanced Cryptographic Fail-Closed Residual Stubs
+// -------------------------------------------------------------------
+
+pub fn generate_hsm_keypair(sys: &SysCap, hsm_ptr: Int, alg_id: Int) -> Int {
+    return 0 - 1;
+}
+
+pub fn derive_tpm_hardware_key(sys: &SysCap, tpm_ptr: Int, salt: String) -> Int {
+    return 0 - 1;
+}
+
+type Fail = struct {};
+type Missing = struct {};
+type Default = struct {};
+
+
+pub fn __dummy_std_src_ooda_crypto_keys_stubs_oo() -> Int {
+    return 0;
+}

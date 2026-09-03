@@ -1,0 +1,255 @@
+// # Zero-copy JSON parser
+//
+// Logline: Parses one RFC 8259 JSON value from a List[Int] byte buffer and returns child byte offsets for arrays and objects without allocating intermediate strings.
+//
+// Setup: Pure. Input bytes are List[Int] 0..255. Strings and numbers live in the returned JsonValue. Nested children keep their byte offsets in the input buffer.
+//
+// Beats:
+//   1. Skip whitespace and dispatch on the next byte to a leaf, array, or object parser.
+//   2. Parse JSON strings, integers, and the literals true, false, and null.
+//   3. Parse arrays and objects; record each child start offset in a flat List[Int].
+//   4. Validate that one top-level value consumes the whole buffer.
+//   5. Expose kind, integer, and string accessors for the returned value.
+
+import "std/core/primitives/result.oo";
+
+type JsonValue = struct {
+    kind: String,
+    num: Int,
+    str: String,
+    children: List[Int]
+};
+
+fn jzc_v(k: String, n: Int, s: String) -> JsonValue {
+    return JsonValue { kind: k, num: n, str: s, children: list_new() };
+}
+
+fn jzc_at(buf: List[Int], i: Int) -> Int {
+    if i < 0 { return 0 - 1; }
+    if i >= list_len(buf) { return 0 - 1; }
+    return list_get(buf, i) & 255;
+}
+
+pub fn jzc_skip_ws(buf: List[Int], pos: Int) -> Int {
+    let n: Int = list_len(buf);
+    let mut j: Int = pos;
+    while j < n {
+        let b: Int = jzc_at(buf, j);
+        if b == 32 || b == 9 || b == 10 || b == 13 { j = j + 1; }
+        else { return j; }
+    }
+    return j;
+}
+
+fn jzc_digit(b: Int) -> Int {
+    if b < 48 { return 0 - 1; }
+    if b > 57 { return 0 - 1; }
+    return b - 48;
+}
+
+fn jzc_unesc(nx: Int) -> Int {
+    if nx == 34 { return 34; }
+    if nx == 92 { return 92; }
+    if nx == 47 { return 47; }
+    if nx == 110 { return 10; }
+    if nx == 116 { return 9; }
+    if nx == 114 { return 13; }
+    if nx == 98 { return 8; }
+    if nx == 102 { return 12; }
+    return 0 - 1;
+}
+
+fn jzc_lit_eq(buf: List[Int], pos: Int, want: String) -> Bool {
+    let n: Int = chars_len(want);
+    let mut k: Int = 0;
+    while k < n {
+        if jzc_at(buf, pos + k) != byte_at(want, k) { return false; }
+        k = k + 1;
+    }
+    return true;
+}
+
+fn jzc_scan_string(buf: List[Int], pos: Int) -> Int {
+    if jzc_at(buf, pos) != 34 { return 0 - 1; }
+    let n: Int = list_len(buf);
+    let mut j: Int = pos + 1;
+    while j < n {
+        let b: Int = jzc_at(buf, j);
+        if b == 34 { return j + 1; }
+        if b == 92 { j = j + 2; }
+        else { j = j + 1; }
+    }
+    return 0 - 1;
+}
+
+fn jzc_scan_number(buf: List[Int], pos: Int) -> Int {
+    let n: Int = list_len(buf);
+    let mut j: Int = pos;
+    if jzc_at(buf, j) == 45 { j = j + 1; }
+    if j >= n { return 0 - 1; }
+    let mut any: Int = 0;
+    while j < n {
+        let d: Int = jzc_digit(jzc_at(buf, j));
+        if d < 0 { break; }
+        any = 1;
+        j = j + 1;
+    }
+    if any < 1 { return 0 - 1; }
+    return j;
+}
+
+fn jzc_scan_container(buf: List[Int], pos: Int, open: Int, close: Int, is_obj: Int) -> Int {
+    if jzc_at(buf, pos) != open { return 0 - 1; }
+    let mut j: Int = pos + 1;
+    let p: Int = jzc_skip_ws(buf, j);
+    if jzc_at(buf, p) == close { return p + 1; }
+    let mut more: Int = 1;
+    while more == 1 {
+        if is_obj == 1 {
+            let kp: Int = jzc_skip_ws(buf, j);
+            let kend: Int = jzc_scan_string(buf, kp);
+            if kend < 0 { return 0 - 1; }
+            let cp: Int = jzc_skip_ws(buf, kend);
+            if jzc_at(buf, cp) != 58 { return 0 - 1; }
+            j = cp + 1;
+        }
+        let cp2: Int = jzc_skip_ws(buf, j);
+        let nx: Int = jzc_scan_value(buf, cp2);
+        if nx < 0 { return 0 - 1; }
+        let q: Int = jzc_skip_ws(buf, nx);
+        let c: Int = jzc_at(buf, q);
+        if c == close { return q + 1; }
+        if c == 44 { j = q + 1; }
+        else { return 0 - 1; }
+    }
+    return 0 - 1;
+}
+
+fn jzc_scan_value(buf: List[Int], pos: Int) -> Int {
+    let p: Int = jzc_skip_ws(buf, pos);
+    let b: Int = jzc_at(buf, p);
+    if b < 0 { return 0 - 1; }
+    if b == 123 { return jzc_scan_container(buf, p, 123, 125, 1); }
+    if b == 91 { return jzc_scan_container(buf, p, 91, 93, 0); }
+    if b == 34 { return jzc_scan_string(buf, p); }
+    if b == 116 { return p + 4; }
+    if b == 102 { return p + 5; }
+    if b == 110 { return p + 4; }
+    return jzc_scan_number(buf, p);
+}
+
+pub fn jzc_parse_string(buf: List[Int], pos: Int) -> Result[JsonValue, String] {
+    if jzc_at(buf, pos) != 34 { return Err("ERR\tjzc_parse_string\tquote_expected"); }
+    let n: Int = list_len(buf);
+    let mut j: Int = pos + 1;
+    let mut bs: List[Int] = list_new();
+    while j < n {
+        let b: Int = jzc_at(buf, j);
+        if b == 34 { return Ok(jzc_v("string", j + 1, bytes_to_str(bs))); }
+        if b == 92 {
+            if j + 1 >= n { return Err("ERR\tjzc_parse_string\tbad_escape"); }
+            let nb: Int = jzc_unesc(jzc_at(buf, j + 1));
+            if nb < 0 { return Err("ERR\tjzc_parse_string\tbad_escape"); }
+            bs = list_push(bs, nb);
+            j = j + 2;
+        } else {
+            bs = list_push(bs, b);
+            j = j + 1;
+        }
+    }
+    return Err("ERR\tjzc_parse_string\tunterminated");
+}
+
+pub fn jzc_parse_number(buf: List[Int], pos: Int) -> Result[JsonValue, String] {
+    let n: Int = list_len(buf);
+    if pos >= n { return Err("ERR\tjzc_parse_number\teof"); }
+    let mut j: Int = pos;
+    let mut sign: Int = 1;
+    let b0: Int = jzc_at(buf, j);
+    if b0 == 45 { sign = 0 - 1; j = j + 1; }
+    if j >= n { return Err("ERR\tjzc_parse_number\teof"); }
+    let mut acc: Int = 0;
+    let mut any: Int = 0;
+    while j < n {
+        let d: Int = jzc_digit(jzc_at(buf, j));
+        if d < 0 { break; }
+        acc = acc * 10 + d;
+        any = 1;
+        j = j + 1;
+    }
+    if any < 1 { return Err("ERR\tjzc_parse_number\tdigit_expected"); }
+    return Ok(jzc_v("number", acc * sign, ""));
+}
+
+fn jzc_parse_lit(buf: List[Int], pos: Int, want: String, kind: String, ln: Int) -> Result[JsonValue, String] {
+    if jzc_lit_eq(buf, pos, want) == false { return Err("ERR\tjzc_parse_value\tbad_literal"); }
+    return Ok(jzc_v(kind, pos + ln, ""));
+}
+
+pub fn jzc_parse_value(buf: List[Int], pos: Int) -> Result[JsonValue, String] {
+    let p: Int = jzc_skip_ws(buf, pos);
+    let b: Int = jzc_at(buf, p);
+    if b < 0 { return Err("ERR\tjzc_parse_value\teof"); }
+    if b == 123 { return jzc_parse_object(buf, p); }
+    if b == 91 { return jzc_parse_array(buf, p); }
+    if b == 34 { return jzc_parse_string(buf, p); }
+    if b == 116 { return jzc_parse_lit(buf, p, "true", "true", 4); }
+    if b == 102 { return jzc_parse_lit(buf, p, "false", "false", 5); }
+    if b == 110 { return jzc_parse_lit(buf, p, "null", "null", 4); }
+    if b == 45 { return jzc_parse_number(buf, p); }
+    if jzc_digit(b) >= 0 { return jzc_parse_number(buf, p); }
+    return Err("ERR\tjzc_parse_value\tunexpected");
+}
+
+fn jzc_parse_container(buf: List[Int], pos: Int, open: Int, close: Int, kind: String, is_obj: Int) -> Result[JsonValue, String] {
+    if jzc_at(buf, pos) != open { return Err("ERR\tjzc_parse\topen_expected"); }
+    let mut j: Int = pos + 1;
+    let mut kids: List[Int] = list_new();
+    let p: Int = jzc_skip_ws(buf, j);
+    if jzc_at(buf, p) == close { return Ok(jzc_v(kind, p + 1, "")); }
+    let mut more: Int = 1;
+    while more == 1 {
+        if is_obj == 1 {
+            let kp: Int = jzc_skip_ws(buf, j);
+            let kend: Int = jzc_scan_string(buf, kp);
+            if kend < 0 { return Err("ERR\tjzc_parse_object\tbad_key"); }
+            kids = list_push(kids, kp);
+            let cp: Int = jzc_skip_ws(buf, kend);
+            if jzc_at(buf, cp) != 58 { return Err("ERR\tjzc_parse_object\tcolon_expected"); }
+            j = cp + 1;
+        }
+        let cp2: Int = jzc_skip_ws(buf, j);
+        let nx: Int = jzc_scan_value(buf, cp2);
+        if nx < 0 { return Err("ERR\tjzc_parse\tbad_value"); }
+        kids = list_push(kids, cp2);
+        let q: Int = jzc_skip_ws(buf, nx);
+        let c: Int = jzc_at(buf, q);
+        if c == close {
+            return Ok(JsonValue { kind: kind, num: q + 1, str: "", children: kids });
+        }
+        if c == 44 { j = q + 1; }
+        else { return Err("ERR\tjzc_parse\tcomma_expected"); }
+    }
+    return Err("ERR\tjzc_parse\tunterminated");
+}
+
+pub fn jzc_parse_array(buf: List[Int], pos: Int) -> Result[JsonValue, String] {
+    return jzc_parse_container(buf, pos, 91, 93, "array", 0);
+}
+
+pub fn jzc_parse_object(buf: List[Int], pos: Int) -> Result[JsonValue, String] {
+    return jzc_parse_container(buf, pos, 123, 125, "object", 1);
+}
+
+pub fn jzc_parse(buf: List[Int]) -> Result[JsonValue, String] {
+    let r: Result[JsonValue, String] = jzc_parse_value(buf, jzc_skip_ws(buf, 0));
+    if r.is_err() { return r; }
+    let v: JsonValue = match r { Ok(x) => x, Err(_) => JsonValue { kind: "", num: 0, str: "", children: list_new() } };
+    let q: Int = jzc_skip_ws(buf, v.num);
+    if q != list_len(buf) { return Err("ERR\tjzc_parse\ttrailing"); }
+    return Ok(v);
+}
+
+pub fn jzc_kind(v: JsonValue) -> String { return v.kind; }
+pub fn jzc_int(v: JsonValue) -> Int { return v.num; }
+pub fn jzc_str(v: JsonValue) -> String { return v.str; }

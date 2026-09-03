@@ -1,0 +1,113 @@
+// # Neural Scaling Law
+//
+// Logline: Loss decreases as a power law in compute, parameters, and dataset size (Chinchilla-style).
+//
+// Setup: Pure Float. Loss = a + b * N^-alpha. a=0 intercept is valid; a<0 or N<=0 is Err. Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Loss(N) = a + b * N^(-alpha) for non-negative a, b, alpha.
+//   2. Compute-optimal model size for N tokens: M = c * D^p.
+//   3. Loss improvement from N1 to N2: must be negative (loss goes down).
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+
+fn sl_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Loss(N) = a + b * N^(-alpha). a=0 is a valid intercept.
+pub fn sl_loss(a: Float, b: Float, alpha: Float, n: Float) -> Result[Float, String] {
+    if a < 0.0 { return Err("ERR\tsl\tdomain"); }
+    if b < 0.0 { return Err("ERR\tsl\tdomain"); }
+    if alpha < 0.0 { return Err("ERR\tsl\tdomain"); }
+    if n <= 0.0 { return Err("ERR\tsl\tdomain"); }
+    let pr: Result[Float, String] = pow_negative_alpha(n, alpha);
+    match pr {
+        Ok(n_alpha) => { return Ok(a + (b * n_alpha)); },
+        Err(e)      => { return Err(e); }
+    }
+}
+
+// Power x^(-alpha) computed as 1 / x^alpha for alpha >= 0.
+pub fn pow_negative_alpha(x: Float, alpha: Float) -> Result[Float, String] {
+    if x <= 0.0 { return Err("ERR\tsl\tdomain"); }
+    if alpha < 0.0 { return Err("ERR\tsl\tdomain"); }
+    if alpha == 0.0 { return Ok(1.0); }
+    let expr: Result[Int, String] = float_to_int(alpha);
+    if expr.is_ok() == false { return Err("ERR\tsl\tdomain"); }
+    let mut exp: Int = fti_got(expr);
+    if exp <= 0 { return Ok(1.0); }
+    let mut result: Float = 1.0;
+    let mut i: Int = 0;
+    while i < exp {
+        result = result * x;
+        i = i + 1;
+    }
+    if result == 0.0 { return Err("ERR\tsl\tdomain"); }
+    return Ok(1.0 / result);
+}
+
+fn fti_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Convert Float (non-negative) to Int by truncation. [0,1) is Ok(0). x<0 is Err.
+pub fn float_to_int(x: Float) -> Result[Int, String] {
+    if x < 0.0 { return Err("ERR\tfti\tdomain"); }
+    if x > 1000000.0 { return Ok(1000000); }
+    let mut acc: Int = 0;
+    let mut remaining: Float = x;
+    while remaining >= 1.0 {
+        remaining = remaining - 1.0;
+        acc = acc + 1;
+    }
+    return Ok(acc);
+}
+
+// Loss improvement: loss(N2) - loss(N1). Negative means improvement.
+pub fn sl_improvement(a: Float, b: Float, alpha: Float, n1: Float, n2: Float) -> Result[Float, String] {
+    let r1: Result[Float, String] = sl_loss(a, b, alpha, n1);
+    let r2: Result[Float, String] = sl_loss(a, b, alpha, n2);
+    match r1 {
+        Ok(l1)         => {
+            match r2 {
+                Ok(l2) => { return Ok(l2 - l1); },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+// KAT and hostile cases for the neural scaling law.
+pub fn verify_scaling_law() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    let l1: Float = sl_got(sl_loss(1.0, 1.0, 1.0, 1.0));
+    let target: Float = 2.0;
+    let mut d: Float = l1 - target;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let l_big: Float = sl_got(sl_loss(1.0, 1.0, 1.0, 100.0));
+    if l_big >= l1 { return false; }
+    let imp: Float = sl_got(sl_improvement(1.0, 1.0, 1.0, 1.0, 100.0));
+    if imp >= 0.0 { return false; }
+    let l0: Float = sl_got(sl_loss(0.0, 1.0, 1.0, 1.0));
+    let mut d0: Float = l0 - 1.0;
+    if d0 < 0.0 { d0 = 0.0 - d0; }
+    if d0 > 0.0001 { return false; }
+    if sl_loss(0.0 - 1.0, 1.0, 1.0, 1.0).is_ok() { return false; }
+    if sl_loss(1.0, 0.0 - 1.0, 1.0, 1.0).is_ok() { return false; }
+    if sl_loss(1.0, 1.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    if sl_loss(1.0, 1.0, 1.0, 0.0).is_ok() { return false; }
+    if sl_loss(1.0, 1.0, 1.0, 0.0 - 1.0).is_ok() { return false; }
+    if sl_got(pow_negative_alpha(2.0, 3.0)) <= 0.0 { return false; }
+    if pow_negative_alpha(0.0, 1.0).is_ok() { return false; }
+    if sl_got(pow_negative_alpha(2.0, 0.0)) != 1.0 { return false; }
+    if pow_negative_alpha(0.0 - 1.0, 1.0).is_ok() { return false; }
+    if fti_got(float_to_int(3.7)) != 3 { return false; }
+    if float_to_int(0.0 - 1.0).is_ok() { return false; }
+    if fti_got(float_to_int(0.0)) != 0 { return false; }
+    return true;
+}

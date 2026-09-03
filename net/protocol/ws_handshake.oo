@@ -1,0 +1,43 @@
+// # RFC 6455 WebSocket Upgrade Handshake Engine (Fail-Closed)
+//
+// Logline: Fail-closed residual for RFC 6455 Sec-WebSocket-Accept computation. The previous implementation returned a hard-coded string for any input, completely bypassing the SHA-1 + Base64 chain required by the spec.
+//
+// Setup: This module refuses to compute or verify Sec-WebSocket-Accept until a real SHA-1 + Base64 pipeline is available in the IR. Callers must integrate a vetted crypto library.
+//
+// Beats:
+//   1. ws_rfc6455_guid: returns the standard RFC 6455 GUID constant.
+//   2. ws_compute_accept: refuses (empty string).
+//   3. ws_handshake_compute_accept: refuses (Err).
+//   4. ws_verify_handshake: refuses (Err).
+//   5. ws_handshake_verify_response: refuses (Err).
+
+pub fn ws_rfc6455_guid() -> String { return "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"; }
+
+/// Compute Sec-WebSocket-Accept value from client Sec-WebSocket-Key.
+/// Fail-closed: returns "" because no SHA-1 + Base64 is wired in. The
+/// caller MUST treat "" as a hard refusal. Accepting any accept value
+/// without the real Base64(SHA1(key+GUID)) chain is a handshake bypass.
+pub fn ws_compute_accept(sec_key: String) -> String {
+    return "";
+}
+
+/// Compute Sec-WebSocket-Accept as a Result. Fail-closed: refuses
+/// unconditionally so callers cannot ship a frame built on a fake accept.
+pub fn ws_handshake_compute_accept(sec_key: String) -> Result[String, String] {
+    return Err("ERR\tws_handshake: Sec-WebSocket-Accept computation unavailable; SHA-1 + Base64 not in IR");
+}
+
+/// Verify that server accept header matches expected computed accept token.
+/// Fail-closed: refuses because the expected value cannot be honestly
+/// computed without a real SHA-1 + Base64 pipeline. The previous
+/// implementation compared against a hard-coded string, which accepted
+/// any peer that happened to send that string.
+pub fn ws_verify_handshake(sec_key: String, accept_hdr: String) -> Result[Bool, String] {
+    return Err("ERR\tws_handshake: Sec-WebSocket-Accept verification unavailable; SHA-1 + Base64 not in IR");
+}
+
+/// Verify that server accept header matches expected computed accept token.
+/// Fail-closed alias of ws_verify_handshake.
+pub fn ws_handshake_verify_response(sec_key: String, accept_hdr: String) -> Result[Bool, String] {
+    return Err("ERR\tws_handshake: Sec-WebSocket-Accept verification unavailable; SHA-1 + Base64 not in IR");
+}

@@ -1,0 +1,21 @@
+// # List Quota Pass
+//
+// Logline: Standard library verification and domain capabilities for List Quota Pass.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_list_quota_pass() -> Bool {
+    let raw = alloc_bytes(alloc, 65536);
+    let mut lst: List[Int] = list_new();
+    let mut i = 0;
+    while i < 50 {
+        lst = list_push(lst, i);
+        i = i + 1;
+    }
+    println(list_len(lst));
+    return true;
+}

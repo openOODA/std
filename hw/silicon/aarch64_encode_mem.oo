@@ -1,0 +1,177 @@
+// # AArch64 Branch And Memory Instruction Encoder
+//
+// Logline: Encodes PC-relative branches and 64-bit load/store pair and unsigned-offset memory words.
+//
+// Setup: Builds on aarch64_encoder little-endian packing. Offsets for LDR/STR are byte counts scaled by 8.
+//
+// Beats:
+//   1. Encode unconditional B and BL plus conditional B.cond with signed instruction offsets.
+//   2. Encode ADD/SUB immediate including MOV of the frame pointer from SP.
+//   3. Encode LDR/STR unsigned [Xn, #imm] and STP pre-index plus LDP post-index.
+//   4. Provide the AAPCS64 prologue STP x29, x30, [sp, #-16]! word.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_regs.oo";
+
+fn arm64_imm7(byte_off: Int) -> Int {
+    let q: Int = byte_off / 8;
+    if q < 0 {
+        return (q + 128) & 127;
+    }
+    return q & 127;
+}
+
+pub fn arm64_word_b(inst_off: Int) -> Int {
+    return (20 << 24) | (inst_off & 67108863);
+}
+
+pub fn arm64_encode_b(inst_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_b(inst_off));
+}
+
+pub fn arm64_word_bl(inst_off: Int) -> Int {
+    return (148 << 24) | (inst_off & 67108863);
+}
+
+pub fn arm64_encode_bl(inst_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_bl(inst_off));
+}
+
+pub fn arm64_word_b_cond(cond: Int, inst_off: Int) -> Int {
+    return (84 << 24) | ((inst_off & 524287) << 5) | (cond & 15);
+}
+
+pub fn arm64_encode_b_cond(cond: Int, inst_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_b_cond(cond, inst_off));
+}
+
+pub fn arm64_encode_b_eq(inst_off: Int) -> List[Int] {
+    return arm64_encode_b_cond(arm64_cond_eq(), inst_off);
+}
+
+pub fn arm64_encode_b_ne(inst_off: Int) -> List[Int] {
+    return arm64_encode_b_cond(arm64_cond_ne(), inst_off);
+}
+
+pub fn arm64_encode_b_lt(inst_off: Int) -> List[Int] {
+    return arm64_encode_b_cond(arm64_cond_lt(), inst_off);
+}
+
+pub fn arm64_encode_b_le(inst_off: Int) -> List[Int] {
+    return arm64_encode_b_cond(arm64_cond_le(), inst_off);
+}
+
+pub fn arm64_encode_b_gt(inst_off: Int) -> List[Int] {
+    return arm64_encode_b_cond(arm64_cond_gt(), inst_off);
+}
+
+pub fn arm64_encode_b_ge(inst_off: Int) -> List[Int] {
+    return arm64_encode_b_cond(arm64_cond_ge(), inst_off);
+}
+
+pub fn arm64_word_add_imm(rd: Int, rn: Int, imm12: Int) -> Int {
+    return (145 << 24) | ((imm12 & 4095) << 10) | ((rn & 31) << 5) | (rd & 31);
+}
+
+pub fn arm64_encode_add_imm(rd: Int, rn: Int, imm12: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_add_imm(rd, rn, imm12));
+}
+
+pub fn arm64_word_sub_imm(rd: Int, rn: Int, imm12: Int) -> Int {
+    return (209 << 24) | ((imm12 & 4095) << 10) | ((rn & 31) << 5) | (rd & 31);
+}
+
+pub fn arm64_encode_sub_imm(rd: Int, rn: Int, imm12: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_sub_imm(rd, rn, imm12));
+}
+
+pub fn arm64_word_ldr(rt: Int, rn: Int, byte_off: Int) -> Int {
+    let imm12: Int = (byte_off / 8) & 4095;
+    return (249 << 24) | (64 << 16) | (imm12 << 10) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn arm64_encode_ldr(rt: Int, rn: Int, byte_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_ldr(rt, rn, byte_off));
+}
+
+pub fn arm64_word_str(rt: Int, rn: Int, byte_off: Int) -> Int {
+    let imm12: Int = (byte_off / 8) & 4095;
+    return (249 << 24) | (imm12 << 10) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn arm64_encode_str(rt: Int, rn: Int, byte_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_str(rt, rn, byte_off));
+}
+
+pub fn arm64_word_stp_pre(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> Int {
+    let imm7: Int = (0 + arm64_imm7(byte_off));
+    return (169 << 24) | (128 << 16) | (imm7 << 15) | ((rt2 & 31) << 10) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn arm64_encode_stp_pre(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_stp_pre(rt, rt2, rn, byte_off));
+}
+
+pub fn arm64_word_ldp_post(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> Int {
+    let imm7: Int = (0 + arm64_imm7(byte_off));
+    return (168 << 24) | (192 << 16) | (imm7 << 15) | ((rt2 & 31) << 10) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn arm64_encode_ldp_post(rt: Int, rt2: Int, rn: Int, byte_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_ldp_post(rt, rt2, rn, byte_off));
+}
+
+pub fn arm64_encode_stp_fp_lr() -> List[Int] {
+    return arm64_encode_stp_pre(29, 30, 31, -16);
+}
+
+pub fn arm64_encode_ldp_fp_lr() -> List[Int] {
+    return arm64_encode_ldp_post(29, 30, 31, 16);
+}
+
+pub fn arm64_word_mov_fp_sp() -> Int {
+    return arm64_word_add_imm(29, 31, 0);
+}
+
+pub fn arm64_encode_mov_fp_sp() -> List[Int] {
+    return arm64_u32_to_le(arm64_word_mov_fp_sp());
+}
+
+pub fn arm64_word_adr(xd: Int, byte_off: Int) -> Int {
+    let mut imm: Int = byte_off;
+    if imm < 0 {
+        imm = imm + 2097152;
+    }
+    imm = imm & 2097151;
+    let lo: Int = imm & 3;
+    let hi: Int = (imm >> 2) & 524287;
+    return (lo << 29) | (16 << 24) | (hi << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_adr(xd: Int, byte_off: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_adr(xd, byte_off));
+}
+
+pub fn arm64_word_ldrb_reg(rt: Int, rn: Int, rm: Int) -> Int {
+    return 945842176 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn arm64_encode_ldrb_reg(rt: Int, rn: Int, rm: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_ldrb_reg(rt, rn, rm));
+}
+
+pub fn arm64_word_strb_reg(rt: Int, rn: Int, rm: Int) -> Int {
+    return 941647872 | ((rm & 31) << 16) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn arm64_encode_strb_reg(rt: Int, rn: Int, rm: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_strb_reg(rt, rn, rm));
+}
+
+pub fn arm64_word_blr(rn: Int) -> Int {
+    return (214 << 24) | (63 << 16) | ((rn & 31) << 5);
+}
+
+pub fn arm64_encode_blr(rn: Int) -> List[Int] {
+    return arm64_u32_to_le(arm64_word_blr(rn));
+}

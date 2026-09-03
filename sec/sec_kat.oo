@@ -1,0 +1,155 @@
+// # SEC Known-Answer Test (KAT) Literature Vectors
+//
+// Logline: Curated post-2010 security standards and verification papers pass at 0.001% precision; hostile and out-of-precision vectors fail closed.
+//
+// Setup: Pure Int golden values. Each predicate returns 1 iff the claim matches the published value. Mismatch exits 1.
+//
+// Beats:
+//   1. TLS 1.3 RFC 8446 published 2018-08-10 and uses 1-RTT (vs 2-RTT in TLS 1.2).
+//   2. seL4 (Klein 2009): 8700 LoC C, ~200,000 proof lines, formally verified.
+//   3. FIPS 140-3 published 2019; replaces FIPS 140-2.
+//   4. AES-256: 256-bit key, 14 rounds (FIPS 197).
+//   5. IND-CCA2 = adaptive chosen-ciphertext (Bellare-Rogaway 1993; Cramer-Shoup 1998).
+//   6. Each vector within 0.001% or stated spec tolerance.
+//
+// residual: Int golden-value model only; not a live crypto implementation.
+
+import "std/sec/sec_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// 0.001% precision (1 ppm tolerance per unit expected).
+pub fn kat_close_enough(actual: Int, expected: Int, tolerance_ppm: Int) -> Int {
+    if expected < 0 { return 0; }
+    if tolerance_ppm < 0 { return 0; }
+    let diff_pos: Int = actual - expected;
+    let diff_neg: Int = expected - actual;
+    let mut diff: Int = diff_pos;
+    if diff_neg > diff_pos { diff = diff_neg; }
+    if expected == 0 {
+        if diff == 0 { return 1; }
+        return 0;
+    }
+    let bound: Int = diff * 100000;
+    let allowed: Int = tolerance_ppm * expected;
+    if bound <= allowed { return 1; }
+    return 0;
+}
+
+// (a) TLS 1.3 RFC 8446 published 2018-08-10.
+pub fn kat_tls13_rfc_year() -> Int { return 2018; }     // RFC 8446 publication year.
+pub fn kat_tls13_rfc_month() -> Int { return 8; }       // RFC 8446 publication month.
+pub fn kat_tls13_rfc_day() -> Int { return 10; }        // RFC 8446 publication day.
+pub fn kat_tls13_rfc_number() -> Int { return 8446; }   // RFC 8446 number.
+
+// (b) TLS 1.3 1-RTT vs 2-RTT in TLS 1.2.
+pub fn kat_tls13_rtt() -> Int { return 1; }             // TLS 1.3 full handshake RTT.
+pub fn kat_tls12_rtt() -> Int { return 2; }             // TLS 1.2 full handshake RTT.
+
+// (c) seL4 verification scale: Klein et al. SOSP 2009.
+pub fn kat_sel4_loc() -> Int { return 8700; }           // seL4 C source LoC (Klein 2009).
+pub fn kat_sel4_proof_lines() -> Int { return 200000; } // seL4 proof lines (Klein 2009).
+pub fn kat_sel4_year() -> Int { return 2009; }          // seL4 SOSP paper year.
+
+// (d) FIPS 140-3 publication year.
+pub fn kat_fips140_3_year() -> Int { return 2019; }      // FIPS 140-3 publication year.
+pub fn kat_fips140_3_replaces() -> Int { return 2; }    // Replaces FIPS 140-2 (legacy index).
+
+// (e) AES-256 parameters (FIPS 197).
+pub fn kat_aes256_key_bits() -> Int { return 256; }     // AES-256 key size in bits (FIPS 197).
+pub fn kat_aes256_rounds() -> Int { return 14; }        // AES-256 round count (FIPS 197).
+pub fn kat_aes256_block_bits() -> Int { return 128; }   // AES block size in bits (FIPS 197).
+
+// (f) IND-CCA2 = adaptive chosen-ciphertext.
+pub fn kat_ind_cca2_code() -> Int { return 3; }         // IND-CCA2 goal code (1+2).
+pub fn kat_ind_cpa_code() -> Int { return 1; }          // IND-CPA goal code.
+pub fn kat_ind_cca2_is_adaptive() -> Int { return 1; }  // 1 = adaptive chosen-ciphertext.
+
+// Domain certificate wrappers.
+pub fn kat_tls13_rfc_law() -> DomainCert {
+    let mut h: Int = 1;
+    if kat_tls13_rfc_year() != 2018 { h = 0; }
+    if kat_tls13_rfc_month() != 8 { h = 0; }
+    if kat_tls13_rfc_day() != 10 { h = 0; }
+    return domain_cert("sec", "kat_tls13_rfc_date", h);
+}
+
+pub fn kat_tls13_rtt_law() -> DomainCert {
+    let h: Int = kat_close_enough(kat_tls13_rtt(), 1, 1);
+    return domain_cert("sec", "kat_tls13_rtt", h);
+}
+
+pub fn kat_sel4_scale_law() -> DomainCert {
+    let a: Int = kat_close_enough(kat_sel4_loc(), 8700, 1);
+    let b: Int = kat_close_enough(kat_sel4_proof_lines(), 200000, 1);
+    let mut h: Int = 0;
+    if a == 1 { if b == 1 { h = 1; } }
+    return domain_cert("sec", "kat_sel4_scale", h);
+}
+
+pub fn kat_fips140_3_law() -> DomainCert {
+    let h: Int = kat_close_enough(kat_fips140_3_year(), 2019, 1);
+    return domain_cert("sec", "kat_fips140_3", h);
+}
+
+pub fn kat_aes256_law() -> DomainCert {
+    let a: Int = kat_close_enough(kat_aes256_key_bits(), 256, 1);
+    let b: Int = kat_close_enough(kat_aes256_rounds(), 14, 1);
+    let mut h: Int = 0;
+    if a == 1 { if b == 1 { h = 1; } }
+    return domain_cert("sec", "kat_aes256", h);
+}
+
+pub fn kat_ind_cca2_law() -> DomainCert {
+    let h: Int = kat_ind_cca2_is_adaptive();
+    return domain_cert("sec", "kat_ind_cca2_adaptive", h);
+}
+
+// KAT and hostile cases for the SEC literature KAT.
+pub fn verify_sec_kat() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if kat_tls13_rfc_year() != 2018 { return false; }
+    if kat_tls13_rfc_month() != 8 { return false; }
+    if kat_tls13_rfc_day() != 10 { return false; }
+    if kat_tls13_rfc_number() != 8446 { return false; }
+    if kat_tls13_rtt() != 1 { return false; }
+    if kat_tls12_rtt() != 2 { return false; }
+    if kat_tls13_rtt() >= kat_tls12_rtt() { return false; }
+    if kat_sel4_loc() != 8700 { return false; }
+    if kat_sel4_proof_lines() != 200000 { return false; }
+    if kat_sel4_year() != 2009 { return false; }
+    if kat_fips140_3_year() != 2019 { return false; }
+    if kat_fips140_3_replaces() != 2 { return false; }
+    if kat_aes256_key_bits() != 256 { return false; }
+    if kat_aes256_rounds() != 14 { return false; }
+    if kat_aes256_block_bits() != 128 { return false; }
+    if kat_ind_cca2_code() != 3 { return false; }
+    if kat_ind_cpa_code() != 1 { return false; }
+    if kat_ind_cca2_is_adaptive() != 1 { return false; }
+    if kat_close_enough(2018, 2018, 1) != 1 { return false; }
+    if kat_close_enough(8700, 8700, 1) != 1 { return false; }
+    if kat_close_enough(200000, 200000, 1) != 1 { return false; }
+    if kat_close_enough(256, 256, 1) != 1 { return false; }
+    if kat_close_enough(14, 14, 1) != 1 { return false; }
+    if kat_close_enough(1, 1, 1) != 1 { return false; }
+    if kat_close_enough(0, 0, 1) != 1 { return false; }
+    if kat_close_enough(2019, 2018, 1) != 0 { return false; }
+    if kat_close_enough(8701, 8700, 1) != 0 { return false; }
+    if kat_close_enough(200003, 200000, 1) != 0 { return false; }
+    if kat_close_enough(255, 256, 1) != 0 { return false; }
+    if kat_close_enough(13, 14, 1) != 0 { return false; }
+    if kat_close_enough(2, 1, 1) != 0 { return false; }
+    let c1: DomainCert = kat_tls13_rfc_law();
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = kat_tls13_rtt_law();
+    if c2.holds != 1 { return false; }
+    let c3: DomainCert = kat_sel4_scale_law();
+    if c3.holds != 1 { return false; }
+    let c4: DomainCert = kat_fips140_3_law();
+    if c4.holds != 1 { return false; }
+    let c5: DomainCert = kat_aes256_law();
+    if c5.holds != 1 { return false; }
+    let c6: DomainCert = kat_ind_cca2_law();
+    if c6.holds != 1 { return false; }
+    return true;
+}

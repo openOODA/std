@@ -1,0 +1,86 @@
+// # ASCII Printable Principle
+//
+// Logline: A byte is printable ASCII iff it falls in the range 0x20 (space) through 0x7E ('~').
+//
+// Setup: Pure Int. Byte is 0..255 inclusive; out-of-range returns 0. ASCII 7-bit only.
+//
+// Beats:
+//   1. ascii_printable(b) holds iff 0x20 <= b <= 0x7E.
+//   2. ascii_printable_count returns the number of printable bytes in a four-byte window.
+//   3. ascii_printable_principle returns a DomainCert with holds matching the Int law.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn ascii_printable(b: Int) -> Int {
+    if b < 0 {
+        return 0;
+    }
+    if b > 255 {
+        return 0;
+    }
+    if b >= 32 {
+        if b <= 126 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn ascii_printable_count(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
+    let mut count: Int = 0;
+    if ascii_printable(b0) == 1 {
+        count = count + 1;
+    }
+    if ascii_printable(b1) == 1 {
+        count = count + 1;
+    }
+    if ascii_printable(b2) == 1 {
+        count = count + 1;
+    }
+    if ascii_printable(b3) == 1 {
+        count = count + 1;
+    }
+    return count;
+}
+
+pub fn ascii_printable_principle(b: Int) -> DomainCert {
+    return domain_cert("encoding", "ascii_printable", ascii_printable(b));
+}
+
+pub fn verify_ascii_printable_principle() -> Bool {
+    // Golden: 'A' = 0x41 is printable.
+    if ascii_printable(65) != 1 { return false; }
+    // Golden: ' ' = 0x20 (lower boundary) is printable.
+    if ascii_printable(32) != 1 { return false; }
+    // Golden: '~' = 0x7E (upper boundary) is printable.
+    if ascii_printable(126) != 1 { return false; }
+    // Golden: 'a' = 0x61 is printable.
+    if ascii_printable(97) != 1 { return false; }
+    // Golden: '0' = 0x30 is printable.
+    if ascii_printable(48) != 1 { return false; }
+    // Hostile: 0x1F (US, just below space) is not printable.
+    if ascii_printable(31) != 0 { return false; }
+    // Hostile: DEL = 0x7F is not printable.
+    if ascii_printable(127) != 0 { return false; }
+    // Hostile: 0x00 (NULL) is not printable.
+    if ascii_printable(0) != 0 { return false; }
+    // Hostile: 0xFF is not printable.
+    if ascii_printable(255) != 0 { return false; }
+    // Hostile: out-of-range bytes fail closed.
+    if ascii_printable(-1) != 0 { return false; }
+    if ascii_printable(256) != 0 { return false; }
+    // Golden: 4 printable bytes count 4.
+    if ascii_printable_count(65, 66, 67, 68) != 4 { return false; }
+    // Golden: 0 printable bytes count 0.
+    if ascii_printable_count(0, 1, 2, 3) != 0 { return false; }
+    // Golden: 2 printable bytes in mixed window.
+    if ascii_printable_count(65, 0, 66, 127) != 2 { return false; }
+    // Golden: boundaries 0x20 and 0x7E count.
+    if ascii_printable_count(32, 126, 31, 127) != 2 { return false; }
+    // DomainCert holds matches the Int law.
+    if ascii_printable_principle(65).holds != 1 { return false; }
+    if ascii_printable_principle(127).holds != 0 { return false; }
+    if ascii_printable_principle(32).holds != 1 { return false; }
+    if ascii_printable_principle(126).holds != 1 { return false; }
+    return true;
+}

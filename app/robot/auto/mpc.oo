@@ -1,0 +1,24 @@
+// # Model Predictive Control (MPC) Facade
+//
+// Logline: Re-exports vehicle state constraints, trajectory references, kinematic models, and QP engine.
+//
+// Setup: Pure module shim importing MPC types.
+//
+// Beats:
+//   1. Import MPC types and constraints.
+//   2. Re-export public symbols with typed shim markers.
+//   3. Maintain compatibility with downstream vehicle trajectory controllers.
+
+import "./mpc_types_construct.oo";
+
+pub fn shim_marker_mpc_horizon_default() -> MpcHorizon {
+    return mpc_horizon_default();
+}
+
+pub fn shim_marker_mpc_constraints_default() -> MpcConstraints {
+    return mpc_constraints_default();
+}
+
+pub fn shim_marker_mpc_weights_default() -> MpcWeights {
+    return mpc_weights_default();
+}

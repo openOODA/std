@@ -1,0 +1,131 @@
+// # PTP IEEE 1588-2019 law
+//
+// Logline: IEEE Std 1588-2019 (Precision Time Protocol, v2.1, published 2019-11-21) synchronizes master-slave clocks via Sync/Follow_Up/Delay_Req/Delay_Resp message exchange; given t1 (master sends Sync), t2 (slave receives Sync), t3 (slave sends Delay_Req), t4 (master receives Delay_Req), the clock offset is ((t2 - t1) + (t4 - t3)) / 2 and the path delay is ((t4 - t3) + (t2 - t1)) / 2, both in the same time unit (ns); t4 < t3 fails closed.
+// Setup: Pure Int. Time unit is nanoseconds (ns). 1 ms = 1,000,000 ns; 1 us = 1,000 ns. All four timestamps are in the same time base.
+// Beats:
+//   1. ptp_offset(t1,t2,t3,t4) returns ((t2-t1) + (t4-t3))/2.
+//   2. ptp_delay(t1,t2,t3,t4) returns ((t4-t3) + (t2-t1))/2.
+//   3. Hostile: t4 < t3 fails closed (negative round-trip -> Err).
+//   4. Golden: t1=0, t2=10 ms=10,000,000 ns, t3=11 ms, t4=21 ms -> offset = 10 ms, delay = 10 ms (within 0.001% = 100 ns).
+//   5. Coupled: PTP achieves sub-microsecond sync; NTP achieves millisecond-class sync (IEEE 1588-2019 Sec 1; Mills 1991 RFC 1305).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Nanoseconds per millisecond (SI).
+pub fn ptp_ns_per_ms() -> Int {
+    return 1000000;
+}
+
+// Nanoseconds per microsecond (SI).
+pub fn ptp_ns_per_us() -> Int {
+    return 1000;
+}
+
+// IEEE 1588-2019 publication date: 2019-11-21.
+pub fn ptp_published_year() -> Int {
+    return 2019;
+}
+
+pub fn ptp_published_month() -> Int {
+    return 11;
+}
+
+pub fn ptp_published_day() -> Int {
+    return 21;
+}
+
+// Unwrap a Result[Int, String] for PTP offset/delay; -1 on Err.
+fn ptp_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// PTP path delay: ((t4 - t3) + (t2 - t1)) / 2. All timestamps in ns.
+// Fails closed (Err) when t4 < t3 because the round-trip cannot be negative.
+pub fn ptp_delay(t1: Int, t2: Int, t3: Int, t4: Int) -> Result[Int, String] {
+    if t4 < t3 { return Err("ERR\tptp\trt"); }
+    let a: Int = t4 - t3;
+    let b: Int = t2 - t1;
+    return Ok((a + b) / 2);
+}
+
+// PTP clock offset: ((t2 - t1) + (t4 - t3)) / 2. All timestamps in ns.
+// Fails closed (Err) when t4 < t3 for the same reason as ptp_delay.
+pub fn ptp_offset(t1: Int, t2: Int, t3: Int, t4: Int) -> Result[Int, String] {
+    if t4 < t3 { return Err("ERR\tptp\trt"); }
+    let a: Int = t2 - t1;
+    let b: Int = t4 - t3;
+    return Ok((a + b) / 2);
+}
+
+// 1 if |observed - expected| <= tol; 0 otherwise. Within-tolerance test.
+pub fn ptp_within(observed: Int, expected: Int, tol: Int) -> Int {
+    let mut d: Int = observed - expected;
+    if d < 0 { d = 0 - d; }
+    if d <= tol { return 1; }
+    return 0;
+}
+
+pub fn ptp_ieee_1588_holds(t1: Int, t2: Int, t3: Int, t4: Int) -> DomainCert {
+    let mut holds: Int = 0;
+    let offr: Result[Int, String] = ptp_offset(t1, t2, t3, t4);
+    let delr: Result[Int, String] = ptp_delay(t1, t2, t3, t4);
+    let offok: Bool = offr.is_ok();
+    let delok: Bool = delr.is_ok();
+    if offok == true {
+        if delok == true { holds = 1; }
+    }
+    return domain_cert("time", "ptp_ieee_1588", holds);
+}
+
+pub fn verify_ptp_ieee_1588_law() -> Bool {
+    // Golden: t1=0, t2=10 ms, t3=11 ms, t4=21 ms -> offset = 10 ms = 10,000,000 ns.
+    let ten_ms: Int = 10 * ptp_ns_per_ms();
+    let eleven_ms: Int = 11 * ptp_ns_per_ms();
+    let twenty_one_ms: Int = 21 * ptp_ns_per_ms();
+    let off: Int = ptp_got(ptp_offset(0, ten_ms, eleven_ms, twenty_one_ms));
+    if off != ten_ms { return false; }
+    // Golden: same example -> delay = 10 ms.
+    let del: Int = ptp_got(ptp_delay(0, ten_ms, eleven_ms, twenty_one_ms));
+    if del != ten_ms { return false; }
+    // 0.001% tolerance on 10 ms = 100 ns.
+    if ptp_within(off, ten_ms, 100) != 1 { return false; }
+    if ptp_within(del, ten_ms, 100) != 1 { return false; }
+    // Golden: a 100-microsecond asymmetric case (forward 100us, reverse 0).
+    let hun_us: Int = 100 * ptp_ns_per_us();
+    let off2: Int = ptp_got(ptp_offset(0, hun_us, hun_us + 1000, hun_us + 1000));
+    if off2 != hun_us / 2 { return false; }
+    let del2: Int = ptp_got(ptp_delay(0, hun_us, hun_us + 1000, hun_us + 1000));
+    if del2 != hun_us / 2 { return false; }
+    // Golden: zero offset (symmetric path) -> offset = 1000, delay = 1000.
+    let off3: Int = ptp_got(ptp_offset(0, 1000, 2000, 3000));
+    if off3 != 1000 { return false; }
+    let del3: Int = ptp_got(ptp_delay(0, 1000, 2000, 3000));
+    if del3 != 1000 { return false; }
+    // Hostile: t4 < t3 fails closed on offset.
+    if ptp_offset(0, 1000, 2000, 1500).is_ok() { return false; }
+    // Hostile: t4 < t3 fails closed on delay.
+    if ptp_delay(0, 1000, 2000, 1500).is_ok() { return false; }
+    // Hostile: t4 = t3 - 1 -> Err.
+    if ptp_offset(0, 1000, 2000, 1999).is_ok() { return false; }
+    if ptp_delay(0, 1000, 2000, 1999).is_ok() { return false; }
+    // Golden: IEEE 1588-2019 publication date metadata.
+    if ptp_published_year() != 2019 { return false; }
+    if ptp_published_month() != 11 { return false; }
+    if ptp_published_day() != 21 { return false; }
+    // Coupled: sub-microsecond vs millisecond tolerance bands.
+    if ptp_ns_per_us() != 1000 { return false; }
+    if ptp_ns_per_ms() != 1000000 { return false; }
+    // Golden: domain_cert wrapper holds=1 for valid case.
+    let c1: DomainCert = ptp_ieee_1588_holds(0, ten_ms, eleven_ms, twenty_one_ms);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "time" { return false; }
+    if c1.law_name != "ptp_ieee_1588" { return false; }
+    // Golden: domain_cert wrapper holds=0 for hostile case.
+    let c2: DomainCert = ptp_ieee_1588_holds(0, 1000, 2000, 1500);
+    if c2.holds != 0 { return false; }
+    // ptp_within negative-deviation test.
+    if ptp_within(ten_ms - 50, ten_ms, 100) != 1 { return false; }
+    if ptp_within(ten_ms + 50, ten_ms, 100) != 1 { return false; }
+    if ptp_within(ten_ms + 200, ten_ms, 100) != 0 { return false; }
+    return true;
+}

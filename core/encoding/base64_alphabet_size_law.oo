@@ -1,0 +1,119 @@
+// # Base64 Alphabet Size Law
+//
+// Logline: Base64 uses exactly 64 distinct alphabet characters plus a separate padding token.
+//
+// Setup: Pure Int. Indices are 0/1 classifiers. Raw byte counts are non-negative; negative size or a decode length not a multiple of 4 returns Err. encode_size(0) is Ok(0).
+//
+// Beats:
+//   1. b64_alphabet_index_in_range holds iff 0 <= i < 64.
+//   2. b64_encode_size returns 4 * ceil(raw_bytes / 3) for valid input.
+//   3. b64_padding_token holds only for index 64; padding is not part of the alphabet.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn b64_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn b64_alphabet_index_in_range(i: Int) -> Int {
+    if i < 0 {
+        return 0;
+    }
+    if i < 64 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn b64_padding_token(i: Int) -> Int {
+    if i == 64 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn b64_encode_size(raw_bytes: Int) -> Result[Int, String] {
+    if raw_bytes < 0 { return Err("ERR\tb64\tdomain"); }
+    let groups: Int = (raw_bytes + 2) / 3;
+    return Ok(groups * 4);
+}
+
+pub fn b64_decode_padded_size(encoded_chars: Int) -> Result[Int, String] {
+    if encoded_chars < 0 { return Err("ERR\tb64\tdomain"); }
+    if (encoded_chars % 4) != 0 { return Err("ERR\tb64\tdomain"); }
+    return Ok((encoded_chars / 4) * 3);
+}
+
+pub fn b64_alphabet_size_law() -> DomainCert {
+    let lower: Int = b64_alphabet_index_in_range(0);
+    let upper: Int = b64_alphabet_index_in_range(63);
+    let beyond: Int = b64_alphabet_index_in_range(64);
+    if lower != 1 {
+        return domain_cert("encoding", "b64_alphabet_size", 0);
+    }
+    if upper != 1 {
+        return domain_cert("encoding", "b64_alphabet_size", 0);
+    }
+    if beyond != 0 {
+        return domain_cert("encoding", "b64_alphabet_size", 0);
+    }
+    return domain_cert("encoding", "b64_alphabet_size", 1);
+}
+
+pub fn verify_base64_alphabet_size_law() -> Bool {
+    // Golden: index 0 is in range.
+    if b64_alphabet_index_in_range(0) != 1 { return false; }
+    // Golden: index 25 (lowercase 'z') is in range.
+    if b64_alphabet_index_in_range(25) != 1 { return false; }
+    // Golden: index 51 (digit 'z'+1) is in range.
+    if b64_alphabet_index_in_range(51) != 1 { return false; }
+    // Golden: index 62 is in range.
+    if b64_alphabet_index_in_range(62) != 1 { return false; }
+    // Golden: index 63 is in range.
+    if b64_alphabet_index_in_range(63) != 1 { return false; }
+    // Hostile: index 64 is not in the alphabet.
+    if b64_alphabet_index_in_range(64) != 0 { return false; }
+    // Hostile: index 100 is not in the alphabet.
+    if b64_alphabet_index_in_range(100) != 0 { return false; }
+    // Hostile: negative index fails closed.
+    if b64_alphabet_index_in_range(0 - 1) != 0 { return false; }
+    // Golden: padding token 64 holds.
+    if b64_padding_token(64) != 1 { return false; }
+    // Hostile: padding token 0 is not padding.
+    if b64_padding_token(0) != 0 { return false; }
+    // Hostile: padding token 63 is not padding.
+    if b64_padding_token(63) != 0 { return false; }
+    // Identity: 0 raw bytes encode to Ok(0) chars.
+    let zenc: Result[Int, String] = b64_encode_size(0);
+    if zenc.is_ok() == false { return false; }
+    if b64_got(zenc) != 0 { return false; }
+    // Golden: 1 raw byte encodes to 4 chars.
+    if b64_got(b64_encode_size(1)) != 4 { return false; }
+    // Golden: 2 raw bytes encode to 4 chars.
+    if b64_got(b64_encode_size(2)) != 4 { return false; }
+    // Golden: 3 raw bytes encode to 4 chars.
+    if b64_got(b64_encode_size(3)) != 4 { return false; }
+    // Golden: 4 raw bytes encode to 8 chars.
+    if b64_got(b64_encode_size(4)) != 8 { return false; }
+    // Golden: 6 raw bytes encode to 8 chars.
+    if b64_got(b64_encode_size(6)) != 8 { return false; }
+    // Golden: 12 raw bytes encode to 16 chars.
+    if b64_got(b64_encode_size(12)) != 16 { return false; }
+    // Hostile: negative raw bytes returns Err.
+    if b64_encode_size(0 - 1).is_ok() { return false; }
+    // Golden: 4 encoded chars decode to 3 raw bytes.
+    if b64_got(b64_decode_padded_size(4)) != 3 { return false; }
+    // Golden: 8 encoded chars decode to 6 raw bytes.
+    if b64_got(b64_decode_padded_size(8)) != 6 { return false; }
+    // Identity: 0 encoded chars decode to Ok(0).
+    let zdec: Result[Int, String] = b64_decode_padded_size(0);
+    if zdec.is_ok() == false { return false; }
+    if b64_got(zdec) != 0 { return false; }
+    // Hostile: 5 encoded chars is not a multiple of 4.
+    if b64_decode_padded_size(5).is_ok() { return false; }
+    // Hostile: negative encoded chars returns Err.
+    if b64_decode_padded_size(0 - 4).is_ok() { return false; }
+    // DomainCert.holds matches the Int law.
+    if b64_alphabet_size_law().holds != 1 { return false; }
+    return true;
+}

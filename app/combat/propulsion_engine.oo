@@ -1,0 +1,29 @@
+// # Propulsion engine
+//
+// Logline: PropEng implemented off Float nozzle thermodynamics.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type PropEng = struct {
+    thrust: Int,
+    isp: Int
+};
+
+pub fn prop_eng_new(thrust: Int, isp: Int) -> PropEng {
+    return PropEng { thrust: thrust, isp: isp };
+}
+
+pub fn prop_eng_thrust(e: PropEng) -> Int {
+    return e.thrust;
+}
+
+pub fn prop_eng_isp(e: PropEng) -> Int {
+    return e.isp;
+}

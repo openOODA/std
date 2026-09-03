@@ -1,0 +1,100 @@
+// # Shannon-Hartley Channel Capacity Law
+//
+// Logline: Maximum reliable bit rate over a noisy channel is C = B * log2(1 + S/N).
+//
+// Setup: Pure Float. B > 0, S/N >= 0. B<=0 or SNR<0 return Err. SNR=0 with B>0 is Ok(0).
+//   Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. Capacity C = B * log2(1 + S/N) in bits/second.
+//   2. SNR linear: S/N in [0, +inf). SNR=0 is C = 0.
+//   3. Capacity in dB: capacity from bandwidth and SNR in decibels.
+//   4. Bandwidth required for a target rate at a given SNR.
+
+import "std/net/net_invariants.oo";
+
+fn sh_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// log2 via natural log and ln(2). x<=0 is Err, not dummy 0.
+fn sh_log2(x: Float) -> Result[Float, String] {
+    if x <= 0.0 { return Err("ERR\tsh\tlog"); }
+    let ln2: Float = 0.6931471805599453;
+    return Ok(ln(x) / ln2);
+}
+
+// Capacity C = B * log2(1 + snr). snr < 0 or B <= 0 returns Err.
+// SNR_linear==0 with B>0 is Ok(0): C = B log2(1+0) = 0.
+pub fn shannon_hartley_capacity(bandwidth_hz: Float, snr_linear: Float) -> Result[Float, String] {
+    if bandwidth_hz <= 0.0 { return Err("ERR\tsh\tbw"); }
+    if snr_linear < 0.0 { return Err("ERR\tsh\tsnr"); }
+    let one_plus: Float = 1.0 + snr_linear;
+    let lr: Result[Float, String] = sh_log2(one_plus);
+    match lr {
+        Ok(l2) => { return Ok(bandwidth_hz * l2); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+// Capacity from SNR in decibels: snr_linear = 10^(snr_db / 10).
+pub fn shannon_hartley_capacity_db(bandwidth_hz: Float, snr_db: Float) -> Result[Float, String] {
+    if bandwidth_hz <= 0.0 { return Err("ERR\tsh\tbw"); }
+    let ln10: Float = 2.302585092994046;
+    let snr_lin: Float = exp((snr_db / 10.0) * ln10);
+    return shannon_hartley_capacity(bandwidth_hz, snr_lin);
+}
+
+// Bandwidth required for a target capacity C at given SNR: B = C / log2(1 + snr).
+pub fn shannon_hartley_required_bandwidth(target_capacity_bps: Float, snr_linear: Float) -> Result[Float, String] {
+    if target_capacity_bps <= 0.0 { return Err("ERR\tsh\tcap"); }
+    if snr_linear < 0.0 { return Err("ERR\tsh\tsnr"); }
+    let lr: Result[Float, String] = sh_log2(1.0 + snr_linear);
+    match lr {
+        Ok(l2) => {
+            if l2 <= 0.0 { return Err("ERR\tsh\tsnr"); }
+            return Ok(target_capacity_bps / l2);
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+// KAT and hostile cases for the Shannon-Hartley law.
+pub fn verify_shannon_hartley_law() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    let c_zero: Float = sh_got(shannon_hartley_capacity(1000.0, 0.0));
+    if c_zero != 0.0 { return false; }
+    let c_one: Float = sh_got(shannon_hartley_capacity(1000.0, 1.0));
+    let mut d: Float = c_one - 1000.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let c_three: Float = sh_got(shannon_hartley_capacity(1000.0, 3.0));
+    let target: Float = 1000.0 * 2.0;
+    let mut d3: Float = c_three - target;
+    if d3 < 0.0 { d3 = 0.0 - d3; }
+    if d3 > 0.0001 { return false; }
+    let c_db: Float = sh_got(shannon_hartley_capacity_db(1000.0, 10.0));
+    let target_db: Float = 1000.0 * sh_got(sh_log2(11.0));
+    let mut dd: Float = c_db - target_db;
+    if dd < 0.0 { dd = 0.0 - dd; }
+    if dd > 0.0001 { return false; }
+    let b_req: Float = sh_got(shannon_hartley_required_bandwidth(2000.0, 3.0));
+    let target_b: Float = 2000.0 / 2.0;
+    let mut db: Float = b_req - target_b;
+    if db < 0.0 { db = 0.0 - db; }
+    if db > 0.0001 { return false; }
+    if shannon_hartley_capacity(1000.0, 0.0).is_ok() == false { return false; }
+    if sh_log2(1.0).is_ok() == false { return false; }
+    if sh_got(sh_log2(1.0)) != 0.0 { return false; }
+    if shannon_hartley_capacity(0.0, 1.0).is_ok() { return false; }
+    if shannon_hartley_capacity(0.0 - 1.0, 1.0).is_ok() { return false; }
+    if shannon_hartley_capacity(1000.0, 0.0 - 1.0).is_ok() { return false; }
+    if shannon_hartley_capacity_db(0.0, 10.0).is_ok() { return false; }
+    if shannon_hartley_required_bandwidth(0.0, 1.0).is_ok() { return false; }
+    if shannon_hartley_required_bandwidth(2000.0, 0.0).is_ok() { return false; }
+    if shannon_hartley_required_bandwidth(2000.0, 0.0 - 1.0).is_ok() { return false; }
+    if sh_log2(0.0).is_ok() { return false; }
+    if sh_log2(0.0 - 1.0).is_ok() { return false; }
+    return true;
+}

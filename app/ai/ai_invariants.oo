@@ -1,0 +1,27 @@
+// # AI learning-rate product invariants
+//
+// Logline: Learning rate must be strictly positive; zero and negative fail closed.
+//
+// Setup: Pure Float checks. DomainCert is local because std/core/domain_cert.oo is absent.
+//
+// Beats:
+//   1. ai_lr_ok(0.0) returns 0.
+//   2. Negative learning rate returns 0.
+//   3. ai_lr_ok(0.1) returns 1.
+
+import "std/core/primitives/domain_cert.oo";
+// Zero and negative learning rates are invalid.
+pub fn ai_lr_ok(lr: Float) -> Int {
+    if lr <= 0.0 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn ai_lr_cert(lr: Float) -> DomainCert {
+    return DomainCert {
+        domain: "ai",
+        law_name: "lr_positive",
+        holds: ai_lr_ok(lr)
+    };
+}

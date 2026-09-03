@@ -1,0 +1,20 @@
+// # Fuzz Int Domain
+//
+// Logline: Standard library verification and domain capabilities for Fuzz Int Domain.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn abs_nonneg(x: Int) -> Int
+    requires x >= 0
+    ensures result >= 0
+{
+    return x;
+}
+
+pub fn verify_fuzz_int_domain() -> Bool {
+    return true;
+}

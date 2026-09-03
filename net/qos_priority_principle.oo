@@ -1,0 +1,112 @@
+// # QoS Priority Principle
+//
+// Logline: DSCP code selects a 0-7 priority class: EF (46) voice, AF41 (34) video, BE (0) data; out-of-range DSCP fails closed.
+//
+// Setup: Pure Int. dscp in 0..63. priority 0..7. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. DSCP EF (46) maps to priority 7 (voice).
+//   2. DSCP AF41 (34) maps to priority 5 (video).
+//   3. DSCP BE (0) maps to priority 0 (data).
+//   4. dscp out of [0, 63] fails closed to 0.
+
+import "std/net/net_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Known DSCP codes (RFC 2474 / 2597 / 3246).
+pub fn qos_dscp_ef() -> Int {
+    return 46;
+}
+
+pub fn qos_dscp_af41() -> Int {
+    return 34;
+}
+
+pub fn qos_dscp_af31() -> Int {
+    return 26;
+}
+
+pub fn qos_dscp_af21() -> Int {
+    return 18;
+}
+
+pub fn qos_dscp_af11() -> Int {
+    return 10;
+}
+
+pub fn qos_dscp_be() -> Int {
+    return 0;
+}
+
+fn qos_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Map a DSCP code to a 0..7 priority. BE (0) is Ok(0). Out of [0, 63] is Err.
+pub fn qos_priority(dscp: Int) -> Result[Int, String] {
+    if dscp < 0 { return Err("ERR\tqos\tdomain"); }
+    if dscp > 63 { return Err("ERR\tqos\tdomain"); }
+    if dscp == qos_dscp_ef() { return Ok(7); }
+    if dscp == qos_dscp_af41() { return Ok(5); }
+    if dscp == qos_dscp_af31() { return Ok(4); }
+    if dscp == qos_dscp_af21() { return Ok(3); }
+    if dscp == qos_dscp_af11() { return Ok(2); }
+    if dscp == qos_dscp_be() { return Ok(0); }
+    if dscp >= 32 { return Ok(6); }
+    if dscp >= 16 { return Ok(3); }
+    return Ok(1);
+}
+
+// Map a class name to its canonical DSCP. data/best-effort is Ok(0). Unknown is Err.
+pub fn qos_dscp_for_class(class_name: String) -> Result[Int, String] {
+    if class_name == "voice" { return Ok(qos_dscp_ef()); }
+    if class_name == "video" { return Ok(qos_dscp_af41()); }
+    if class_name == "data" { return Ok(qos_dscp_be()); }
+    if class_name == "best-effort" { return Ok(qos_dscp_be()); }
+    return Err("ERR\tqos\tdomain");
+}
+
+// Domain certificate: 1 when dscp is in range [0, 63] and priority is in [0, 7].
+pub fn qos_holds(dscp: Int) -> DomainCert {
+    let inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if inv_ok == false { return domain_cert("net", "qos_priority_principle", 0); }
+    if dscp < 0 { return domain_cert("net", "qos_priority_principle", 0); }
+    if dscp > 63 { return domain_cert("net", "qos_priority_principle", 0); }
+    return domain_cert("net", "qos_priority_principle", 1);
+}
+
+// KAT and hostile cases for the QoS priority principle.
+pub fn verify_qos_priority_principle() -> Bool {
+    if qos_holds(46).holds != 1 { return false; }
+    if qos_holds(34).holds != 1 { return false; }
+    if qos_holds(0).holds != 1 { return false; }
+    if qos_holds(0 - 1).holds != 0 { return false; }
+    if qos_holds(64).holds != 0 { return false; }
+    if qos_holds(100).holds != 0 { return false; }
+    if qos_got(qos_priority(46)) != 7 { return false; }
+    if qos_got(qos_priority(34)) != 5 { return false; }
+    let zbe: Result[Int, String] = qos_priority(0);
+    if zbe.is_ok() == false { return false; }
+    if qos_got(zbe) != 0 { return false; }
+    if qos_got(qos_priority(26)) != 4 { return false; }
+    if qos_got(qos_priority(18)) != 3 { return false; }
+    if qos_got(qos_priority(10)) != 2 { return false; }
+    if qos_priority(0 - 1).is_ok() { return false; }
+    if qos_priority(64).is_ok() { return false; }
+    if qos_got(qos_priority(63)) != 6 { return false; }
+    if qos_got(qos_priority(32)) != 6 { return false; }
+    if qos_got(qos_priority(16)) != 3 { return false; }
+    if qos_got(qos_priority(8)) != 1 { return false; }
+    if qos_got(qos_dscp_for_class("voice")) != 46 { return false; }
+    if qos_got(qos_dscp_for_class("video")) != 34 { return false; }
+    let zdata: Result[Int, String] = qos_dscp_for_class("data");
+    if zdata.is_ok() == false { return false; }
+    if qos_got(zdata) != 0 { return false; }
+    if qos_got(qos_dscp_for_class("best-effort")) != 0 { return false; }
+    if qos_dscp_for_class("unknown").is_ok() { return false; }
+    if qos_dscp_for_class("").is_ok() { return false; }
+    if qos_dscp_ef() != 46 { return false; }
+    if qos_dscp_af41() != 34 { return false; }
+    if qos_dscp_be() != 0 { return false; }
+    return true;
+}

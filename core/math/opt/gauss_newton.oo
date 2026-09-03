@@ -1,0 +1,46 @@
+// # Gauss-Newton Nonlinear Least Squares
+//
+// Logline: Fits y = a^2 x by damped Gauss-Newton on an in-module residual.
+//
+// Setup: Pure math. Data are abscissae xs and ordinates ys of equal length.
+//
+// Beats:
+//   1. Reject empty or mismatched data.
+//   2. Form r_i = y_i - a^2 x_i and J_i = 2 a x_i.
+//   3. Solve (J^T J) delta = J^T r and update a.
+//   4. Stop when |delta| is below tol, else fail closed.
+
+import "std/core/primitives/result.oo";
+
+pub fn gauss_newton_quad(xs: List[Float], ys: List[Float], a0: Float, max_iter: Int, tol: Float) -> Result[Float, String] {
+    let n: Int = list_len(xs);
+    if n < 1 { return Err("ERR\tgn\tn"); }
+    if list_len(ys) != n { return Err("ERR\tgn\tys"); }
+    if max_iter < 1 { return Err("ERR\tgn\titers"); }
+    if tol <= 0.0 { return Err("ERR\tgn\ttol"); }
+    let mut a: Float = a0;
+    let mut it: Int = 0;
+    while it < max_iter {
+        let mut jtj: Float = 0.0;
+        let mut jtr: Float = 0.0;
+        let mut i: Int = 0;
+        while i < n {
+            let xi: Float = list_get(xs, i);
+            let yi: Float = list_get(ys, i);
+            let fi: Float = (a * a) * xi;
+            let ji: Float = (2.0 * a) * xi;
+            let ri: Float = yi - fi;
+            jtj = jtj + ji * ji;
+            jtr = jtr + ji * ri;
+            i = i + 1;
+        }
+        if jtj == 0.0 { return Err("ERR\tgn\tsingular"); }
+        let delta: Float = jtr / jtj;
+        a = a + delta;
+        let mut ad: Float = delta;
+        if ad < 0.0 { ad = 0.0 - ad; }
+        if ad < tol { return Ok(a); }
+        it = it + 1;
+    }
+    return Err("ERR\tgn\max_iter");
+}

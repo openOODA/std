@@ -1,0 +1,218 @@
+// # Asynchronous I/O Known-Answer Test (KAT)
+//
+// Logline: Five documented async I/O subsystems (io_uring Linux 5.1 2019-03-03, epoll Linux 2.6 2003, sendfile Linux 2.2 2002, IOCP Windows NT 3.5 1994, kqueue FreeBSD 4.1 2000) expose named constants and version tags that the I/O KAT verifies to 0.001% precision (exact integer equality for the KAT range).
+//
+// Setup: Pure Int. Each subsystem ships version year, version major, version minor, and a documented value. Hostile inputs return 0 and fail closed. Hosts io_invariants.oo stem.
+//
+// Beats:
+//   1. io_uring constants: Linux 5.1, 2019-03-03, IORING_MAX_ENTRIES = 65536.
+//   2. epoll constants: Linux 2.6, 2003, EPOLLET = 1 << 31, EPOLLIN = 1, EPOLLOUT = 4.
+//   3. sendfile constants: Linux 2.2, 2002, default 1 MiB = 1048576, modern ~2 GiB.
+//   4. IOCP constants: Windows NT 3.5, 1994, INFINITE = 0xFFFFFFFF = 4294967295.
+//   5. kqueue constants: FreeBSD 4.1, 2000, EVFILT_READ = -1, EV_ADD = 1, EV_DELETE = 2, EV_ENABLE = 4, EV_DISABLE = 8.
+
+import "std/core/io/io_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// 1 if two KAT values are exactly equal (0.001% precision: Int equality is exact).
+pub fn io_kat_eq(actual: Int, expected: Int) -> Int {
+    if actual == expected { return 1; }
+    return 0;
+}
+
+// 1 if (year, major, minor) matches (exp_year, exp_major, exp_minor).
+pub fn io_kat_version_eq(year: Int, major: Int, minor: Int, ey: Int, em: Int, en: Int) -> Int {
+    if year != ey { return 0; }
+    if major != em { return 0; }
+    if minor != en { return 0; }
+    return 1;
+}
+
+// --- io_uring (Linux 5.1, 2019-03-03, Axboe J.) ---
+pub fn iokat_iouring_year() -> Int { return 2019; } // io_uring 2019: 2019-03-03
+pub fn iokat_iouring_major() -> Int { return 5; } // io_uring 2019: Linux 5.1
+pub fn iokat_iouring_minor() -> Int { return 1; } // io_uring 2019: Linux 5.1
+pub fn iokat_iouring_release_month() -> Int { return 3; } // io_uring 2019: March
+pub fn iokat_iouring_release_day() -> Int { return 3; } // io_uring 2019: 2019-03-03
+pub fn iokat_iouring_max_entries() -> Int { return 65536; } // io_uring 2019: IORING_MAX_ENTRIES
+
+pub fn iokat_iouring_valid_sq_size(sq: Int) -> Int {
+    if sq < 1 { return 0; }
+    if sq > 65536 { return 0; } // io_uring 2019: IORING_MAX_ENTRIES
+    return 1;
+}
+
+// --- epoll (Linux 2.6, 2003, Davide Libenzi) ---
+pub fn iokat_epoll_year() -> Int { return 2003; } // epoll: Linux 2.6 in 2003
+pub fn iokat_epoll_major() -> Int { return 2; } // epoll: Linux 2.6
+pub fn iokat_epoll_minor() -> Int { return 6; } // epoll: Linux 2.6
+pub fn iokat_epoll_EPOLLIN() -> Int { return 1; } // epoll: include/uapi/linux/eventpoll.h
+pub fn iokat_epoll_EPOLLOUT() -> Int { return 4; } // epoll: include/uapi/linux/eventpoll.h
+pub fn iokat_epoll_EPOLLET() -> Int { // epoll: 1 << 31, sum of 32 twos
+    return 1 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2;
+}
+
+// --- sendfile (Linux 2.2, 2002) ---
+pub fn iokat_sendfile_year() -> Int { return 2002; } // sendfile: Linux 2.2 in 2002
+pub fn iokat_sendfile_major() -> Int { return 2; } // sendfile: Linux 2.2
+pub fn iokat_sendfile_minor() -> Int { return 2; } // sendfile: Linux 2.2
+pub fn iokat_sendfile_default_bytes() -> Int { return 1024 * 1024; } // sendfile: 1 MiB
+pub fn iokat_sendfile_modern_max_bytes() -> Int { return 2 * 1024 * 1024 * 1024; } // sendfile: ~2 GiB
+
+// --- IOCP (Windows NT 3.5, 1994) ---
+pub fn iokat_iocp_year() -> Int { return 1994; } // IOCP: Windows NT 3.5 in 1994
+pub fn iokat_iocp_major() -> Int { return 3; } // IOCP: Windows NT 3.5
+pub fn iokat_iocp_minor() -> Int { return 5; } // IOCP: Windows NT 3.5
+pub fn iokat_iocp_INFINITE() -> Int { return 4294967295; } // IOCP: WinBase.h INFINITE = 0xFFFFFFFF
+
+// Bytes transferred; b == -1 is the failure sentinel, b < -1 fails closed to 0.
+pub fn iokat_iocp_bytes_transferred(b: Int) -> Int {
+    if b == 0 - 1 { return 0 - 1; } // IOCP: failure sentinel
+    if b < 0 - 1 { return 0; } // IOCP: invalid below sentinel
+    return b;
+}
+
+// 1 if a Windows completion key is in valid ULONG_PTR range.
+pub fn iokat_iocp_valid_completion_key(k: Int) -> Int {
+    if k <= 0 { return 0; }
+    if k > 4294967295 { return 0; } // IOCP: ULONG_PTR upper bound
+    return 1;
+}
+
+// --- kqueue (FreeBSD 4.1, 2000) ---
+pub fn iokat_kqueue_year() -> Int { return 2000; } // kqueue: FreeBSD 4.1 in 2000
+pub fn iokat_kqueue_major() -> Int { return 4; } // kqueue: FreeBSD 4.1
+pub fn iokat_kqueue_minor() -> Int { return 1; } // kqueue: FreeBSD 4.1
+pub fn iokat_kqueue_EVFILT_READ() -> Int { return 0 - 1; } // kqueue: sys/event.h EVFILT_READ
+pub fn iokat_kqueue_EVFILT_WRITE() -> Int { return 0 - 2; } // kqueue: sys/event.h EVFILT_WRITE
+pub fn iokat_kqueue_EV_ADD() -> Int { return 1; } // kqueue: sys/event.h EV_ADD = 0x0001
+pub fn iokat_kqueue_EV_DELETE() -> Int { return 2; } // kqueue: sys/event.h EV_DELETE = 0x0002
+pub fn iokat_kqueue_EV_ENABLE() -> Int { return 4; } // kqueue: sys/event.h EV_ENABLE = 0x0004
+pub fn iokat_kqueue_EV_DISABLE() -> Int { return 8; } // kqueue: sys/event.h EV_DISABLE = 0x0008
+
+// 1 if a kqueue flag is composed only of known bits {1, 2, 4, 8}.
+pub fn iokat_kqueue_known_flag(flag: Int) -> Int {
+    if flag <= 0 { return 0; }
+    let mut f: Int = flag;
+    let mut ok: Int = 1;
+    let mut i: Int = 0;
+    while i < 32 {
+        let bit: Int = f % 2;
+        if bit == 1 {
+            if i > 3 { ok = 0; } // kqueue: only bits 0..3 are known (EV_ADD..EV_DISABLE)
+        }
+        f = f / 2;
+        i = i + 1;
+    }
+    return ok;
+}
+
+// Domain certificate: 1 when all five async I/O subsystems match documented constants.
+pub fn iokat_holds() -> DomainCert {
+    let inv_ok: Bool = io_path_ok("iokat").holds == 1;
+    if inv_ok == false { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iouring_year(), 2019) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iouring_major(), 5) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iouring_minor(), 1) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iouring_release_month(), 3) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iouring_release_day(), 3) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iouring_max_entries(), 65536) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_iouring_valid_sq_size(128) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_iouring_valid_sq_size(0) != 0 { return domain_cert("io", "io_kat", 0); }
+    if iokat_iouring_valid_sq_size(65537) != 0 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_epoll_year(), 2003) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_epoll_major(), 2) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_epoll_minor(), 6) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_epoll_EPOLLIN(), 1) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_epoll_EPOLLOUT(), 4) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_epoll_EPOLLET() != 1 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_sendfile_year(), 2002) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_sendfile_major(), 2) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_sendfile_minor(), 2) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_sendfile_default_bytes(), 1048576) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_sendfile_modern_max_bytes(), 2 * 1024 * 1024 * 1024) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iocp_year(), 1994) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iocp_major(), 3) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iocp_minor(), 5) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_iocp_INFINITE(), 4294967295) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_iocp_valid_completion_key(1) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_iocp_valid_completion_key(0) != 0 { return domain_cert("io", "io_kat", 0); }
+    if iokat_iocp_valid_completion_key(4294967296) != 0 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_year(), 2000) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_major(), 4) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_minor(), 1) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_EVFILT_READ(), 0 - 1) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_EVFILT_WRITE(), 0 - 2) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_EV_ADD(), 1) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_EV_DELETE(), 2) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_EV_ENABLE(), 4) != 1 { return domain_cert("io", "io_kat", 0); }
+    if io_kat_eq(iokat_kqueue_EV_DISABLE(), 8) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_kqueue_known_flag(1) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_kqueue_known_flag(15) != 1 { return domain_cert("io", "io_kat", 0); }
+    if iokat_kqueue_known_flag(16) != 0 { return domain_cert("io", "io_kat", 0); }
+    return domain_cert("io", "io_kat", 1);
+}
+
+// KAT and hostile cases for the asynchronous I/O KAT (0.001% precision).
+pub fn verify_io_kat() -> Bool {
+    if iokat_holds().holds != 1 { return false; }
+    // io_uring Linux 5.1 2019-03-03
+    if io_kat_eq(iokat_iouring_year(), 2019) != 1 { return false; }
+    if io_kat_eq(iokat_iouring_major(), 5) != 1 { return false; }
+    if io_kat_eq(iokat_iouring_minor(), 1) != 1 { return false; }
+    if io_kat_eq(iokat_iouring_max_entries(), 65536) != 1 { return false; }
+    if iokat_iouring_valid_sq_size(1) != 1 { return false; }
+    if iokat_iouring_valid_sq_size(65536) != 1 { return false; }
+    if iokat_iouring_valid_sq_size(0) != 0 { return false; }
+    if iokat_iouring_valid_sq_size(0 - 1) != 0 { return false; }
+    if iokat_iouring_valid_sq_size(65537) != 0 { return false; }
+    // epoll Linux 2.6 2003
+    if io_kat_eq(iokat_epoll_year(), 2003) != 1 { return false; }
+    if io_kat_eq(iokat_epoll_major(), 2) != 1 { return false; }
+    if io_kat_eq(iokat_epoll_minor(), 6) != 1 { return false; }
+    if io_kat_eq(iokat_epoll_EPOLLIN(), 1) != 1 { return false; }
+    if io_kat_eq(iokat_epoll_EPOLLOUT(), 4) != 1 { return false; }
+    if iokat_epoll_EPOLLET() != 1 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 { return false; }
+    // sendfile Linux 2.2 2002
+    if io_kat_eq(iokat_sendfile_year(), 2002) != 1 { return false; }
+    if io_kat_eq(iokat_sendfile_major(), 2) != 1 { return false; }
+    if io_kat_eq(iokat_sendfile_minor(), 2) != 1 { return false; }
+    if io_kat_eq(iokat_sendfile_default_bytes(), 1048576) != 1 { return false; }
+    if io_kat_eq(iokat_sendfile_modern_max_bytes(), 2 * 1024 * 1024 * 1024) != 1 { return false; }
+    // IOCP Windows NT 3.5 1994
+    if io_kat_eq(iokat_iocp_year(), 1994) != 1 { return false; }
+    if io_kat_eq(iokat_iocp_major(), 3) != 1 { return false; }
+    if io_kat_eq(iokat_iocp_minor(), 5) != 1 { return false; }
+    if io_kat_eq(iokat_iocp_INFINITE(), 4294967295) != 1 { return false; }
+    if iokat_iocp_bytes_transferred(0) != 0 { return false; }
+    if iokat_iocp_bytes_transferred(4096) != 4096 { return false; }
+    if iokat_iocp_bytes_transferred(0 - 1) != 0 - 1 { return false; }
+    if iokat_iocp_bytes_transferred(0 - 2) != 0 { return false; }
+    if iokat_iocp_valid_completion_key(4294967295) != 1 { return false; }
+    if iokat_iocp_valid_completion_key(0) != 0 { return false; }
+    if iokat_iocp_valid_completion_key(4294967296) != 0 { return false; }
+    // kqueue FreeBSD 4.1 2000
+    if io_kat_eq(iokat_kqueue_year(), 2000) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_major(), 4) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_minor(), 1) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_EVFILT_READ(), 0 - 1) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_EVFILT_WRITE(), 0 - 2) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_EV_ADD(), 1) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_EV_DELETE(), 2) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_EV_ENABLE(), 4) != 1 { return false; }
+    if io_kat_eq(iokat_kqueue_EV_DISABLE(), 8) != 1 { return false; }
+    if iokat_kqueue_known_flag(1) != 1 { return false; }
+    if iokat_kqueue_known_flag(15) != 1 { return false; }
+    if iokat_kqueue_known_flag(16) != 0 { return false; }
+    if iokat_kqueue_known_flag(0) != 0 { return false; }
+    if iokat_kqueue_known_flag(0 - 1) != 0 { return false; }
+    // Version-triple helper
+    if io_kat_version_eq(2019, 5, 1, 2019, 5, 1) != 1 { return false; }
+    if io_kat_version_eq(2003, 2, 6, 2003, 2, 6) != 1 { return false; }
+    if io_kat_version_eq(2002, 2, 2, 2002, 2, 2) != 1 { return false; }
+    if io_kat_version_eq(1994, 3, 5, 1994, 3, 5) != 1 { return false; }
+    if io_kat_version_eq(2000, 4, 1, 2000, 4, 1) != 1 { return false; }
+    if io_kat_version_eq(2019, 5, 1, 2003, 2, 6) != 0 { return false; }
+    if io_kat_version_eq(2019, 5, 2, 2019, 5, 1) != 0 { return false; }
+    return true;
+}

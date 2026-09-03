@@ -1,0 +1,76 @@
+// # Iteration determinism principle
+//
+// Logline: Iterating the same collection under the same op yields the same result sequence; the determinism score is 1 when all observed iterates are equal.
+//
+// Setup: Pure Int. results is a List[Int] of observed iterate outcomes. Score 1 iff every element equals the first; else 0.
+//
+// Beats:
+//   1. One observation trivially scores 1 (nothing to compare against).
+//   2. Many identical observations score 1 (deterministic).
+//   3. A single divergent observation fails the score to 0.
+//   4. Coupled with the iter count: the count must agree with the list length.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Score 1 when every element of results equals results[0]; 0 otherwise.
+// Empty list fails closed to 0.
+pub fn collections_iter_determinism_score(results: List[Int]) -> DomainCert {
+    let n: Int = list_len(results);
+    if n < 1 {
+        return domain_cert("collections", "iter_determinism", 0);
+    }
+    let first: Int = list_get(results, 0);
+    let mut i: Int = 1;
+    while i < n {
+        if list_get(results, i) != first {
+            return domain_cert("collections", "iter_determinism", 0);
+        }
+        i = i + 1;
+    }
+    return domain_cert("collections", "iter_determinism", 1);
+}
+
+// Coupled: assert observed count agrees with the recorded iter count.
+// Holds 1 when observed == reported; else 0.
+pub fn collections_iter_count_consistent(observed: Int, reported: Int) -> DomainCert {
+    if observed == reported {
+        return domain_cert("collections", "iter_count_consistent", 1);
+    }
+    return domain_cert("collections", "iter_count_consistent", 0);
+}
+
+pub fn verify_collections_iter_deterministic_principle() -> Bool {
+    // Golden: 100 iterations of [1,2,3] all yield length 3.
+    let mut hundred: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < 100 {
+        hundred = list_push(hundred, 3);
+        k = k + 1;
+    }
+    if cert_holds(collections_iter_determinism_score(hundred)) != 1 { return false; }
+    if cert_holds(collections_iter_count_consistent(100, 100)) != 1 { return false; }
+
+    // Hostile: a single observation trivially scores 1 (no variance to detect).
+    let mut one: List[Int] = list_new();
+    one = list_push(one, 42);
+    if cert_holds(collections_iter_determinism_score(one)) != 1 { return false; }
+    if cert_holds(collections_iter_count_consistent(1, 1)) != 1 { return false; }
+
+    // Hostile: one divergent observation drops the score to 0.
+    let mut mix: List[Int] = list_new();
+    mix = list_push(mix, 5);
+    mix = list_push(mix, 5);
+    mix = list_push(mix, 5);
+    mix = list_push(mix, 6);
+    if cert_holds(collections_iter_determinism_score(mix)) != 0 { return false; }
+
+    // Hostile: empty list fails closed to 0.
+    let mut empty: List[Int] = list_new();
+    if cert_holds(collections_iter_determinism_score(empty)) != 0 { return false; }
+
+    // Hostile: mismatch between observed and reported count fails closed.
+    if cert_holds(collections_iter_count_consistent(7, 8)) != 0 { return false; }
+    if cert_holds(collections_iter_count_consistent(0, 1)) != 0 { return false; }
+
+    return true;
+}

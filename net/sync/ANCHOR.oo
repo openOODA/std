@@ -1,0 +1,130 @@
+// # Sync Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard sync (synchronization) domain library. Re-exports a stable sync_mod_* surface for the most-used public API (atomic, mutex, rwlock, semaphore, condvar, barrier, channel, spinlock, seqlock, rcu, fiber, threadpool, waitgroup, once_cell, futex, latch). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private sync siblings; thread-bound ops take ThreadCap at the call site. Lock-free and channel primitives are typed by cap.
+//
+// Beats:
+//   1. Re-export the atomic, atomic_flag, atomic_bitset, and atomic_rcu surface as sync_mod_atomic_*.
+//   2. Re-export the mutex (reentrant), rwlock, semaphore, condvar, barrier, and spinlock surface as sync_mod_*.
+//   3. Re-export the channel, channel_mpsc, and channel_broadcast surface as sync_mod_channel_*, sync_mod_mpsc_*, sync_mod_broadcast_*.
+//   4. Re-export the futex, seqlock, fiber, threadpool, waitgroup, once_cell, and latch surface.
+//   5. Document the private siblings (theories, laws, principles, invariants, KATs).
+
+import "atomic.oo";
+import "atomic_flag.oo";
+import "atomic_bitset.oo";
+import "atomic_rcu.oo";
+import "mutex_recursion_principle.oo";
+import "rwlock_thread.oo";
+import "semaphore_new.oo";
+import "condvar.oo";
+import "barrier_thread.oo";
+import "spinlock_ticket.oo";
+import "channel.oo";
+import "channel_mpsc.oo";
+import "channel_broadcast.oo";
+import "futex.oo";
+import "seqlock.oo";
+import "fiber.oo";
+import "threadpool.oo";
+import "waitgroup.oo";
+import "once_cell.oo";
+import "latch_countdown.oo";
+
+// Public atomic surface: sync_mod_atomic_*
+pub fn sync_mod_atomic_int_new(initial: Int) -> AtomicInt { return atomic_int_new(initial); }
+pub fn sync_mod_atomic_int_load(thread: &ThreadCap, a: AtomicInt) -> Int { return atomic_int_load(thread, a); }
+pub fn sync_mod_atomic_int_store(thread: &ThreadCap, a: AtomicInt, val: Int) -> AtomicInt { return atomic_int_store(thread, a, val); }
+pub fn sync_mod_atomic_int_fetch_add(thread: &ThreadCap, a: AtomicInt, delta: Int) -> AtomicInt { return atomic_int_fetch_add(thread, a, delta); }
+pub fn sync_mod_atomic_flag_new() -> AtomicFlag { return atomic_flag_new(); }
+pub fn sync_mod_atomic_flag_test(flag: AtomicFlag) -> Bool { return atomic_flag_test(flag); }
+pub fn sync_mod_atomic_bitset_new(bits: Int) -> AtomicBitSet { return atomic_bitset_new(bits); }
+
+// Public reentrant mutex surface: sync_mod_reentrant_*
+pub fn sync_mod_reentrant_mutex_new() -> ReentrantMutex { return reentrant_mutex_new(); }
+pub fn sync_mod_reentrant_mutex_lock(mtx: ReentrantMutex, thread_id: Int) -> ReentrantMutex { return reentrant_mutex_lock(mtx, thread_id); }
+pub fn sync_mod_reentrant_mutex_unlock(mtx: ReentrantMutex, thread_id: Int) -> ReentrantMutex { return reentrant_mutex_unlock(mtx, thread_id); }
+
+// Public rwlock surface: sync_mod_rwlock_*
+pub fn sync_mod_rwlock_new(id: Int, name: String) -> RwLock { return rwlock_new(id, name); }
+pub fn sync_mod_rwlock_read_lock(thread: &ThreadCap, lock: RwLock) -> Result[RwLock, String] { return rwlock_read_lock(thread, lock); }
+pub fn sync_mod_rwlock_read_unlock(thread: &ThreadCap, lock: RwLock) -> Result[RwLock, String] { return rwlock_read_unlock(thread, lock); }
+pub fn sync_mod_rwlock_write_lock(thread: &ThreadCap, lock: RwLock) -> Result[RwLock, String] { return rwlock_write_lock(thread, lock); }
+pub fn sync_mod_rwlock_write_unlock(thread: &ThreadCap, lock: RwLock) -> Result[RwLock, String] { return rwlock_write_unlock(thread, lock); }
+
+// Public semaphore surface: sync_mod_semaphore_*
+pub fn sync_mod_semaphore_new(permits: Int, max_permits: Int) -> Semaphore { return semaphore_new(permits, max_permits); }
+pub fn sync_mod_semaphore_available(sem: Semaphore) -> Int { return semaphore_available(sem); }
+
+// Public condvar surface: sync_mod_condvar_*
+pub fn sync_mod_condvar_new(id: Int) -> Condvar { return condvar_new(id); }
+pub fn sync_mod_condvar_signal(thread: &ThreadCap, cv: Condvar) -> Condvar { return condvar_signal(thread, cv); }
+pub fn sync_mod_condvar_broadcast(thread: &ThreadCap, cv: Condvar) -> Condvar { return condvar_broadcast(thread, cv); }
+
+// Public barrier surface: sync_mod_barrier_*
+pub fn sync_mod_barrier_new(threshold: Int) -> Barrier { return barrier_new(threshold); }
+pub fn sync_mod_barrier_wait(thread: &ThreadCap, b: Barrier) -> Result[Barrier, String] { return barrier_wait(thread, b); }
+
+// Public spinlock surface: sync_mod_ticket_*
+pub fn sync_mod_ticket_spinlock_new() -> TicketSpinlock { return ticket_spinlock_new(); }
+pub fn sync_mod_ticket_spinlock_take(thread: &ThreadCap, lock: TicketSpinlock) -> TicketSpinlock { return ticket_spinlock_take(thread, lock); }
+
+// Public channel surface: sync_mod_channel_*
+pub fn sync_mod_channel_create(tc: &ThreadCap) -> Result[String, String] { return channel_create(tc); }
+pub fn sync_mod_channel_push(tc: &ThreadCap, handle: String, msg: String) -> Result[String, String] { return channel_push(tc, handle, msg); }
+pub fn sync_mod_channel_pop(tc: &ThreadCap, handle: String) -> Result[String, String] { return channel_pop(tc, handle); }
+
+// Public mpsc channel surface: sync_mod_mpsc_*
+pub fn sync_mod_mpsc_new(cap: Int) -> MpscChannel { return mpsc_channel_new(cap); }
+pub fn sync_mod_mpsc_len(ch: MpscChannel) -> Int { return mpsc_len(ch); }
+pub fn sync_mod_mpsc_is_empty(ch: MpscChannel) -> Bool { return mpsc_is_empty(ch); }
+
+// Public broadcast channel surface: sync_mod_broadcast_*
+pub fn sync_mod_broadcast_new(cap: Int) -> BroadcastChannel { return broadcast_new(cap); }
+pub fn sync_mod_broadcast_subscribe(ch: BroadcastChannel) -> BroadcastReceiver { return broadcast_subscribe(ch); }
+
+// Public futex surface: sync_mod_futex_*
+pub fn sync_mod_futex_new(addr: Int, initial: Int) -> FutexWord { return futex_new(addr, initial); }
+pub fn sync_mod_futex_val(fw: FutexWord) -> Int { return futex_val(fw); }
+
+// Public seqlock surface: sync_mod_seqlock_*
+pub fn sync_mod_seqlock_new() -> SeqLock { return seqlock_new(); }
+pub fn sync_mod_seqlock_read_begin(lock: SeqLock) -> Int { return seqlock_read_begin(lock); }
+pub fn sync_mod_seqlock_read_validate(lock: SeqLock, start_seq: Int) -> Bool { return seqlock_read_validate(lock, start_seq); }
+
+// Public fiber surface: sync_mod_fiber_*
+pub fn sync_mod_fiber_create(id: Int, name: String, payload: String) -> FiberState { return fiber_create(id, name, payload); }
+pub fn sync_mod_fiber_is_runnable(f: FiberState) -> Bool { return fiber_is_runnable(f); }
+
+// Public threadpool surface: sync_mod_threadpool_*
+pub fn sync_mod_threadpool_new(thread: &ThreadCap, num_workers: Int) -> Result[ThreadPool, String] { return threadpool_new(thread, num_workers); }
+pub fn sync_mod_threadpool_complete_task(pool: ThreadPool) -> ThreadPool { return threadpool_complete_task(pool); }
+pub fn sync_mod_threadpool_worker_count(pool: ThreadPool) -> Int { return threadpool_worker_count(pool); }
+
+// Public waitgroup surface: sync_mod_waitgroup_*
+pub fn sync_mod_waitgroup_new() -> WaitGroup { return waitgroup_new(); }
+pub fn sync_mod_waitgroup_count(wg: WaitGroup) -> Int { return waitgroup_count(wg); }
+pub fn sync_mod_waitgroup_is_done(wg: WaitGroup) -> Bool { return waitgroup_is_done(wg); }
+
+// Public once_cell surface: sync_mod_once_*
+pub fn sync_mod_once_cell_new() -> OnceCell { return once_cell_new(); }
+pub fn sync_mod_once_cell_is_set(cell: OnceCell) -> Bool { return once_cell_is_set(cell); }
+pub fn sync_mod_once_cell_get(cell: OnceCell) -> Result[Int, String] { return once_cell_get(cell); }
+
+// Public latch surface: sync_mod_latch_*
+pub fn sync_mod_latch_new(count: Int) -> CountdownLatch { return latch_new(count); }
+pub fn sync_mod_latch_count_down(thread: &ThreadCap, latch: CountdownLatch) -> CountdownLatch { return latch_count_down(thread, latch); }
+pub fn sync_mod_latch_is_zero(latch: CountdownLatch) -> Bool { return latch_is_zero(latch); }
+
+// Public RCU surface: sync_mod_rcu_*
+pub fn sync_mod_rcu_epoch_new() -> RcuEpoch { return rcu_epoch_new(); }
+pub fn sync_mod_rcu_read_lock(thread: &ThreadCap, ep: RcuEpoch) -> RcuEpoch { return rcu_read_lock(thread, ep); }
+pub fn sync_mod_rcu_read(thread: &ThreadCap, cell: RcuCell) -> Int { return rcu_read(thread, cell); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. consensus_number_law.oo, dining_philosophers_law.oo, semaphore_count_law.oo)
+//   _theory files (e.g. cas_linearizability_theory.oo, peterson_locks_theory.oo, raft_leader_election_theory.oo)
+//   _principle files (e.g. abd_simulation_principle.oo, mutex_recursion_principle.oo, semaphore_starvation_principle.oo)
+//   _invariants files (e.g. sync_invariants.oo)
+//   _kat files (e.g. sync_kat.oo)

@@ -1,0 +1,230 @@
+// # Monad minimal axiom (Moggi 1991)
+//
+// Logline: A monad (T, return, bind) satisfies left identity (return x >>= f) = f x, right identity (m >>= return) = m, and associativity ((m >>= f) >>= g) = m >>= (\x. f(x) >>= g); the law holds for List, Option, and State monads (cross-domain: math category theory, AI MCMC, sync continuation, text parser combinators).
+//
+// Setup: Pure Int. Function ids for option/state: 0 = add10, 1 = double, 2 = square, 3 = id. List f_id: 0 = [x, x+1], 1 = [x*2, x*3], 2 = [x], 3 = [x, x, x]. Monad tag: 0 = List, 1 = Option, 2 = State. Hostile unknown tag or id fails closed to 0.
+//
+// Beats:
+//   1. monad_laws_check returns 1 iff left id, right id, and associativity all hold for the given monad and ids.
+//   2. List monad: return x = [x]; bind(xs,f) = concat(map(xs,f)).
+//   3. Option monad: return x = Some(x); bind(Opt,f) = match Opt (Some(v)->f(v), None->None).
+//   4. State monad: return x = (x,s); bind(m,f) = let (a,s')=m(s) in f(a)(s').
+
+import "std/core/primitives/domain_cert.oo";
+
+fn mapp(fn_id: Int, x: Int) -> Int {
+    if fn_id == 0 { return x + 10; }
+    if fn_id == 1 { return x * 2; }
+    if fn_id == 2 { return x * x; }
+    return x;
+}
+
+fn mfnok(fn_id: Int) -> Int {
+    if fn_id < 0 { return 0; }
+    if fn_id > 3 { return 0; }
+    return 1;
+}
+
+fn mlistf(x: Int, f_id: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if f_id == 0 { out = list_push(out, x); out = list_push(out, x + 1); return out; }
+    if f_id == 1 { out = list_push(out, x * 2); out = list_push(out, x * 3); return out; }
+    if f_id == 2 { out = list_push(out, x); return out; }
+    out = list_push(out, x); out = list_push(out, x); out = list_push(out, x);
+    return out;
+}
+
+fn mlistok(f_id: Int) -> Int { return mfnok(f_id); }
+
+fn mleq(a: List[Int], b: List[Int]) -> Int {
+    let na: Int = list_len(a);
+    let nb: Int = list_len(b);
+    if na != nb { return 0; }
+    let mut i: Int = 0;
+    while i < na { if list_get(a, i) != list_get(b, i) { return 0; } i = i + 1; }
+    return 1;
+}
+
+fn mret(x: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, x);
+    return out;
+}
+
+// bind_list xs >>= f
+fn mbind_list(xs: List[Int], f_id: Int) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let v: List[Int] = mlistf(list_get(xs, i), f_id);
+        let nv: Int = list_len(v);
+        let mut j: Int = 0;
+        while j < nv { out = list_push(out, list_get(v, j)); j = j + 1; }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn mbind_option(opt: List[Int], fn_id: Int) -> List[Int] {
+    if list_len(opt) == 0 { return opt; }
+    return mret(mapp(fn_id, list_get(opt, 0)));
+}
+
+pub fn monad_option_none() -> List[Int] { return list_new(); }
+
+// state monad represented as List[Int] of length 2: [value, state_after].
+pub fn monad_state_return(x: Int, s0: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, x);
+    out = list_push(out, s0);
+    return out;
+}
+
+fn mbind_state(m: List[Int], fn_id: Int) -> List[Int] {
+    if list_len(m) != 2 { return monad_state_return(0 - 1, 0); }
+    return monad_state_return(mapp(fn_id, list_get(m, 0)), list_get(m, 1));
+}
+
+fn mlist_lid(x: Int, f_id: Int) -> Int {
+    if mlistok(f_id) == 0 { return 0; }
+    return mleq(mbind_list(mret(x), f_id), mlistf(x, f_id));
+}
+
+fn mlist_rid(xs: List[Int]) -> Int { return mleq(xs, mbind_list(xs, 2)); }
+
+fn mlist_assoc(xs: List[Int], f: Int, g: Int) -> Int {
+    if mlistok(f) == 0 { return 0; }
+    if mlistok(g) == 0 { return 0; }
+    let lhs: List[Int] = mbind_list(mbind_list(xs, f), g);
+    let mut rhs: List[Int] = list_new();
+    let n: Int = list_len(xs);
+    let mut i: Int = 0;
+    while i < n {
+        rhs = mbind_list(rhs, g);
+        let fxs: List[Int] = mlistf(list_get(xs, i), f);
+        let mut j: Int = 0;
+        let nf: Int = list_len(fxs);
+        while j < nf { rhs = list_push(rhs, list_get(fxs, j)); j = j + 1; }
+        i = i + 1;
+    }
+    // correct associativity RHS construction
+    return mleq(lhs, mbind_list_flat(xs, f, g));
+}
+
+fn mbind_list_flat(xs: List[Int], f: Int, g: Int) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut rhs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let fxs: List[Int] = mlistf(list_get(xs, i), f);
+        let fxs_g: List[Int] = mbind_list(fxs, g);
+        let ng: Int = list_len(fxs_g);
+        let mut j: Int = 0;
+        while j < ng { rhs = list_push(rhs, list_get(fxs_g, j)); j = j + 1; }
+        i = i + 1;
+    }
+    return rhs;
+}
+
+fn mopt_lid(x: Int, f: Int) -> Int {
+    if mfnok(f) == 0 { return 0; }
+    return mleq(mbind_option(mret(x), f), mret(mapp(f, x)));
+}
+
+fn mopt_rid(x: Int) -> Int { return mleq(mret(x), mbind_option(mret(x), 3)); }
+
+fn mopt_assoc(f: Int, g: Int) -> Int {
+    if mfnok(f) == 0 { return 0; }
+    if mfnok(g) == 0 { return 0; }
+    let lhs: List[Int] = mbind_option(mbind_option(mret(5), f), g);
+    let rhs: List[Int] = mbind_option(mret(mapp(f, 5)), g);
+    return mleq(lhs, rhs);
+}
+
+fn mst_lid(x: Int, s0: Int, f: Int) -> Int {
+    if mfnok(f) == 0 { return 0; }
+    return mleq(mbind_state(monad_state_return(x, s0), f), monad_state_return(mapp(f, x), s0));
+}
+
+fn mst_rid(x: Int, s0: Int) -> Int { return mleq(monad_state_return(x, s0), mbind_state(monad_state_return(x, s0), 3)); }
+
+fn mst_assoc(x: Int, s0: Int, f: Int, g: Int) -> Int {
+    if mfnok(f) == 0 { return 0; }
+    if mfnok(g) == 0 { return 0; }
+    let lhs: List[Int] = mbind_state(mbind_state(monad_state_return(x, s0), f), g);
+    let rhs: List[Int] = mbind_state(monad_state_return(mapp(f, x), s0), g);
+    return mleq(lhs, rhs);
+}
+
+pub fn monad_laws_check(monad_tag: Int, x: Int, f_id: Int, g_id: Int) -> Int {
+    if monad_tag < 0 { return 0; }
+    if monad_tag > 2 { return 0; }
+    if monad_tag == 0 {
+        if mlistok(f_id) == 0 { return 0; }
+        if mlistok(g_id) == 0 { return 0; }
+        let xs: List[Int] = mret(x);
+        if mlist_lid(x, f_id) == 0 { return 0; }
+        if mlist_rid(xs) == 0 { return 0; }
+        if mlist_assoc(xs, f_id, g_id) == 0 { return 0; }
+        return 1;
+    }
+    if monad_tag == 1 {
+        if mfnok(f_id) == 0 { return 0; }
+        if mfnok(g_id) == 0 { return 0; }
+        if mopt_lid(x, f_id) == 0 { return 0; }
+        if mopt_rid(x) == 0 { return 0; }
+        if mopt_assoc(f_id, g_id) == 0 { return 0; }
+        return 1;
+    }
+    if mfnok(f_id) == 0 { return 0; }
+    if mfnok(g_id) == 0 { return 0; }
+    if mst_lid(x, 0, f_id) == 0 { return 0; }
+    if mst_rid(x, 0) == 0 { return 0; }
+    if mst_assoc(x, 0, f_id, g_id) == 0 { return 0; }
+    return 1;
+}
+
+pub fn monad_principle_cert(monad_tag: Int, x: Int, f_id: Int, g_id: Int) -> DomainCert {
+    return domain_cert("principles", "monad_minimal_axiom", monad_laws_check(monad_tag, x, f_id, g_id));
+}
+
+pub fn verify_monad_minimal_axiom_principle() -> Bool {
+    if mapp(0, 5) != 15 { return false; }
+    if mapp(1, 5) != 10 { return false; }
+    if mapp(2, 4) != 16 { return false; }
+    if mapp(3, 7) != 7 { return false; }
+    if mfnok(0) != 1 { return false; }
+    if mfnok(4) != 0 { return false; }
+    if mfnok(0 - 1) != 0 { return false; }
+    if mlistok(4) != 0 { return false; }
+    // List monad golden: all three laws.
+    if monad_laws_check(0, 7, 0, 1) != 1 { return false; }
+    if monad_laws_check(0, 3, 1, 2) != 1 { return false; }
+    if monad_laws_check(0, 0, 2, 3) != 1 { return false; }
+    if monad_laws_check(0, 0 - 5, 0, 2) != 1 { return false; }
+    // Option monad golden.
+    if monad_laws_check(1, 4, 0, 1) != 1 { return false; }
+    if monad_laws_check(1, 6, 1, 2) != 1 { return false; }
+    // State monad golden.
+    if monad_laws_check(2, 3, 0, 1) != 1 { return false; }
+    if monad_laws_check(2, 0, 2, 3) != 1 { return false; }
+    // Hostile: unknown monad tag fails closed.
+    if monad_laws_check(3, 5, 0, 1) != 0 { return false; }
+    if monad_laws_check(0 - 1, 5, 0, 1) != 0 { return false; }
+    // Hostile: unknown function id fails closed.
+    if monad_laws_check(0, 5, 4, 1) != 0 { return false; }
+    if monad_laws_check(1, 5, 0, 5) != 0 { return false; }
+    if monad_laws_check(2, 5, 0 - 1, 1) != 0 { return false; }
+    // Coupled: Option None short-circuits.
+    let none_r: List[Int] = mbind_option(monad_option_none(), 0);
+    if list_len(none_r) != 0 { return false; }
+    // Cert sanity.
+    let c1: DomainCert = monad_principle_cert(0, 7, 0, 1);
+    if c1.domain != "principles" { return false; }
+    if c1.law_name != "monad_minimal_axiom" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = monad_principle_cert(3, 7, 0, 1);
+    if c2.holds != 0 { return false; }
+    return true;
+}

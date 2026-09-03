@@ -1,0 +1,120 @@
+// # Chaitin-Briggs Copy Coalesce For AArch64
+//
+// Logline: Unions copy endpoints that do not interfere so later coloring assigns one color and drops the copy.
+//
+// Setup: Parallel live-range lists and copy endpoint lists. Parent is an identity map of variable ids.
+//
+// Beats:
+//   1. Find the representative of a variable through a parent map.
+//   2. Test whether any live range of one class overlaps any live range of another.
+//   3. Union copy source and destination when those classes do not interfere.
+//   4. Return the parent map and the number of coalesced copies.
+
+pub fn rg_find(parent: List[Int], x: Int) -> Int {
+    let n: Int = list_len(parent);
+    if x < 0 { return 0; }
+    if x >= n { return 0; }
+    let mut v: Int = x;
+    let mut hops: Int = 0;
+    while list_get(parent, v) != v {
+        v = list_get(parent, v);
+        hops = hops + 1;
+        if hops > 64 { return v; }
+    }
+    return v;
+}
+
+pub fn rg_set(xs: List[Int], idx: Int, val: Int) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx {
+            out = list_push(out, val);
+        } else {
+            out = list_push(out, list_get(xs, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn rg_identity(n: Int) -> List[Int] {
+    let mut xs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        xs = list_push(xs, i);
+        i = i + 1;
+    }
+    return xs;
+}
+
+pub fn rg_zeros(n: Int) -> List[Int] {
+    let mut xs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        xs = list_push(xs, 0);
+        i = i + 1;
+    }
+    return xs;
+}
+
+pub fn rg_overlap(s1: Int, e1: Int, s2: Int, e2: Int) -> Bool {
+    if s1 < e2 {
+        if s2 < e1 {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn rg_class_interfere(ids: List[Int], starts: List[Int], ends: List[Int], parent: List[Int], a: Int, b: Int) -> Bool {
+    if a == b { return false; }
+    let n: Int = list_len(ids);
+    let mut i: Int = 0;
+    while i < n {
+        if (0 + rg_find(parent, list_get(ids, i))) == a {
+            let mut j: Int = 0;
+            while j < n {
+                if (0 + rg_find(parent, list_get(ids, j))) == b {
+                    if rg_overlap(list_get(starts, i), list_get(ends, i), list_get(starts, j), list_get(ends, j)) {
+                        return true;
+                    }
+                }
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn rg_coalesce(ids: List[Int], starts: List[Int], ends: List[Int], copy_src: List[Int], copy_dst: List[Int], parent0: List[Int]) -> List[Int] {
+    let nc: Int = list_len(copy_src);
+    let mut parent: List[Int] = parent0;
+    let mut i: Int = 0;
+    while i < nc {
+        let s: Int = 0 + rg_find(parent, list_get(copy_src, i));
+        let d: Int = 0 + rg_find(parent, list_get(copy_dst, i));
+        if s != d {
+            if !rg_class_interfere(ids, starts, ends, parent, s, d) {
+                parent = rg_set(parent, d, s);
+            }
+        }
+        i = i + 1;
+    }
+    return parent;
+}
+
+pub fn rg_count_coalesced(copy_src: List[Int], copy_dst: List[Int], parent: List[Int]) -> Int {
+    let nc: Int = list_len(copy_src);
+    let mut n: Int = 0;
+    let mut i: Int = 0;
+    while i < nc {
+        if (0 + rg_find(parent, list_get(copy_src, i))) == (0 + rg_find(parent, list_get(copy_dst, i))) {
+            n = n + 1;
+        }
+        i = i + 1;
+    }
+    return n;
+}

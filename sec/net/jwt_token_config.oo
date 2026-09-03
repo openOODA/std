@@ -1,0 +1,131 @@
+// # JwtConfig & ValidationRules Types
+//
+// Logline: Define JwtConfig and JwtValidationRules records; init and validate token configuration.
+//
+// Setup: Imports jwt_str.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. JwtConfig: bind secret, algorithm, issuer, audience, default_ttl_seconds.
+//   2. JwtValidationRules: bind require_exp/nbf/iss/aud, allowed_algorithms.
+//   3. jwt_config_init: build a JwtConfig with is_valid gate.
+//   4. jwt_rules_init: build ValidationRules with is_active gate.
+//
+// residual: sign/verify are process_exit in jwt_stubs.
+
+// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required where applicable.
+// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+
+import "std/sec/net/jwt_str.oo";
+
+type JwtConfig = struct {
+    secret: String,
+    algorithm: String,
+    issuer: String,
+    audience: String,
+    default_ttl_seconds: Int,
+    is_valid: Bool
+};
+
+type JwtValidationRules = struct {
+    require_exp: Bool,
+    require_nbf: Bool,
+    require_iss: Bool,
+    require_aud: Bool,
+    expected_issuer: String,
+    expected_audience: String,
+    clock_skew_seconds: Int,
+    allowed_algorithms: List[String],
+    is_active: Bool
+};
+
+// -------------------------------------------------------------------
+// JwtConfig & ValidationRules Operations
+// -------------------------------------------------------------------
+
+pub fn jwt_config_init(
+    secret: String,
+    algorithm: String,
+    issuer: String,
+    audience: String,
+    ttl: Int
+) -> JwtConfig {
+    let sec_len: Int = secret.len();
+    let alg_len: Int = algorithm.len();
+    let mut valid: Bool = true;
+    if sec_len == 0 || alg_len == 0 || ttl <= 0 {
+        valid = false;
+    }
+
+    return JwtConfig {
+        secret: secret,
+        algorithm: algorithm,
+        issuer: issuer,
+        audience: audience,
+        default_ttl_seconds: ttl,
+        is_valid: valid
+    };
+}
+
+pub fn jwt_config_validate(config: JwtConfig) -> Bool {
+    let is_v: Bool = config.is_valid;
+    if is_v == false {
+        return false;
+    }
+    let sec: String = config.secret;
+    let sec_len: Int = sec.len();
+    if sec_len == 0 {
+        return false;
+    }
+    let ttl: Int = config.default_ttl_seconds;
+    if ttl <= 0 {
+        return false;
+    }
+    return true;
+}
+
+pub fn jwt_config_free(config: JwtConfig) -> JwtConfig {
+    return JwtConfig {
+        secret: "",
+        algorithm: config.algorithm,
+        issuer: config.issuer,
+        audience: config.audience,
+        default_ttl_seconds: config.default_ttl_seconds,
+        is_valid: false
+    };
+}
+
+pub fn jwt_validation_rules_default() -> JwtValidationRules {
+    let empty_algs: List[String] = list_new();
+    let algs: List[String] = list_push(empty_algs, "HS256");
+    return JwtValidationRules {
+        require_exp: true,
+        require_nbf: true,
+        require_iss: false,
+        require_aud: false,
+        expected_issuer: "",
+        expected_audience: "",
+        clock_skew_seconds: 60,
+        allowed_algorithms: algs,
+        is_active: true
+    };
+}
+
+pub fn jwt_validation_rules_add_algorithm(rules: JwtValidationRules, alg: String) -> JwtValidationRules {
+    let cur_algs: List[String] = rules.allowed_algorithms;
+    let new_algs: List[String] = list_push(cur_algs, alg);
+    return JwtValidationRules {
+        require_exp: rules.require_exp,
+        require_nbf: rules.require_nbf,
+        require_iss: rules.require_iss,
+        require_aud: rules.require_aud,
+        expected_issuer: rules.expected_issuer,
+        expected_audience: rules.expected_audience,
+        clock_skew_seconds: rules.clock_skew_seconds,
+        allowed_algorithms: new_algs,
+        is_active: rules.is_active
+    };
+}
+
+pub fn __dummy_std_src_ooda_sec_net_jwt_token_config_oo() -> Int {
+    return 0;
+}

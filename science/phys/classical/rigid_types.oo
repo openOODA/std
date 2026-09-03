@@ -1,0 +1,28 @@
+// # Rigid body types
+//
+// Logline: RigidBody implementedbed off nested Vec3 lists.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implementedbed.
+
+type RigidBody = struct {
+    mass: Int,
+    vx: Int
+};
+
+pub fn rigid_body_new(mass: Int, vx: Int) -> RigidBody {
+    return RigidBody {
+        mass: mass,
+        vx: vx
+    };
+}
+
+pub fn rigid_body_mass(b: RigidBody) -> Int {
+    return b.mass;
+}

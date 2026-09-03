@@ -1,0 +1,107 @@
+// # Assertion count law
+//
+// Logline: An assertion suite reports its total assertion count as held + failed; a run with zero assertions is not proof.
+//
+// Setup: Pure Int arithmetic on an AssertionSuite record. No FS, net, env.
+//
+// Beats:
+//   1. New suite has held=0, failed=0, total=0.
+//   2. add_held increments held and total.
+//   3. add_failed increments failed and total.
+//   4. suite_is_proof is true only when total > 0 and failed == 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+type AssertionSuite = struct {
+    held: Int,
+    failed: Int
+};
+
+pub fn assertion_suite_new() -> AssertionSuite {
+    return AssertionSuite {
+        held: 0,
+        failed: 0
+    };
+}
+
+pub fn assertion_suite_add_held(s: AssertionSuite) -> AssertionSuite {
+    return AssertionSuite {
+        held: s.held + 1,
+        failed: s.failed
+    };
+}
+
+pub fn assertion_suite_add_failed(s: AssertionSuite) -> AssertionSuite {
+    return AssertionSuite {
+        held: s.held,
+        failed: s.failed + 1
+    };
+}
+
+pub fn assertion_suite_total(s: AssertionSuite) -> Int {
+    return s.held + s.failed;
+}
+
+// True only when the suite ran at least one assertion and had no failures.
+pub fn assertion_suite_is_proof(s: AssertionSuite) -> Bool {
+    let t: Int = s.held + s.failed;
+    if t <= 0 {
+        return false;
+    }
+    if s.failed != 0 {
+        return false;
+    }
+    return true;
+}
+
+pub fn verify_assertion_count_law() -> Bool {
+    // Golden: 2 held, 0 failed -> total 2, proof true.
+    let s0: AssertionSuite = assertion_suite_new();
+    if assertion_suite_total(s0) != 0 {
+        return false;
+    }
+    if assertion_suite_is_proof(s0) != false {
+        return false;
+    }
+    let s1: AssertionSuite = assertion_suite_add_held(s0);
+    let s2: AssertionSuite = assertion_suite_add_held(s1);
+    if s2.held != 2 {
+        return false;
+    }
+    if s2.failed != 0 {
+        return false;
+    }
+    if assertion_suite_total(s2) != 2 {
+        return false;
+    }
+    if assertion_suite_is_proof(s2) != true {
+        return false;
+    }
+    // Hostile: a failure means the suite is not proof.
+    let s3: AssertionSuite = assertion_suite_add_failed(s2);
+    if s3.held != 2 {
+        return false;
+    }
+    if s3.failed != 1 {
+        return false;
+    }
+    if assertion_suite_total(s3) != 3 {
+        return false;
+    }
+    if assertion_suite_is_proof(s3) != false {
+        return false;
+    }
+    // Hostile: an empty suite is not proof even with no failures.
+    if assertion_suite_is_proof(s0) != false {
+        return false;
+    }
+    return true;
+}
+
+// Domain certificate: 1 if the assertion count law holds across all golden and hostile cases.
+pub fn assertion_count_law_holds() -> DomainCert {
+    if verify_assertion_count_law() {
+        return domain_cert("test", "assertion_count_law", 1);
+    }
+    return domain_cert("test", "assertion_count_law", 0);
+}

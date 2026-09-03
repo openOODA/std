@@ -1,0 +1,109 @@
+// # Capability Derivation Tree & Cascading Revocation
+//
+// Logline: Hierarchical Capability Derivation Tree (CDT), lineage tracking, child derivation, and cascading subtree revocation.
+//
+// Setup: Declared capability: None. Pure mathematical bitmask-backed tree data structure for deterministic capability lifetime tracking.
+//
+// Beats:
+//   1. Declare CDT derivation tree structure.
+//   2. Implement tree initialization and child derivation.
+//   3. Implement recursive cascading subtree revocation.
+//   4. Validate active status and derivation lineage.
+
+type CdtTree = struct {
+    root_id: Int,
+    node_count: Int,
+    next_node_id: Int,
+    active_mask: Int,
+    parent_map: Int
+};
+
+fn cdt_pow2(exp: Int) -> Int {
+    let mut res: Int = 1;
+    let mut i: Int = 0;
+    while i < exp {
+        res = res * 2;
+        i = i + 1;
+    }
+    return res;
+}
+
+pub fn cdt_tree_init(root_slot: Int) -> CdtTree {
+    let root_bit: Int = cdt_pow2(1);
+    return CdtTree {
+        root_id: 1,
+        node_count: 1,
+        next_node_id: 2,
+        active_mask: root_bit,
+        parent_map: 0
+    };
+}
+
+pub fn cdt_derive_child(tree: CdtTree, parent_id: Int, child_slot: Int) -> CdtTree {
+    let parent_p: Int = cdt_pow2(parent_id);
+    let parent_active: Bool = ((tree.active_mask / parent_p) % 2) == 1;
+    if !parent_active {
+        return tree;
+    }
+    let new_id: Int = tree.next_node_id;
+    let new_bit: Int = cdt_pow2(new_id);
+    let new_active_mask: Int = tree.active_mask + new_bit;
+    let parent_shift: Int = cdt_pow2(new_id * 4);
+    let new_parent_map: Int = tree.parent_map + (parent_id * parent_shift);
+    return CdtTree {
+        root_id: tree.root_id,
+        node_count: tree.node_count + 1,
+        next_node_id: new_id + 1,
+        active_mask: new_active_mask,
+        parent_map: new_parent_map
+    };
+}
+
+pub fn cdt_get_parent(tree: CdtTree, node_id: Int) -> Int {
+    if node_id <= 1 {
+        return 0;
+    }
+    let shift: Int = cdt_pow2(node_id * 4);
+    let p: Int = (tree.parent_map / shift) % 16;
+    return p;
+}
+
+pub fn cdt_revoke_subtree(tree: CdtTree, target_id: Int) -> CdtTree {
+    let mut mask: Int = tree.active_mask;
+    let target_bit: Int = cdt_pow2(target_id);
+    if ((mask / target_bit) % 2) == 1 {
+        mask = mask - target_bit;
+    }
+    let mut check_id: Int = target_id + 1;
+    let max_id: Int = tree.next_node_id;
+    while check_id < max_id {
+        let mut cur_ancestor: Int = cdt_get_parent(tree, check_id);
+        let mut is_descendant: Bool = false;
+        while cur_ancestor > 0 {
+            if cur_ancestor == target_id {
+                is_descendant = true;
+            }
+            cur_ancestor = cdt_get_parent(tree, cur_ancestor);
+        }
+        if is_descendant {
+            let child_bit: Int = cdt_pow2(check_id);
+            if ((mask / child_bit) % 2) == 1 {
+                mask = mask - child_bit;
+            }
+        }
+        check_id = check_id + 1;
+    }
+    return CdtTree {
+        root_id: tree.root_id,
+        node_count: tree.node_count,
+        next_node_id: tree.next_node_id,
+        active_mask: mask,
+        parent_map: tree.parent_map
+    };
+}
+
+pub fn cdt_is_node_active(tree: CdtTree, node_id: Int) -> Bool {
+    let bit: Int = cdt_pow2(node_id);
+    let is_on: Bool = ((tree.active_mask / bit) % 2) == 1;
+    return is_on;
+}

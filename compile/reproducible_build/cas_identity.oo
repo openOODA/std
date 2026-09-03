@@ -1,0 +1,97 @@
+// # CAS compiler, toolchain, runtime, and flag identity
+//
+// Logline: Digest gcc, as, ld, runtime C, and the pinned gcc flag manifest into the CAS key.
+//
+// Setup: FsReadCap reads tool and runtime files. SysCap locates gcc/as/ld. Hash is cas_file_digest.
+//
+// Beats:
+//   1. Hash each toolchain binary and runtime/chs_rt.c over every byte.
+//   2. Record a stable gcc flag id that does not embed a sandbox path.
+//   3. Fold those digests into the flag manifest so a swap misses.
+
+import "std/compile/reproducible_build/artifact_cas_store.oo";
+
+fn id_sq(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    let mut out: String = "'";
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "'" {
+            out = out + "'\\''";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out + "'";
+}
+
+pub fn cas_which(sys: &ProcessCap, fs: &FsReadCap, name: String, tmp: String) -> Result[String, String] {
+    let outp: String = tmp + "/which-" + name;
+    let r: Result[String, String] = sys_exec(sys, "sh", "-c", "command -v " + name + " > " + id_sq(outp));
+    if r.is_err() {
+        return Err("ERR\tcas\twhich " + name);
+    }
+    let b: Result[String, String] = read_file(fs, outp);
+    if b.is_err() {
+        return Err("ERR\tcas\twhich " + name);
+    }
+    let p: String = match b { Ok(s) => s, Err(_) => "" };
+    let n: Int = chars_len(p);
+    if n <= 0 {
+        return Err("ERR\tcas\twhich " + name);
+    }
+    if char_at(p, n - 1) == "\n" {
+        return Ok(str_slice(p, 0, n - 1));
+    }
+    return Ok(p);
+}
+
+pub fn cas_tool_hash(fs: &FsReadCap, sys: &ProcessCap, name: String, tmp: String) -> Result[String, String] {
+    let wp: Result[String, String] = cas_which(sys, fs, name, tmp);
+    if wp.is_err() {
+        return Err("ERR\tcas\ttool " + name);
+    }
+    let path: String = match wp { Ok(s) => s, Err(_) => "" };
+    return cas_file_digest(fs, path);
+}
+
+pub fn cas_runtime_hash(fs: &FsReadCap, rt_c: String) -> Result[String, String] {
+    return cas_file_digest(fs, rt_c);
+}
+
+pub fn cas_gcc_flag_id() -> String {
+    return "-O0 -g0 -fno-ident -frandom-seed=1 -Wl,--build-id=none -ffile-prefix-map=/ooda -fdebug-prefix-map=/ooda -fmacro-prefix-map=/ooda";
+}
+
+pub fn cas_flags_full(
+    target: String,
+    hermetic: Bool,
+    want_repro: Bool,
+    gcc_h: String,
+    as_h: String,
+    ld_h: String,
+    rt_h: String
+) -> String {
+    let mut f: String = cas_flags(target, hermetic, want_repro);
+    f = f + ",gcc=" + gcc_h;
+    f = f + ",as=" + as_h;
+    f = f + ",ld=" + ld_h;
+    f = f + ",rt=" + rt_h;
+    f = f + ",gflags=" + cas_gcc_flag_id();
+    return f;
+}
+
+pub fn cas_toolchain_triple(fs: &FsReadCap, sys: &ProcessCap, tmp: String) -> Result[String, String] {
+    let g: Result[String, String] = cas_tool_hash(fs, sys, "gcc", tmp);
+    let a: Result[String, String] = cas_tool_hash(fs, sys, "as", tmp);
+    let l: Result[String, String] = cas_tool_hash(fs, sys, "ld", tmp);
+    if g.is_err() || a.is_err() || l.is_err() {
+        return Err("ERR\tcas\ttoolchain");
+    }
+    let gh: String = match g { Ok(s) => s, Err(_) => "" };
+    let ah: String = match a { Ok(s) => s, Err(_) => "" };
+    let lh: String = match l { Ok(s) => s, Err(_) => "" };
+    return Ok(gh + "|" + ah + "|" + lh);
+}

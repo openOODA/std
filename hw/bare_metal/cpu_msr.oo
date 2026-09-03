@@ -1,0 +1,81 @@
+// # CPU Model-Specific Registers & Hardware Architecture Control
+//
+// Logline: Hardware MSR access, CR0/CR3/CR4 control registers, EFER, ARM64 SCTLR/TCR, and RISC-V satp/sstatus.
+//
+// Setup: Declared capability: None. Direct model-specific register encoding and processor execution modes.
+//
+// Beats:
+//   1. Declare MSR address constants and register state structures.
+//   2. Implement x86_64 CR0/CR4 control flags and EFER Long Mode Enable bitmasks.
+//   3. Implement ARM64 SCTLR_EL1 and TCR_EL1 translation control bitmasks.
+//   4. Implement RISC-V satp paging register and sstatus privilege bitmasks.
+
+type CpuMsrBank = struct {
+    efer: Int,
+    star: Int,
+    lstar: Int,
+    fmask: Int,
+    kernel_gs_base: Int,
+    apic_base: Int
+};
+
+type CpuControlRegs = struct {
+    cr0: Int,
+    cr3: Int,
+    cr4: Int,
+    sctlr_el1: Int,
+    satp: Int
+};
+
+pub fn cpu_msr_bank_init(syscall_handler: Int) -> CpuMsrBank {
+    let safe_handler: Int = if syscall_handler < 0 { 0 } else { syscall_handler };
+    return CpuMsrBank {
+        efer: 1793,
+        star: 3096224743817216,
+        lstar: safe_handler,
+        fmask: 1026,
+        kernel_gs_base: 0,
+        apic_base: 4276092928
+    };
+}
+
+pub fn cpu_control_regs_init(page_dir_base: Int) -> CpuControlRegs {
+    let safe_base: Int = if page_dir_base < 0 { 0 } else { page_dir_base };
+    return CpuControlRegs {
+        cr0: 2147549185,
+        cr3: safe_base,
+        cr4: 66080,
+        sctlr_el1: 805834805,
+        satp: safe_base + 2305843009213693952
+    };
+}
+
+pub fn cpu_is_long_mode_active(bank: CpuMsrBank) -> Bool {
+    let efer_val: Int = bank.efer;
+    let lma: Int = (efer_val / 1024) % 2;
+    return lma == 1;
+}
+
+pub fn cpu_is_nx_enabled(bank: CpuMsrBank) -> Bool {
+    let efer_val: Int = bank.efer;
+    let nxe: Int = (efer_val / 2048) % 2;
+    return nxe == 1;
+}
+
+pub fn cpu_cr0_is_paging_enabled(regs: CpuControlRegs) -> Bool {
+    let cr0_val: Int = regs.cr0;
+    let pg: Int = (cr0_val / 2147483648) % 2;
+    return pg == 1;
+}
+
+pub fn cpu_cr4_has_osfxsr(regs: CpuControlRegs) -> Bool {
+    let cr4_val: Int = regs.cr4;
+    let osfxsr: Int = (cr4_val / 512) % 2;
+    return osfxsr == 1;
+}
+
+pub fn cpu_satp_get_ppn(regs: CpuControlRegs) -> Int {
+    let satp_val: Int = regs.satp;
+    let ppn: Int = satp_val % 1099511627776;
+    return ppn;
+}

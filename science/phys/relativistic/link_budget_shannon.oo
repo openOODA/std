@@ -1,0 +1,33 @@
+// # Deep Space RF Communications Link Budget & Shannon Capacity
+//
+// Logline: Calculates RF link budget (EIRP, path loss, G/T, Eb/N0), noise temperature, and Shannon channel capacity.
+//
+// Setup: Pure telecommunications theory based on Friis transmission equation and Shannon-Hartley theorem.
+//
+// Beats:
+//   1. Nominal deep space SNR query in dB (10 dB).
+//   2. Calculate free-space path loss L_fs = (4*pi*R / lambda)^2.
+//   3. Compute receiver carrier-to-noise density ratio C/N0.
+//   4. Calculate maximum theoretical Shannon capacity C = B * log2(1 + SNR).
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astro_advanced_link_budget_shannon() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn shannon_snr_db() -> Int {
+    return 10;
+}
+
+/// Computes free-space path loss in dB: L_fs = 20*log10(4*pi*d / lambda).
+pub fn link_budget_free_space_loss_db(distance_m: Float, frequency_hz: Float) -> Float {
+    let c: Float = 299792458.0;
+    let lambda: Float = c / frequency_hz;
+    let pi: Float = circ_pi_std_phys_astro_advanced_link_budget_shannon();
+    let ratio: Float = (4.0 * pi * distance_m) / lambda;
+    let log10_ratio: Float = ln(ratio) / ln(10.0);
+    return 20.0 * log10_ratio;
+}
+
+/// Computes Shannon channel capacity C in bits/second: C = Bandwidth * log2(1 + SNR_linear).
+pub fn link_budget_shannon_capacity(bandwidth_hz: Float, snr_linear: Float) -> Float {
+    let log2_term: Float = ln(1.0 + snr_linear) / ln(2.0);
+    return bandwidth_hz * log2_term;
+}

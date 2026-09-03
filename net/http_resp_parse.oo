@@ -1,0 +1,98 @@
+// # HTTP/1.1 Response Parser (Spec API)
+//
+// Logline: Pure HTTP/1.1 response parser extracting status line, headers, and body with case-insensitive header lookup. This is the full Result[HttpResponse, String] spec API.
+//
+// Setup: Pure module. Status line and headers ride List[String] parallel arrays. Body is everything after the first \r\n\r\n separator; empty body is allowed. Kept in a sibling file so fixtures that import the parent module avoid the C emit Result[Struct, String] redefinition bug.
+//
+// Beats:
+//   1. Parse the status line "HTTP/1.1 200 OK" into version, status code, and reason phrase.
+//   2. Parse header lines until the empty line and store the remainder as the body.
+//   3. Reassemble the response with the parsed headers and body.
+
+import "std/core/primitives/result.oo";
+import "std/net/http_resp.oo";
+
+pub fn http_resp_parse(s: String) -> Result[HttpResponse, String] {
+    if chars_len(s) == 0 {
+        return Err("http_resp_parse: empty input");
+    }
+    let n: Int = chars_len(s);
+    let crlf_nl: Int = str_index_of(s, "\r\n");
+    if crlf_nl <= 0 {
+        return Err("http_resp_parse: malformed status line");
+    }
+    let status_line: String = str_slice(s, 0, crlf_nl);
+    let sp1: Int = str_index_of(status_line, " ");
+    if sp1 <= 0 {
+        return Err("http_resp_parse: missing space after version");
+    }
+    let version: String = str_slice(status_line, 0, sp1);
+    let after_v: String = str_slice(status_line, sp1 + 1, chars_len(status_line));
+    let sp2: Int = str_index_of(after_v, " ");
+    let mut code_str: String = "";
+    let mut reason: String = "";
+    if sp2 < 0 {
+        code_str = after_v;
+    } else {
+        code_str = str_slice(after_v, 0, sp2);
+        let after_c: String = str_slice(after_v, sp2 + 1, chars_len(after_v));
+        reason = after_c;
+    }
+    let status: Int = http_resp_parse_digits(code_str);
+    if status < 0 {
+        return Err("http_resp_parse: invalid status code");
+    }
+    let sep: String = "\r\n\r\n";
+    let sep_idx: Int = str_index_of(s, sep);
+    let mut headers_text: String = "";
+    let mut body: String = "";
+    if sep_idx < 0 {
+        headers_text = str_slice(s, crlf_nl + 2, n);
+        body = "";
+    } else {
+        headers_text = str_slice(s, crlf_nl + 2, sep_idx);
+        body = str_slice(s, sep_idx + 4, n);
+    }
+    let mut hs: List[String] = list_new();
+    let mut vs: List[String] = list_new();
+    let mut pos: Int = 0;
+    let hlen: Int = chars_len(headers_text);
+    while pos < hlen {
+        let rem: String = str_slice(headers_text, pos, hlen);
+        let nl: Int = str_index_of(rem, "\r\n");
+        let mut line: String = "";
+        if nl < 0 {
+            line = rem;
+            pos = hlen;
+        } else {
+            line = str_slice(rem, 0, nl);
+            pos = pos + nl + 2;
+        }
+        if chars_len(line) == 0 {
+            break;
+        }
+        let colon: Int = str_index_of(line, ":");
+        if colon <= 0 {
+            continue;
+        }
+        let nm: String = str_slice(line, 0, colon);
+        let rest: String = str_slice(line, colon + 1, chars_len(line));
+        let rlen: Int = chars_len(rest);
+        let mut val: String = rest;
+        if rlen > 0 {
+            if char_at(rest, 0) == " " {
+                val = str_slice(rest, 1, rlen);
+            }
+        }
+        hs = list_push(hs, nm);
+        vs = list_push(vs, val);
+    }
+    return Ok(HttpResponse {
+        version: version,
+        status: status,
+        reason: reason,
+        headers: hs,
+        values: vs,
+        body: body
+    });
+}

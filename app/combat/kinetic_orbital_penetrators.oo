@@ -1,0 +1,208 @@
+// # Orbital Kinetic Penetrators and Hypersonic Impact Physics
+//
+// Logline: Canonical physics models for orbital de-orbit delta-V, hypersonic atmospheric entry deceleration, Mach 8-10 terminal velocity, and kinetic TNT equivalence.
+//
+// Setup: Pure astrodynamics and hypersonic ballistics formulation with zero ambient authority and deterministic calculations.
+//
+// Beats:
+//   1. Hohmann transfer de-orbit delta-V calculation from circular LEO to atmospheric entry.
+//   2. Hypersonic atmospheric entry drag deceleration and ballistic coefficient dynamics.
+//   3. Terminal impact velocity equilibrium and Birkhoff hydrodynamic penetration depth.
+//   4. Pure kinetic energy to TNT equivalent yield conversion with verification suite.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_weapons_kinetic_orbital_penetrators() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type OrbitalRodSpec = struct {
+    mass_kg: Float,
+    length_m: Float,
+    diameter_m: Float,
+    drag_coeff: Float,
+    density_kg_m3: Float
+};
+
+type DeorbitResult = struct {
+    delta_v_mps: Float,
+    initial_orbit_speed_mps: Float,
+    transfer_apogee_speed_mps: Float,
+    transfer_perigee_speed_mps: Float
+};
+
+type KineticImpactResult = struct {
+    impact_velocity_mps: Float,
+    mach_number: Float,
+    kinetic_energy_joules: Float,
+    tnt_equivalent_tons: Float,
+    penetration_depth_m: Float,
+    crater_diameter_m: Float
+};
+
+pub fn kop_earth_mu_m3_s2() -> Float { return 398600441800000.0; }
+pub fn kop_earth_radius_m() -> Float { return 6371000.0; }
+pub fn kop_tnt_joules_per_ton() -> Float { return 4184000000.0; }
+pub fn kop_speed_of_sound_sea_level() -> Float { return 340.0; }
+pub fn kop_pi_val() -> Float { return circ_pi_std_phys_weapons_kinetic_orbital_penetrators(); }
+
+fn kop_abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn orbital_deorbit_delta_v(
+    r_orbit_m: Float,
+    r_entry_m: Float,
+    mu: Float
+) -> Float {
+    if r_orbit_m <= 0.0 || r_entry_m <= 0.0 || mu <= 0.0 { return 0.0; }
+    let v_circ: Float = sqrt(mu / r_orbit_m);
+    let r_sum: Float = r_orbit_m + r_entry_m;
+    let v_apogee: Float = sqrt(mu * ((2.0 / r_orbit_m) - (2.0 / r_sum)));
+    let delta_v: Float = v_circ - v_apogee;
+    if delta_v < 0.0 { return 0.0; }
+    return delta_v;
+}
+
+pub fn calc_deorbit_delta_v(orbit_alt_m: Float, entry_alt_m: Float) -> Float {
+    let r_e: Float = kop_earth_radius_m();
+    let r_orbit: Float = r_e + orbit_alt_m;
+    let r_entry: Float = r_e + entry_alt_m;
+    return orbital_deorbit_delta_v(r_orbit, r_entry, kop_earth_mu_m3_s2());
+}
+
+pub fn calc_full_deorbit(orbit_alt_m: Float, entry_alt_m: Float) -> DeorbitResult {
+    let r_e: Float = kop_earth_radius_m();
+    let mu: Float = kop_earth_mu_m3_s2();
+    let r_orbit: Float = r_e + orbit_alt_m;
+    let r_entry: Float = r_e + entry_alt_m;
+    let r_sum: Float = r_orbit + r_entry;
+
+    let v_circ: Float = sqrt(mu / r_orbit);
+    let v_apogee: Float = sqrt(mu * ((2.0 / r_orbit) - (2.0 / r_sum)));
+    let v_perigee: Float = sqrt(mu * ((2.0 / r_entry) - (2.0 / r_sum)));
+    let dv: Float = v_circ - v_apogee;
+
+    return DeorbitResult {
+        delta_v_mps: dv,
+        initial_orbit_speed_mps: v_circ,
+        transfer_apogee_speed_mps: v_apogee,
+        transfer_perigee_speed_mps: v_perigee
+    };
+}
+
+pub fn calc_ballistic_coefficient(mass_kg: Float, cd: Float, area_m2: Float) -> Float {
+    let denom: Float = cd * area_m2;
+    if denom <= 0.0000001 { return 0.0; }
+    return mass_kg / denom;
+}
+
+pub fn calc_atmospheric_hypersonic_decel(
+    velocity_m_s: Float,
+    altitude_m: Float,
+    mass_kg: Float,
+    cd: Float,
+    area_m2: Float
+) -> Float {
+    if mass_kg <= 0.001 { return 0.0; }
+    let mut alt_norm: Float = altitude_m;
+    if alt_norm < 0.0 { alt_norm = 0.0; }
+    let exp_term: Float = (0.0 - alt_norm) / 7200.0;
+    let rho: Float = 1.225 * exp(exp_term);
+    let v_sq: Float = velocity_m_s * velocity_m_s;
+    let drag_force: Float = 0.5 * rho * cd * area_m2 * v_sq;
+    return drag_force / mass_kg;
+}
+
+pub fn calc_rod_terminal_velocity(
+    mass_kg: Float,
+    cd: Float,
+    area_m2: Float,
+    rho_air: Float,
+    g: Float
+) -> Float {
+    let denom: Float = rho_air * cd * area_m2;
+    if denom <= 0.0000001 || mass_kg <= 0.0 || g <= 0.0 { return 0.0; }
+    let v_sq: Float = (2.0 * mass_kg * g) / denom;
+    return sqrt(v_sq);
+}
+
+pub fn calc_kinetic_energy_joules(mass_kg: Float, velocity_m_s: Float) -> Float {
+    if mass_kg <= 0.0 || velocity_m_s <= 0.0 { return 0.0; }
+    return 0.5 * mass_kg * (velocity_m_s * velocity_m_s);
+}
+
+pub fn calc_tnt_equivalent_tons(joules: Float) -> Float {
+    if joules <= 0.0 { return 0.0; }
+    return joules / kop_tnt_joules_per_ton();
+}
+
+pub fn kinetic_penetrator_tnt_equivalent(mass_kg: Float, velocity_m_s: Float) -> Float {
+    let ek_j: Float = calc_kinetic_energy_joules(mass_kg, velocity_m_s);
+    return calc_tnt_equivalent_tons(ek_j);
+}
+
+pub fn calc_hydrodynamic_penetration_m(
+    rod_length_m: Float,
+    rod_density_kg_m3: Float,
+    target_density_kg_m3: Float
+) -> Float {
+    if rod_length_m <= 0.0 || rod_density_kg_m3 <= 0.0 || target_density_kg_m3 <= 0.001 {
+        return 0.0;
+    }
+    let density_ratio: Float = rod_density_kg_m3 / target_density_kg_m3;
+    return rod_length_m * sqrt(density_ratio);
+}
+
+pub fn evaluate_orbital_kinetic_strike(
+    rod: OrbitalRodSpec,
+    impact_speed_mps: Float,
+    target_density_kg_m3: Float
+) -> KineticImpactResult {
+    let ek_j: Float = calc_kinetic_energy_joules(rod.mass_kg, impact_speed_mps);
+    let tnt_tons: Float = calc_tnt_equivalent_tons(ek_j);
+    let mach: Float = impact_speed_mps / kop_speed_of_sound_sea_level();
+    let pen_m: Float = calc_hydrodynamic_penetration_m(rod.length_m, rod.density_kg_m3, target_density_kg_m3);
+    let mut crater_d: Float = 0.0;
+    if ek_j > 0.0 {
+        crater_d = 0.08 * pow(ek_j, 0.3333333333333333);
+    }
+
+    return KineticImpactResult {
+        impact_velocity_mps: impact_speed_mps,
+        mach_number: mach,
+        kinetic_energy_joules: ek_j,
+        tnt_equivalent_tons: tnt_tons,
+        penetration_depth_m: pen_m,
+        crater_diameter_m: crater_d
+    };
+}
+
+pub fn verify_kinetic_orbital_penetrators() -> Bool {
+    let mass_9t: Float = 9000.0;
+    let v_3000: Float = 3000.0;
+
+    let ek_j: Float = calc_kinetic_energy_joules(mass_9t, v_3000);
+    let diff_ek: Float = kop_abs_val(ek_j - 40500000000.0);
+    if diff_ek > 1.0 { return false; }
+
+    let tnt_tons: Float = calc_tnt_equivalent_tons(ek_j);
+    let diff_tnt: Float = kop_abs_val(tnt_tons - 9.679732313575525);
+    if diff_tnt > 0.001 { return false; }
+
+    let dv_500_60: Float = calc_deorbit_delta_v(500000.0, 60000.0);
+    if dv_500_60 < 120.0 || dv_500_60 > 140.0 { return false; }
+
+    let rod_len: Float = 6.1;
+    let rho_w: Float = 19250.0;
+    let rho_granite: Float = 2500.0;
+    let pen_depth: Float = calc_hydrodynamic_penetration_m(rod_len, rho_w, rho_granite);
+    let exp_pen: Float = 6.1 * sqrt(19250.0 / 2500.0);
+    let diff_pen: Float = kop_abs_val(pen_depth - exp_pen);
+    if diff_pen > 0.001 { return false; }
+
+    let v_term: Float = calc_rod_terminal_velocity(9000.0, 0.12, 0.070685, 1.225, 9.80665);
+    if v_term < 2500.0 || v_term > 5000.0 { return false; }
+
+    let decel: Float = calc_atmospheric_hypersonic_decel(3000.0, 0.0, 9000.0, 0.12, 0.070685);
+    if decel < 1.0 || decel > 100.0 { return false; }
+
+    return true;
+}

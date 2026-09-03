@@ -1,0 +1,148 @@
+// # WebAssembly Engine V2 Step Once (front opcodes)
+//
+// Logline: Decode i32.const, locals, drop, block, loop, br, br_if, and if. Other opcodes go to wasm_engine_v2_step_more.
+//
+// Setup: Returns WasmStepCont. Recursion stays in wasm_engine_v2_step.
+//
+// Beats:
+//   1. Handle const/local/drop/block/loop/br/if.
+//   2. Delegate remaining opcodes to step_more.
+
+import "std/compile/wasm_interpreter/wasm_stack.oo";
+import "std/compile/wasm_interpreter/wasm_opcodes.oo";
+import "std/compile/wasm_interpreter/wasm_host_runtime.oo";
+import "std/compile/wasm_interpreter/wasm_engine_v2.oo";
+import "std/compile/wasm_interpreter/wasm_engine_v2_block.oo";
+import "std/compile/wasm_interpreter/wasm_step_cont.oo";
+import "std/compile/wasm_interpreter/wasm_engine_v2_step_more.oo";
+
+pub fn wasm_engine_v2_step_once(mod: WasmModuleV2, body: List[Int], body_len: Int, pc: Int, st: WasmStack, locs: List[Int], local_base: Int, locals_top: Int, skip_depth: Int, block_depth: Int, call_stack: List[Int], func_idx: Int, rt: WasmHostRuntime, labels: List[Int]) -> WasmStepCont {
+    if pc >= body_len { return wasm_step_cont_ok(rt, 0); }
+    let op: Int = list_get(body, pc);
+    if op == wasm_op_i32_const() {
+        let imm: Int = wasm_engine_v2_decode_imm(body, pc + 1);
+        let sz: Int = wasm_engine_v2_imm_size(body, pc + 1);
+        let next_pc: Int = pc + 1 + sz;
+        if skip_depth == 0 {
+            let r: Result[WasmStack, String] = wasm_stack_push(st, imm);
+            match r { Ok(s) => { return wasm_step_cont_go(body, body_len, next_pc, s, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels); } Err(_) => { return wasm_step_cont_err("ERR\twasm_trap_stack_overflow\tat_i32_const", rt); } }
+        }
+        return wasm_step_cont_go(body, body_len, next_pc, st, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+    }
+    if op == wasm_op_local_get() {
+        let idx: Int = list_get(body, pc + 1);
+        let next_pc: Int = pc + 2;
+        if skip_depth == 0 {
+            let abs_idx: Int = local_base + idx;
+            let v: Int = list_get(locs, abs_idx);
+            let r: Result[WasmStack, String] = wasm_stack_push(st, v);
+            match r { Ok(s) => { return wasm_step_cont_go(body, body_len, next_pc, s, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels); } Err(_) => { return wasm_step_cont_err("ERR\twasm_trap_stack_overflow\tat_local_get", rt); } }
+        }
+        return wasm_step_cont_go(body, body_len, next_pc, st, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+    }
+    if op == wasm_op_local_set() {
+        let idx: Int = list_get(body, pc + 1);
+        let next_pc: Int = pc + 2;
+        if skip_depth == 0 {
+            let r: Result[WasmPopResult, String] = wasm_stack_pop(st);
+            match r { Ok(pr) => { let abs_idx: Int = local_base + idx; let new_locs: List[Int] = wasm_engine_v2_set_local(locs, abs_idx, pr.val); return wasm_step_cont_go(body, body_len, next_pc, pr.stack, new_locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels); } Err(_) => { return wasm_step_cont_err("ERR\twasm_trap_stack_underflow\tat_local_set", rt); } }
+        }
+        return wasm_step_cont_go(body, body_len, next_pc, st, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+    }
+    if op == wasm_op_local_tee() {
+        let idx: Int = list_get(body, pc + 1);
+        let next_pc: Int = pc + 2;
+        if skip_depth == 0 {
+            let r: Result[WasmPopResult, String] = wasm_stack_pop(st);
+            if r.ok == 1 {
+                let pr: WasmPopResult = r.val;
+                let abs_idx: Int = local_base + idx;
+                let new_locs: List[Int] = wasm_engine_v2_set_local(locs, abs_idx, pr.val);
+                let r_push: Result[WasmStack, String] = wasm_stack_push(pr.stack, pr.val);
+                if r_push.ok == 1 {
+                    let s_new: WasmStack = r_push.val;
+                    return wasm_step_cont_go(body, body_len, next_pc, s_new, new_locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+                } else { return wasm_step_cont_err("ERR\twasm_trap_stack_overflow\tat_local_tee", rt); }
+            } else { return wasm_step_cont_err("ERR\twasm_trap_stack_underflow\tat_local_tee", rt); }
+        }
+        return wasm_step_cont_go(body, body_len, next_pc, st, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+    }
+    if op == wasm_op_i32_eqz() {
+        let next_pc: Int = pc + 1;
+        if skip_depth == 0 {
+            let r: Result[WasmPopResult, String] = wasm_stack_pop(st);
+            if r.ok == 1 {
+                let pr: WasmPopResult = r.val;
+                let rv: Int = if pr.val == 0 { 1 } else { 0 };
+                let r_push: Result[WasmStack, String] = wasm_stack_push(pr.stack, rv);
+                if r_push.ok == 1 {
+                    let s_new: WasmStack = r_push.val;
+                    return wasm_step_cont_go(body, body_len, next_pc, s_new, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+                } else { return wasm_step_cont_err("ERR\twasm_trap_stack_overflow\tat_i32_eqz", rt); }
+            } else { return wasm_step_cont_err("ERR\twasm_trap_stack_underflow\tat_i32_eqz", rt); }
+        }
+        return wasm_step_cont_go(body, body_len, next_pc, st, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+    }
+    if op == wasm_op_drop() {
+        let next_pc: Int = pc + 1;
+        if skip_depth == 0 {
+            let r: Result[WasmPopResult, String] = wasm_stack_pop(st);
+            match r { Ok(pr) => { return wasm_step_cont_go(body, body_len, next_pc, pr.stack, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels); } Err(_) => { return wasm_step_cont_err("ERR\twasm_trap_stack_underflow\tat_drop", rt); } }
+        }
+        return wasm_step_cont_go(body, body_len, next_pc, st, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+    }
+    if op == wasm_op_block() {
+        let end_pc: Int = wasm_engine_v2_block_end(body, body_len, pc);
+        let new_labels: List[Int] = list_push(labels, end_pc * 2);
+        return wasm_step_cont_go(body, body_len, pc + 1 + wasm_engine_v2_imm_size(body, pc + 1), st, locs, local_base, locals_top, skip_depth, block_depth + 1, call_stack, func_idx, rt, new_labels);
+    }
+    if op == wasm_op_loop() {
+        let body_start: Int = pc + 1 + wasm_engine_v2_imm_size(body, pc + 1);
+        let new_labels: List[Int] = list_push(labels, body_start * 2 + 1);
+        return wasm_step_cont_go(body, body_len, body_start, st, locs, local_base, locals_top, skip_depth, block_depth + 1, call_stack, func_idx, rt, new_labels);
+    }
+    if op == wasm_op_br() {
+        let depth_b: Int = wasm_engine_v2_decode_imm(body, pc + 1);
+        let raw_target: Int = list_get(labels, list_len(labels) - depth_b - 1);
+        let is_loop: Int = wasm_engine_v2_label_is_loop(raw_target);
+        let target: Int = wasm_engine_v2_label_decode(raw_target);
+        let mut new_labels: List[Int] = wasm_engine_v2_labels_pop(labels, depth_b + 1);
+        if is_loop == 1 { new_labels = list_push(new_labels, raw_target); }
+        return wasm_step_cont_go(body, body_len, target, st, locs, local_base, locals_top, 0, block_depth - depth_b, call_stack, func_idx, rt, new_labels);
+    }
+    if op == wasm_op_br_if() {
+        let depth_if: Int = wasm_engine_v2_decode_imm(body, pc + 1);
+        let r_bi: Result[WasmPopResult, String] = wasm_stack_pop(st);
+        match r_bi {
+            Ok(pr) => {
+                if pr.val != 0 {
+                    let raw_target: Int = list_get(labels, list_len(labels) - depth_if - 1);
+                    let is_loop: Int = wasm_engine_v2_label_is_loop(raw_target);
+                    let tgt: Int = wasm_engine_v2_label_decode(raw_target);
+                    let mut nl: List[Int] = wasm_engine_v2_labels_pop(labels, depth_if + 1);
+                    if is_loop == 1 { nl = list_push(nl, raw_target); }
+                    return wasm_step_cont_go(body, body_len, tgt, pr.stack, locs, local_base, locals_top, 0, block_depth - depth_if, call_stack, func_idx, rt, nl);
+                }
+                return wasm_step_cont_go(body, body_len, pc + 1 + wasm_engine_v2_imm_size(body, pc + 1), pr.stack, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+            }
+            Err(_) => { return wasm_step_cont_err("ERR\twasm_trap_stack_underflow\tat_br_if", rt); }
+        }
+    }
+    if op == wasm_op_if() {
+        let next_pc: Int = pc + 1 + wasm_engine_v2_imm_size(body, pc + 1);
+        let end_pc: Int = wasm_engine_v2_block_end(body, body_len, pc);
+        let new_labels: List[Int] = list_push(labels, end_pc * 2);
+        if skip_depth > 0 {
+            return wasm_step_cont_go(body, body_len, next_pc, st, locs, local_base, locals_top, skip_depth + 1, block_depth + 1, call_stack, func_idx, rt, new_labels);
+        }
+        let r: Result[WasmPopResult, String] = wasm_stack_pop(st);
+        match r {
+            Ok(pr) => {
+                let new_skip: Int = if pr.val == 0 { 1 } else { 0 };
+                return wasm_step_cont_go(body, body_len, next_pc, pr.stack, locs, local_base, locals_top, new_skip, block_depth + 1, call_stack, func_idx, rt, new_labels);
+            }
+            Err(_) => { return wasm_step_cont_err("ERR\twasm_trap_stack_underflow\tat_if", rt); }
+        }
+    }
+    return wasm_engine_v2_step_more(mod, body, body_len, pc, st, locs, local_base, locals_top, skip_depth, block_depth, call_stack, func_idx, rt, labels);
+}

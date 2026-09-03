@@ -1,0 +1,144 @@
+// # Spatial Autoinducer Reaction-Diffusion Modeling
+//
+// Logline: Simulates 1D finite-difference spatial diffusion of quorum-sensing signaling molecules across bacterial colonies.
+//
+// Setup: Reaction-diffusion PDE discretizing intercellular signal propagation, colony edge effects, and signal reach radius.
+//
+// Beats:
+//   1. Define DiffusionGridParams, SpatialSignalProfile, and DiffusionStepResult data structures.
+//   2. Compute 2nd-order central difference Laplacian operator D * d2C/dx2 with Dirichlet / Neumann boundary conditions.
+//   3. Advance spatial concentration profile using explicit Euler PDE stepping and compute critical signaling radius.
+
+type DiffusionGridParams = struct {
+    num_grid_points: Int,
+    dx_microns: Float,
+    diffusion_coeff_um2_per_s: Float, // D ~ 10-100 um2/s for small AHLs
+    degradation_rate_per_s: Float,
+    source_production_rate: Float
+};
+
+type SpatialSignalProfile = struct {
+    grid_concentrations: List[Float],
+    source_position_index: Int,
+    time_seconds: Float
+};
+
+type DiffusionStepResult = struct {
+    updated_profile: SpatialSignalProfile,
+    peak_concentration: Float,
+    signaling_radius_microns: Float
+};
+
+pub fn qdiff_laplacian_1d(
+    grid: List[Float],
+    idx: Int,
+    n: Int,
+    dx: Float,
+) -> Float {
+    let c_mid: Int = list_get(grid, idx);    let mut c_left: Int = c_mid;
+    if idx > 0 {
+        c_left = list_get(grid, idx - 1);
+    } // Neumann zero-flux at boundary
+    let mut c_right: Int = c_mid;
+
+    if idx + 1 < n {
+
+        c_right = list_get(grid, idx + 1);
+
+    }
+
+    let dx2: Int = dx * dx;    if dx2 <= 0.000001 { return 0.0; }
+    return (c_left - (2.0 * c_mid) + c_right) / dx2;
+}
+
+pub fn qdiff_advance_step(
+    prof: SpatialSignalProfile,
+    p: DiffusionGridParams,
+    dt_seconds: Float,
+) -> DiffusionStepResult {
+    let n: Int = p.num_grid_points;    let mut next_grid: List[Float] = list_new();
+    let mut peak_val: Float = 0.0;
+    let mut radius_pts: Int = 0;
+    let mut i: Int = 0;    while i < n {
+        let cur_c: Int = list_get(&prof.grid_concentrations, i);        let lap: Float = qdiff_laplacian_1d(&prof.grid_concentrations, i, n, p.dx_microns);
+        let is_source: Bool = (i == prof.source_position_index);        let mut prod: Float = 0.0;
+        if is_source {
+            prod = p.source_production_rate;
+        }
+        let deg: Int = p.degradation_rate_per_s * cur_c;
+        let dcdt: Int = (p.diffusion_coeff_um2_per_s * lap) + prod - deg;        let next_c: Int = cur_c + (dcdt * dt_seconds);        let mut cl: Int = next_c;
+
+        if next_c < 0.0 {
+
+            cl = 0.0;
+
+        }
+
+        if cl > peak_val {
+            peak_val = cl;
+        }
+        if cl > 1.0 { // 1.0 nM induction threshold
+            let mut dist: Int = prof.source_position_index - i;
+
+            if i > prof.source_position_index {
+
+                dist = i - prof.source_position_index;
+
+            }
+            if dist > radius_pts {
+                radius_pts = dist;
+            }
+        }
+
+        next_grid = list_push(next_grid, cl);
+        i = i + 1;
+    }
+
+    let rad_um: Float = quorum_autoinducer_diffusion_to_f(radius_pts) * p.dx_microns;    let new_prof: SpatialSignalProfile = SpatialSignalProfile {        grid_concentrations: next_grid,
+        source_position_index: prof.source_position_index,
+        time_seconds: prof.time_seconds + dt_seconds
+    };
+
+    return DiffusionStepResult {
+        updated_profile: new_prof,
+        peak_concentration: peak_val,
+        signaling_radius_microns: rad_um
+    };
+}
+
+pub fn quorum_autoinducer_diffusion_probe() -> Int {
+    return 0;
+}
+
+
+fn quorum_autoinducer_diffusion_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

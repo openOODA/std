@@ -1,0 +1,40 @@
+// # Wind Turbine Facility State Types
+//
+// Logline: Defines WindTurbine and TurbineTelemetry data structures for wind electromechanical modeling.
+//
+// Setup: Two-aggregate by-value types. WindTurbine carries the electromechanical state; TurbineTelemetry reports it.
+//
+// Beats:
+//   1. Define WindTurbine with rated power, hub height, embedded power curve, and pitch controller.
+//   2. Define TurbineTelemetry summary record for monitoring and export.
+
+type WindTurbine = struct {
+    id: Int,
+    rated_power_kw: Float,
+    hub_height_m: Float,
+    power_curve: Int,
+    pitch_controller: Int,
+    wind_speed_ms: Float,
+    wind_direction_deg: Float,
+    rotor_rpm: Float,
+    generator_rpm: Float,
+    gearbox_ratio: Float,
+    output_power_kw: Float,
+    yaw_angle_deg: Float,
+    nacelle_temp_c: Float,
+    status: Int
+};
+
+type TurbineTelemetry = struct {
+    turbine_id: Int,
+    wind_speed_ms: Float,
+    pitch_deg: Float,
+    rotor_rpm: Float,
+    power_kw: Float,
+    efficiency_pct: Float,
+    is_fault: Bool
+};
+
+pub fn wind_turbine_id(t: WindTurbine) -> Int {
+    return t.id;
+}

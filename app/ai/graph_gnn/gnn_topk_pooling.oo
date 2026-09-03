@@ -1,0 +1,54 @@
+// # Top-K Graph Pooling (gPool)
+//
+// Logline: Implements learnable projection vector scoring and graph coarsening via Top-K node selection.
+//
+// Setup: Parameterized graph downsampling layer projecting node feature vectors onto a 1D learnable direction vector.
+//
+// Beats:
+//   1. Project node representations onto learnable unit direction vector p: y = X * p / ||p||.
+//   2. Identify indices of top-k largest scalar projection values.
+//   3. Apply soft-gating feature modulation and extract downsampled subgraph representations.
+
+type TopKPoolingConfig = struct {
+    in_features: Int,
+    k_nodes_to_keep: Int
+};
+
+pub fn topk_pooling_config_new(in_f: Int, k_nodes: Int) -> TopKPoolingConfig {
+    return TopKPoolingConfig {
+        in_features: in_f,
+        k_nodes_to_keep: k_nodes
+    };
+}
+
+pub fn topk_init_projection(in_f: Int, seed_val: Int) -> List[Int] {
+    let mut p_vec: List[Int] = list_new();
+    let mut state: Int = seed_val;
+    let mut i: Int = 0;
+    while i < in_f {
+        state = (state * 1103515245 + 12345) % 2147483647;
+        if state < 0 { state = 0 - state; }
+        let val: Int = (state % 2000) - 1000;
+        p_vec = list_push(p_vec, val);
+        i = i + 1;
+    }
+    return p_vec;
+}
+
+pub fn topk_score_node(
+    in_features: Int,
+    proj_vec: List[Int],
+    node_features: List[Int],
+    feat_offset: Int
+) -> Int {
+    let mut dot: Int = 0;
+    let mut c: Int = 0;
+    while c < in_features {
+        let x_idx: Int = feat_offset + c;
+        let x: Int = list_get(node_features, x_idx);
+        let p: Int = list_get(proj_vec, c);
+        dot = dot + (x * p);
+        c = c + 1;
+    }
+    return dot;
+}

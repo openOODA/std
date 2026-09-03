@@ -1,0 +1,103 @@
+// # MPC Vehicle State & Trajectory Types
+//
+// Logline: Defines ControlState, TrajectoryTarget, MpcWeights, MpcConstraints, and ControlCommand structures.
+//
+// Setup: Pure data representations for Model Predictive Control optimization.
+//
+// Beats:
+//   1. Define MpcHorizon prediction intervals and time discretization models.
+//   2. Define ControlState position/velocity and TrajectoryTarget reference states.
+//   3. Define MpcWeights quadratic penalties, MpcConstraints bounds, and ControlCommand outputs.
+
+type MpcHorizon = struct {
+    steps: Int,
+    dt_s: Float,
+    horizon_time_s: Float
+};
+
+pub fn mpc_horizon_steps(h: MpcHorizon) -> Int {
+    return h.steps;
+}
+
+pub fn mpc_horizon_dt(h: MpcHorizon) -> Float {
+    return h.dt_s;
+}
+
+pub fn mpc_horizon_total_time(h: MpcHorizon) -> Float {
+    return h.horizon_time_s;
+}
+
+type ControlState = struct {
+    x: Float,
+    y: Float,
+    yaw: Float,
+    velocity: Float,
+    steering_angle: Float,
+    acceleration: Float,
+    timestamp_s: Float,
+    valid: Bool
+};
+
+type TrajectoryTarget = struct {
+    x: Float,
+    y: Float,
+    target_yaw: Float,
+    target_speed: Float,
+    curvature: Float,
+    timestamp_s: Float
+};
+
+type MpcWeights = struct {
+    pos_x: Float,
+    pos_y: Float,
+    yaw: Float,
+    speed: Float,
+    steer_angle: Float,
+    acceleration: Float,
+    steer_rate: Float,
+    accel_rate: Float,
+    terminal_pos: Float,
+    terminal_yaw: Float
+};
+
+pub fn mpc_weights_speed(w: MpcWeights) -> Float {
+    return w.speed;
+}
+
+type MpcConstraints = struct {
+    min_speed: Float,
+    max_speed: Float,
+    min_accel: Float,
+    max_accel: Float,
+    max_steering_angle: Float,
+    max_steering_rate: Float,
+    wheelbase_m: Float
+};
+
+pub fn mpc_constraints_max_speed(c: MpcConstraints) -> Float {
+    return c.max_speed;
+}
+
+type ControlCommand = struct {
+    steering_angle: Float,
+    acceleration: Float,
+    target_speed: Float,
+    is_valid: Bool
+};
+
+type MpcResult = struct {
+    command: ControlCommand,
+    predicted_cost: Float,
+    iterations: Int,
+    solved: Bool,
+    horizon_steps: Int
+};
+
+type MpcController = struct {
+    horizon: MpcHorizon,
+    weights: MpcWeights,
+    constraints: MpcConstraints,
+    current_state: ControlState,
+    target: TrajectoryTarget,
+    is_initialized: Bool
+};

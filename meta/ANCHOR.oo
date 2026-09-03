@@ -1,0 +1,42 @@
+// # Meta Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard meta (testing + diagnostics infrastructure) domain library. Re-exports the test/ and diag/ sub-hubs. Phase 3.7: this domain consolidates:
+//   meta/test/  ← was std/test/  (20 files: fuzz, fault_injection, multi_compiler, mutation, GPU cross-validation, scenario/runner)
+//   meta/diag/  ← was std/diag/  (34 files: backtrace, breadcrumb, event_timeline, health check, invariant eval, log levels/formatters, metrics, panic hook, stopwatch, telemetry, tracer)
+//
+// Note: principles/, formal_proofs/, proof_verifiers/, cli/ are in core/ (per Phase 3.1), NOT in meta/. Meta is purely test+diag infrastructure.
+//
+// Setup: Imports the test/ and diag/ sub-hubs. Time-bound ops take TimeCap at the call site. Most pure diagnostic types and constructors take no caps. Test harness construction takes no caps; cross-validation and mutation may take CompileCap at the call site.
+//
+// Beats:
+//   1. Re-export the test sub-hub (test_mod_*) by importing meta/test/ANCHOR.oo.
+//   2. Re-export the diag sub-hub (diag_mod_*) by importing meta/diag/ANCHOR.oo.
+//   3. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _stub files in each subdir.
+
+import "test/ANCHOR.oo";
+import "diag/ANCHOR.oo";
+
+// Public meta version: meta_mod_version_*
+pub fn meta_mod_version() -> String { return "meta/0.1.0"; }
+
+// Public meta domain inventory: meta_mod_*
+pub fn meta_mod_subdir_count() -> Int { return 2; }
+pub fn meta_mod_subdir_list() -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, "test");
+    out = list_push(out, "diag");
+    return out;
+}
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   meta/test/_law files (e.g. assertion_count_law.oo, flaky_test_law.oo, mutation_score_law.oo, property_based_law.oo)
+//   meta/test/_theory files (e.g. coverage_theory.oo, quickcheck_shrink_theory.oo)
+//   meta/test/_principle files (e.g. fuzzing_coverage_principle.oo, mutation_score_principle.oo, test_isolation_principle.oo)
+//   meta/test/_invariants files (e.g. test_invariants.oo)
+//   meta/test/_kat files (e.g. test_kat.oo)
+//   meta/diag/_law files (e.g. error_severity_monotonic_law.oo, tracing_span_law.oo, w3c_trace_context_law.oo)
+//   meta/diag/_theory files (e.g. ebpf_probe_theory.oo, log_structured_theory.oo, metrics_aggregation_theory.oo)
+//   meta/diag/_principle files (e.g. heartbeat_principle.oo, log_level_ordering_principle.oo, red_use_principle.oo)
+//   meta/diag/_invariants files (e.g. diag_invariants.oo)
+//   meta/diag/_kat files (e.g. diag_kat.oo)
+//   meta/diag/_stub files (e.g. backtrace_stub.oo, profiler_sampling_stub.oo)

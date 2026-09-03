@@ -1,0 +1,110 @@
+// # Bayes update law
+//
+// Logline: P(H|E) = P(E|H) * P(H) / P(E). Two-hypothesis and
+//   multi-hypothesis forms. Out-of-range probabilities return Err.
+//
+// Setup: Pure Float. Slack 1e-3 on the posterior.
+//
+// Beats:
+//   1. bayes_two updates (prior, sensitivity, specificity).
+//   2. bayes_multi updates a list of (likelihood, prior) pairs.
+//   3. domain_cert boxes both. Out of range returns Err.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn bayes_two(prior: Float, sens: Float, spec: Float) -> Result[Float, String] {
+    if prior < 0.0 { return Err("ERR\tbayes\tprior"); }
+    if prior > 1.0 { return Err("ERR\tbayes\tprior"); }
+    if sens < 0.0 { return Err("ERR\tbayes\tsens"); }
+    if sens > 1.0 { return Err("ERR\tbayes\tsens"); }
+    if spec < 0.0 { return Err("ERR\tbayes\tspec"); }
+    if spec > 1.0 { return Err("ERR\tbayes\tspec"); }
+    let num: Float = sens * prior;
+    let den: Float = num + (1.0 - spec) * (1.0 - prior);
+    if den == 0.0 { return Err("ERR\tbayes\tden"); }
+    return Ok(num / den);
+}
+
+pub fn bayes_multi(liks: List[Float], priors: List[Float], idx: Int) -> Result[Float, String] {
+    let n: Int = list_len(liks);
+    let m: Int = list_len(priors);
+    if n == 0 { return Err("ERR\tbayes\tempty"); }
+    if n != m { return Err("ERR\tbayes\tlen"); }
+    if idx < 0 { return Err("ERR\tbayes\tidx"); }
+    if idx >= n { return Err("ERR\tbayes\tidx"); }
+    let mut ev: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let l: Float = list_get(liks, i);
+        let p: Float = list_get(priors, i);
+        if l < 0.0 { return Err("ERR\tbayes\tlik"); }
+        if l > 1.0 { return Err("ERR\tbayes\tlik"); }
+        if p < 0.0 { return Err("ERR\tbayes\tprior"); }
+        if p > 1.0 { return Err("ERR\tbayes\tprior"); }
+        ev = ev + l * p;
+        i = i + 1;
+    }
+    if ev == 0.0 { return Err("ERR\tbayes\tden"); }
+    let li: Float = list_get(liks, idx);
+    let pi: Float = list_get(priors, idx);
+    return Ok((li * pi) / ev);
+}
+
+pub fn math_bayes_medical_test_golden() -> DomainCert {
+    let pr: Result[Float, String] = bayes_two(0.01, 0.95, 0.90);
+    let mut h: Int = 0;
+    match pr {
+        Ok(post) => { if pabs(post - 0.0876) <= 0.001 { h = 1; } },
+        Err(_)   => { h = 0; }
+    }
+    return domain_cert("math", "bayes_medical_golden", h);
+}
+
+pub fn math_bayes_multi_three_hypotheses() -> DomainCert {
+    let mut liks: List[Float] = list_new();
+    liks = list_push(liks, 0.8);
+    liks = list_push(liks, 0.5);
+    liks = list_push(liks, 0.1);
+    let mut priors: List[Float] = list_new();
+    priors = list_push(priors, 0.5);
+    priors = list_push(priors, 0.3);
+    priors = list_push(priors, 0.2);
+    let pr: Result[Float, String] = bayes_multi(liks, priors, 0);
+    let mut h: Int = 0;
+    match pr {
+        Ok(post0) => { if pabs(post0 - 0.70175438) <= 0.001 { h = 1; } },
+        Err(_)    => { h = 0; }
+    }
+    return domain_cert("math", "bayes_multi_three", h);
+}
+
+pub fn math_bayes_bad_prior_fails_closed() -> DomainCert {
+    let pr: Result[Float, String] = bayes_two(0.0 - 0.5, 0.95, 0.90);
+    let mut h: Int = 0;
+    if pr.is_err() { h = 1; }
+    return domain_cert("math", "bayes_bad_prior_closed", h);
+}
+
+pub fn math_bayes_bad_lik_fails_closed() -> DomainCert {
+    let pr: Result[Float, String] = bayes_two(0.5, 1.5, 0.90);
+    let mut h: Int = 0;
+    if pr.is_err() { h = 1; }
+    return domain_cert("math", "bayes_bad_lik_closed", h);
+}
+
+pub fn verify_bayes_update_law() -> Bool {
+    let a: DomainCert = math_bayes_medical_test_golden();
+    let b: DomainCert = math_bayes_multi_three_hypotheses();
+    let c: DomainCert = math_bayes_bad_prior_fails_closed();
+    let d: DomainCert = math_bayes_bad_lik_fails_closed();
+    if a.holds != 1 { return false; }
+    if b.holds != 1 { return false; }
+    if c.holds != 1 { return false; }
+    if d.holds != 1 { return false; }
+    return true;
+}

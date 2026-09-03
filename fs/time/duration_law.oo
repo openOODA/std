@@ -1,0 +1,178 @@
+// # Duration law
+//
+// Logline: A duration expressed in nanoseconds equals s * 1,000,000,000 + ns; mixed-unit durations reduce to a single Int in nanoseconds; negative or out-of-range remainders return Err; monotonic subtraction is non-decreasing.
+//
+// Setup: Pure Int on a Duration record. No FS, net, env, or wall clock. One second is 1,000,000,000 ns; one millisecond is 1,000,000 ns; one microsecond is 1,000 ns.
+//
+// Beats:
+//   1. ns_total(s, ns) returns Ok(s * 1e9 + ns) when ns is in [0, 1e9). seconds=0, ns=0 is Ok(0).
+//   2. ns_total_mixed(s, ms, us, ns) reduces to a single Int in nanoseconds.
+//   3. duration_at keeps Duration; negative ns returns Err; ns=0 is Ok zero-length.
+//   4. Coupled: monotonic duration from two ClockReading is non-decreasing.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub type Duration = struct {
+    ns: Int
+};
+
+fn dur_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+fn dur_at_got(r: Result[Duration, String]) -> Duration {
+    match r { Ok(v) => { return v; }, Err(_) => { return Duration { ns: 0 - 1 }; } }
+}
+
+pub fn duration_new() -> Duration {
+    return Duration {
+        ns: 0
+    };
+}
+
+// Build a duration from a non-negative nanosecond count. Negative values return Err. ns=0 is Ok.
+pub fn duration_at(ns: Int) -> Result[Duration, String] {
+    if ns < 0 { return Err("ERR\tdur\tns"); }
+    return Ok(Duration {
+        ns: ns
+    });
+}
+
+// Ideal: total nanoseconds from seconds and a sub-second nanosecond remainder.
+// Negative or ns out of [0, 1e9) return Err. seconds=0, ns=0 is Ok(0).
+pub fn ns_total(seconds: Int, ns: Int) -> Result[Int, String] {
+    if seconds < 0 { return Err("ERR\tdur\tsec"); }
+    if ns < 0 { return Err("ERR\tdur\tns"); }
+    if ns >= 1000000000 { return Err("ERR\tdur\tns"); }
+    return Ok(seconds * 1000000000 + ns);
+}
+
+// Non-ideal: reduce a mixed-unit duration to a single Int in nanoseconds.
+// ms, us, ns are sub-second remainders and must each be in [0, unit).
+pub fn ns_total_mixed(seconds: Int, ms: Int, us: Int, ns: Int) -> Result[Int, String] {
+    if seconds < 0 { return Err("ERR\tdur\tsec"); }
+    if ms < 0 { return Err("ERR\tdur\tms"); }
+    if us < 0 { return Err("ERR\tdur\tus"); }
+    if ns < 0 { return Err("ERR\tdur\tns"); }
+    if ms >= 1000 { return Err("ERR\tdur\tms"); }
+    if us >= 1000 { return Err("ERR\tdur\tus"); }
+    if ns >= 1000 { return Err("ERR\tdur\tns"); }
+    return Ok(seconds * 1000000000 + ms * 1000000 + us * 1000 + ns);
+}
+
+// tabs: |a - b| without using abs_f. Pure Int.
+pub fn tabs(a: Int, b: Int) -> Int {
+    let d: Int = a - b;
+    if d < 0 {
+        return 0 - d;
+    }
+    return d;
+}
+
+// 1 if val is within tol of want (relative tolerance 0.001% expressed as
+// absolute Int). 0 when the relative gap exceeds one-thousandth of max(|val|,
+// |want|, 1).
+pub fn within_tolerance(val: Int, want: Int) -> Int {
+    let gap: Int = tabs(val, want);
+    let mut scale: Int = want;
+    let ag: Int = val;
+    if ag < 0 {
+        if 0 - ag > scale { scale = 0 - ag; }
+    } else {
+        if ag > scale { scale = ag; }
+    }
+    if scale < 1 { scale = 1; }
+    // 0.001% of scale = scale / 100000.
+    let tol: Int = scale / 100000;
+    if tol < 1 { return 0; }
+    if gap <= tol { return 1; }
+    return 0;
+}
+
+// 1 if two durations are equal within a relative tolerance of 0.001%.
+pub fn duration_close(a: Duration, b: Duration) -> Int {
+    return within_tolerance(a.ns, b.ns);
+}
+
+// Coupled with monotonic_clock_principle: monotonic duration must be
+// non-decreasing; returns 1 when later is at or after earlier, 0 otherwise.
+pub fn duration_monotonic_ok(earlier_ns: Int, later_ns: Int) -> Int {
+    if earlier_ns < 0 { return 0; }
+    if later_ns < earlier_ns { return 0; }
+    return 1;
+}
+
+pub fn duration_law_holds(seconds: Int, ns: Int) -> DomainCert {
+    let nr: Result[Int, String] = ns_total(seconds, ns);
+    let mut ok: Int = 0;
+    if nr.is_ok() {
+        let total: Int = dur_got(nr);
+        if total > 0 {
+            if within_tolerance(total, seconds * 1000000000 + ns) == 1 {
+                ok = 1;
+            }
+        }
+    }
+    return domain_cert("time", "duration_law", ok);
+}
+
+pub fn verify_duration_law() -> Bool {
+    // Golden: 1.5 seconds = 1,500,000,000 ns.
+    if dur_got(ns_total(1, 500000000)) != 1500000000 { return false; }
+    // Identity: 0 seconds and 0 ns is Ok(0).
+    let z: Result[Int, String] = ns_total(0, 0);
+    if z.is_ok() == false { return false; }
+    if dur_got(z) != 0 { return false; }
+    // Golden: 2 seconds exactly = 2,000,000,000 ns.
+    if dur_got(ns_total(2, 0)) != 2000000000 { return false; }
+    // Golden: 0 seconds and 1 ns = 1 ns.
+    if dur_got(ns_total(0, 1)) != 1 { return false; }
+    // Golden: 60 seconds = 60,000,000,000 ns (used in leap second math).
+    if dur_got(ns_total(60, 0)) != 60000000000 { return false; }
+    // Golden: 86400 seconds = a day in ns.
+    if dur_got(ns_total(86400, 0)) != 86400000000000 { return false; }
+    // Non-ideal mixed units: 1 s + 500 ms + 250 us + 750 ns = 1,500,250,750 ns.
+    if dur_got(ns_total_mixed(1, 500, 250, 750)) != 1500250750 { return false; }
+    // Identity: all zero mixed is Ok(0).
+    let zm: Result[Int, String] = ns_total_mixed(0, 0, 0, 0);
+    if zm.is_ok() == false { return false; }
+    if dur_got(zm) != 0 { return false; }
+    // Non-ideal: 0 s + 0 ms + 1 us + 0 ns.
+    if dur_got(ns_total_mixed(0, 0, 1, 0)) != 1000 { return false; }
+    // Hostile: negative seconds or out-of-range remainder return Err.
+    if ns_total(0 - 1, 0).is_ok() { return false; }
+    if ns_total(1, 1000000000).is_ok() { return false; }
+    if ns_total(1, 0 - 1).is_ok() { return false; }
+    if ns_total_mixed(1, 1000, 0, 0).is_ok() { return false; }
+    if ns_total_mixed(1, 0, 1000, 0).is_ok() { return false; }
+    if ns_total_mixed(1, 0, 0, 1000).is_ok() { return false; }
+    if ns_total_mixed(0 - 1, 0, 0, 0).is_ok() { return false; }
+    // Hostile: duration_at negative returns Err.
+    if duration_at(0 - 42).is_ok() { return false; }
+    // Identity: duration_at(0) is Ok zero-length.
+    let zdat: Result[Duration, String] = duration_at(0);
+    if zdat.is_ok() == false { return false; }
+    if dur_at_got(zdat).ns != 0 { return false; }
+    // Golden: duration_at keeps positive ns.
+    let dpos: Duration = dur_at_got(duration_at(1234567890));
+    if dpos.ns != 1234567890 { return false; }
+    // Golden: duration_close within 0.001% tolerance.
+    if duration_close(dur_at_got(duration_at(1500000000)), dur_at_got(duration_at(1500000000))) != 1 { return false; }
+    // Hostile: 1 ns apart on a 1.5e9 ns scale (<< 0.001%) still within tolerance.
+    if duration_close(dur_at_got(duration_at(1500000000)), dur_at_got(duration_at(1500000001))) != 1 { return false; }
+    // Hostile: 1,000,000 ns apart on a small 100 ns scale fails the tolerance.
+    if duration_close(dur_at_got(duration_at(100)), dur_at_got(duration_at(1000100))) != 0 { return false; }
+    // Coupled: monotonic duration is non-decreasing.
+    if duration_monotonic_ok(100, 200) != 1 { return false; }
+    if duration_monotonic_ok(200, 100) != 0 { return false; }
+    if duration_monotonic_ok(100, 100) != 1 { return false; }
+    if duration_monotonic_ok(0 - 1, 100) != 0 { return false; }
+    // Golden: domain_cert wrapper.
+    let c1: DomainCert = duration_law_holds(1, 500000000);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "time" { return false; }
+    if c1.law_name != "duration_law" { return false; }
+    let c2: DomainCert = duration_law_holds(0 - 1, 0);
+    if c2.holds != 0 { return false; }
+    return true;
+}

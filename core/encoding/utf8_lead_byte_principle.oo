@@ -1,0 +1,161 @@
+// # UTF-8 Lead Byte Principle
+//
+// Logline: A byte 0 to 127 is ASCII; bytes 194 to 244 are valid UTF-8 leads by length; other ranges are not leads.
+//
+// Setup: Pure Int. Byte is 0..255 inclusive; out-of-range returns 0. RFC 3629 ranges only.
+//
+// Beats:
+//   1. utf8_is_ascii(b) holds iff b < 128.
+//   2. utf8_is_lead_2byte holds iff 194 <= b <= 223.
+//   3. utf8_is_lead_3byte holds iff 224 <= b <= 239.
+//   4. utf8_is_lead_4byte holds iff 240 <= b <= 244.
+//   5. utf8_is_continuation holds iff 128 <= b <= 191.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn utf8_is_ascii(b: Int) -> Int {
+    if b < 0 {
+        return 0;
+    }
+    if b > 255 {
+        return 0;
+    }
+    if b < 128 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn utf8_is_lead_2byte(b: Int) -> Int {
+    if b < 0 {
+        return 0;
+    }
+    if b > 255 {
+        return 0;
+    }
+    if b >= 194 {
+        if b <= 223 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn utf8_is_lead_3byte(b: Int) -> Int {
+    if b < 0 {
+        return 0;
+    }
+    if b > 255 {
+        return 0;
+    }
+    if b >= 224 {
+        if b <= 239 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn utf8_is_lead_4byte(b: Int) -> Int {
+    if b < 0 {
+        return 0;
+    }
+    if b > 255 {
+        return 0;
+    }
+    if b >= 240 {
+        if b <= 244 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn utf8_is_continuation(b: Int) -> Int {
+    if b < 0 {
+        return 0;
+    }
+    if b > 255 {
+        return 0;
+    }
+    if b >= 128 {
+        if b <= 191 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn utf8_lead_byte_law(b: Int) -> DomainCert {
+    if b < 0 {
+        return domain_cert("encoding", "utf8_lead_byte", 0);
+    }
+    if b > 255 {
+        return domain_cert("encoding", "utf8_lead_byte", 0);
+    }
+    if b < 128 {
+        return domain_cert("encoding", "utf8_lead_byte", 1);
+    }
+    if b >= 194 {
+        if b <= 244 {
+            return domain_cert("encoding", "utf8_lead_byte", 1);
+        }
+    }
+    return domain_cert("encoding", "utf8_lead_byte", 0);
+}
+
+pub fn verify_utf8_lead_byte_principle() -> Bool {
+    // Golden: ASCII 65 holds.
+    if utf8_is_ascii(65) != 1 { return false; }
+    // Golden: ASCII 0 boundary holds.
+    if utf8_is_ascii(0) != 1 { return false; }
+    // Golden: ASCII 127 boundary holds.
+    if utf8_is_ascii(127) != 1 { return false; }
+    // Golden: 2-byte lead 194 boundary holds.
+    if utf8_is_lead_2byte(194) != 1 { return false; }
+    // Golden: 2-byte lead 223 boundary holds.
+    if utf8_is_lead_2byte(223) != 1 { return false; }
+    // Golden: 3-byte lead 224 boundary holds.
+    if utf8_is_lead_3byte(224) != 1 { return false; }
+    // Golden: 3-byte lead 239 boundary holds.
+    if utf8_is_lead_3byte(239) != 1 { return false; }
+    // Golden: 4-byte lead 240 boundary holds.
+    if utf8_is_lead_4byte(240) != 1 { return false; }
+    // Golden: 4-byte lead 244 boundary holds.
+    if utf8_is_lead_4byte(244) != 1 { return false; }
+    // Golden: continuation 145 holds.
+    if utf8_is_continuation(145) != 1 { return false; }
+    // Golden: continuation 128 boundary holds.
+    if utf8_is_continuation(128) != 1 { return false; }
+    // Golden: continuation 191 boundary holds.
+    if utf8_is_continuation(191) != 1 { return false; }
+    // Hostile: 128 is not ASCII.
+    if utf8_is_ascii(128) != 0 { return false; }
+    // Hostile: 193 is not a 2-byte lead.
+    if utf8_is_lead_2byte(193) != 0 { return false; }
+    // Hostile: 224 is not a 2-byte lead.
+    if utf8_is_lead_2byte(224) != 0 { return false; }
+    // Hostile: 223 is not a 3-byte lead.
+    if utf8_is_lead_3byte(223) != 0 { return false; }
+    // Hostile: 245 is not a 3-byte lead.
+    if utf8_is_lead_3byte(245) != 0 { return false; }
+    // Hostile: 239 is not a 4-byte lead.
+    if utf8_is_lead_4byte(239) != 0 { return false; }
+    // Hostile: 245 is not a 4-byte lead.
+    if utf8_is_lead_4byte(245) != 0 { return false; }
+    // Hostile: 65 is not a continuation.
+    if utf8_is_continuation(65) != 0 { return false; }
+    // Hostile: 200 is not a continuation.
+    if utf8_is_continuation(200) != 0 { return false; }
+    // Hostile: out-of-range bytes fail closed.
+    if utf8_is_ascii(-1) != 0 { return false; }
+    if utf8_is_ascii(256) != 0 { return false; }
+    if utf8_is_lead_2byte(-1) != 0 { return false; }
+    if utf8_is_continuation(256) != 0 { return false; }
+    // DomainCert.holds matches the Int law.
+    if utf8_lead_byte_law(65).holds != 1 { return false; }
+    if utf8_lead_byte_law(128).holds != 0 { return false; }
+    if utf8_lead_byte_law(194).holds != 1 { return false; }
+    if utf8_lead_byte_law(245).holds != 0 { return false; }
+    return true;
+}

@@ -1,0 +1,74 @@
+// # TUI Selectable List Widget
+//
+// Logline: Single and multi-select vertical item list widget with scrollbar support and item tags.
+//
+// Setup: Interactive menu list widget for option selection, file pickers, and feeds.
+//
+// Beats:
+//   1. Define ListItem model with selection, active status, and badge labels.
+//   2. Manage active item focus, selection toggle, and scrolling windows.
+//   3. Render item list with custom cursor markers and highlight styling.
+
+import "std/app/ui/tui/tui_buffer.oo";
+
+type ListItem = struct {
+    id: Int,
+    label: String,
+    is_selected: Bool,
+    is_disabled: Bool
+};
+
+pub fn list_item_new(id: Int, label: String) -> ListItem {
+    return ListItem {
+        id: id,
+        label: label,
+        is_selected: false,
+        is_disabled: false
+    };
+}
+
+type WidgetList = struct {
+    id: Int,
+    area: BufferArea,
+    items: List[String],
+    active_index: Int,
+    scroll_offset: Int,
+    is_focused: Bool,
+    is_multiselect: Bool
+};
+
+pub fn widget_list_new(id: Int, area: BufferArea) -> WidgetList {
+    let items: List[String] = list_new();
+    return WidgetList {
+        id: id,
+        area: area,
+        items: items,
+        active_index: 0,
+        scroll_offset: 0,
+        is_focused: false,
+        is_multiselect: false
+    };
+}
+
+pub fn widget_list_add_item(lst: WidgetList, label: String) -> WidgetList {
+    let cur: List[String] = lst.items;
+    let updated: List[String] = list_push(cur, label);
+    return WidgetList {
+        id: lst.id,
+        area: lst.area,
+        items: updated,
+        active_index: lst.active_index,
+        scroll_offset: lst.scroll_offset,
+        is_focused: lst.is_focused,
+        is_multiselect: lst.is_multiselect
+    };
+}
+
+pub fn widget_list_get_item_count(lst: WidgetList) -> Int {
+    let cur: List[String] = lst.items;
+    return list_len(cur);
+}
+
+pub fn widget_list_get_selected_index(lst: WidgetList) -> Int {
+    return lst.active_index;
+}

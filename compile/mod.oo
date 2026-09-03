@@ -1,0 +1,42 @@
+// # Compile Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard compile domain library. The compile/ subdirectory is a theoretical-foundation library: laws, theories, and principles for compiler correctness (constant folding, dominance frontier, lex-byte invariant, lexer DFA, MLIR dialect, parse balance, polyhedral Pluto, register allocation liveness, SSA phi). No public API code -- the directory is documentation and verification rules.
+//
+// Setup: No caps required. compile/ is a theoretical-foundation library; no FS, net, or env.
+//
+// Beats:
+//   1. Document the constant-folding, parse-balance, and SSA-phi law surface as private siblings.
+//   2. Document the dominance-frontier (Cytron), polyhedral-Pluto, and register-allocation liveness surface as private siblings.
+//   3. Document the lex-byte-invariant, lexer-DFA, and MLIR-dialect principle surface as private siblings.
+//   4. Document the remaining theoretical siblings (theories, laws, principles, invariants, KATs).
+//   5. Document the invariants and KATs as private siblings. External callers must not import _law, _theory, _principle, _invariants, _kat files directly.
+
+import "constant_folding_law.oo";
+import "cytron_dominance_frontier_theory.oo";
+import "lex_byte_invariant_principle.oo";
+import "lexer_dfa_theory.oo";
+import "mlir_dialect_principle.oo";
+import "parse_balance_law.oo";
+import "polyhedral_pluto_law.oo";
+import "regalloc_liveness_principle.oo";
+import "ssa_phi_law.oo";
+
+// Note: compile/ has no public API code; every sibling is a _law,
+// _theory, _principle, _invariants, or _kat file. The mod.oo exists
+// to satisfy the Pillar 6 seam rule (FORMAT.oot §1.4) and to provide
+// a single public entry door whose surface is empty. Internal callers
+// (tests, audit harnesses, compiler-correctness proofs) reference the
+// theoretical files directly; external callers must go through this
+// mod.oo and receive no public functions.
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. constant_folding_law.oo, parse_balance_law.oo, polyhedral_pluto_law.oo, ssa_phi_law.oo)
+//   _theory files (e.g. cytron_dominance_frontier_theory.oo, lexer_dfa_theory.oo)
+//   _principle files (e.g. lex_byte_invariant_principle.oo, mlir_dialect_principle.oo, regalloc_liveness_principle.oo)
+//   _invariants files (e.g. compile_invariants.oo)
+//   _kat files (e.g. compile_kat.oo)
+//
+// Migration path: if a future caller needs to verify a specific
+// compiler law, they should add a re-export wrapper here (e.g.
+// compile_mod_constant_folding_holds) rather than importing the
+// private _law file directly.

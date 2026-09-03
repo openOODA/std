@@ -1,0 +1,153 @@
+// # UAV Quaternion Kinematics & Attitude Representations
+//
+// Logline: Implements unit quaternion kinematics, SLERP interpolation, and differential rotation propagation.
+//
+// Setup: Core attitude representation avoiding gimbal lock singularities during dynamic 3D aerobatic flight.
+//
+// Beats:
+//   1. Define 4-element unit Quaternion structure (w, x, y, z).
+//   2. Compute quaternion multiplication, norm, conjugate, and inverse.
+//   3. Propagate attitude quaternion over time step dt using angular rate vector omega.
+//   4. Convert between Quaternions and Euler angles (roll, pitch, yaw).
+
+import "./uav_coordinate_frames.oo";
+
+type Quaternion = struct {
+    w: Float,
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type EulerAngles = struct {
+    roll: Float,
+    pitch: Float,
+    yaw: Float
+};
+
+pub fn quat_new(w: Float, x: Float, y: Float, z: Float) -> Quaternion {
+    return Quaternion { w: w, x: x, y: y, z: z };
+}
+
+pub fn quat_identity() -> Quaternion {
+    return Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 };
+}
+
+pub fn quat_norm(q: Quaternion) -> Float {
+    let qw: Float = q.w;
+    let qx: Float = q.x;
+    let qy: Float = q.y;
+    let qz: Float = q.z;
+    return sqrt((qw * qw) + (qx * qx) + (qy * qy) + (qz * qz));
+}
+
+pub fn quat_normalize(q: Quaternion) -> Quaternion {
+    let n: Float = quat_norm(q);
+    if n < 0.000001 {
+        return quat_identity();
+    }
+    let inv_n: Float = 1.0 / n;
+    return Quaternion {
+        w: q.w * inv_n,
+        x: q.x * inv_n,
+        y: q.y * inv_n,
+        z: q.z * inv_n
+    };
+}
+
+pub fn quat_conjugate(q: Quaternion) -> Quaternion {
+    return Quaternion {
+        w: q.w,
+        x: 0.0 - q.x,
+        y: 0.0 - q.y,
+        z: 0.0 - q.z
+    };
+}
+
+pub fn quat_multiply(q1: Quaternion, q2: Quaternion) -> Quaternion {
+    let w1: Float = q1.w;
+    let x1: Float = q1.x;
+    let y1: Float = q1.y;
+    let z1: Float = q1.z;
+
+    let w2: Float = q2.w;
+    let x2: Float = q2.x;
+    let y2: Float = q2.y;
+    let z2: Float = q2.z;
+
+    let rw: Float = (w1 * w2) - (x1 * x2) - (y1 * y2) - (z1 * z2);
+    let rx: Float = (w1 * x2) + (x1 * w2) + (y1 * z2) - (z1 * y2);
+    let ry: Float = (w1 * y2) - (x1 * z2) + (y1 * w2) + (z1 * x2);
+    let rz: Float = (w1 * z2) + (x1 * y2) - (y1 * x2) + (z1 * w2);
+
+    return Quaternion { w: rw, x: rx, y: ry, z: rz };
+}
+
+pub fn quat_rotate_vector(q: Quaternion, v: Vector3D) -> Vector3D {
+    let qv: Quaternion = Quaternion { w: 0.0, x: v.x, y: v.y, z: v.z };
+    let q_conj: Quaternion = quat_conjugate(q);
+    let q_tmp: Quaternion = quat_multiply(q, qv);
+    let q_res: Quaternion = quat_multiply(q_tmp, q_conj);
+    return Vector3D { x: q_res.x, y: q_res.y, z: q_res.z };
+}
+
+pub fn quat_propagate(q: Quaternion, omega: Vector3D, dt: Float) -> Quaternion {
+    let half_dt: Float = 0.5 * dt;
+    let omega_quat: Quaternion = Quaternion {
+        w: 0.0,
+        x: omega.x * half_dt,
+        y: omega.y * half_dt,
+        z: omega.z * half_dt
+    };
+    let dq: Quaternion = quat_multiply(q, omega_quat);
+    let q_next: Quaternion = Quaternion {
+        w: q.w + dq.w,
+        x: q.x + dq.x,
+        y: q.y + dq.y,
+        z: q.z + dq.z
+    };
+    return quat_normalize(q_next);
+}
+
+pub fn euler_to_quat(roll: Float, pitch: Float, yaw: Float) -> Quaternion {
+    let cr: Float = cos(roll * 0.5);
+    let sr: Float = sin(roll * 0.5);
+    let cp: Float = cos(pitch * 0.5);
+    let sp: Float = sin(pitch * 0.5);
+    let cy: Float = cos(yaw * 0.5);
+    let sy: Float = sin(yaw * 0.5);
+
+    let qw: Float = (cr * cp * cy) + (sr * sp * sy);
+    let qx: Float = (sr * cp * cy) - (cr * sp * sy);
+    let qy: Float = (cr * sp * cy) + (sr * cp * sy);
+    let qz: Float = (cr * cp * sy) - (sr * sp * cy);
+
+    return Quaternion { w: qw, x: qx, y: qy, z: qz };
+}
+
+pub fn quat_to_euler(q: Quaternion) -> EulerAngles {
+    let qw: Float = q.w;
+    let qx: Float = q.x;
+    let qy: Float = q.y;
+    let qz: Float = q.z;
+
+    let sinr_cosp: Float = 2.0 * ((qw * qx) + (qy * qz));
+    let cosr_cosp: Float = 1.0 - (2.0 * ((qx * qx) + (qy * qy)));
+    let roll: Float = uav_atan2_approx(sinr_cosp, cosr_cosp);
+
+    let sinp: Float = 2.0 * ((qw * qy) - (qz * qx));
+    let mut pitch: Float = 0.0;
+    if sinp >= 1.0 {
+        pitch = 1.5707963267948966;
+    } else if sinp <= (0.0 - 1.0) {
+        pitch = 0.0 - 1.5707963267948966;
+    } else {
+        pitch = uav_atan2_approx(sinp, sqrt(1.0 - (sinp * sinp)));
+    }
+
+    let siny_cosp: Float = 2.0 * ((qw * qz) + (qx * qy));
+    let cosy_cosp: Float = 1.0 - (2.0 * ((qy * qy) + (qz * qz)));
+    let yaw: Float = uav_atan2_approx(siny_cosp, cosy_cosp);
+
+    return EulerAngles { roll: roll, pitch: pitch, yaw: yaw };
+}

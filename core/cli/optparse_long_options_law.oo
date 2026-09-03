@@ -1,0 +1,152 @@
+// # GNU getopt long-options law
+//
+// Logline: per GNU getopt_long (Fogel 1994+), a long option starts with "--" and is followed by a name of length >= 1; an optional "=" separates the name from its value.
+//
+// Setup: Pure Int and List[String]. No FS, no process. Coupling is with POSIX.1-2017 §12.2 short options in std/cli/posix_utility_convention_theory.oo and with the subcommand pattern in std/cli/cli_arg_parser.oo.
+// Source: GNU C Library manual, Argp / Getopt Long Options, Fogel "Open Source Development with CVS" 1994+ (autoconf getopt); ISO/IEC 9945:2009 POSIX getopt() extension.
+//
+// Beats:
+//   1. optparse_is_long(arg) returns 1 iff arg starts with "--" and has length > 2.
+//   2. optparse_split_long_arg("--name=value") returns ["--name", "value"].
+//   3. "--name" with no "=" returns ["--name", ""] (value empty).
+//   4. Hostile "-x" or "--" alone returns 0; split of hostile returns empty list.
+
+import "std/core/primitives/domain_cert.oo";
+
+// ASCII 45 = '-', 61 = '='.
+// Source: POSIX.1-2017 §6.1 Character Set; RFC 20 / ASCII 1968.
+fn byte_dash2() -> Int { return 45; }
+fn byte_eq2() -> Int { return 61; }
+
+// 1 if arg begins with "--" and has length > 2; 0 otherwise.
+// Source: GNU getopt_long — long options must start with "--" and have a name of length >= 1.
+pub fn optparse_is_long(arg: String) -> Int {
+    let n: Int = arg.len();
+    if n <= 2 { return 0; }
+    if byte_at(arg, 0) == byte_dash2() {
+        if byte_at(arg, 1) == byte_dash2() { return 1; }
+    }
+    return 0;
+}
+
+// Split "--name=value" into ["--name", "value"].
+// If no '=' is present, return ["--name", ""].
+// If the arg is not a long option, return an empty list.
+// Source: GNU getopt_long — optional '=' separator.
+pub fn optparse_split_long_arg(arg: String) -> List[String] {
+    let out: List[String] = list_new();
+    if optparse_is_long(arg) != 1 { return out; }
+    let eq_idx: Int = str_index_of(arg, "=");
+    if eq_idx < 0 {
+        let only: List[String] = list_push(out, arg);
+        let only2: List[String] = list_push(only, "");
+        return only2;
+    }
+    let name_part: String = str_slice(arg, 0, eq_idx);
+    let val_len: Int = arg.len();
+    let val_part: String = str_slice(arg, eq_idx + 1, val_len);
+    let p1: List[String] = list_push(out, name_part);
+    let p2: List[String] = list_push(p1, val_part);
+    return p2;
+}
+
+// 1 if split produced exactly 2 parts and the first begins with "--"; 0 otherwise.
+pub fn optparse_split_well_formed(parts: List[String]) -> Int {
+    let n: Int = list_len(parts);
+    if n != 2 { return 0; }
+    let first: String = list_get(parts, 0);
+    if optparse_is_long(first) != 1 { return 0; }
+    return 1;
+}
+
+// domain_cert wrapper for the law.
+pub fn optparse_long_law_holds(arg: String, parts_expected: Int) -> DomainCert {
+    let parts: List[String] = optparse_split_long_arg(arg);
+    let n: Int = list_len(parts);
+    let mut v: Int = 0;
+    if n == parts_expected { v = 1; }
+    return domain_cert("cli", "optparse_long_options_law", v);
+}
+
+// The published GNU getopt constants.
+// Source: GNU getopt_long spec; POSIX.1-2017 §12.2.
+pub fn optparse_long_prefix_len() -> Int { return 2; }
+pub fn optparse_long_separator() -> Int { return 61; }
+
+pub fn verify_optparse_long_options_law() -> Bool {
+    // is_long: "--" + name returns 1.
+    if optparse_is_long("--foo") != 1 { return false; }
+    if optparse_is_long("--name") != 1 { return false; }
+    if optparse_is_long("--x") != 1 { return false; }
+    if optparse_is_long("--verbose") != 1 { return false; }
+
+    // is_long: short option, bare "--", and empty return 0.
+    if optparse_is_long("-x") != 0 { return false; }
+    if optparse_is_long("--") != 0 { return false; }
+    if optparse_is_long("") != 0 { return false; }
+    if optparse_is_long("-") != 0 { return false; }
+    if optparse_is_long("foo") != 0 { return false; }
+
+    // split: golden "--name=value" -> 2 parts, "--name" and "value".
+    let p1: List[String] = optparse_split_long_arg("--name=value");
+    if list_len(p1) != 2 { return false; }
+    if list_get(p1, 0) != "--name" { return false; }
+    if list_get(p1, 1) != "value" { return false; }
+    if optparse_split_well_formed(p1) != 1 { return false; }
+
+    // split: "--output=file.txt" -> 2 parts.
+    let p2: List[String] = optparse_split_long_arg("--output=file.txt");
+    if list_len(p2) != 2 { return false; }
+    if list_get(p2, 0) != "--output" { return false; }
+    if list_get(p2, 1) != "file.txt" { return false; }
+
+    // split: empty value after '=' -> ["--flag", ""].
+    let p3: List[String] = optparse_split_long_arg("--flag=");
+    if list_len(p3) != 2 { return false; }
+    if list_get(p3, 0) != "--flag" { return false; }
+    if list_get(p3, 1) != "" { return false; }
+
+    // split: no '=' at all -> ["--name", ""] (value empty).
+    let p4: List[String] = optparse_split_long_arg("--verbose");
+    if list_len(p4) != 2 { return false; }
+    if list_get(p4, 0) != "--verbose" { return false; }
+    if list_get(p4, 1) != "" { return false; }
+
+    // split: hostile "-x" -> empty list.
+    let p5: List[String] = optparse_split_long_arg("-x");
+    if list_len(p5) != 0 { return false; }
+
+    // split: hostile "--" -> empty list (length must be > 2).
+    let p6: List[String] = optparse_split_long_arg("--");
+    if list_len(p6) != 0 { return false; }
+
+    // split: hostile "" -> empty list.
+    let p7: List[String] = optparse_split_long_arg("");
+    if list_len(p7) != 0 { return false; }
+
+    // split_well_formed: positive check.
+    let q1: List[String] = optparse_split_long_arg("--name=value");
+    if optparse_split_well_formed(q1) != 1 { return false; }
+
+    // Constants.
+    if optparse_long_prefix_len() != 2 { return false; }
+    if optparse_long_separator() != 61 { return false; }
+
+    // Coupled: domain_cert boxes the holds bit.
+    let c1: DomainCert = optparse_long_law_holds("--name=value", 2);
+    if c1.domain != "cli" { return false; }
+    if c1.law_name != "optparse_long_options_law" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = optparse_long_law_holds("-x", 0);
+    if c2.holds != 1 { return false; }
+    let c3: DomainCert = optparse_long_law_holds("--name=value", 1);
+    if c3.holds != 0 { return false; }
+
+    // Coupled: long option and short option live in disjoint namespaces.
+    // A long option is never a short option.
+    if optparse_is_long("--name") == 1 {
+        if optparse_is_long("-a") == 1 { return false; }
+    }
+
+    return true;
+}

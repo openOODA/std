@@ -1,0 +1,104 @@
+// # CLI literature KAT constants
+//
+// Logline: published POSIX and Linux CLI vector constants — exit codes, signal codes, and well-known upper bounds — exposed as pure Int constants for the cli KAT lock to compare against.
+//
+// Setup: Pure Int constants. No FS or process. Source: POSIX 2017 (exit codes), signal(7) (signal numbers), Linux kernel limits.
+//
+// Beats:
+//   1. POSIX exit codes 0, 1, 2, 126, 127, 130.
+//   2. Signal numbers SIGINT=2, SIGTERM=15, SIGKILL=9, exit-by-signal offset 128.
+//   3. Upper bounds: argc max reasonable = 1000; Linux env var MAX = 131072 bytes.
+
+import "std/core/primitives/domain_cert.oo";
+
+// POSIX 2017 exit codes.
+pub fn kat_exit_success() -> Int { return 0; }
+pub fn kat_exit_general_error() -> Int { return 1; }
+pub fn kat_exit_misuse() -> Int { return 2; }
+pub fn kat_exit_cannot_execute() -> Int { return 126; }
+pub fn kat_exit_not_found() -> Int { return 127; }
+
+// Exit code produced by termination via signal n: 128 + n.
+pub fn kat_exit_by_signal(sig: Int) -> Int { return 128 + sig; }
+
+// signal(7) numbers on Linux/POSIX.
+pub fn kat_sigint() -> Int { return 2; }
+pub fn kat_sigterm() -> Int { return 15; }
+pub fn kat_sigkill() -> Int { return 9; }
+
+// Reasonable upper bound for argc on a single command line.
+pub fn kat_argc_max_reasonable() -> Int { return 1000; }
+
+// Linux ARG_MAX / env var upper bound in bytes.
+pub fn kat_env_max_bytes() -> Int { return 131072; }
+
+// 1 when the given code matches the published POSIX exit code for that category.
+pub fn kat_exit_is_success(code: Int) -> Int {
+    if code == kat_exit_success() { return 1; }
+    return 0;
+}
+pub fn kat_exit_is_general_error(code: Int) -> Int {
+    if code == kat_exit_general_error() { return 1; }
+    return 0;
+}
+pub fn kat_exit_is_misuse(code: Int) -> Int {
+    if code == kat_exit_misuse() { return 1; }
+    return 0;
+}
+pub fn kat_exit_is_cannot_execute(code: Int) -> Int {
+    if code == kat_exit_cannot_execute() { return 1; }
+    return 0;
+}
+pub fn kat_exit_is_not_found(code: Int) -> Int {
+    if code == kat_exit_not_found() { return 1; }
+    return 0;
+}
+
+// domain_cert wrapper for the cli literature KAT.
+pub fn kat_lit_holds(success_code: Int, sigint_code: Int) -> DomainCert {
+    let s: Int = kat_exit_is_success(success_code);
+    let mut i: Int = 0;
+    if sigint_code == 130 { i = 1; }
+    if s == 1 {
+        if i == 1 { return domain_cert("cli", "literature_kat", 1); }
+    }
+    return domain_cert("cli", "literature_kat", 0);
+}
+
+pub fn verify_cli_literature_kat() -> Bool {
+    if kat_exit_success() != 0 { return false; }
+    if kat_exit_general_error() != 1 { return false; }
+    if kat_exit_misuse() != 2 { return false; }
+    if kat_exit_cannot_execute() != 126 { return false; }
+    if kat_exit_not_found() != 127 { return false; }
+    if kat_sigint() != 2 { return false; }
+    if kat_sigterm() != 15 { return false; }
+    if kat_sigkill() != 9 { return false; }
+    if kat_exit_by_signal(2) != 130 { return false; }
+    if kat_exit_by_signal(15) != 143 { return false; }
+    if kat_exit_by_signal(9) != 137 { return false; }
+    if kat_argc_max_reasonable() != 1000 { return false; }
+    if kat_env_max_bytes() != 131072 { return false; }
+
+    if kat_exit_is_success(0) != 1 { return false; }
+    if kat_exit_is_success(1) != 0 { return false; }
+    if kat_exit_is_general_error(1) != 1 { return false; }
+    if kat_exit_is_general_error(0) != 0 { return false; }
+    if kat_exit_is_misuse(2) != 1 { return false; }
+    if kat_exit_is_misuse(3) != 0 { return false; }
+    if kat_exit_is_cannot_execute(126) != 1 { return false; }
+    if kat_exit_is_cannot_execute(127) != 0 { return false; }
+    if kat_exit_is_not_found(127) != 1 { return false; }
+    if kat_exit_is_not_found(126) != 0 { return false; }
+
+    let c1: DomainCert = kat_lit_holds(0, 130);
+    if c1.domain != "cli" { return false; }
+    if c1.law_name != "literature_kat" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = kat_lit_holds(1, 130);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = kat_lit_holds(0, 131);
+    if c3.holds != 0 { return false; }
+
+    return true;
+}

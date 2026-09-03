@@ -1,0 +1,241 @@
+// # Gen 5 VLO Stealth, Thrust Vectoring, and Missile Guidance
+//
+// Logline: Models 5th-generation stealth aircraft flight dynamics, internal weapons bays, and missile flyout.
+//
+// Setup: Aerodynamic equations, radar cross section calculations, and proportional navigation.
+//
+// Beats:
+//   1. Simulate 5th-generation aircraft flight states and thrust vectoring.
+//   2. Calculate dynamic radar cross sections and weapons bay door states.
+//   3. Simulate AIM-120 missile proportional navigation flyout kinematics.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_aero_gen5_stealth() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type Gen5AircraftState = struct {
+    pos_x: Float,
+    pos_y: Float,
+    vel_fps: Float,
+    heading_rad: Float,
+    pitch_rad: Float,
+    aoa_rad: Float,
+    thrust_lbf: Float,
+    weight_lbs: Float,
+    tvc_pitch_deg: Float,
+    tvc_yaw_deg: Float,
+    bay_door_state: Int,
+    bay_door_timer: Float,
+    rcs_m2: Float,
+    cd0_current: Float
+};
+
+type AmraamKinematics = struct {
+    pos_x: Float,
+    pos_y: Float,
+    vel_fps: Float,
+    heading_rad: Float,
+    target_x: Float,
+    target_y: Float,
+    time_alive_s: Float,
+    active_seeker: Bool,
+    is_destroyed: Bool
+};
+
+pub fn gen5_pi() -> Float {
+    return circ_pi_std_phys_aero_gen5_stealth();
+}
+
+pub fn gen5_clamp(val: Float, min_v: Float, max_v: Float) -> Float {
+    if val < min_v {
+        return min_v;
+    }
+    if val > max_v {
+        return max_v;
+    }
+    return val;
+}
+
+pub fn gen5_abs(val: Float) -> Float {
+    if val < 0.0 {
+        return 0.0 - val;
+    }
+    return val;
+}
+
+pub fn gen5_atan(x: Float) -> Float {
+    let mut sign: Float = 1.0;
+    let mut ax: Float = x;
+    if x < 0.0 {
+        sign = 0.0 - 1.0;
+        ax = 0.0 - x;
+    }
+    let pi_over_2: Float = 1.5707963267948966;
+    if ax <= 1.0 {
+        let poly: Float = ax / (1.0 + (0.28 * ax * ax));
+        return sign * poly;
+    }
+    let poly: Float = (1.0 / ax) / (1.0 + (0.28 / (ax * ax)));
+    let res: Float = pi_over_2 - poly;
+    return sign * res;
+}
+
+pub fn gen5_atan2(y: Float, x: Float) -> Float {
+    let pi_val: Float = gen5_pi();
+    let half_pi: Float = 1.5707963267948966;
+    if x == 0.0 {
+        if y > 0.0 {
+            return half_pi;
+        }
+        if y < 0.0 {
+            return 0.0 - half_pi;
+        }
+        return 0.0;
+    }
+    let q: Float = gen5_atan(y / x);
+    if x > 0.0 {
+        return q;
+    }
+    if y >= 0.0 {
+        return q + pi_val;
+    }
+    return q - pi_val;
+}
+
+pub fn gen5_normalize_angle(rad: Float) -> Float {
+    let pi_val: Float = gen5_pi();
+    let two_pi: Float = 2.0 * pi_val;
+    let mut a: Float = rad;
+    while a > pi_val {
+        a = a - two_pi;
+    }
+    while a < (0.0 - pi_val) {
+        a = a + two_pi;
+    }
+    return a;
+}
+
+pub fn gen5_compute_rcs(aspect_angle_rad: Float, bay_open_ratio: Float) -> Float {
+    let theta: Float = gen5_abs(gen5_normalize_angle(aspect_angle_rad));
+    let sin_t: Float = sin(theta);
+    let cos_half: Float = cos(theta * 0.5);
+    let beam_factor: Float = sin_t * sin_t * sin_t * sin_t;
+    let tail_factor: Float = cos_half * cos_half * (1.0 - cos(theta));
+    let clean_rcs: Float = 0.0001 + (0.0499 * beam_factor) + (0.0099 * tail_factor);
+    let clamped_bay: Float = gen5_clamp(bay_open_ratio, 0.0, 1.0);
+    let bay_bloom_rcs: Float = 0.85 * (clamped_bay * clamped_bay);
+    return clean_rcs + bay_bloom_rcs;
+}
+
+pub fn gen5_radar_detection_range(rcs_m2: Float, r_ref_ft: Float, rcs_ref_m2: Float) -> Float {
+    if rcs_m2 <= 0.0000001 || rcs_ref_m2 <= 0.0000001 {
+        return 0.0;
+    }
+    let rcs_ratio: Float = rcs_m2 / rcs_ref_m2;
+    let range_scale: Float = sqrt(sqrt(rcs_ratio));
+    return r_ref_ft * range_scale;
+}
+
+pub fn gen5_cycle_weapons_bay(door_state: Int, timer_s: Float, dt: Float) -> Float {
+    let t_transit: Float = 0.5;
+    if door_state == 1 {
+        let t_curr: Float = timer_s + dt;
+        if t_curr >= t_transit {
+            return 1.0;
+        }
+        return gen5_clamp(t_curr / t_transit, 0.0, 1.0);
+    }
+    if door_state == 2 {
+        return 1.0;
+    }
+    if door_state == 3 {
+        let t_curr: Float = timer_s + dt;
+        if t_curr >= t_transit {
+            return 0.0;
+        }
+        return gen5_clamp(1.0 - (t_curr / t_transit), 0.0, 1.0);
+    }
+    return 0.0;
+}
+
+pub fn gen5_compute_cd0(base_cd0: Float, open_ratio: Float) -> Float {
+    let delta_cd0: Float = 0.0350 * gen5_clamp(open_ratio, 0.0, 1.0);
+    return base_cd0 + delta_cd0;
+}
+
+pub fn gen5_compute_tvc_pitch_rate(thrust_lbf: Float, tvc_pitch_deg: Float, moment_arm_ft: Float, i_yy_slugft2: Float, dt: Float) -> Float {
+    if i_yy_slugft2 <= 0.001 {
+        return 0.0;
+    }
+    let pitch_rad: Float = (tvc_pitch_deg * gen5_pi()) / 180.0;
+    let tvc_moment: Float = thrust_lbf * sin(pitch_rad) * moment_arm_ft;
+    let pitch_accel: Float = tvc_moment / i_yy_slugft2;
+    return pitch_accel * dt;
+}
+
+pub fn gen5_post_stall_pitch_authority(aoa_rad: Float, tvc_pitch_deg: Float, thrust_weight_ratio: Float) -> Float {
+    let aero_decay: Float = cos(aoa_rad) * cos(aoa_rad);
+    let tvc_contrib: Float = (tvc_pitch_deg / 20.0) * thrust_weight_ratio * 1.5;
+    return aero_decay + tvc_contrib;
+}
+
+pub fn gen5_amraam_png_accel(closing_vel_fps: Float, los_rate_rad_s: Float, nav_gain_n: Float) -> Float {
+    let raw_accel: Float = nav_gain_n * closing_vel_fps * los_rate_rad_s;
+    let max_accel: Float = 40.0 * 32.174;
+    return gen5_clamp(raw_accel, 0.0 - max_accel, max_accel);
+}
+
+pub fn gen5_amraam_thrust_lbf(time_alive_s: Float) -> Float {
+    if time_alive_s <= 3.0 {
+        return 4500.0;
+    }
+    if time_alive_s <= 10.0 {
+        return 1200.0;
+    }
+    return 0.0;
+}
+
+pub fn gen5_amraam_update(pos_x: Float, pos_y: Float, vel_fps: Float, heading_rad: Float, tgt_x: Float, tgt_y: Float, time_s: Float, dt: Float) -> AmraamKinematics {
+    let dx: Float = tgt_x - pos_x;
+    let dy: Float = tgt_y - pos_y;
+    let dx2: Float = dx * dx;
+    let dy2: Float = dy * dy;
+    let dist_sq: Float = dx2 + dy2;
+    let dist_ft: Float = sqrt(dist_sq);
+    if dist_ft < 15.0 {
+        return AmraamKinematics {
+            pos_x: pos_x,
+            pos_y: pos_y,
+            vel_fps: 0.0,
+            heading_rad: heading_rad,
+            target_x: tgt_x,
+            target_y: tgt_y,
+            time_alive_s: time_s + dt,
+            active_seeker: true,
+            is_destroyed: true
+        };
+    }
+    let los_angle: Float = gen5_atan2(dy, dx);
+    let los_err: Float = gen5_normalize_angle(los_angle - heading_rad);
+    let los_rate: Float = los_err / 0.1;
+    let png_accel: Float = gen5_amraam_png_accel(vel_fps, los_rate, 4.0);
+    let d_heading: Float = (png_accel / vel_fps) * dt;
+    let new_heading: Float = gen5_normalize_angle(heading_rad + d_heading);
+    let thrust: Float = gen5_amraam_thrust_lbf(time_s);
+    let drag: Float = 0.5 * 0.002377 * (vel_fps * vel_fps) * 0.35 * 0.22;
+    let net_force: Float = thrust - drag;
+    let accel: Float = (net_force * 32.174) / 335.0;
+    let new_vel: Float = gen5_clamp(vel_fps + (accel * dt), 300.0, 4200.0);
+    let new_x: Float = pos_x + (new_vel * cos(new_heading) * dt);
+    let new_y: Float = pos_y + (new_vel * sin(new_heading) * dt);
+    let seeker_active: Bool = (dist_ft < 60000.0) || (time_s > 8.0);
+    return AmraamKinematics {
+        pos_x: new_x,
+        pos_y: new_y,
+        vel_fps: new_vel,
+        heading_rad: new_heading,
+        target_x: tgt_x,
+        target_y: tgt_y,
+        time_alive_s: time_s + dt,
+        active_seeker: seeker_active,
+        is_destroyed: time_s > 60.0
+    };
+}

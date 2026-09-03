@@ -1,0 +1,27 @@
+// # Atmospheric Gravity Turn Ascent Guidance
+//
+// Logline: Calculates zero-aerodynamic-lift gravity turn ascent trajectory, dynamic pressure evolution, and pitch kick angle.
+//
+// Setup: Pure launch trajectory numerical modeling enforcing zero angle-of-attack (alpha = 0) to minimize aerodynamic bending moments.
+//
+// Beats:
+//   1. Final orbital injection pitch angle integer query (90 degrees / horizontal).
+//   2. Calculate flight path angle rate dgamma/dt = - (g/v - v/r) * cos(gamma).
+//   3. Compute pitch kick velocity and altitude trigger conditions.
+//   4. Evaluate aerodynamic load q*alpha limit margins during transonic flight.
+
+pub fn gravity_turn_pitch_deg() -> Int {
+    return 90;
+}
+
+/// Computes flight path angle rate dgamma/dt in radians/second for zero-lift gravity turn.
+pub fn gravity_turn_gamma_rate(
+    velocity_m_s: Float,
+    radius_m: Float,
+    g_local_m_s2: Float,
+    gamma_rad: Float
+) -> Float {
+    if velocity_m_s <= 0.1 { return 0.0; }
+    let term: Float = (g_local_m_s2 / velocity_m_s) - (velocity_m_s / radius_m);
+    return (0.0 - term) * cos(gamma_rad);
+}

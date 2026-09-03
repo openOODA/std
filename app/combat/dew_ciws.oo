@@ -1,0 +1,53 @@
+// # Directed Energy Weapon Laser CIWS Point Defense
+//
+// Logline: Calculates atmospheric laser power attenuation, required dwell times, and thermal ablation.
+//
+// Setup: Beer-Lambert atmospheric transmission and thermal energy transfer models.
+//
+// Beats:
+//   1. Compute target beam power via Beer-Lambert atmospheric attenuation.
+//   2. Calculate required dwell time for structural target neutralization.
+//   3. Evaluate thermal heat accumulation and capacitor energy drain.
+
+pub fn dew_calculate_target_power(source_power_kw: Float, distance_m: Float, extinction_per_km: Float) -> Float {
+    let dist_km: Float = distance_m * 0.001;
+    let exp_arg: Float = 0.0 - (extinction_per_km * dist_km);
+    let transmittance: Float = exp(exp_arg);
+    return source_power_kw * transmittance;
+}
+
+pub fn dew_calculate_required_dwell_time(power_target_kw: Float, kill_threshold_kj: Float) -> Float {
+    if power_target_kw <= 0.001 {
+        return 999999.0;
+    }
+    return kill_threshold_kj / power_target_kw;
+}
+
+pub fn dew_fire_defensive_burst(
+    available_joules: Float,
+    shot_cost_joules: Float,
+    distance_m: Float,
+    max_range_m: Float
+) -> Bool {
+    if distance_m > max_range_m {
+        return false;
+    }
+    if available_joules < shot_cost_joules {
+        return false;
+    }
+    return true;
+}
+
+pub fn dew_recharge_bank(
+    current_joules: Float,
+    max_joules: Float,
+    recharge_rate_watts: Float,
+    dt_sec: Float
+) -> Float {
+    let add_joules: Float = recharge_rate_watts * dt_sec;
+    let updated: Float = current_joules + add_joules;
+    if updated > max_joules {
+        return max_joules;
+    }
+    return updated;
+}

@@ -1,0 +1,151 @@
+// # Ed25519 Bigint Helpers
+//
+// Logline: Bigint arithmetic primitives used by Ed25519 sign and verify: 16-limb add, sub, mul mod 2^256, mod L reduction, LE encoding, and Ed25519 group order limbs.
+//
+// Setup: Pure. A 256-bit bigint is represented as a List[Int] of 16 little-endian 16-bit limbs. A 512-bit product is 32 limbs.
+//
+// Beats:
+//   1. Add and subtract two 16-limb values with carry and borrow.
+//   2. Compare two 16-limb values and detect less-than and greater-or-equal.
+//   3. Reduce a 16-limb value modulo L, the Ed25519 group order.
+//   4. Reduce a 32-limb value modulo L using the 2^256-mod-L constant and iterative folding.
+
+import "std/core/primitives/list.oo";
+import "std/sec/asymmetric/ed25519_scalarmult_wide.oo";
+
+pub fn ed25519_order_limbs16() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 54253);
+    out = list_push(out, 23797);
+    out = list_push(out, 25370);
+    out = list_push(out, 22546);
+    out = list_push(out, 40150);
+    out = list_push(out, 41719);
+    out = list_push(out, 63966);
+    out = list_push(out, 5342);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 4096);
+    return out;
+}
+
+pub fn ed25519_c1_limbs16() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 38173);
+    out = list_push(out, 36248);
+    out = list_push(out, 12660);
+    out = list_push(out, 55020);
+    out = list_push(out, 53104);
+    out = list_push(out, 29565);
+    out = list_push(out, 23540);
+    out = list_push(out, 50927);
+    out = list_push(out, 65534);
+    out = list_push(out, 65535);
+    out = list_push(out, 65535);
+    out = list_push(out, 65535);
+    out = list_push(out, 65535);
+    out = list_push(out, 65535);
+    out = list_push(out, 65535);
+    out = list_push(out, 4095);
+    return out;
+}
+
+pub fn ed25519_limbs16_cmp(a: List[Int], b: List[Int]) -> Int {
+    let mut i: Int = 15;
+    while i >= 0 {
+        let av: Int = list_get(a, i);
+        let bv: Int = list_get(b, i);
+        if av < bv { return 0 - 1; }
+        if av > bv { return 1; }
+        i = i - 1;
+    }
+    return 0;
+}
+
+pub fn ed25519_limbs16_ge(a: List[Int], b: List[Int]) -> Bool {
+    return ed25519_limbs16_cmp(a, b) >= 0;
+}
+
+pub fn ed25519_limbs16_mod_l(a: List[Int]) -> List[Int] {
+    let order: List[Int] = ed25519_order_limbs16();
+    let mut work: List[Int] = a;
+    while ed25519_limbs16_ge(work, order) {
+        work = ed25519_limbs16_sub(work, order);
+    }
+    return work;
+}
+
+pub fn ed25519_limbs32_split(a: List[Int]) -> List[Int] {
+    let mut low: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        low = list_push(low, list_get(a, i));
+        i = i + 1;
+    }
+    return low;
+}
+
+pub fn ed25519_limbs32_high(a: List[Int]) -> List[Int] {
+    let mut high: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        high = list_push(high, list_get(a, 16 + i));
+        i = i + 1;
+    }
+    return high;
+}
+
+pub fn ed25519_limbs32_high_is_zero(a: List[Int]) -> Bool {
+    let mut i: Int = 16;
+    while i < 32 {
+        if list_get(a, i) != 0 { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn ed25519_limbs32_mod_l(a: List[Int]) -> List[Int] {
+    let mut work: List[Int] = a;
+    let mut iter: Int = 0;
+    while iter < 4 {
+        if ed25519_limbs32_high_is_zero(work) {
+            let low: List[Int] = ed25519_limbs32_split(work);
+            return ed25519_limbs16_mod_l(low);
+        }
+        let high: List[Int] = ed25519_limbs32_high(work);
+        let c1: List[Int] = ed25519_c1_limbs16();
+        let folded_high: List[Int] = ed25519_limbs16_mul(high, c1);
+        let mut new_work: List[Int] = list_new();
+        let mut i: Int = 0;
+        while i < 32 {
+            new_work = list_push(new_work, 0);
+            i = i + 1;
+        }
+        i = 0;
+        while i < 32 {
+            new_work = list_set(new_work, i, list_get(folded_high, i));
+            i = i + 1;
+        }
+        i = 0;
+        while i < 16 {
+            new_work = list_set(new_work, i, list_get(new_work, i) + list_get(work, i));
+            i = i + 1;
+        }
+        let mut carry: Int = 0;
+        i = 0;
+        while i < 32 {
+            let v: Int = list_get(new_work, i) + carry;
+            new_work = list_set(new_work, i, v & 65535);
+            carry = v >> 16;
+            i = i + 1;
+        }
+        work = new_work;
+        iter = iter + 1;
+    }
+    return ed25519_limbs32_split(work);
+}

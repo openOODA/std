@@ -1,0 +1,30 @@
+// # Data table-name product invariants
+//
+// Logline: Empty table name is invalid; a non-empty name holds.
+//
+// Setup: Pure String checks. DomainCert is local because std/core/domain_cert.oo is absent.
+//
+// Beats:
+//   1. data_table_ok("") returns 0.
+//   2. data_table_ok("orders") returns 1.
+//   3. data_table_cert boxes the law into DomainCert.holds.
+
+import "std/core/primitives/domain_cert.oo";
+// Empty table name is invalid.
+pub fn data_table_ok(name: String) -> Int {
+    if name == "" {
+        return 0;
+    }
+    if name.len() == 0 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn data_table_cert(name: String) -> DomainCert {
+    return DomainCert {
+        domain: "data",
+        law_name: "table_nonempty",
+        holds: data_table_ok(name)
+    };
+}

@@ -1,0 +1,90 @@
+// # AI/ML & Tensor Computing Facade
+//
+// Logline: Re-exports tensor types, math operations, layers, optimizers, tokenizers, ONNX runtime, and evaluation metrics.
+//
+// Setup: Pure module shim importing all companion AI/ML submodules.
+//
+// Beats:
+//   1. Import all AI/ML submodules covering tensors, autograd, layers, optimizers, tokenizers, onnx, metrics, and stubs.
+//   2. Re-export public entry points with typed shim markers.
+//   3. Provide comprehensive AI/ML standard library surface for openOODA applications.
+
+import "std/app/ai/ml/tensor_types.oo";
+import "std/app/ai/ml/activation_ops.oo";
+import "std/app/ai/ml/tensor_ops.oo";
+import "std/app/ai/ml/tensor_autograd.oo";
+import "std/app/ai/ml/tensor_engine.oo";
+import "std/app/ai/ml/layer_dense.oo";
+import "std/app/ai/ml/layer_conv2d.oo";
+import "std/app/ai/ml/layer_attention.oo";
+import "std/app/ai/ml/layer_recurrent.oo";
+import "std/app/ai/ml/layer_norm.oo";
+import "std/app/ai/ml/layer_embedding.oo";
+import "std/app/ai/ml/loss_cross_entropy.oo";
+import "std/app/ai/ml/loss_mse.oo";
+import "std/app/ai/ml/opt_sgd.oo";
+import "std/app/ai/ml/opt_adamw.oo";
+import "std/app/ai/ml/opt_rmsprop.oo";
+import "std/app/ai/ml/tokenizer_bpe.oo";
+import "std/app/ai/ml/tokenizer_wordpiece.oo";
+import "std/app/ai/ml/onnx_parser.oo";
+import "std/app/ai/ml/onnx_graph.oo";
+import "std/app/ai/ml/onnx_engine.oo";
+import "std/app/ai/ml/metric_accuracy.oo";
+import "std/app/ai/ml/metric_loss.oo";
+import "std/app/ai/ml/ai_ml_stubs.oo";
+
+
+pub fn shim_ai_ml_marker() -> Int {
+    return 1;
+}
+
+fn activation_ops_marker() -> Int { let _: Float = act_relu(0.0); return 1; }
+
+pub fn shim_tensor_1d_new(data: List[Float], size: Int) -> Tensor1D {
+    return tensor_1d_new(data, size);
+}
+
+pub fn shim_act_relu(x: Float) -> Float {
+    return act_relu(x);
+}
+
+pub fn shim_act_gelu(x: Float) -> Float {
+    return act_gelu(x);
+}
+
+pub fn shim_bpe_vocab_size() -> Int {
+    return bpe_vocab_size();
+}
+
+pub fn shim_onnx_engine_new() -> OnnxEngine {
+    return onnx_engine_new();
+}
+
+fn layer_dense_marker() -> Int { return 1; }
+fn layer_conv2d_marker() -> Int { return 1; }
+fn layer_attention_marker() -> Int { return 1; }
+fn layer_recurrent_marker() -> Int { return 1; }
+fn layer_norm_marker() -> Int { return 1; }
+fn layer_embedding_marker() -> Int { return 1; }
+fn loss_cross_entropy_marker() -> Int { return 1; }
+fn loss_mse_marker() -> Int { return 1; }
+fn opt_sgd_marker() -> Int { return 1; }
+fn opt_adamw_marker() -> Int { return 1; }
+fn opt_rmsprop_marker() -> Int { return 1; }
+fn tokenizer_bpe_marker() -> Int { return 1; }
+fn tokenizer_wordpiece_marker() -> Int { return 1; }
+fn onnx_parser_marker() -> Int { return 1; }
+fn onnx_graph_marker() -> Int { return 1; }
+fn onnx_engine_marker() -> Int { return 1; }
+fn metric_accuracy_marker() -> Int { return 1; }
+fn metric_loss_marker() -> Int { return 1; }
+fn ai_ml_stubs_marker() -> Int { return 1; }
+fn tensor_types_marker() -> Int { return 1; }
+fn tensor_ops_marker() -> Int { return 1; }
+fn tensor_autograd_marker() -> Int { return 1; }
+fn tensor_engine_marker() -> Int { return 1; }
+
+pub fn shim_metric_accuracy_milli(cm: ConfusionMatrix) -> Int {
+    return metric_accuracy_milli(cm);
+}

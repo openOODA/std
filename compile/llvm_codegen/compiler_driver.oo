@@ -1,0 +1,134 @@
+// # Unified Multi-Target Compiler Driver
+//
+// Logline: Orchestrates the 5-stage openOODA-to-LLVM compilation pipeline from tokenization to IR text emission.
+//
+// Setup: Requires token_stream, ast_parse, ssa_lower, ssa_mem2reg, ssa_opt, and llvm_text_emitter.
+//
+// Beats:
+//   1. Configure compiler pipeline stages and optimization levels.
+//   2. Lower source and ASTs into SSA CFGs.
+//   3. Apply Mem2Reg stack slot elimination and -O3 optimization passes.
+//   4. Emit canonical LLVM IR text bitcode (.ll).
+
+import "oodac/lex/token_stream.oo";
+import "oodac/lex/token_fmt.oo";
+import "oodac/ast/ast_parse.oo";
+import "ssa_ir.oo";
+import "ssa_lower.oo";
+import "ssa_mem2reg.oo";
+import "ssa_opt.oo";
+import "llvm_text_emitter.oo";
+
+type CompilerConfig = struct {
+    opt_level: Int,
+    enable_mem2reg: Bool,
+    target_triple: String
+};
+
+pub fn compiler_config_default() -> CompilerConfig {
+    return CompilerConfig {
+        opt_level: 3,
+        enable_mem2reg: true,
+        target_triple: "x86_64-unknown-linux-gnu"
+    };
+}
+
+pub fn driver_tokenize(src: String) -> List[String] {
+    return tokenize_lines(src);
+}
+
+pub fn driver_parse(toks: List[String]) -> String {
+    return ast_parse(toks);
+}
+
+pub fn driver_lower_ast(ast_str: String) -> SsaFunction {
+    return ssa_lower_ast(ast_str);
+}
+
+pub fn driver_lower_fn(fn_name: String, ret_type: Int, body_ast: String) -> SsaFunction {
+    return ssa_lower_fn(fn_name, ret_type, body_ast);
+}
+
+pub fn driver_promote(fn_data: SsaFunction) -> SsaFunction {
+    return ssa_mem2reg_promote(fn_data);
+}
+
+pub fn driver_optimize(fn_data: SsaFunction) -> SsaFunction {
+    return ssa_opt_run_o3(fn_data);
+}
+
+pub fn driver_emit(fn_data: SsaFunction) -> String {
+    return llvm_emit_module(fn_data);
+}
+
+pub fn llvm_compile_ssa(fn_data: SsaFunction, cfg: CompilerConfig) -> Result[String, String] {
+    if fn_data.block_count == 0 {
+        return Err("ERR\tcompiler_driver\tssa_lowering_failed");
+    }
+    let mut cur_fn: SsaFunction = fn_data;
+    if cfg.enable_mem2reg {
+        cur_fn = ssa_mem2reg_promote(cur_fn);
+    }
+    if cfg.opt_level >= 3 {
+        cur_fn = ssa_opt_run_o3(cur_fn);
+    } else if cfg.opt_level > 0 {
+        cur_fn = ssa_opt_const_fold(cur_fn);
+    }
+    let ir: String = llvm_emit_module(cur_fn);
+    if chars_len(ir) == 0 {
+        return Err("ERR\tcompiler_driver\tempty_llvm_ir");
+    }
+    return Ok(ir);
+}
+
+pub fn llvm_compile_fn_data(fn_data: SsaFunction) -> Result[String, String] {
+    let cfg: CompilerConfig = compiler_config_default();
+    return llvm_compile_ssa(fn_data, cfg);
+}
+
+pub fn llvm_compile_fn_with_config(fn_name: String, ret_type: Int, body_ast: String, cfg: CompilerConfig) -> Result[String, String] {
+    if chars_len(fn_name) == 0 {
+        return Err("ERR\tcompiler_driver\tempty_fn_name");
+    }
+    let ssa_fn: SsaFunction = ssa_lower_fn(fn_name, ret_type, body_ast);
+    return llvm_compile_ssa(ssa_fn, cfg);
+}
+
+pub fn llvm_compile_fn(fn_name: String, ret_type: Int, body_ast: String) -> Result[String, String] {
+    let cfg: CompilerConfig = compiler_config_default();
+    return llvm_compile_fn_with_config(fn_name, ret_type, body_ast, cfg);
+}
+
+pub fn llvm_compile_ast_with_config(ast_string: String, cfg: CompilerConfig) -> Result[String, String] {
+    if chars_len(ast_string) == 0 {
+        return Err("ERR\tcompiler_driver\tempty_ast");
+    }
+    let ssa_fn: SsaFunction = ssa_lower_ast(ast_string);
+    return llvm_compile_ssa(ssa_fn, cfg);
+}
+
+pub fn llvm_compile_ast(ast_string: String) -> Result[String, String] {
+    let cfg: CompilerConfig = compiler_config_default();
+    return llvm_compile_ast_with_config(ast_string, cfg);
+}
+
+pub fn llvm_compile_source_with_config(source_code: String, cfg: CompilerConfig) -> Result[String, String] {
+    if chars_len(source_code) == 0 {
+        return Err("ERR\tcompiler_driver\tempty_source");
+    }
+    let toks: List[String] = tokenize_lines(source_code);
+    if list_len(toks) == 0 {
+        return Err("ERR\tcompiler_driver\ttoken_collection_failed");
+    }
+    let ast_str: String = ast_parse(toks);
+    if chars_len(ast_str) == 0 {
+        return Err("ERR\tcompiler_driver\tast_parse_empty");
+    }
+    let ssa_fn: SsaFunction = ssa_lower_ast(ast_str);
+    return llvm_compile_ssa(ssa_fn, cfg);
+}
+
+pub fn llvm_compile_source(source_code: String) -> Result[String, String] {
+    let cfg: CompilerConfig = compiler_config_default();
+    return llvm_compile_source_with_config(source_code, cfg);
+}

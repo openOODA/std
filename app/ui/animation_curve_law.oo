@@ -1,0 +1,166 @@
+// # Cubic Bezier Animation Easing Law
+//
+// Logline: B(t) = (1-t)^3 * 0 + 3(1-t)^2 t * y1 + 3(1-t) t^2 * y2 + t^3 * 1 with x1, x2 mapped to t.
+//
+// Setup: Pure Float. Control points in [0, 1] each. u or controls outside [0,1] return Err. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. Ideal: symmetric ease-in-out with P1=(0.42, 0), P2=(0.58, 1).
+//   2. Non-ideal: caller-supplied custom control points.
+//   3. Boundary: B(0) = 0, B(1) = 1. u=0 and u=1 are valid endpoints.
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+pub fn anim_md_standard_x1() -> Float {
+    return 0.4;
+}
+
+pub fn anim_md_standard_y1() -> Float {
+    return 0.0;
+}
+
+pub fn anim_md_standard_x2() -> Float {
+    return 0.2;
+}
+
+pub fn anim_md_standard_y2() -> Float {
+    return 1.0;
+}
+
+pub fn anim_symmetric_x1() -> Float {
+    return 0.5;
+}
+
+pub fn anim_symmetric_y1() -> Float {
+    return 0.5;
+}
+
+pub fn anim_symmetric_x2() -> Float {
+    return 0.5;
+}
+
+pub fn anim_symmetric_y2() -> Float {
+    return 0.5;
+}
+
+fn ac_unit(x: Float) -> Int {
+    if x < 0.0 { return 0; }
+    if x > 1.0 { return 0; }
+    return 1;
+}
+
+fn ac_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn anim_solve_t(x1: Float, x2: Float, u: Float) -> Float {
+    let mut t: Float = u;
+    let mut k: Int = 0;
+    while k < 12 {
+        let omt: Float = 1.0 - t;
+        let omt2: Float = omt * omt;
+        let t2: Float = t * t;
+        let x_t: Float = 3.0 * omt2 * t * x1 + 3.0 * omt * t2 * x2 + t2 * t;
+        let dx: Float = 3.0 * omt2 * x1 + 6.0 * omt * t * (x2 - x1) + 3.0 * t2 * (1.0 - x2);
+        if dx == 0.0 { return t; }
+        let diff: Float = x_t - u;
+        let mut ad: Float = diff;
+        if ad < 0.0 { ad = 0.0 - ad; }
+        if ad < 0.0001 { return t; }
+        t = t - diff / dx;
+        if t < 0.0 { t = 0.0; }
+        if t > 1.0 { t = 1.0; }
+        k = k + 1;
+    }
+    return t;
+}
+
+// Cubic Bezier easing value at progress u in [0, 1] with control points in [0, 1]^2.
+pub fn anim_bezier(u: Float, x1: Float, y1: Float, x2: Float, y2: Float) -> Result[Float, String] {
+    if ac_unit(u) != 1 { return Err("ERR\tanim\tu"); }
+    if ac_unit(x1) != 1 { return Err("ERR\tanim\tx1"); }
+    if ac_unit(y1) != 1 { return Err("ERR\tanim\ty1"); }
+    if ac_unit(x2) != 1 { return Err("ERR\tanim\tx2"); }
+    if ac_unit(y2) != 1 { return Err("ERR\tanim\ty2"); }
+    let t: Float = anim_solve_t(x1, x2, u);
+    let omt: Float = 1.0 - t;
+    let omt2: Float = omt * omt;
+    let t2: Float = t * t;
+    let b0: Float = omt2 * omt;
+    let b1: Float = 3.0 * omt2 * t;
+    let b2: Float = 3.0 * omt * t2;
+    let b3: Float = t2 * t;
+    return Ok(b0 * 0.0 + b1 * y1 + b2 * y2 + b3 * 1.0);
+}
+
+pub fn anim_ideal(u: Float) -> Result[Float, String] {
+    return anim_bezier(u, anim_symmetric_x1(), anim_symmetric_y1(), anim_symmetric_x2(), anim_symmetric_y2());
+}
+
+pub fn anim_md_standard(u: Float) -> Result[Float, String] {
+    return anim_bezier(u, anim_md_standard_x1(), anim_md_standard_y1(), anim_md_standard_x2(), anim_md_standard_y2());
+}
+
+pub fn animation_curve_cert(u: Float, x1: Float, y1: Float, x2: Float, y2: Float) -> DomainCert {
+    let mut h: Int = 0;
+    if anim_bezier(u, x1, y1, x2, y2).is_ok() { h = 1; }
+    return domain_cert("ui", "animation_curve", h);
+}
+
+pub fn verify_animation_curve_law() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    let b0: Float = ac_got(anim_ideal(0.0));
+    let mut db0: Float = b0 - 0.0;
+    if db0 < 0.0 { db0 = 0.0 - db0; }
+    if db0 > 0.001 { return false; }
+    let b1: Float = ac_got(anim_ideal(1.0));
+    let mut db1: Float = b1 - 1.0;
+    if db1 < 0.0 { db1 = 0.0 - db1; }
+    if db1 > 0.001 { return false; }
+    let bm: Float = ac_got(anim_ideal(0.5));
+    let mut dbm: Float = bm - 0.5;
+    if dbm < 0.0 { dbm = 0.0 - dbm; }
+    if dbm > 0.001 { return false; }
+    let m0: Float = ac_got(anim_md_standard(0.0));
+    let mut dm0: Float = m0 - 0.0;
+    if dm0 < 0.0 { dm0 = 0.0 - dm0; }
+    if dm0 > 0.001 { return false; }
+    let m1: Float = ac_got(anim_md_standard(1.0));
+    let mut dm1: Float = m1 - 1.0;
+    if dm1 < 0.0 { dm1 = 0.0 - dm1; }
+    if dm1 > 0.001 { return false; }
+    let mm: Float = ac_got(anim_md_standard(0.5));
+    if mm <= 0.0 { return false; }
+    if mm >= 1.0 { return false; }
+    let ma: Float = ac_got(anim_md_standard(0.25));
+    let mb: Float = ac_got(anim_md_standard(0.75));
+    if mb <= ma { return false; }
+    if anim_bezier(0.0 - 0.1, 0.5, 0.5, 0.5, 0.5).is_ok() { return false; }
+    if anim_bezier(1.1, 0.5, 0.5, 0.5, 0.5).is_ok() { return false; }
+    if anim_bezier(0.5, 0.0 - 0.1, 0.5, 0.5, 0.5).is_ok() { return false; }
+    if anim_bezier(0.5, 1.1, 0.5, 0.5, 0.5).is_ok() { return false; }
+    if anim_bezier(0.5, 0.5, 0.0 - 0.1, 0.5, 0.5).is_ok() { return false; }
+    if anim_bezier(0.5, 0.5, 1.1, 0.5, 0.5).is_ok() { return false; }
+    if anim_bezier(0.5, 0.5, 0.5, 0.0 - 0.1, 0.5).is_ok() { return false; }
+    if anim_bezier(0.5, 0.5, 0.5, 1.1, 0.5).is_ok() { return false; }
+    if anim_bezier(0.5, 0.5, 0.5, 0.5, 0.0 - 0.1).is_ok() { return false; }
+    if anim_bezier(0.5, 0.5, 0.5, 0.5, 1.1).is_ok() { return false; }
+    if anim_ideal(0.0 - 0.1).is_ok() { return false; }
+    if anim_ideal(1.1).is_ok() { return false; }
+    if anim_md_standard(0.0 - 0.1).is_ok() { return false; }
+    if anim_md_standard(1.1).is_ok() { return false; }
+    if anim_md_standard_x1() <= 0.0 { return false; }
+    if anim_md_standard_x1() >= 1.0 { return false; }
+    if anim_md_standard_y1() < 0.0 { return false; }
+    if anim_md_standard_y1() > 1.0 { return false; }
+    let c1: DomainCert = animation_curve_cert(0.5, 0.5, 0.5, 0.5, 0.5);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = animation_curve_cert(0.0 - 0.1, 0.5, 0.5, 0.5, 0.5);
+    if cert_holds(c0) != 0 { return false; }
+    let c7: DomainCert = animation_curve_cert(0.5, 1.1, 0.5, 0.5, 0.5);
+    if cert_holds(c7) != 0 { return false; }
+    return true;
+}

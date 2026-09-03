@@ -1,0 +1,31 @@
+// # Science Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard science domain library. Re-exports the bio, chem, comm, econ, and phys submodule hubs. Phase 3.4 reorg: this domain is now composed of:
+//
+//   science/bio/   <- was std/bio/   (379 files, kept as-is)
+//   science/chem/  <- was std/chem/  (29 files, kept as-is)
+//   science/comm/  <- was std/phys/satellite_dvb/  (DVB-S2/S2X, GNSS, satellite links, ISL)
+//   science/econ/  <- was std/econ/  (343 files; fin, finance, fintech, fintech_defi kept as siblings)
+//   science/phys/  <- was std/phys/  (754 files, reorged internally)
+//
+// Setup: Imports the sub-domain hubs (bio, chem, comm, econ, phys). No caps required for pure compute. Effectful ops take the appropriate caps at the call site.
+//
+// Beats:
+//   1. Re-export the bio, chem, comm, econ, phys hub surfaces.
+//   2. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariant, _kat, _stubs, _types, _ops, _engine, _shim.
+
+import "bio/ANCHOR.oo";
+import "chem/ANCHOR.oo";
+import "comm/ANCHOR.oo";
+import "econ/ANCHOR.oo";
+import "phys/ANCHOR.oo";
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. beer_lambert_law.oo, chargaff_law.oo)
+//   _theory files (e.g. central_dogma_theory.oo, hodgkin_huxley_theory.oo)
+//   _principle files (e.g. haldane_principle.oo, watson_crick_principle.oo)
+//   _invariant files (e.g. bio_invariants.oo, phys_invariants.oo, chem_invariants.oo, econ_invariants.oo)
+//   _kat files (e.g. genetics_kat.oo, thermochemistry_codata_kat.oo)
+//   _stubs files
+//   _types files
+// External callers must import this ANCHOR.oo to access the science domain.

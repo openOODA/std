@@ -1,0 +1,59 @@
+// # Coulomb friction law
+//
+// Logline: Static friction maximum is mu_s * N; kinetic friction is mu_k * N. Both fail closed on non-physical inputs.
+//
+// Setup: Pure Float. Coefficients and normal force are caller-supplied; the law is unit-agnostic. Illegal mu or N return Err. Zero force at mu=0 is Ok.
+//
+// Beats:
+//   1. F_static_max = mu_s * F_normal when mu_s >= 0 and F_normal > 0.
+//   2. F_kinetic = mu_k * F_normal when mu_k >= 0 and F_normal > 0.
+//   3. Hostile negative coefficient or non-positive normal force returns Err.
+
+fn cf_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn cf_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn coulomb_static_friction_max(mu_s: Float, f_normal: Float) -> Result[Float, String] {
+    if mu_s < 0.0 { return Err("ERR\tcoulomb\tmu"); }
+    if f_normal <= 0.0 { return Err("ERR\tcoulomb\tn"); }
+    return Ok(mu_s * f_normal);
+}
+
+pub fn coulomb_kinetic_friction(mu_k: Float, f_normal: Float) -> Result[Float, String] {
+    if mu_k < 0.0 { return Err("ERR\tcoulomb\tmu"); }
+    if f_normal <= 0.0 { return Err("ERR\tcoulomb\tn"); }
+    return Ok(mu_k * f_normal);
+}
+
+pub fn verify_coulomb_friction_law() -> Bool {
+    let tol: Float = 0.0000001;
+
+    // Steel on steel (mu_s ~= 0.6, mu_k ~= 0.4) with N = 100 N.
+    if cf_abs(cf_got(coulomb_static_friction_max(0.6, 100.0)) - 60.0) > tol { return false; }
+    if cf_abs(cf_got(coulomb_kinetic_friction(0.4, 100.0)) - 40.0) > tol { return false; }
+
+    // Zero coefficient yields zero friction force.
+    if cf_got(coulomb_static_friction_max(0.0, 100.0)) != 0.0 { return false; }
+    if cf_got(coulomb_kinetic_friction(0.0, 100.0)) != 0.0 { return false; }
+
+    // Round-trip identity: friction scales linearly with N.
+    if cf_abs(cf_got(coulomb_kinetic_friction(0.5, 20.0)) - 10.0) > tol { return false; }
+
+    // Static coefficient at or above kinetic coefficient is a physical expectation.
+    let fs_check: Float = cf_got(coulomb_static_friction_max(0.7, 50.0));
+    let fk_check: Float = cf_got(coulomb_kinetic_friction(0.5, 50.0));
+    if fs_check < fk_check { return false; }
+
+    if coulomb_static_friction_max(0.0 - 0.1, 100.0).is_ok() { return false; }
+    if coulomb_static_friction_max(0.6, 0.0).is_ok() { return false; }
+    if coulomb_static_friction_max(0.6, 0.0 - 10.0).is_ok() { return false; }
+    if coulomb_kinetic_friction(0.0 - 0.1, 100.0).is_ok() { return false; }
+    if coulomb_kinetic_friction(0.4, 0.0).is_ok() { return false; }
+    if coulomb_kinetic_friction(0.4, 0.0 - 5.0).is_ok() { return false; }
+    return true;
+}

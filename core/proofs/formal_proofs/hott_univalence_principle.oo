@@ -1,0 +1,190 @@
+// # Univalence Axiom (HoTT book 2013, Voevodsky-Awodey-Coquand, arXiv:1308.0607)
+//
+// Logline: For any two types A, B in a universe U: (A =_U B) ≃ (A ≃_U B). The univalence axiom states that identity between types in a universe is equivalent to a homotopy equivalence between the types. Quantitative: univalence_check_homotopy_equiv(a, b) returns 1 iff A and B share the documented type structure; univalence_id_from_equiv is the witness returning 1 iff the equivalence (A ≃ B) yields the type identity (A = B).
+//
+// Setup: Pure Int. A "type" is encoded as a 6-tuple (kind, c0, c1, c2, c3) where kind ∈ {0=Unit, 1=Bool, 2=Nat, 3=Σ, 4=Π, 5=Id} and c0..c3 are the structural component fingerprints. Two types are equal in the universe iff element-wise identical (same kind and same components). The univalence check reduces to the equality check in the stub encoding. Hostile: invalid kinds or non-equal components fail closed to 0. The 2013 HoTT book fixes this axiom (HoTT book, Section 2.10).
+//
+// Beats:
+//   1. univalence_is_valid_kind returns 1 only for kinds 0..5.
+//   2. univalence_check_homotopy_equiv returns 1 iff same kind + same 4 components.
+//   3. univalence_id_from_equiv returns 1 iff equivalence witness is 1 AND A = B element-wise.
+//   4. Hostile: different kinds or components fail closed to 0.
+//   5. Coupled: univalence extends to dependent types under a context of size ∈ {1, 2, 3, 4}.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Type-former kinds: 0=Unit, 1=Bool, 2=Nat, 3=Σ, 4=Π, 5=Id (HoTT book 2013 §1.1).
+pub fn univalence_is_valid_kind(kind: Int) -> Int {
+    if kind == 0 { return 1; }
+    if kind == 1 { return 1; }
+    if kind == 2 { return 1; }
+    if kind == 3 { return 1; }
+    if kind == 4 { return 1; }
+    if kind == 5 { return 1; }
+    return 0;
+}
+
+// 1 iff type A and type B are equivalent under the (A ≃_U B) reading. A is
+// encoded by (ak, a0..a3) and B by (bk, b0..b3). Two types are ≃-equivalent
+// iff they have the same kind and the same four structural components. This
+// is the univalence check (HoTT book 2013 §2.10, Voevodsky's axiom ua).
+pub fn univalence_check_homotopy_equiv(
+    ak: Int, a0: Int, a1: Int, a2: Int, a3: Int,
+    bk: Int, b0: Int, b1: Int, b2: Int, b3: Int
+) -> Int {
+    if univalence_is_valid_kind(ak) == 0 { return 0; }
+    if univalence_is_valid_kind(bk) == 0 { return 0; }
+    if ak != bk { return 0; }
+    if a0 != b0 { return 0; }
+    if a1 != b1 { return 0; }
+    if a2 != b2 { return 0; }
+    if a3 != b3 { return 0; }
+    return 1;
+}
+
+// Witness: univalence_id_from_equiv returns 1 iff the equivalence witness w is
+// 1 AND A and B are element-wise equal. The witness w encodes "the equivalence
+// A ≃ B has been established"; in the stub, equality is the witness.
+pub fn univalence_id_from_equiv(
+    a0: Int, a1: Int, a2: Int, a3: Int,
+    b0: Int, b1: Int, b2: Int, b3: Int,
+    w: Int
+) -> Int {
+    if w != 1 { return 0; }
+    if a0 != b0 { return 0; }
+    if a1 != b1 { return 0; }
+    if a2 != b2 { return 0; }
+    if a3 != b3 { return 0; }
+    return 1;
+}
+
+// Coupled: univalence in a dependent context of length ctx_len ∈ {1, 2, 3, 4}.
+// The univalence axiom extends to type families (a, b) : (x : X) → Type via
+// transport (HoTT book 2013 §2.10). For the stub, the dependent check is the
+// univalence check guarded by a valid context length.
+pub fn univalence_dependent_coupled(
+    ak: Int, a0: Int, a1: Int, a2: Int, a3: Int,
+    bk: Int, b0: Int, b1: Int, b2: Int, b3: Int,
+    ctx_len: Int
+) -> Int {
+    let uv: Int = univalence_check_homotopy_equiv(ak, a0, a1, a2, a3, bk, b0, b1, b2, b3);
+    if uv != 1 { return 0; }
+    if ctx_len < 1 { return 0; }
+    if ctx_len > 4 { return 0; }
+    return 1;
+}
+
+// 1 iff the kind is one of the four type formers that admit dependent elimination
+// (Σ, Π, Id, W) — the canonical site for univalence reasoning. The kind must be
+// in {3, 4, 5}; other kinds return 0.
+pub fn univalence_kind_dependent_elim(kind: Int) -> Int {
+    if kind == 3 { return 1; }
+    if kind == 4 { return 1; }
+    if kind == 5 { return 1; }
+    return 0;
+}
+
+// domain_cert wrapper for the HoTT univalence lock.
+pub fn univalence_holds(
+    ak: Int, a0: Int, a1: Int, a2: Int, a3: Int,
+    bk: Int, b0: Int, b1: Int, b2: Int, b3: Int
+) -> DomainCert {
+    let v: Int = univalence_check_homotopy_equiv(ak, a0, a1, a2, a3, bk, b0, b1, b2, b3);
+    return domain_cert("formal_proofs", "hott_univalence_principle", v);
+}
+
+pub fn verify_hott_univalence_principle() -> Bool {
+    // Golden: kind validity for documented type formers.
+    if univalence_is_valid_kind(0) != 1 { return false; }   // Unit
+    if univalence_is_valid_kind(1) != 1 { return false; }   // Bool
+    if univalence_is_valid_kind(2) != 1 { return false; }   // Nat
+    if univalence_is_valid_kind(3) != 1 { return false; }   // Σ
+    if univalence_is_valid_kind(4) != 1 { return false; }   // Π
+    if univalence_is_valid_kind(5) != 1 { return false; }   // Id
+
+    // Hostile: kind outside documented range fails closed.
+    if univalence_is_valid_kind(6) != 0 { return false; }
+    if univalence_is_valid_kind(0 - 1) != 0 { return false; }
+    if univalence_is_valid_kind(99) != 0 { return false; }
+    if univalence_is_valid_kind(7) != 0 { return false; }
+
+    // Golden: two Unit types with no structure -> 1.
+    if univalence_check_homotopy_equiv(0, 0, 0, 0, 0, 0, 0, 0, 0, 0) != 1 { return false; }
+    // Golden: two Bool types with the same single constructor fingerprint -> 1.
+    if univalence_check_homotopy_equiv(1, 7, 0, 0, 0, 1, 7, 0, 0, 0) != 1 { return false; }
+    // Golden: two Σ types with matching first/second components -> 1.
+    if univalence_check_homotopy_equiv(3, 2, 4, 1, 0, 3, 2, 4, 1, 0) != 1 { return false; }
+    // Golden: two Π types with matching components -> 1.
+    if univalence_check_homotopy_equiv(4, 5, 6, 7, 0, 4, 5, 6, 7, 0) != 1 { return false; }
+    // Golden: two Id types with matching endpoints -> 1.
+    if univalence_check_homotopy_equiv(5, 9, 9, 0, 0, 5, 9, 9, 0, 0) != 1 { return false; }
+    // Golden: two Nat types with the same fingerprint -> 1.
+    if univalence_check_homotopy_equiv(2, 1, 2, 3, 0, 2, 1, 2, 3, 0) != 1 { return false; }
+
+    // Hostile: different kinds -> 0.
+    if univalence_check_homotopy_equiv(0, 0, 0, 0, 0, 1, 0, 0, 0, 0) != 0 { return false; }
+    if univalence_check_homotopy_equiv(1, 7, 0, 0, 0, 2, 7, 0, 0, 0) != 0 { return false; }
+    if univalence_check_homotopy_equiv(3, 1, 1, 1, 1, 4, 1, 1, 1, 1) != 0 { return false; }
+    if univalence_check_homotopy_equiv(5, 9, 9, 0, 0, 3, 9, 9, 0, 0) != 0 { return false; }
+
+    // Hostile: different components -> 0.
+    if univalence_check_homotopy_equiv(1, 7, 0, 0, 0, 1, 8, 0, 0, 0) != 0 { return false; }
+    if univalence_check_homotopy_equiv(1, 7, 0, 0, 0, 1, 7, 1, 0, 0) != 0 { return false; }
+    if univalence_check_homotopy_equiv(1, 7, 0, 0, 0, 1, 7, 0, 1, 0) != 0 { return false; }
+    if univalence_check_homotopy_equiv(1, 7, 0, 0, 0, 1, 7, 0, 0, 1) != 0 { return false; }
+    if univalence_check_homotopy_equiv(3, 2, 4, 1, 0, 3, 2, 5, 1, 0) != 0 { return false; }
+
+    // Hostile: invalid kinds fail closed.
+    if univalence_check_homotopy_equiv(6, 0, 0, 0, 0, 6, 0, 0, 0, 0) != 0 { return false; }
+    if univalence_check_homotopy_equiv(99, 0, 0, 0, 0, 99, 0, 0, 0, 0) != 0 { return false; }
+    if univalence_check_homotopy_equiv(6, 0, 0, 0, 0, 0, 0, 0, 0, 0) != 0 { return false; }
+
+    // Golden: univalence_id_from_equiv returns 1 for the witness + equality.
+    if univalence_id_from_equiv(7, 0, 0, 0, 7, 0, 0, 0, 1) != 1 { return false; }
+    if univalence_id_from_equiv(1, 2, 3, 4, 1, 2, 3, 4, 1) != 1 { return false; }
+    if univalence_id_from_equiv(0, 0, 0, 0, 0, 0, 0, 0, 1) != 1 { return false; }
+
+    // Hostile: univalence_id_from_equiv requires witness == 1.
+    if univalence_id_from_equiv(7, 0, 0, 0, 7, 0, 0, 0, 0) != 0 { return false; }
+    if univalence_id_from_equiv(7, 0, 0, 0, 7, 0, 0, 0, 2) != 0 { return false; }
+    if univalence_id_from_equiv(7, 0, 0, 0, 7, 0, 0, 0, 0 - 1) != 0 { return false; }
+
+    // Hostile: univalence_id_from_equiv requires element-wise equality.
+    if univalence_id_from_equiv(7, 0, 0, 0, 8, 0, 0, 0, 1) != 0 { return false; }
+    if univalence_id_from_equiv(7, 0, 0, 0, 7, 1, 0, 0, 1) != 0 { return false; }
+    if univalence_id_from_equiv(7, 0, 0, 0, 7, 0, 0, 1, 1) != 0 { return false; }
+
+    // Coupled: univalence_dependent_coupled holds for valid contexts.
+    if univalence_dependent_coupled(1, 7, 0, 0, 0, 1, 7, 0, 0, 0, 1) != 1 { return false; }
+    if univalence_dependent_coupled(1, 7, 0, 0, 0, 1, 7, 0, 0, 0, 2) != 1 { return false; }
+    if univalence_dependent_coupled(1, 7, 0, 0, 0, 1, 7, 0, 0, 0, 4) != 1 { return false; }
+    if univalence_dependent_coupled(3, 2, 4, 1, 0, 3, 2, 4, 1, 0, 3) != 1 { return false; }
+
+    // Hostile: univalence_dependent_coupled requires univalence.
+    if univalence_dependent_coupled(1, 7, 0, 0, 0, 1, 8, 0, 0, 0, 1) != 0 { return false; }
+    if univalence_dependent_coupled(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1) != 0 { return false; }
+    // Hostile: univalence_dependent_coupled requires valid context.
+    if univalence_dependent_coupled(1, 7, 0, 0, 0, 1, 7, 0, 0, 0, 0) != 0 { return false; }
+    if univalence_dependent_coupled(1, 7, 0, 0, 0, 1, 7, 0, 0, 0, 5) != 0 { return false; }
+    if univalence_dependent_coupled(1, 7, 0, 0, 0, 1, 7, 0, 0, 0, 0 - 1) != 0 { return false; }
+
+    // Coupled: univalence_kind_dependent_elim.
+    if univalence_kind_dependent_elim(3) != 1 { return false; }  // Σ
+    if univalence_kind_dependent_elim(4) != 1 { return false; }  // Π
+    if univalence_kind_dependent_elim(5) != 1 { return false; }  // Id
+    // Hostile: Unit/Bool/Nat are not "dependent-elimination" type formers.
+    if univalence_kind_dependent_elim(0) != 0 { return false; }
+    if univalence_kind_dependent_elim(1) != 0 { return false; }
+    if univalence_kind_dependent_elim(2) != 0 { return false; }
+    if univalence_kind_dependent_elim(6) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the value.
+    let c1: DomainCert = univalence_holds(1, 7, 0, 0, 0, 1, 7, 0, 0, 0);
+    if c1.domain != "formal_proofs" { return false; }
+    if c1.law_name != "hott_univalence_principle" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = univalence_holds(1, 7, 0, 0, 0, 1, 8, 0, 0, 0);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

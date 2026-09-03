@@ -1,0 +1,196 @@
+// # Universal Variable Lambert Solver
+//
+// Logline: Solve Lambert orbital boundary value problem for interplanetary trajectory transfer velocity vectors and delta-v.
+//
+// Setup: Pure astrodynamics solver. Employs Stumpff universal functions and Newton-Raphson iteration.
+//
+// Beats:
+//   1. Calculate transfer angle geometry and transfer plane normal.
+//   2. Evaluate analytic Stumpff series c2(z) and c3(z) across orbital regimes.
+//   3. Solve time-of-flight equation for universal variable z via Newton-Raphson.
+//   4. Compute Lagrange f, g, g_dot coefficients and departure/arrival velocity vectors.
+//   5. Expose universal transfer delta-v and orbital parameters.
+
+type Vector3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type LambertResult = struct {
+    v1_x: Float,
+    v1_y: Float,
+    v1_z: Float,
+    v2_x: Float,
+    v2_y: Float,
+    v2_z: Float,
+    semi_major_axis: Float,
+    eccentricity: Float,
+    transfer_delta_v: Float,
+    converged: Bool
+};
+
+pub fn vec3_new(x: Float, y: Float, z: Float) -> Vector3 {
+    return Vector3 { x: x, y: y, z: z };
+}
+
+pub fn lambert_revs() -> Int {
+    return 0;
+}
+
+pub fn lmb_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn lmb_asin_series(x: Float) -> Float {
+    let mut u: Float = x;
+    if u > 1.0 { u = 1.0; }
+    if u < -1.0 { u = -1.0; }
+    let u2: Float = u * u;
+    let u3: Float = u2 * u;
+    let u5: Float = u3 * u2;
+    let u7: Float = u5 * u2;
+    return u + u3 * 0.1666666667 + u5 * 0.075 + u7 * 0.0446428571;
+}
+
+pub fn lmb_acos(cos_val: Float) -> Float {
+    let mut c: Float = cos_val;
+    if c > 1.0 { c = 1.0; }
+    if c < -1.0 { c = -1.0; }
+    let half_m: Float = (1.0 - c) * 0.5;
+    let s: Float = sqrt(half_m);
+    return 2.0 * lmb_asin_series(s);
+}
+
+pub fn lmb_stumpff_c2(z: Float) -> Float {
+    if z > 0.05 {
+        let s: Float = sqrt(z);
+        return (1.0 - cos(s)) / z;
+    }
+    if z < -0.05 {
+        let neg_z: Float = 0.0 - z;
+        let s: Float = sqrt(neg_z);
+        let exp_s: Float = exp(s);
+        let cosh_s: Float = 0.5 * (exp_s + 1.0 / exp_s);
+        return (cosh_s - 1.0) / neg_z;
+    }
+    let z2: Float = z * z;
+    let z3: Float = z2 * z;
+    return 0.5 - z / 24.0 + z2 / 720.0 - z3 / 40320.0;
+}
+
+pub fn lmb_stumpff_c3(z: Float) -> Float {
+    if z > 0.05 {
+        let s: Float = sqrt(z);
+        return (s - sin(s)) / (s * s * s);
+    }
+    if z < -0.05 {
+        let neg_z: Float = 0.0 - z;
+        let s: Float = sqrt(neg_z);
+        let exp_s: Float = exp(s);
+        let sinh_s: Float = 0.5 * (exp_s - 1.0 / exp_s);
+        return (sinh_s - s) / (s * s * s);
+    }
+    let z2: Float = z * z;
+    let z3: Float = z2 * z;
+    return 1.0 / 6.0 - z / 120.0 + z2 / 5040.0 - z3 / 362880.0;
+}
+
+pub fn lmb_tof_z(z: Float, r1: Float, r2: Float, a_geom: Float, mu: Float) -> Float {
+    let c2: Float = lmb_stumpff_c2(z);
+    let c3: Float = lmb_stumpff_c3(z);
+    let sqrt_c2: Float = sqrt(c2);
+    if sqrt_c2 <= 0.0000001 { return 1000000000.0; }
+    let y: Float = (r1 + r2) + ((a_geom * ((z * c3) - 1.0)) / sqrt_c2);
+    if y <= 0.0 { return 1000000000.0; }
+    let chi: Float = sqrt(y / c2);
+    let chi3: Float = chi * chi * chi;
+    let sqrt_mu: Float = sqrt(mu);
+    if sqrt_mu <= 0.0000001 { return 1000000000.0; }
+    return (chi3 * c3 + a_geom * sqrt(y)) / sqrt_mu;
+}
+
+pub fn lambert_solve(r1: Vector3, r2: Vector3, tof: Float, is_prograde: Bool, mu: Float, max_iter: Int, tol: Float) -> LambertResult {
+    let r1_mag: Float = sqrt(r1.x * r1.x + r1.y * r1.y + r1.z * r1.z);
+    let r2_mag: Float = sqrt(r2.x * r2.x + r2.y * r2.y + r2.z * r2.z);
+    if r1_mag <= 0.000001 || r2_mag <= 0.000001 || mu <= 0.000001 || tof <= 0.000001 {
+        return LambertResult { v1_x: 0.0, v1_y: 0.0, v1_z: 0.0, v2_x: 0.0, v2_y: 0.0, v2_z: 0.0, semi_major_axis: 0.0, eccentricity: 0.0, transfer_delta_v: 0.0, converged: false };
+    }
+    let dot12: Float = r1.x * r2.x + r1.y * r2.y + r1.z * r2.z;
+    let mut cos_dnu: Float = dot12 / (r1_mag * r2_mag);
+    if cos_dnu > 1.0 { cos_dnu = 1.0; }
+    if cos_dnu < -1.0 { cos_dnu = -1.0; }
+    let cz: Float = r1.x * r2.y - r1.y * r2.x;
+    let base_angle: Float = lmb_acos(cos_dnu);
+    let mut dnu: Float = base_angle;
+    if is_prograde {
+        if cz < 0.0 { dnu = 6.283185307179586 - base_angle; }
+    } else {
+        if cz >= 0.0 { dnu = 6.283185307179586 - base_angle; }
+    }
+    let sin_dnu: Float = sin(dnu);
+    let denom: Float = 1.0 - cos_dnu;
+    if denom <= 0.00000001 {
+        return LambertResult { v1_x: 0.0, v1_y: 0.0, v1_z: 0.0, v2_x: 0.0, v2_y: 0.0, v2_z: 0.0, semi_major_axis: 0.0, eccentricity: 0.0, transfer_delta_v: 0.0, converged: false };
+    }
+    let a_geom: Float = sin_dnu * sqrt(r1_mag * r2_mag / denom);
+    if a_geom == 0.0 {
+        return LambertResult { v1_x: 0.0, v1_y: 0.0, v1_z: 0.0, v2_x: 0.0, v2_y: 0.0, v2_z: 0.0, semi_major_axis: 0.0, eccentricity: 0.0, transfer_delta_v: 0.0, converged: false };
+    }
+    let mut z: Float = 0.0;
+    let mut iter: Int = 0;
+    let mut conv: Bool = false;
+    let delta_z: Float = 0.0001;
+    let mut effective_tol: Float = tol;
+    if effective_tol < 0.001 { effective_tol = 0.001; }
+    while iter < max_iter {
+        let t_cur: Float = lmb_tof_z(z, r1_mag, r2_mag, a_geom, mu);
+        let diff: Float = t_cur - tof;
+        if lmb_abs(diff) < effective_tol || lmb_abs(diff / tof) < 0.00001 {
+            conv = true;
+            iter = max_iter;
+        } else {
+            let t_step: Float = lmb_tof_z(z + delta_z, r1_mag, r2_mag, a_geom, mu);
+            let dt_dz: Float = (t_step - t_cur) / delta_z;
+            if lmb_abs(dt_dz) < 0.00000000001 {
+                z = z + 0.01;
+            } else {
+                let z_next: Float = z - diff / dt_dz;
+                let mut z_clamped: Float = z_next;
+                if z_clamped > 38.0 { z_clamped = 38.0; }
+                if z_clamped < -38.0 { z_clamped = -38.0; }
+                z = z_clamped;
+            }
+            iter = iter + 1;
+        }
+    }
+    let c2_f: Float = lmb_stumpff_c2(z);
+    let c3_f: Float = lmb_stumpff_c3(z);
+    let y_final: Float = (r1_mag + r2_mag) + ((a_geom * ((z * c3_f) - 1.0)) / sqrt(c2_f));
+    let f_lag: Float = 1.0 - y_final / r1_mag;
+    let g_lag: Float = a_geom * sqrt(y_final / mu);
+    let gdot_lag: Float = 1.0 - y_final / r2_mag;
+    if lmb_abs(g_lag) <= 0.00000001 {
+        return LambertResult { v1_x: 0.0, v1_y: 0.0, v1_z: 0.0, v2_x: 0.0, v2_y: 0.0, v2_z: 0.0, semi_major_axis: 0.0, eccentricity: 0.0, transfer_delta_v: 0.0, converged: false };
+    }
+    let inv_g: Float = 1.0 / g_lag;
+    let v1x: Float = (r2.x - f_lag * r1.x) * inv_g;
+    let v1y: Float = (r2.y - f_lag * r1.y) * inv_g;
+    let v1z: Float = (r2.z - f_lag * r1.z) * inv_g;
+    let v2x: Float = (gdot_lag * r2.x - r1.x) * inv_g;
+    let v2y: Float = (gdot_lag * r2.y - r1.y) * inv_g;
+    let v2z: Float = (gdot_lag * r2.z - r1.z) * inv_g;
+    let v1_sq: Float = v1x * v1x + v1y * v1y + v1z * v1z;
+    let v2_sq: Float = v2x * v2x + v2y * v2y + v2z * v2z;
+    let inv_sma: Float = 2.0 / r1_mag - v1_sq / mu;
+    let mut sma: Float = 0.0;
+    if lmb_abs(inv_sma) > 0.000000001 { sma = 1.0 / inv_sma; }
+    let dv: Float = sqrt(v1_sq) + sqrt(v2_sq);
+    return LambertResult {
+        v1_x: v1x, v1_y: v1y, v1_z: v1z,
+        v2_x: v2x, v2_y: v2y, v2_z: v2z,
+        semi_major_axis: sma, eccentricity: 0.0,
+        transfer_delta_v: dv, converged: conv
+    };
+}

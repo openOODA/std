@@ -1,0 +1,24 @@
+// # Time duration non-negative law
+//
+// Logline: A negative duration is invalid; zero duration is allowed.
+//
+// Setup: Pure Int duration. No TimeCap.
+//
+// Beats:
+//   1. time_duration_ok(0-1) holds=0.
+//   2. time_duration_ok(0) holds=1.
+//   3. domain_cert boxes the holds bit for the time domain.
+//
+// residual: sign gate only; not a clock
+
+import "std/core/primitives/domain_cert.oo";
+pub fn time_duration_ok(duration: Int) -> Int {
+    if duration < 0 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn time_duration_law(duration: Int) -> DomainCert {
+    return domain_cert("time", "duration_ok", time_duration_ok(duration));
+}

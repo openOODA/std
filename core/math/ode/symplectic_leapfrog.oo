@@ -1,0 +1,41 @@
+// # Symplectic Leapfrog Integrator
+//
+// Logline: Advances a harmonic oscillator with velocity-Verlet so phase-space volume stays preserved.
+//
+// Setup: Pure math. In-module Hamiltonian y'' = -omega^2 y. No function pointers.
+//
+// Beats:
+//   1. Evaluate energy E = 1/2 v^2 + 1/2 omega^2 y^2.
+//   2. Kick velocity a half step from a = -omega^2 y.
+//   3. Drift position then kick the remaining half step.
+//   4. Return final (y, v, E, E0).
+
+import "std/core/primitives/result.oo";
+
+pub fn leapfrog_energy(y: Float, v: Float, omega: Float) -> Float {
+    return 0.5 * v * v + 0.5 * omega * omega * y * y;
+}
+
+pub fn leapfrog_harmonic(y0: Float, v0: Float, dt: Float, nsteps: Int, omega: Float) -> Result[List[Float], String] {
+    if nsteps < 1 { return Err("ERR\tleapfrog\tnsteps"); }
+    if dt <= 0.0 { return Err("ERR\tleapfrog\tdt"); }
+    let e0: Float = leapfrog_energy(y0, v0, omega);
+    let mut y: Float = y0;
+    let mut v: Float = v0;
+    let mut k: Int = 0;
+    while k < nsteps {
+        let a: Float = (0.0 - omega * omega) * y;
+        let v_half: Float = v + 0.5 * dt * a;
+        y = y + dt * v_half;
+        let a2: Float = (0.0 - omega * omega) * y;
+        v = v_half + 0.5 * dt * a2;
+        k = k + 1;
+    }
+    let e: Float = leapfrog_energy(y, v, omega);
+    let mut out: List[Float] = list_new();
+    out = list_push(out, y);
+    out = list_push(out, v);
+    out = list_push(out, e);
+    out = list_push(out, e0);
+    return Ok(out);
+}

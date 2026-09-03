@@ -1,0 +1,64 @@
+// # Hall Effect Electric Propulsion Thruster Model
+//
+// Logline: Calculates plasma thrust, specific impulse, anode efficiency, and power consumption for Hall effect thrusters.
+//
+// Setup: Pure electrostatic plasma propulsion model based on Xenon/Krypton propellant ionization and magnetic acceleration.
+//
+// Beats:
+//   1. Nominal Xenon Hall thruster specific impulse integer query (1600 seconds).
+//   2. Hall thruster specification structures and defaults.
+//   3. Compute thrust force F = sqrt(2 * m_ion / q_ion) * I_beam * sqrt(V_discharge).
+//   4. Calculate anode efficiency and electrical power budget.
+
+type HallThrusterSpec = struct {
+    discharge_voltage_v: Float,
+    discharge_current_a: Float,
+    anode_mass_flow_mg_s: Float,
+    propellant_name_id: Int
+};
+
+type HallThrusterPerformance = struct {
+    thrust_mn: Float,
+    specific_impulse_s: Float,
+    anode_efficiency: Float,
+    power_kw: Float
+};
+
+pub fn hall_isp() -> Int {
+    return 1600;
+}
+
+pub fn hall_thruster_xenon_default() -> HallThrusterSpec {
+    return HallThrusterSpec {
+        discharge_voltage_v: 300.0, // 300 V discharge
+        discharge_current_a: 15.0, // 15 A current (~4.5 kW)
+        anode_mass_flow_mg_s: 5.2, // 5.2 mg/s Xenon flow
+        propellant_name_id: 54 // Xenon (atomic number 54)
+    };
+}
+
+/// Computes Hall thruster performance from electrical discharge specs and propellant mass flow.
+pub fn hall_thruster_compute(spec: HallThrusterSpec) -> HallThrusterPerformance {
+    let power_w: Float = spec.discharge_voltage_v * spec.discharge_current_a;
+    let power_kw: Float = power_w / 1000.0;
+
+    let q_over_m: Float = 734862385.0; // Xe+ charge-to-mass ratio (C/kg)
+    let v_exit_m_s: Float = sqrt(2.0 * q_over_m * spec.discharge_voltage_v);
+    let m_dot_kg_s: Float = spec.anode_mass_flow_mg_s * 0.000001;
+
+    let thrust_n: Float = m_dot_kg_s * v_exit_m_s * 0.92; // 0.92 beam divergence factor
+    let thrust_mn: Float = thrust_n * 1000.0;
+
+    let g0: Float = 9.80665;
+    let isp_s: Float = (v_exit_m_s * 0.92) / g0;
+
+    let jet_power_w: Float = 0.5 * thrust_n * (v_exit_m_s * 0.92);
+    let efficiency: Float = jet_power_w / power_w;
+
+    return HallThrusterPerformance {
+        thrust_mn: thrust_mn,
+        specific_impulse_s: isp_s,
+        anode_efficiency: efficiency,
+        power_kw: power_kw
+    };
+}

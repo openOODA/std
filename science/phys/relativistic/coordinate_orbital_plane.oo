@@ -1,0 +1,57 @@
+// # Perifocal Orbital Plane Transformations
+//
+// Logline: Converts orbital conic parameters and true anomaly into 2D/3D perifocal frame (PQW) position and velocity state vectors.
+//
+// Setup: Pure Keplerian orbital coordinate geometry in the principal plane of motion.
+//
+// Beats:
+//   1. 2D orbital motion plane dimensionality query.
+//   2. Calculate perifocal radius vector [P, Q, W] from semi-latus rectum and true anomaly.
+//   3. Calculate perifocal velocity vector from specific angular momentum.
+//   4. Evaluate specific orbital angular momentum h = sqrt(mu * a * (1 - e^2)).
+
+type PqwVector = struct {
+    p: Float,
+    q: Float,
+    w: Float
+};
+
+pub fn plane_inc_deg() -> Int {
+    return 28;
+}
+
+pub fn orbital_plane_dim() -> Int {
+    return 2;
+}
+
+pub fn orbital_angular_momentum(semi_major_axis: Float, eccentricity: Float, mu: Float) -> Float {
+    let p: Float = semi_major_axis * (1.0 - (eccentricity * eccentricity));
+    return sqrt(mu * p);
+}
+
+/// Computes position in perifocal PQW coordinates (meters).
+pub fn keplerian_to_pqw_position(
+    semi_major_axis: Float,
+    eccentricity: Float,
+    true_anomaly_rad: Float
+) -> PqwVector {
+    let p_slr: Float = semi_major_axis * (1.0 - (eccentricity * eccentricity));
+    let r_mag: Float = p_slr / (1.0 + (eccentricity * cos(true_anomaly_rad)));
+    let p_pos: Float = r_mag * cos(true_anomaly_rad);
+    let q_pos: Float = r_mag * sin(true_anomaly_rad);
+    return PqwVector { p: p_pos, q: q_pos, w: 0.0 };
+}
+
+/// Computes velocity in perifocal PQW coordinates (m/s).
+pub fn keplerian_to_pqw_velocity(
+    semi_major_axis: Float,
+    eccentricity: Float,
+    true_anomaly_rad: Float,
+    mu: Float
+) -> PqwVector {
+    let h: Float = orbital_angular_momentum(semi_major_axis, eccentricity, mu);
+    let mu_over_h: Float = mu / h;
+    let p_vel: Float = (0.0 - mu_over_h) * sin(true_anomaly_rad);
+    let q_vel: Float = mu_over_h * (eccentricity + cos(true_anomaly_rad));
+    return PqwVector { p: p_vel, q: q_vel, w: 0.0 };
+}

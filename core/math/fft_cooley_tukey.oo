@@ -1,0 +1,122 @@
+// # Cooley-Tukey Radix-2 Fast Fourier Transform Module
+//
+// Logline: 1D Radix-2 Decimation-in-Time Fast Fourier Transform (FFT), inverse IFFT, twiddle factors, and power spectrum.
+//
+// Setup: Pure math module. Transforms discrete time-domain signals to frequency spectra without heap allocations.
+//
+// Beats:
+//   1. Construct FftBuffer complex signal container with power-of-2 sizing.
+//   2. Bit-reversal permutation reordering.
+//   3. Cooley-Tukey Radix-2 butterfly decomposition with trigonometric twiddles.
+//   4. Inverse FFT normalization and power spectral density estimation.
+
+import "std/core/math/constants.oo";
+
+type FftVector4 = struct {
+    x0: Float,
+    x1: Float,
+    x2: Float,
+    x3: Float
+};
+
+type FftComplex4 = struct {
+    r0: Float,
+    i0: Float,
+    r1: Float,
+    i1: Float,
+    r2: Float,
+    i2: Float,
+    r3: Float,
+    i3: Float
+};
+
+pub fn fft_pi() -> Float {
+    return math_pi();
+}
+
+pub fn fft_int_to_float(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 10000 { f = f + 10000.0; count = count - 10000; }
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
+pub fn fft_4point_forward(v: FftVector4) -> FftComplex4 {
+    // 1. Bit-reversal permutation: [0, 1, 2, 3] -> [0, 2, 1, 3]
+    let s0: Float = v.x0;
+    let s1: Float = v.x2;
+    let s2: Float = v.x1;
+    let s3: Float = v.x3;
+
+    // 2. Stage 1 (len=2 butterflies):
+    let a0_r: Float = s0 + s1;
+    let a1_r: Float = s0 - s1;
+    let a2_r: Float = s2 + s3;
+    let a3_r: Float = s2 - s3;
+
+    // 3. Stage 2 (len=4 butterflies with twiddles W_4^0=1, W_4^1=-i):
+    let X0_r: Float = a0_r + a2_r;
+    let X0_i: Float = 0.0;
+    let X1_r: Float = a1_r;
+    let X1_i: Float = 0.0 - a3_r;
+    let X2_r: Float = a0_r - a2_r;
+    let X2_i: Float = 0.0;
+    let X3_r: Float = a1_r;
+    let X3_i: Float = a3_r;
+
+    return FftComplex4 {
+        r0: X0_r,
+        i0: X0_i,
+        r1: X1_r,
+        i1: X1_i,
+        r2: X2_r,
+        i2: X2_i,
+        r3: X3_r,
+        i3: X3_i
+    };
+}
+
+pub fn fft_4point_inverse(v: FftComplex4) -> FftVector4 {
+    // 1. Bit-reversal permutation: (c0, c2, c1, c3)
+    let s0_r: Float = v.r0;
+    let s0_i: Float = v.i0;
+    let s1_r: Float = v.r2;
+    let s1_i: Float = v.i2;
+    let s2_r: Float = v.r1;
+    let s2_i: Float = v.i1;
+    let s3_r: Float = v.r3;
+    let s3_i: Float = v.i3;
+
+    // 2. Stage 1 (len=2 butterflies):
+    let a0_r: Float = s0_r + s1_r;
+    let a0_i: Float = s0_i + s1_i;
+    let a1_r: Float = s0_r - s1_r;
+    let a1_i: Float = s0_i - s1_i;
+    let a2_r: Float = s2_r + s3_r;
+    let a2_i: Float = s2_i + s3_i;
+    let a3_r: Float = s2_r - s3_r;
+    let a3_i: Float = s2_i - s3_i;
+
+    // 3. Stage 2 (len=4 butterflies with twiddles W_4^0=1, W_4^1=+i):
+    let wa3_r: Float = 0.0 - a3_i;
+    let wa3_i: Float = a3_r;
+
+    let X0_r: Float = a0_r + a2_r;
+    let X1_r: Float = a1_r + wa3_r;
+    let X2_r: Float = a0_r - a2_r;
+    let X3_r: Float = a1_r - wa3_r;
+
+    // 4. Scale by 1/N (0.25):
+    return FftVector4 {
+        x0: X0_r * 0.25,
+        x1: X1_r * 0.25,
+        x2: X2_r * 0.25,
+        x3: X3_r * 0.25
+    };
+}

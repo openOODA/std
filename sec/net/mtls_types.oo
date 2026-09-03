@@ -1,0 +1,206 @@
+// # mTLS Types & Helpers
+//
+// Logline: Define MtlsCertificate, CertificateChain, TlsHandshakeState, and PeerIdentity records.
+//
+// Setup: RULES.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. MtlsCertificate: bind subject_cn, issuer_cn, sans, validity, is_ca, is_valid.
+//   2. CertificateChain: bind leaf, intermediates, root, depth, is_verified.
+//   3. TlsHandshakeState: bind session_id, cipher_suite, tls_version, is_handshake_complete.
+//   4. PeerIdentity: bind common_name, san_domains, san_ips, fingerprint_sha256, is_authenticated.
+//
+// residual: struct-only module; no TLS FFI.
+
+// RULES.oot 1.4: Default-deny for privileged effects.
+// CAP-G6: preferred &TcpCap for TLS/TCP session effects; &NetCap still works via supersede.
+// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+
+// -------------------------------------------------------------------
+// Core Data Structures & Realistic mTLS Types
+// -------------------------------------------------------------------
+
+type MtlsCertificate = struct {
+    cert_id: String,
+    subject_cn: String,
+    issuer_cn: String,
+    sans: List[String],
+    serial_number: String,
+    public_key_algorithm: String,
+    signature_algorithm: String,
+    not_before: Int,
+    not_after: Int,
+    is_ca: Bool,
+    is_self_signed: Bool,
+    raw_pem: String,
+    checksum: Int,
+    is_valid: Bool
+};
+
+type CertificateChain = struct {
+    chain_id: String,
+    leaf: MtlsCertificate,
+    intermediates: List[MtlsCertificate],
+    root: MtlsCertificate,
+    depth: Int,
+    is_verified: Bool,
+    error_code: String
+};
+
+type TlsHandshakeState = struct {
+    session_id: String,
+    stage: String,
+    cipher_suite: String,
+    tls_version: String,
+    client_random: String,
+    server_random: String,
+    pre_master_secret_hash: String,
+    client_auth_requested: Bool,
+    client_auth_completed: Bool,
+    is_handshake_complete: Bool,
+    error_message: String
+};
+
+type MtlsConfig = struct {
+    config_id: String,
+    server_name_indication: String,
+    require_client_cert: Bool,
+    verify_hostname: Bool,
+    min_tls_version: String,
+    allowed_cipher_suites: List[String],
+    max_chain_depth: Int,
+    ca_roots: List[String],
+    client_cert: MtlsCertificate,
+    client_chain: CertificateChain,
+    session_timeout_seconds: Int,
+    enforce_revocation_check: Bool,
+    is_valid: Bool,
+    server_port: Int
+};
+
+type PeerIdentity = struct {
+    peer_id: String,
+    common_name: String,
+    organization: String,
+    san_domains: List[String],
+    san_ips: List[String],
+    cert_serial: String,
+    fingerprint_sha256: String,
+    trust_score: Int,
+    is_authenticated: Bool
+};
+
+type MtlsSession = struct {
+    session_id: String,
+    config: MtlsConfig,
+    peer_identity: PeerIdentity,
+    handshake_state: TlsHandshakeState,
+    negotiated_cipher: String,
+    negotiated_version: String,
+    established_at: Int,
+    expires_at: Int,
+    bytes_sent: Int,
+    bytes_received: Int,
+    is_active: Bool,
+    is_renegotiated: Bool
+};
+
+type MtlsSecurityPolicy = struct {
+    policy_id: String,
+    min_tls_version: String,
+    mandatory_client_auth: Bool,
+    require_san_match: Bool,
+    max_cert_chain_depth: Int,
+    allowed_sans: List[String],
+    revocation_check_strict: Bool,
+    fail_closed: Bool,
+    is_active: Bool
+};
+
+type MtlsVerificationResult = struct {
+    is_success: Bool,
+    session_id: String,
+    peer_id: String,
+    chain_depth: Int,
+    error_code: String,
+    error_description: String,
+    timestamp: Int
+};
+
+type MtlsHandshakeResult = struct {
+    is_successful: Bool,
+    session_id: String,
+    negotiated_cipher: String,
+    peer_common_name: String,
+    handshake_duration_ms: Int,
+    error_code: String
+};
+
+type MtlsEngine = struct {
+    engine_id: String,
+    policy: MtlsSecurityPolicy,
+    active_sessions: List[MtlsSession],
+    revoked_cert_serials: List[String],
+    total_handshakes: Int,
+    successful_handshakes: Int,
+    failed_handshakes: Int,
+    system_halted: Bool
+};
+
+// -------------------------------------------------------------------
+// Helper Functions & Utilities
+// -------------------------------------------------------------------
+
+pub fn checksum_calculate(raw_bytes: String) -> Int {
+    let raw_len: Int = raw_bytes.len();
+    let mut i: Int = 0;
+    let mut hash: Int = 5381;
+    while i < raw_len {
+        let ch: Int = byte_at(raw_bytes, i);
+        let hash_x33: Int = hash * 33;
+        hash = hash_x33 + ch;
+        i = i + 1;
+    }
+    return hash;
+}
+
+pub fn bytes_constant_time_eq(s1: String, s2: String) -> Bool {
+    let s1_len: Int = s1.len();
+    let s2_len: Int = s2.len();
+    // Length-mismatch path: return false but the lengths are not secret
+    // (they are public side-channel info by design), so the early-out is OK.
+    if s1_len != s2_len {
+        return false;
+    }
+    let mut i: Int = 0;
+    // Branchless accumulation: OR-in XOR diff at every position so the
+    // instruction sequence and runtime are independent of the secret byte
+    // values. The previous `if b1 != b2 { diff = diff + 1; }` was a
+    // textbook timing side-channel.
+    let mut diff: Int = 0;
+    while i < s1_len {
+        let b1: Int = byte_at(s1, i);
+        let b2: Int = byte_at(s2, i);
+        diff = diff | (b1 ^ b2);
+        i = i + 1;
+    }
+    return diff == 0;
+}
+
+pub fn str_eq(s1: String, s2: String) -> Bool {
+    let s1_len: Int = s1.len();
+    let s2_len: Int = s2.len();
+    if s1_len != s2_len {
+        return false;
+    }
+    let mut i: Int = 0;
+    while i < s1_len {
+        let b1: Int = byte_at(s1, i);
+        let b2: Int = byte_at(s2, i);
+        if b1 != b2 {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}

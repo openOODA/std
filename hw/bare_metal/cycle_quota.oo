@@ -1,0 +1,100 @@
+// # Deterministic Execution Cycle Quotas & Preemption Traps
+//
+// Logline: Deterministic CPU cycle accounting, hierarchical budget delegation, and preemptive exhaustion traps.
+//
+// Setup: Declared capability: None. Pure mathematical cycle counting and quota delegation without ambient clock drift.
+//
+// Beats:
+//   1. Declare CycleQuota and CycleDelegationResult structures.
+//   2. Implement cycle quota initialization and deduction.
+//   3. Implement hierarchical budget delegation: Parent - Child = Remaining.
+//   4. Enforce hard preemption traps upon budget exhaustion.
+
+type CycleQuota = struct {
+    allocated_cycles: Int,
+    consumed_cycles: Int,
+    remaining_cycles: Int,
+    burst_limit: Int,
+    is_exhausted: Bool
+};
+
+type CycleDelegationResult = struct {
+    parent_quota: CycleQuota,
+    child_quota: CycleQuota,
+    is_success: Bool
+};
+
+pub fn cycle_quota_new(budget: Int, burst: Int) -> CycleQuota {
+    let safe_budget: Int = if budget <= 0 { 1000000 } else { budget };
+    let safe_burst: Int = if burst <= 0 { safe_budget } else { burst };
+    return CycleQuota {
+        allocated_cycles: safe_budget,
+        consumed_cycles: 0,
+        remaining_cycles: safe_budget,
+        burst_limit: safe_burst,
+        is_exhausted: false
+    };
+}
+
+pub fn cycle_quota_deduct(quota: CycleQuota, elapsed: Int) -> CycleQuota {
+    if quota.is_exhausted == true {
+        return quota;
+    }
+    let safe_elapsed: Int = if elapsed <= 0 { 0 } else { elapsed };
+    let new_consumed: Int = quota.consumed_cycles + safe_elapsed;
+    let rem: Int = quota.remaining_cycles - safe_elapsed;
+    let is_done: Bool = rem <= 0;
+    let final_rem: Int = if is_done { 0 } else { rem };
+    return CycleQuota {
+        allocated_cycles: quota.allocated_cycles,
+        consumed_cycles: new_consumed,
+        remaining_cycles: final_rem,
+        burst_limit: quota.burst_limit,
+        is_exhausted: is_done
+    };
+}
+
+pub fn cycle_quota_delegate(parent: CycleQuota, sub_cycles: Int) -> CycleDelegationResult {
+    let rem: Int = parent.remaining_cycles;
+    if (sub_cycles <= 0) || (sub_cycles > rem) || parent.is_exhausted == true {
+        let child_empty: CycleQuota = CycleQuota {
+            allocated_cycles: 0,
+            consumed_cycles: 0,
+            remaining_cycles: 0,
+            burst_limit: 0,
+            is_exhausted: true
+        };
+        return CycleDelegationResult {
+            parent_quota: parent,
+            child_quota: child_empty,
+            is_success: false
+        };
+    }
+    let new_parent_rem: Int = rem - sub_cycles;
+    let new_parent: CycleQuota = CycleQuota {
+        allocated_cycles: parent.allocated_cycles,
+        consumed_cycles: parent.consumed_cycles,
+        remaining_cycles: new_parent_rem,
+        burst_limit: parent.burst_limit,
+        is_exhausted: new_parent_rem == 0
+    };
+    let child_quota: CycleQuota = cycle_quota_new(sub_cycles, sub_cycles);
+    return CycleDelegationResult {
+        parent_quota: new_parent,
+        child_quota: child_quota,
+        is_success: true
+    };
+}
+
+pub fn cycle_quota_replenish(quota: CycleQuota, added_cycles: Int) -> CycleQuota {
+    let safe_add: Int = if added_cycles <= 0 { 0 } else { added_cycles };
+    let new_rem: Int = quota.remaining_cycles + safe_add;
+    let new_alloc: Int = quota.allocated_cycles + safe_add;
+    return CycleQuota {
+        allocated_cycles: new_alloc,
+        consumed_cycles: quota.consumed_cycles,
+        remaining_cycles: new_rem,
+        burst_limit: quota.burst_limit,
+        is_exhausted: new_rem <= 0
+    };
+}

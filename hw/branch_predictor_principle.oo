@@ -1,0 +1,109 @@
+// # 2-bit saturating branch predictor principle
+//
+// Logline: A 2-bit saturating counter increments on taken and decrements on not-taken, saturating at 0 (strongly not-taken) and 3 (strongly taken); this reduces branch misprediction rate below 5% on typical workloads.
+//
+// Setup: Pure Int. counter in [0, 3], actual_taken in {0, 1}. Returns the next counter state. Hostile inputs (counter outside [0, 3] or actual_taken outside {0, 1}) fail closed to 0 - 1 (sentinel). Uses domain_cert("hw", ...).
+//
+// Beats:
+//   1. bp_counter_state(c, 1) saturates up toward 3; bp_counter_state(c, 0) saturates down toward 0.
+//   2. counter in [0,3] and taken in {0,1} -> valid next state in [0,3].
+//   3. counter outside [0, 3] or taken outside {0, 1} -> sentinel (fail closed).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Next state of a 2-bit saturating counter.
+// taken=1: c -> min(c+1, 3).
+// taken=0: c -> max(c-1, 0).
+// Returns 0 - 1 sentinel for hostile inputs.
+fn bp_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn bp_counter_state(counter: Int, actual_taken: Int) -> Result[Int, String] {
+    if counter < 0 { return Err("ERR\tbp\tc"); }
+    if counter > 3 { return Err("ERR\tbp\tc"); }
+    if actual_taken == 1 {
+        if counter >= 3 { return Ok(3); }
+        return Ok(counter + 1);
+    }
+    if actual_taken == 0 {
+        if counter <= 0 { return Ok(0); }
+        return Ok(counter - 1);
+    }
+    return Err("ERR\tbp\ttaken");
+}
+
+// Predicate: counter >= 2 means predict taken (weakly or strongly).
+pub fn bp_predict_taken(counter: Int) -> Int {
+    if counter < 0 { return 0; }
+    if counter > 3 { return 0; }
+    if counter >= 2 { return 1; }
+    return 0;
+}
+
+// Coupled: 2-bit predictor with global history table indexed by PC.
+// history_table[pc % size] holds the counter for that branch.
+// This is a witness: the next state of the slot after a real branch is recorded.
+pub fn bp_ght_update(slot: Int, actual_taken: Int) -> Result[Int, String] {
+    return bp_counter_state(slot, actual_taken);
+}
+
+// DomainCert for the golden golden case: counter=2, taken=1 -> 3 (strongly taken).
+pub fn bp_golden_cert() -> DomainCert {
+    let s: Int = bp_got(bp_counter_state(2, 1));
+    let mut holds: Int = 0;
+    if s == 3 { holds = 1; }
+    return domain_cert("hw", "bp_counter_golden", holds);
+}
+
+pub fn bp_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if bp_counter_state(0 - 1, 1).is_ok() == false {
+        if bp_counter_state(4, 1).is_ok() == false {
+            if bp_counter_state(2, 2).is_ok() == false {
+                if bp_counter_state(2, 0 - 1).is_ok() == false { holds = 1; }
+            }
+        }
+    }
+    return domain_cert("hw", "bp_counter_hostile", holds);
+}
+
+pub fn bp_coupled_cert() -> DomainCert {
+    let s: Int = bp_got(bp_ght_update(2, 1));
+    let mut holds: Int = 0;
+    if s == 3 { holds = 1; }
+    return domain_cert("hw", "bp_ght_coupled", holds);
+}
+
+pub fn verify_branch_predictor_principle() -> Bool {
+    // Golden: counter=2 (weakly taken), taken=1 -> 3 (strongly taken).
+    if bp_got(bp_counter_state(2, 1)) != 3 { return false; }
+    if bp_got(bp_counter_state(0, 1)) != 1 { return false; }
+    if bp_got(bp_counter_state(3, 1)) != 3 { return false; }
+    if bp_got(bp_counter_state(1, 0)) != 0 { return false; }
+    if bp_got(bp_counter_state(0, 0)) != 0 { return false; }
+    if bp_got(bp_counter_state(3, 0)) != 2 { return false; }
+    // Predictor: counter >= 2 -> predict taken.
+    if bp_predict_taken(0) != 0 { return false; }
+    if bp_predict_taken(1) != 0 { return false; }
+    if bp_predict_taken(2) != 1 { return false; }
+    if bp_predict_taken(3) != 1 { return false; }
+    // Predictor hostile inputs.
+    if bp_predict_taken(0 - 1) != 0 { return false; }
+    if bp_predict_taken(4) != 0 { return false; }
+    // Hostile: counter<0, counter>3, taken outside {0,1} all return sentinel -1.
+    if bp_counter_state(0 - 1, 1).is_ok() { return false; }
+    if bp_counter_state(4, 1).is_ok() { return false; }
+    if bp_counter_state(2, 2).is_ok() { return false; }
+    if bp_counter_state(2, 0 - 1).is_ok() { return false; }
+    if bp_got(bp_ght_update(2, 1)) != 3 { return false; }
+    if bp_got(bp_ght_update(0, 0)) != 0 { return false; }
+    // Certificates: golden, hostile, coupled all hold.
+    let g: DomainCert = bp_golden_cert();
+    let h: DomainCert = bp_hostile_cert();
+    let cu: DomainCert = bp_coupled_cert();
+    if g.holds != 1 { return false; }
+    if h.holds != 1 { return false; }
+    if cu.holds != 1 { return false; }
+    return true;
+}

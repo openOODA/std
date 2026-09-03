@@ -1,0 +1,84 @@
+// # Attitude Quaternion Kinematics
+//
+// Logline: Implements quaternion algebra, frame rotations, normalization, and kinematic rates for spacecraft attitude dynamics.
+//
+// Setup: Pure 4D hypercomplex quaternion operations for non-singular 3D spacecraft rotation kinematics.
+//
+// Beats:
+//   1. Quaternion structure and identity query.
+//   2. Quaternion multiplication (Hamilton product) and conjugation.
+//   3. Vector rotation via quaternion conjugation q * v * q*.
+//   4. Kinematic differential equation dq/dt = 0.5 * q (x) omega.
+
+type Quaternion = struct {
+    w: Float,
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+pub fn quat_ident_w() -> Int {
+    return 1;
+}
+
+pub fn quat_new(w: Float, x: Float, y: Float, z: Float) -> Quaternion {
+    return Quaternion { w: w, x: x, y: y, z: z };
+}
+
+pub fn quat_identity() -> Quaternion {
+    return Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 };
+}
+
+pub fn quat_norm_sq(q: Quaternion) -> Float {
+    return (q.w * q.w) + (q.x * q.x) + (q.y * q.y) + (q.z * q.z);
+}
+
+pub fn quat_normalize(q: Quaternion) -> Quaternion {
+    let n2: Float = quat_norm_sq(q);
+    if n2 <= 0.000000000001 {
+        return quat_identity();
+    }
+    let inv_n: Float = 1.0 / sqrt(n2);
+    return Quaternion {
+        w: q.w * inv_n,
+        x: q.x * inv_n,
+        y: q.y * inv_n,
+        z: q.z * inv_n
+    };
+}
+
+pub fn quat_conjugate(q: Quaternion) -> Quaternion {
+    return Quaternion {
+        w: q.w,
+        x: 0.0 - q.x,
+        y: 0.0 - q.y,
+        z: 0.0 - q.z
+    };
+}
+
+pub fn quat_multiply(q1: Quaternion, q2: Quaternion) -> Quaternion {
+    let w: Float = (q1.w * q2.w) - (q1.x * q2.x) - (q1.y * q2.y) - (q1.z * q2.z);
+    let x: Float = (q1.w * q2.x) + (q1.x * q2.w) + (q1.y * q2.z) - (q1.z * q2.y);
+    let y: Float = (q1.w * q2.y) - (q1.x * q2.z) + (q1.y * q2.w) + (q1.z * q2.x);
+    let z: Float = (q1.w * q2.z) + (q1.x * q2.y) - (q1.y * q2.x) + (q1.z * q2.w);
+    return Quaternion { w: w, x: x, y: y, z: z };
+}
+
+pub fn quat_rotate_vector_x(q: Quaternion, vx: Float, vy: Float, vz: Float) -> Float {
+    let v_quat: Quaternion = Quaternion { w: 0.0, x: vx, y: vy, z: vz };
+    let q_conj: Quaternion = quat_conjugate(q);
+    let temp: Quaternion = quat_multiply(q, v_quat);
+    let res: Quaternion = quat_multiply(temp, q_conj);
+    return res.x;
+}
+
+pub fn quat_derivative(q: Quaternion, wx: Float, wy: Float, wz: Float) -> Quaternion {
+    let omega_q: Quaternion = Quaternion { w: 0.0, x: wx, y: wy, z: wz };
+    let prod: Quaternion = quat_multiply(q, omega_q);
+    return Quaternion {
+        w: 0.5 * prod.w,
+        x: 0.5 * prod.x,
+        y: 0.5 * prod.y,
+        z: 0.5 * prod.z
+    };
+}

@@ -1,0 +1,40 @@
+// # Lift force L = q S CL
+//
+// Logline: Lift force is dynamic pressure times area times lift coefficient.
+//
+// Setup: Pure Float. Does not grow boyd_em.oo. CL may be signed (inverted flight).
+//
+// Beats:
+//   1. L = q * S * CL when q > 0 and S > 0.
+//   2. q <= 0 or S <= 0 returns Err. Zero CL is Ok(0).
+
+pub fn calculate_lift_force(dynamic_pressure: Float, wing_area: Float, cl: Float) -> Result[Float, String] {
+    if dynamic_pressure <= 0.0 {
+        return Err("ERR\tlift\tq");
+    }
+    if wing_area <= 0.0 {
+        return Err("ERR\tlift\ts");
+    }
+    return Ok(dynamic_pressure * wing_area * cl);
+}
+
+fn lf_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn verify_lift_force_law() -> Bool {
+    let kat: Float = lf_got(calculate_lift_force(100.0, 2.0, 0.5));
+    let mut d: Float = kat - 100.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    if lf_got(calculate_lift_force(100.0, 2.0, 0.0)) != 0.0 {
+        return false;
+    }
+    if calculate_lift_force(0.0, 2.0, 1.0).is_ok() { return false; }
+    if calculate_lift_force(10.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    return true;
+}

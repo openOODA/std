@@ -1,0 +1,31 @@
+// # Agent Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard agent domain library. Re-exports a stable agent_mod_* surface for the most-used public API (synthesizer, repair, repl_engine, pair_programmer, evolution). Moved out of std/ai/ in Phase 3.5: these are dev/agent tools, not AI primitives.
+//
+// Setup: Imports private agent siblings; agent operations may take AiCap, FsReadCap, or ProcessCap at the call site.
+//
+// Beats:
+//   1. Re-export the SMT synthesizer surface as agent_mod_synth_*.
+//   2. Re-export the repair surface as agent_mod_repair_*.
+//   3. Re-export the pair-programmer surface as agent_mod_pair_*.
+//   4. Re-export the evolution surface as agent_mod_evolution_*.
+
+import "synthesizer.oo";
+import "repair.oo";
+import "repl_engine.oo";
+import "pair_programmer.oo";
+import "evolution.oo";
+
+// Public synthesizer surface: agent_mod_synth_*
+pub fn agent_mod_synth_from_contract(spec: SynthSpec) -> Result[SynthResult, String] { return synthesize_from_contract(spec); }
+
+// Public repair surface: agent_mod_repair_*
+pub fn agent_mod_repair_patch(diag: CompilerDiagnostic, src: String) -> RepairPatch { return synthesize_repair_patch(diag, src); }
+
+// Public pair-programmer surface: agent_mod_pair_*
+pub fn agent_mod_pair_propose_module(ctx: AgentContext, name: String) -> CodeProposal { return pair_programmer_propose_module(ctx, name); }
+
+// Public evolution surface: agent_mod_evolution_*
+pub fn agent_mod_evolution_evolve(init_code: String, cfg: EvolutionConfig) -> EvolutionResult { return evolve_population(init_code, cfg); }
+
+// External callers must import this ANCHOR.oo and use the agent_mod_* surface.

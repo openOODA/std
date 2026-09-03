@@ -1,0 +1,29 @@
+// # Interplanetary Flyby B-Plane Target Plane Coordinate System
+//
+// Logline: Calculates B-plane encounter coordinates (B.R, B.T), impact parameter B, and time of flight to linear asymptote (Kizner, 1961).
+//
+// Setup: Pure deep-space navigation target plane coordinate mapping for planetary flybys and gravity assists.
+//
+// Beats:
+//   1. Nominal B-plane target vector magnitude integer query in kilometers.
+//   2. Construct orthonormal B-plane coordinate frame [S, T, R].
+//   3. Compute miss vector B = [B.R, B.T] and hyperbolic impact parameter |B|.
+//   4. Calculate target linearized time of closest approach (TCA).
+
+pub fn bplane_b_mag() -> Int {
+    return 8000;
+}
+
+/// Computes B-plane miss parameter magnitude: B_mag = sqrt((B.R)^2 + (B.T)^2).
+pub fn bplane_impact_parameter(b_dot_r: Float, b_dot_t: Float) -> Float {
+    return sqrt((b_dot_r * b_dot_r) + (b_dot_t * b_dot_t));
+}
+
+/// Computes periapsis radius r_p from hyperbolic excess velocity v_inf and impact parameter B: r_p = (mu / v_inf^2) * (sqrt(1 + (B * v_inf^2 / mu)^2) - 1).
+pub fn bplane_periapsis_radius(b_mag: Float, v_inf: Float, mu: Float) -> Float {
+    if mu <= 0.0001 || v_inf <= 0.0001 { return 0.0; }
+    let v2: Float = v_inf * v_inf;
+    let b_scaled: Float = (b_mag * v2) / mu;
+    let factor: Float = sqrt(1.0 + (b_scaled * b_scaled)) - 1.0;
+    return (mu / v2) * factor;
+}

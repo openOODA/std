@@ -1,0 +1,116 @@
+// # AArch64 Recursion Match And Array Frame Emitters
+//
+// Logline: Emits aligned AArch64 frames for a recursive BL, nested match compares, and a large struct-array of stack slots.
+//
+// Setup: Uses encoder and encode_mem words. Frame sizes pass through abi_stack_aligned so SP stays a multiple of 16.
+//
+// Beats:
+//   1. Push an aligned frame size onto a simulated SP and recurse a shallow host depth.
+//   2. Emit a recursive body that STPs the frame, BLs to itself, and returns in x0.
+//   3. Emit nested match as CMP plus B.cond with results in x0.
+//   4. Emit a large [x29, #offset] struct-array of STR/LDR slots.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+
+pub fn aarch64_aligned_push(sp: Int, need: Int) -> Result[Int, String] {
+    if need < 0 {
+        return Err("ERR\taarch64_aligned_push\tnegative");
+    }
+    let n: Int = (0 + abi_stack_aligned(need));
+    let next: Int = sp + n;
+    if (next % 16) != 0 {
+        return Err("ERR\taarch64_aligned_push\tmisaligned");
+    }
+    return Ok(next);
+}
+
+pub fn aarch64_rec_align(depth: Int, sp: Int) -> Result[Int, String] {
+    if depth <= 0 {
+        return Ok(sp);
+    }
+    let n: Int = (0 + abi_stack_aligned(16));
+    let next: Int = sp + n;
+    if (next % 16) != 0 {
+        return Err("ERR\taarch64_aligned_push\tmisaligned");
+    }
+    return aarch64_rec_align(depth - 1, next);
+}
+
+fn rec_prologue(w: List[Int], frame: Int) -> List[Int] {
+    let mut out: List[Int] = w;
+    out = list_push(out, arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), frame));
+    out = list_push(out, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16));
+    out = list_push(out, arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+    return out;
+}
+
+fn rec_epilogue(w: List[Int], frame: Int) -> List[Int] {
+    let mut out: List[Int] = w;
+    out = list_push(out, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16));
+    out = list_push(out, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), frame));
+    out = list_push(out, arm64_word_ret());
+    return out;
+}
+
+pub fn aarch64_emit_recursive_body() -> List[Int] {
+    let frame: Int = (0 + abi_stack_aligned(64));
+    let mut w: List[Int] = list_new();
+    w = rec_prologue(w, frame);
+    w = list_push(w, arm64_word_movz(abi_ret_reg(), 3, 0));
+    w = list_push(w, arm64_word_bl(4));
+    w = rec_epilogue(w, frame);
+    w = rec_prologue(w, frame);
+    w = list_push(w, arm64_word_cmp_reg(abi_ret_reg(), 31));
+    w = list_push(w, arm64_word_b_cond(0, 4));
+    w = list_push(w, arm64_word_sub_imm(abi_ret_reg(), abi_ret_reg(), 1));
+    w = list_push(w, arm64_word_bl(-6));
+    w = list_push(w, arm64_word_add_imm(abi_ret_reg(), abi_ret_reg(), 1));
+    w = rec_epilogue(w, frame);
+    return arm64_words_to_bytes(w);
+}
+
+pub fn aarch64_emit_match_body() -> List[Int] {
+    let frame: Int = (0 + abi_stack_aligned(32));
+    let mut w: List[Int] = list_new();
+    w = rec_prologue(w, frame);
+    w = list_push(w, arm64_word_movz(0, 1, 0));
+    w = list_push(w, arm64_word_movz(1, 0, 0));
+    w = list_push(w, arm64_word_cmp_reg(0, 1));
+    w = list_push(w, arm64_word_b_cond(1, 8));
+    w = list_push(w, arm64_word_movz(0, 0, 0));
+    w = list_push(w, arm64_word_movz(1, 0, 0));
+    w = list_push(w, arm64_word_cmp_reg(0, 1));
+    w = list_push(w, arm64_word_b_cond(1, 3));
+    w = list_push(w, arm64_word_movz(0, 11, 0));
+    w = list_push(w, arm64_word_b(3));
+    w = list_push(w, arm64_word_movz(0, 12, 0));
+    w = list_push(w, arm64_word_b(2));
+    w = list_push(w, arm64_word_movz(0, 13, 0));
+    w = rec_epilogue(w, frame);
+    return arm64_words_to_bytes(w);
+}
+
+pub fn aarch64_emit_struct_array_body(nslots: Int) -> List[Int] {
+    let mut n: Int = nslots;
+    if n < 1 { n = 1; }
+    if n > 48 { n = 48; }
+    let frame: Int = (0 + abi_stack_aligned(16 + n * 8));
+    let mut w: List[Int] = list_new();
+    w = rec_prologue(w, frame);
+    let mut i: Int = 0;
+    while i < n {
+        let off: Int = 16 + i * 8;
+        w = list_push(w, arm64_word_movz(0, i & 65535, 0));
+        w = list_push(w, arm64_word_str(0, abi_fp_reg(), off));
+        i = i + 1;
+    }
+    w = list_push(w, arm64_word_ldr(0, abi_fp_reg(), 16));
+    w = rec_epilogue(w, frame);
+    return arm64_words_to_bytes(w);
+}
+
+pub fn aarch64_body_frame(need: Int) -> Int {
+    return (0 + abi_stack_aligned(need));
+}

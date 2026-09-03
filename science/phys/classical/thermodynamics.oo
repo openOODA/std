@@ -1,0 +1,52 @@
+// # Fundamental Principles of Thermodynamics
+//
+// Logline: Zeroth, First, Second (Entropy Non-Decrease), and Third Laws.
+//
+// Setup: Fails closed if simulated closed-system process violates Delta S >= 0.
+//
+// Beats:
+//   1. First law energy balance.
+//   2. Second law entropy non-decrease for isolated systems.
+//   3. Carnot maximum theoretical cycle efficiency bound.
+
+type ThermoState = struct {
+    internal_energy_joules: Float,
+    entropy_j_per_k: Float,
+    temperature_kelvin: Float
+};
+
+pub fn thermodynamics_first_law_delta(heat_in: Float, work_out: Float) -> Float {
+    return heat_in - work_out;
+}
+
+pub fn thermodynamics_second_law_valid(
+    initial_entropy: Float,
+    final_entropy: Float,
+    is_isolated_system: Bool
+) -> Bool {
+    if is_isolated_system {
+        return final_entropy >= initial_entropy - 0.000000001;
+    }
+    return true;
+}
+
+pub fn thermodynamics_carnot_max_efficiency(t_cold: Float, t_hot: Float) -> Float {
+    if t_hot <= 0.0 || t_cold <= 0.0 || t_cold >= t_hot {
+        return 0.0;
+    }
+    return 1.0 - (t_cold / t_hot);
+}
+
+pub fn thermodynamics_check_heat_engine_valid(
+    work_output: Float,
+    heat_input: Float,
+    t_cold: Float,
+    t_hot: Float
+) -> Bool {
+    if heat_input <= 0.0 || work_output < 0.0 {
+        return false;
+    }
+    let actual_eff: Float = work_output / heat_input;
+    let max_eff: Float = thermodynamics_carnot_max_efficiency(t_cold, t_hot);
+    return actual_eff <= max_eff + 0.0000001;
+}

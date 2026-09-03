@@ -1,0 +1,117 @@
+// # Van der Waals Real Gas Equation of State
+//
+// Logline: Calculates real gas pressure, compressibility factor Z, critical state coordinates, and reduced corresponding states.
+//
+// Setup: Pure floating-point equations accounting for non-zero molecular volume (b) and attractive dispersion forces (a).
+//
+// Beats:
+//   1. Real gas pressure P(v, T) = R * T / (v - b) - a / v^2.
+//   2. Compressibility factor Z = P * v / (R * T).
+//   3. Critical state parameters (Tc, Pc, vc) and universal critical compressibility Zc = 0.375.
+//   4. Reduced coordinate corresponding states and second virial coefficient B2(T).
+
+type VdwGas = struct {
+    a_param: Float,
+    b_param: Float,
+    temp_critical: Float,
+    press_critical: Float,
+    vol_critical: Float
+};
+
+// Universal gas constant R in J / (mol * K).
+pub fn vdw_gas_constant() -> Float {
+    return 8.314462618;
+}
+
+// Critical temperature Tc = 8 * a / (27 * R * b) (Kelvin).
+pub fn vdw_critical_temp(a: Float, b: Float) -> Float {
+    if a <= 0.0 || b <= 0.0 { return 0.0; }
+    let r: Float = vdw_gas_constant();
+    let num: Float = 8.0 * a;
+    let den: Float = 27.0 * r * b;
+    return num / den;
+}
+
+// Critical pressure Pc = a / (27 * b^2) (Pascals).
+pub fn vdw_critical_press(a: Float, b: Float) -> Float {
+    if a <= 0.0 || b <= 0.0 { return 0.0; }
+    let den: Float = 27.0 * b * b;
+    return a / den;
+}
+
+// Critical molar volume vc = 3 * b (m^3 / mol).
+pub fn vdw_critical_vol(b: Float) -> Float {
+    if b <= 0.0 { return 0.0; }
+    return 3.0 * b;
+}
+
+// Construct a new VdwGas definition with derived critical coordinates.
+pub fn vdw_gas_new(a_param: Float, b_param: Float) -> VdwGas {
+    let tc: Float = vdw_critical_temp(a_param, b_param);
+    let pc: Float = vdw_critical_press(a_param, b_param);
+    let vc: Float = vdw_critical_vol(b_param);
+    return VdwGas {
+        a_param: a_param,
+        b_param: b_param,
+        temp_critical: tc,
+        press_critical: pc,
+        vol_critical: vc
+    };
+}
+
+// Real gas pressure P(v, T) in Pascals. Fail-closed if molar volume <= b.
+pub fn vdw_pressure(gas: VdwGas, molar_vol_m3_mol: Float, temp_kelvin: Float) -> Float {
+    if temp_kelvin <= 0.0 || molar_vol_m3_mol <= (gas.b_param + 0.000000001) {
+        return 0.0;
+    }
+    let r: Float = vdw_gas_constant();
+    let repuls: Float = (r * temp_kelvin) / (molar_vol_m3_mol - gas.b_param);
+    let v_sq: Float = molar_vol_m3_mol * molar_vol_m3_mol;
+    let attract: Float = gas.a_param / v_sq;
+    let p: Float = repuls - attract;
+    if p < 0.0 { return 0.0; }
+    return p;
+}
+
+// Compressibility factor Z = (P * v) / (R * T). Returns 1.0 for ideal gas baseline.
+pub fn vdw_compressibility_z(gas: VdwGas, molar_vol_m3_mol: Float, temp_kelvin: Float) -> Float {
+    if temp_kelvin <= 0.000001 || molar_vol_m3_mol <= (gas.b_param + 0.000000001) {
+        return 1.0;
+    }
+    let p: Float = vdw_pressure(gas, molar_vol_m3_mol, temp_kelvin);
+    let r: Float = vdw_gas_constant();
+    let rt: Float = r * temp_kelvin;
+    return (p * molar_vol_m3_mol) / rt;
+}
+
+// Law of corresponding states: Reduced pressure Pr = 8*Tr / (3*vr - 1) - 3 / vr^2.
+pub fn vdw_reduced_pressure(temp_reduced: Float, vol_reduced: Float) -> Float {
+    if temp_reduced <= 0.0 || vol_reduced <= 0.3333334 {
+        return 0.0;
+    }
+    let term1: Float = (8.0 * temp_reduced) / ((3.0 * vol_reduced) - 1.0);
+    let vr_sq: Float = vol_reduced * vol_reduced;
+    let term2: Float = 3.0 / vr_sq;
+    let pr: Float = term1 - term2;
+    if pr < 0.0 { return 0.0; }
+    return pr;
+}
+
+// Ideal gas pressure baseline P_ideal = R * T / v (Pascals).
+pub fn vdw_ideal_pressure(molar_vol_m3_mol: Float, temp_kelvin: Float) -> Float {
+    if temp_kelvin <= 0.0 || molar_vol_m3_mol <= 0.0 {
+        return 0.0;
+    }
+    let r: Float = vdw_gas_constant();
+    return (r * temp_kelvin) / molar_vol_m3_mol;
+}
+
+// Second virial coefficient B2(T) = b - a / (R * T) (m^3 / mol).
+pub fn vdw_virial_b2(gas: VdwGas, temp_kelvin: Float) -> Float {
+    if temp_kelvin <= 0.000001 {
+        return gas.b_param;
+    }
+    let r: Float = vdw_gas_constant();
+    let rt: Float = r * temp_kelvin;
+    return gas.b_param - (gas.a_param / rt);
+}

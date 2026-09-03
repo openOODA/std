@@ -1,0 +1,92 @@
+// # Legendre Polynomials and Associated Functions
+//
+// Logline: Evaluates Pn(x) by Bonnet recurrence and associated Legendre P_n^m for spherical harmonics.
+//
+// Setup: Pure math. x is in [-1, 1] for associated functions that use sqrt(1-x^2).
+//
+// Beats:
+//   1. Seed P0 = 1 and P1 = x.
+//   2. Recur (n+1) P_{n+1} = (2n+1) x Pn - n P_{n-1}.
+//   3. Build P_m^m from (1-x^2)^{m/2} and the double factorial.
+//   4. Climb n at fixed m with the associated Bonnet rule.
+
+fn leg_i2f(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut c: Int = n;
+    if c < 0 { c = 0 - c; }
+    while c > 0 {
+        f = f + 1.0;
+        c = c - 1;
+    }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
+pub fn legendre_p(n: Int, x: Float) -> Float {
+    if n < 0 { return 0.0; }
+    if n == 0 { return 1.0; }
+    if n == 1 { return x; }
+    let mut pm1: Float = 1.0;
+    let mut p0: Float = x;
+    let mut k: Int = 1;
+    let mut kf: Float = 1.0;
+    while k < n {
+        let p1: Float = ((2.0 * kf + 1.0) * x * p0 - kf * pm1) / (kf + 1.0);
+        pm1 = p0;
+        p0 = p1;
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    return p0;
+}
+
+fn leg_pow_sqrt(base: Float, m: Int) -> Float {
+    let mut o: Float = 1.0;
+    let mut i: Int = 0;
+    while i < m {
+        o = o * base;
+        i = i + 1;
+    }
+    return o;
+}
+
+fn leg_double_odd(m: Int) -> Float {
+    let mut o: Float = 1.0;
+    let mut k: Int = 1;
+    let mut odd: Float = 1.0;
+    while k <= m {
+        o = o * odd;
+        k = k + 1;
+        odd = odd + 2.0;
+    }
+    return o;
+}
+
+pub fn legendre_associated(n: Int, m: Int, x: Float) -> Float {
+    if n < 0 { return 0.0; }
+    let mut mm: Int = m;
+    if mm < 0 { mm = 0 - mm; }
+    if mm > n { return 0.0; }
+    if mm == 0 { return legendre_p(n, x); }
+    let mut s: Float = 1.0 - x * x;
+    if s < 0.0 { s = 0.0; }
+    let root: Float = sqrt(s);
+    let mut pmm: Float = leg_pow_sqrt(root, mm) * leg_double_odd(mm);
+    if mm - (mm / 2) * 2 == 1 { pmm = 0.0 - pmm; }
+    if n == mm { return pmm; }
+    let mf: Float = leg_i2f(mm);
+    let mut pmm1: Float = x * (2.0 * mf + 1.0) * pmm;
+    if n == mm + 1 { return pmm1; }
+    let mut k: Int = mm + 1;
+    let mut kf: Float = mf + 1.0;
+    let mut pkm1: Float = pmm;
+    let mut pk: Float = pmm1;
+    while k < n {
+        let pk1: Float = ((2.0 * kf + 1.0) * x * pk - (kf + mf) * pkm1) / (kf - mf + 1.0);
+        pkm1 = pk;
+        pk = pk1;
+        k = k + 1;
+        kf = kf + 1.0;
+    }
+    return pk;
+}

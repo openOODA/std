@@ -1,0 +1,94 @@
+// # Control Flow Flattening Basic Block & State Structures
+//
+// Logline: Defines AST basic blocks, state transitions, and centralized dispatch containers.
+//
+// Setup: Pure. Represents decomposed control flow graph nodes and state machine loops.
+//
+// Beats:
+//   1. Define FlattenBlock holding state identifiers and branch targets.
+//   2. Define FlattenedDispatchLoop holding basic blocks and dispatcher metadata.
+//   3. Provide basic block constructors, state lookup, and validation helpers.
+
+type FlattenBlock = struct {
+    state_id: Int,
+    inst_count: Int,
+    next_state_default: Int,
+    conditional_next_state: Int,
+    is_terminal: Bool
+};
+
+type FlattenedDispatchLoop = struct {
+    initial_state: Int,
+    exit_state: Int,
+    blocks: List[FlattenBlock],
+    block_count: Int,
+    state_var_name: String,
+    loop_bound: Int
+};
+
+pub fn flatten_block_new(
+    st_id: Int,
+    insts: Int,
+    next_st: Int,
+    cond_next: Int,
+    is_term: Bool
+) -> FlattenBlock {
+    return FlattenBlock {
+        state_id: st_id,
+        inst_count: insts,
+        next_state_default: next_st,
+        conditional_next_state: cond_next,
+        is_terminal: is_term
+    };
+}
+
+pub fn flattened_dispatch_new(
+    init_st: Int,
+    exit_st: Int,
+    var_name: String
+) -> FlattenedDispatchLoop {
+    let empty_blocks: List[FlattenBlock] = list_new();
+    return FlattenedDispatchLoop {
+        initial_state: init_st,
+        exit_state: exit_st,
+        blocks: empty_blocks,
+        block_count: 0,
+        state_var_name: var_name,
+        loop_bound: 1000000
+    };
+}
+
+pub fn dispatch_add_block(
+    loop: FlattenedDispatchLoop,
+    block: FlattenBlock
+) -> FlattenedDispatchLoop {
+    let updated_blocks: List[FlattenBlock] = list_push(loop.blocks, block);
+    return FlattenedDispatchLoop {
+        initial_state: loop.initial_state,
+        exit_state: loop.exit_state,
+        blocks: updated_blocks,
+        block_count: loop.block_count + 1,
+        state_var_name: loop.state_var_name,
+        loop_bound: loop.loop_bound
+    };
+}
+
+pub fn dispatch_get_block(loop: FlattenedDispatchLoop, idx: Int) -> FlattenBlock {
+    return list_get(loop.blocks, idx);
+}
+
+pub fn dispatch_find_block_by_state(
+    loop: FlattenedDispatchLoop,
+    st_id: Int
+) -> Option[FlattenBlock] {
+    let count: Int = loop.block_count;
+    let mut i: Int = 0;
+    while i < count {
+        let b: FlattenBlock = list_get(loop.blocks, i);
+        if b.state_id == st_id {
+            return Some(b);
+        }
+        i = i + 1;
+    }
+    return None;
+}

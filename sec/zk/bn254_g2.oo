@@ -1,0 +1,119 @@
+// # BN254 G2 Twisted Elliptic Curve Group Arithmetic
+//
+// Logline: Implements BN254 G2 affine point arithmetic on y^2 = x^3 + 3/(9+u) over quadratic extension F_p2.
+//
+// Setup: Affine twisted Weierstrass curve arithmetic with point doubling, point addition, and scalar multiplication.
+//
+// Beats:
+//   1. Represent G2 points in affine coordinates (x, y) with F_p2 coordinates and infinity flag.
+//   2. Validate on-curve predicate in F_p2: y^2 == x^3 + b'.
+//   3. Compute affine point addition and point doubling in G2.
+//   4. Compute scalar multiplication via double-and-add.
+
+import "./bn254_fp.oo";
+import "./bn254_fp2.oo";
+
+type Bn254G2Affine = struct {
+    x: Bn254Fp2,
+    y: Bn254Fp2,
+    is_infinity: Bool
+};
+
+pub fn bn254_g2_infinity() -> Bn254G2Affine {
+    return Bn254G2Affine {
+        x: bn254_fp2_zero(),
+        y: bn254_fp2_zero(),
+        is_infinity: true
+    };
+}
+
+pub fn bn254_g2_generator() -> Bn254G2Affine {
+    let gx: Bn254Fp2 = Bn254Fp2 {
+        c0: bn254_fp_from_int(108570469),
+        c1: bn254_fp_from_int(115597309)
+    };
+    let gy: Bn254Fp2 = Bn254Fp2 {
+        c0: bn254_fp_from_int(8495653),
+        c1: bn254_fp_from_int(40823678)
+    };
+    return Bn254G2Affine {
+        x: gx,
+        y: gy,
+        is_infinity: false
+    };
+}
+
+pub fn bn254_g2_double(p: Bn254G2Affine) -> Bn254G2Affine {
+    if p.is_infinity || bn254_fp2_equal(p.y, bn254_fp2_zero()) {
+        return bn254_g2_infinity();
+    }
+    let x2: Bn254Fp2 = bn254_fp2_mul(p.x, p.x);
+    let three: Bn254Fp2 = Bn254Fp2 { c0: bn254_fp_from_int(3), c1: bn254_fp_zero() };
+    let num: Bn254Fp2 = bn254_fp2_mul(three, x2);
+    let two: Bn254Fp2 = Bn254Fp2 { c0: bn254_fp_from_int(2), c1: bn254_fp_zero() };
+    let den: Bn254Fp2 = bn254_fp2_mul(two, p.y);
+    let inv_den: Bn254Fp2 = bn254_fp2_inv(den);
+    let lambda: Bn254Fp2 = bn254_fp2_mul(num, inv_den);
+
+    let lambda2: Bn254Fp2 = bn254_fp2_mul(lambda, lambda);
+    let two_x: Bn254Fp2 = bn254_fp2_mul(two, p.x);
+    let x3: Bn254Fp2 = bn254_fp2_sub(lambda2, two_x);
+
+    let x_diff: Bn254Fp2 = bn254_fp2_sub(p.x, x3);
+    let lam_xdiff: Bn254Fp2 = bn254_fp2_mul(lambda, x_diff);
+    let y3: Bn254Fp2 = bn254_fp2_sub(lam_xdiff, p.y);
+
+    return Bn254G2Affine {
+        x: x3,
+        y: y3,
+        is_infinity: false
+    };
+}
+
+pub fn bn254_g2_add(a: Bn254G2Affine, b: Bn254G2Affine) -> Bn254G2Affine {
+    if a.is_infinity { return b; }
+    if b.is_infinity { return a; }
+
+    if bn254_fp2_equal(a.x, b.x) {
+        if bn254_fp2_equal(a.y, b.y) {
+            return bn254_g2_double(a);
+        }
+        return bn254_g2_infinity();
+    }
+
+    let num: Bn254Fp2 = bn254_fp2_sub(b.y, a.y);
+    let den: Bn254Fp2 = bn254_fp2_sub(b.x, a.x);
+    let inv_den: Bn254Fp2 = bn254_fp2_inv(den);
+    let lambda: Bn254Fp2 = bn254_fp2_mul(num, inv_den);
+
+    let lambda2: Bn254Fp2 = bn254_fp2_mul(lambda, lambda);
+    let x_sum: Bn254Fp2 = bn254_fp2_add(a.x, b.x);
+    let x3: Bn254Fp2 = bn254_fp2_sub(lambda2, x_sum);
+
+    let x_diff: Bn254Fp2 = bn254_fp2_sub(a.x, x3);
+    let lam_xdiff: Bn254Fp2 = bn254_fp2_mul(lambda, x_diff);
+    let y3: Bn254Fp2 = bn254_fp2_sub(lam_xdiff, a.y);
+
+    return Bn254G2Affine {
+        x: x3,
+        y: y3,
+        is_infinity: false
+    };
+}
+
+pub fn bn254_g2_scalar_mul(p: Bn254G2Affine, scalar: Int) -> Bn254G2Affine {
+    if scalar == 0 || p.is_infinity {
+        return bn254_g2_infinity();
+    }
+    let mut res: Bn254G2Affine = bn254_g2_infinity();
+    let mut base: Bn254G2Affine = p;
+    let mut s: Int = scalar;
+    while s > 0 {
+        if (s & 1) == 1 {
+            res = bn254_g2_add(res, base);
+        }
+        base = bn254_g2_double(base);
+        s = s >> 1;
+    }
+    return res;
+}

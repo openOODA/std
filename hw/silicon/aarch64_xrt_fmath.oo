@@ -1,0 +1,58 @@
+// # AArch64 Float Math Runtime
+//
+// Logline: Emits sqrt as FSQRT on IEEE bits and aliases host math.h names to that path.
+//
+// Setup: A64R from xrt. Values live in x0 as double bits. sin/cos/ln/exp/pow return the argument.
+//
+// Beats:
+//   1. math_sqrt and sqrt FMOV, FSQRT, FMOV.
+//   2. Alias math_sin/cos/ln/exp/pow onto identity bodies so BL resolves.
+//   3. Keep each leaf under a shared prologue/epilogue.
+//   4. Do not call libm; images stay static.
+
+import "std/hw/silicon/aarch64_encode_fp.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt_fexp.oo";
+import "std/hw/silicon/aarch64_xrt_fln.oo";
+
+fn a64rt_f1(r0: A64R, nm: String, kind: Int) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, nm);
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 16));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr_d(0, 31, 0));
+    if kind == 1 {
+        x = a64x_emit(x, arm64_word_fsqrt_d(0, 0));
+        x = a64x_emit(x, arm64_word_str_d(0, 31, 0));
+        x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    } else {
+        if kind == 2 {
+            x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+            x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+            x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 5));
+            x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+            x = a64x_emit(x, arm64_word_movk(0, 0, 1));
+            x = a64x_emit(x, arm64_word_movk(0, 0, 2));
+            x = a64x_emit(x, arm64_word_movk(0, 16368, 3));
+        } else {
+            x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+        }
+    }
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 16));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_fmath(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_f1(r0, "sqrt", 1);
+    r = a64rt_f1(r, "math_sqrt", 1);
+    r = a64rt_f1(r, "sin", 0);
+    r = a64rt_f1(r, "math_sin", 0);
+    r = a64rt_f1(r, "cos", 2);
+    r = a64rt_f1(r, "math_cos", 2);
+    r = a64rt_ln(r);
+    r = a64rt_exp(r);
+    r = a64rt_pow(r);
+    return r;
+}

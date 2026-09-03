@@ -1,0 +1,61 @@
+// # Discrete Shannon Entropy
+//
+// Logline: Shannon entropy H(X), joint entropy H(X,Y), conditional entropy H(Y|X), and mutual information I(X;Y).
+//
+// Setup: Pure floating-point math. Negative masses return Err. Empty list is H=0.
+//
+// Beats:
+//   1. H(X) = -sum p * ln(p). Empty is Ok(0). Negative p is Err.
+//   2. H(X,Y) on a flat joint probability list with the same guards.
+//   3. H(Y|X) = H(X,Y) - H(X). Negative difference is Err.
+//   4. I(X;Y) = H(X) + H(Y) - H(X,Y). Negative result is Err.
+
+pub fn shannon_entropy(probs: List[Float]) -> Result[Float, String] {
+    let n: Int = list_len(probs);
+    if n == 0 { return Ok(0.0); }
+    let mut h: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p: Float = list_get(probs, i);
+        if p < 0.0 { return Err("ERR\tshannon\tp"); }
+        if p > 0.0 {
+            h = h + (0.0 - p * ln(p));
+        }
+        i = i + 1;
+    }
+    return Ok(h);
+}
+
+pub fn joint_entropy(joint: List[Float]) -> Result[Float, String] {
+    return shannon_entropy(joint);
+}
+
+pub fn conditional_entropy(joint: List[Float], marginal_x: List[Float]) -> Result[Float, String] {
+    let hxyr: Result[Float, String] = joint_entropy(joint);
+    let hxr: Result[Float, String] = shannon_entropy(marginal_x);
+    match hxyr {
+        Ok(hxy)        => {
+            match hxr {
+                Ok(hx) => {
+                    let diff: Float = hxy - hx;
+                    if diff < 0.0 { return Err("ERR\tshannon\tcond"); }
+                    return Ok(diff);
+                },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn mutual_information(hx: Float, hy: Float, hxy: Float) -> Result[Float, String] {
+    let mi: Float = hx + hy - hxy;
+    if mi < 0.0 { return Err("ERR\tshannon\tmi"); }
+    return Ok(mi);
+}
+
+pub fn max_entropy(n: Int) -> Float {
+    if n <= 1 { return 0.0; }
+    let n_f: Float = 1.0 * (n);
+    return ln(n_f);
+}

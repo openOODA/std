@@ -1,0 +1,137 @@
+// # AI/ML Regression Losses (MSE, MAE, Huber)
+//
+// Logline: Computes Mean Squared Error (MSE), Mean Absolute Error (MAE), and smooth Huber loss with analytical gradients.
+//
+// Setup: Imports tensor_types.oo and tensor_ops.oo for regression objective functions.
+//
+// Beats:
+//   1. Calculate Mean Squared Error (L2) loss and first-order parameter gradients.
+//   2. Calculate Mean Absolute Error (L1) loss and sub-gradient representations.
+//   3. Calculate smooth Huber loss with threshold delta for outlier-robust training.
+
+import "tensor_types.oo";
+import "tensor_ops.oo";
+
+pub fn loss_mse_1d(pred: Tensor1D, target: Tensor1D) -> Float {
+    let n: Int = pred.size;
+    if n == 0 {
+        return 0.0;
+    }
+    let mut sum_sq: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p_v: Float = tensor_1d_get(pred, i);
+        let t_v: Float = tensor_1d_get(target, i);
+        let diff: Float = p_v - t_v;
+        sum_sq = sum_sq + (diff * diff);
+        i = i + 1;
+    }
+    return sum_sq / int_to_float(n);
+}
+
+pub fn loss_mse_grad_1d(pred: Tensor1D, target: Tensor1D) -> Tensor1D {
+    let n: Int = pred.size;
+    let scale: Float = 2.0 / int_to_float(n);
+    let mut grad: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let p_v: Float = tensor_1d_get(pred, i);
+        let t_v: Float = tensor_1d_get(target, i);
+        let diff: Float = p_v - t_v;
+        grad = list_push(grad, diff * scale);
+        i = i + 1;
+    }
+    return Tensor1D { data: grad, size: n };
+}
+
+pub fn loss_mae_1d(pred: Tensor1D, target: Tensor1D) -> Float {
+    let n: Int = pred.size;
+    if n == 0 {
+        return 0.0;
+    }
+    let mut sum_abs: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p_v: Float = tensor_1d_get(pred, i);
+        let t_v: Float = tensor_1d_get(target, i);
+        let diff: Float = p_v - t_v;
+        let mut abs_diff: Float = diff;
+        if diff < 0.0 {
+            abs_diff = 0.0 - diff;
+        }
+        sum_abs = sum_abs + abs_diff;
+        i = i + 1;
+    }
+    return sum_abs / int_to_float(n);
+}
+
+pub fn loss_mae_grad_1d(pred: Tensor1D, target: Tensor1D) -> Tensor1D {
+    let n: Int = pred.size;
+    let scale: Float = 1.0 / int_to_float(n);
+    let mut grad: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let p_v: Float = tensor_1d_get(pred, i);
+        let t_v: Float = tensor_1d_get(target, i);
+        let diff: Float = p_v - t_v;
+        let mut s: Float = 0.0;
+        if diff > 0.0 {
+            s = 1.0;
+        } else if diff < 0.0 {
+            s = 0.0 - 1.0;
+        }
+        grad = list_push(grad, s * scale);
+        i = i + 1;
+    }
+    return Tensor1D { data: grad, size: n };
+}
+
+pub fn loss_huber_1d(pred: Tensor1D, target: Tensor1D, delta: Float) -> Float {
+    let n: Int = pred.size;
+    if n == 0 {
+        return 0.0;
+    }
+    let mut total: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p_v: Float = tensor_1d_get(pred, i);
+        let t_v: Float = tensor_1d_get(target, i);
+        let diff: Float = p_v - t_v;
+        let mut abs_diff: Float = diff;
+        if diff < 0.0 {
+            abs_diff = 0.0 - diff;
+        }
+        if abs_diff <= delta {
+            total = total + (0.5 * (diff * diff));
+        } else {
+            total = total + (delta * (abs_diff - (0.5 * delta)));
+        }
+        i = i + 1;
+    }
+    return total / int_to_float(n);
+}
+
+pub fn loss_huber_grad_1d(pred: Tensor1D, target: Tensor1D, delta: Float) -> Tensor1D {
+    let n: Int = pred.size;
+    let scale: Float = 1.0 / int_to_float(n);
+    let mut grad: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let p_v: Float = tensor_1d_get(pred, i);
+        let t_v: Float = tensor_1d_get(target, i);
+        let diff: Float = p_v - t_v;
+        let mut g: Float = diff;
+        if diff > delta {
+            g = delta;
+        } else if diff < (0.0 - delta) {
+            g = 0.0 - delta;
+        }
+        grad = list_push(grad, g * scale);
+        i = i + 1;
+    }
+    return Tensor1D { data: grad, size: n };
+}
+
+pub fn loss_mse_marker() -> Int {
+    return 1;
+}

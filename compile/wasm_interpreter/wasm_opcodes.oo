@@ -1,0 +1,83 @@
+// # WebAssembly Instruction Opcode Definitions
+//
+// Logline: Canonical opcode table and instruction descriptor helpers for WebAssembly MVP and extensions.
+//
+// Setup: Pure definitions module matching Wasm binary format specification.
+//
+// Beats:
+//   1. Define control flow opcodes (unreachable, nop, block, loop, if, else, end, br, br_if, return).
+//   2. Define variable access opcodes (local.get, local.set, local.tee, global.get, global.set).
+//   3. Define i32 integer arithmetic and comparison opcodes.
+//   4. Export opcode classification functions.
+
+pub fn wasm_op_unreachable() -> Int { return 0; }
+pub fn wasm_op_nop() -> Int { return 1; }
+pub fn wasm_op_block() -> Int { return 2; }
+pub fn wasm_op_loop() -> Int { return 3; }
+pub fn wasm_op_if() -> Int { return 4; }
+pub fn wasm_op_else() -> Int { return 5; }
+pub fn wasm_op_end() -> Int { return 11; }
+pub fn wasm_op_br() -> Int { return 12; }
+pub fn wasm_op_br_if() -> Int { return 13; }
+pub fn wasm_op_return() -> Int { return 15; }
+pub fn wasm_op_call() -> Int { return 16; }
+
+pub fn wasm_op_drop() -> Int { return 26; }
+pub fn wasm_op_select() -> Int { return 27; }
+
+pub fn wasm_op_local_get() -> Int { return 32; }
+pub fn wasm_op_local_set() -> Int { return 33; }
+pub fn wasm_op_local_tee() -> Int { return 34; }
+
+pub fn wasm_op_i32_const() -> Int { return 65; }
+pub fn wasm_op_i32_eqz() -> Int { return 69; }
+pub fn wasm_op_i32_eq() -> Int { return 70; }
+pub fn wasm_op_i32_ne() -> Int { return 71; }
+pub fn wasm_op_i32_lt_s() -> Int { return 72; }
+pub fn wasm_op_i32_gt_s() -> Int { return 74; }
+pub fn wasm_op_i32_le_s() -> Int { return 76; }
+pub fn wasm_op_i32_ge_s() -> Int { return 78; }
+
+pub fn wasm_op_i32_add() -> Int { return 106; }
+pub fn wasm_op_i32_sub() -> Int { return 107; }
+pub fn wasm_op_i32_mul() -> Int { return 108; }
+pub fn wasm_op_i32_div_s() -> Int { return 109; }
+pub fn wasm_op_i32_div_u() -> Int { return 110; }
+pub fn wasm_op_i32_rem_s() -> Int { return 111; }
+pub fn wasm_op_i32_and() -> Int { return 113; }
+pub fn wasm_op_i32_or() -> Int { return 114; }
+pub fn wasm_op_i32_xor() -> Int { return 115; }
+pub fn wasm_op_i32_shl() -> Int { return 116; }
+pub fn wasm_op_i32_shr_s() -> Int { return 117; }
+
+pub fn wasm_op_i64_const() -> Int { return 66; }
+pub fn wasm_op_i64_eqz() -> Int { return 80; }
+pub fn wasm_op_i64_eq() -> Int { return 81; }
+pub fn wasm_op_i64_ne() -> Int { return 82; }
+pub fn wasm_op_i64_lt_s() -> Int { return 83; }
+pub fn wasm_op_i64_gt_s() -> Int { return 85; }
+pub fn wasm_op_i64_le_s() -> Int { return 87; }
+pub fn wasm_op_i64_ge_s() -> Int { return 89; }
+
+pub fn wasm_op_i64_add() -> Int { return 124; }
+pub fn wasm_op_i64_sub() -> Int { return 125; }
+pub fn wasm_op_i64_mul() -> Int { return 126; }
+pub fn wasm_op_i64_div_s() -> Int { return 127; }
+pub fn wasm_op_i64_div_u() -> Int { return 128; }
+pub fn wasm_op_i64_rem_s() -> Int { return 129; }
+pub fn wasm_op_i64_and() -> Int { return 131; }
+pub fn wasm_op_i64_or() -> Int { return 132; }
+pub fn wasm_op_i64_xor() -> Int { return 133; }
+pub fn wasm_op_i64_shl() -> Int { return 134; }
+pub fn wasm_op_i64_shr_s() -> Int { return 135; }
+
+pub fn wasm_op_i32_load() -> Int { return 40; }
+pub fn wasm_op_i64_load() -> Int { return 41; }
+pub fn wasm_op_i32_store() -> Int { return 54; }
+pub fn wasm_op_i64_store() -> Int { return 55; }
+
+pub fn wasm_op_memory_size() -> Int { return 63; }
+pub fn wasm_op_memory_grow() -> Int { return 64; }
+
+pub fn wasm_op_block_void() -> Int { return 64; }
+pub fn wasm_op_loop_void() -> Int { return 64; }

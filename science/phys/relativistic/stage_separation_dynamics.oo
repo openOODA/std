@@ -1,0 +1,37 @@
+// # Multi-Stage Launch Vehicle Separation Dynamics
+//
+// Logline: Models pneumatic/spring stage separation kinematics, retro-rocket impulse, and interstage clearance margins.
+//
+// Setup: Pure rigid-body relative dynamics for multi-stage rocket separation without collision.
+//
+// Beats:
+//   1. Nominal stage separation relative velocity query in m/s (~5 m/s).
+//   2. Calculate separation relative velocity from pneumatic/spring pushers.
+//   3. Compute retro-rocket deceleration impulse to back away spent booster.
+//   4. Calculate interstage collision clearance envelope over time.
+
+pub fn sep_delta_v() -> Int {
+    return 5;
+}
+
+/// Computes relative stage separation velocity (m/s) from total spring pusher energy E (Joules) and stage masses.
+pub fn stage_separation_relative_velocity(
+    pusher_energy_joules: Float,
+    mass_lower_stage_kg: Float,
+    mass_upper_stage_kg: Float
+) -> Float {
+    let m1: Float = mass_lower_stage_kg;
+    let m2: Float = mass_upper_stage_kg;
+    let reduced_mass: Float = (m1 * m2) / (m1 + m2);
+    if reduced_mass <= 0.0001 { return 0.0; }
+    return sqrt((2.0 * pusher_energy_joules) / reduced_mass);
+}
+
+/// Computes clearance distance between separating stages over time t: d(t) = v_rel * t + 0.5 * a_diff * t^2.
+pub fn stage_clearance_distance(
+    v_relative_m_s: Float,
+    accel_differential_m_s2: Float,
+    time_sec: Float
+) -> Float {
+    return (v_relative_m_s * time_sec) + (0.5 * accel_differential_m_s2 * time_sec * time_sec);
+}

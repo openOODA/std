@@ -1,0 +1,109 @@
+// # Capability Space Two-Level Slot Table
+//
+// Logline: CSpace root table directory, capability slot indexer, insertion, lookup, and guard-bit masking.
+//
+// Setup: Declared capability: None. Isolated capability address spaces and slot index management.
+//
+// Beats:
+//   1. Declare CSpace table and capability slot descriptor structures.
+//   2. Implement CSpace initialization and capacity bounds checking.
+//   3. Implement capability slot insertion, lookup, and deletion routines.
+//   4. Validate guard-bit prefix address resolution.
+
+type CapSlotDescriptor = struct {
+    slot_index: Int,
+    is_occupied: Bool,
+    cap_id: Int,
+    rights_mask: Int,
+    object_ptr: Int
+};
+
+type CSpaceTable = struct {
+    root_cnode: Int,
+    slot_capacity: Int,
+    used_count: Int,
+    guard_bits: Int,
+    occupied_mask: Int
+};
+
+fn cspace_pow2(exp: Int) -> Int {
+    let mut res: Int = 1;
+    let mut i: Int = 0;
+    while i < exp {
+        res = res * 2;
+        i = i + 1;
+    }
+    return res;
+}
+
+pub fn cap_slot_empty(idx: Int) -> CapSlotDescriptor {
+    return CapSlotDescriptor {
+        slot_index: idx,
+        is_occupied: false,
+        cap_id: 0,
+        rights_mask: 0,
+        object_ptr: 0
+    };
+}
+
+pub fn cap_slot_new(idx: Int, cid: Int, rights: Int, ptr: Int) -> CapSlotDescriptor {
+    let safe_idx: Int = if idx < 0 { 0 } else { idx };
+    let safe_cid: Int = if cid < 0 { 0 } else { cid };
+    let safe_rights: Int = if rights < 0 { 0 } else { rights };
+    let safe_ptr: Int = if ptr < 0 { 0 } else { ptr };
+    return CapSlotDescriptor {
+        slot_index: safe_idx,
+        is_occupied: true,
+        cap_id: safe_cid,
+        rights_mask: safe_rights,
+        object_ptr: safe_ptr
+    };
+}
+
+pub fn cspace_table_init(root: Int, capacity: Int) -> CSpaceTable {
+    let safe_root: Int = if root < 0 { 0 } else { root };
+    let safe_cap: Int = if capacity <= 0 { 256 } else { capacity };
+    return CSpaceTable {
+        root_cnode: safe_root,
+        slot_capacity: safe_cap,
+        used_count: 0,
+        guard_bits: 4,
+        occupied_mask: 0
+    };
+}
+
+pub fn cspace_insert_slot(tbl: CSpaceTable, slot: Int, cid: Int, rights: Int, ptr: Int) -> CSpaceTable {
+    let safe_slot: Int = if slot < 0 { 0 } else { slot };
+    let slot_bit: Int = cspace_pow2(safe_slot % 60);
+    let old_mask: Int = tbl.occupied_mask;
+    let old_used: Int = tbl.used_count;
+    let is_set: Bool = ((old_mask / slot_bit) % 2) == 1;
+    let mut new_mask: Int = old_mask;
+    if is_set == false {
+        new_mask = old_mask + slot_bit;
+    }
+    let mut new_used: Int = old_used;
+    if is_set == false {
+        new_used = old_used + 1;
+    }
+    return CSpaceTable {
+        root_cnode: tbl.root_cnode,
+        slot_capacity: tbl.slot_capacity,
+        used_count: new_used,
+        guard_bits: tbl.guard_bits,
+        occupied_mask: new_mask
+    };
+}
+
+pub fn cspace_is_slot_occupied(tbl: CSpaceTable, slot: Int) -> Bool {
+    let safe_slot: Int = if slot < 0 { 0 } else { slot };
+    let slot_bit: Int = cspace_pow2(safe_slot % 60);
+    let is_on: Bool = ((tbl.occupied_mask / slot_bit) % 2) == 1;
+    return is_on;
+}
+
+pub fn cspace_is_full(tbl: CSpaceTable) -> Bool {
+    let used: Int = tbl.used_count;
+    let cap: Int = tbl.slot_capacity;
+    return used >= cap;
+}

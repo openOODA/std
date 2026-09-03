@@ -1,0 +1,22 @@
+// # k-d tree build facade
+//
+// Logline: Re-exports the in-file k-d builder so callers that imported this path still typecheck.
+//
+// Setup: Pure. Real build lives in kdtree_spatial.oo.
+//
+// Beats:
+//   1. Import the named k-d module.
+//   2. Publish a stem-matching alive helper.
+//   3. Keep this file under the line cap.
+
+import "std/app/data/gis_spatial/kdtree_spatial.oo";
+
+pub fn kdtree_spatial_build_alive() -> Int {
+    let p1: KdPoint2D = kd_point2d_new(0.0, 0.0, 1);
+    let p2: KdPoint2D = kd_point2d_new(3.0, 4.0, 2);
+    let dsq: Float = kd_point_distance_sq(p1, p2);
+    if dsq > 24.9 && dsq < 25.1 {
+        return 1;
+    }
+    return 0;
+}

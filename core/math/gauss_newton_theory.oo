@@ -1,0 +1,70 @@
+// # Gauss-Newton least-squares theory
+//
+// Logline: Fits y = a^2 x on consistent data. Empty data or tol<=0 is Err.
+//
+// Setup: Imports std/math/opt/gauss_newton.oo. Holds 1 or 0.
+//
+// Beats:
+//   1. Empty xs is Err.
+//   2. Data y=4x at x=1 and y=8 at x=2 recovers a near 2.
+//   3. domain_cert boxes both.
+
+import "std/core/math/opt/gauss_newton.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn math_gn_empty_rejected() -> DomainCert {
+    let xs: List[Float] = list_new();
+    let ys: List[Float] = list_new();
+    let r: Result[Float, String] = gauss_newton_quad(xs, ys, 1.0, 20, 0.0001);
+    let mut h: Int = 0;
+    match r {
+        Ok(_a) => {
+            h = 0;
+        }
+        Err(_e) => {
+            h = 1;
+        }
+    }
+    return domain_cert("math", "gn_empty_rejected", h);
+}
+
+pub fn math_gn_quad_fit() -> DomainCert {
+    let mut xs: List[Float] = list_new();
+    xs = list_push(xs, 1.0);
+    xs = list_push(xs, 2.0);
+    let mut ys: List[Float] = list_new();
+    ys = list_push(ys, 4.0);
+    ys = list_push(ys, 8.0);
+    let r: Result[Float, String] = gauss_newton_quad(xs, ys, 1.0, 40, 0.0001);
+    let mut h: Int = 0;
+    match r {
+        Ok(a) => {
+            if abs_f(a - 2.0) <= 0.05 {
+                h = 1;
+            }
+        }
+        Err(_e) => {
+            h = 0;
+        }
+    }
+    return domain_cert("math", "gn_quad_a_near_2", h);
+}
+
+pub fn verify_gauss_newton_theory() -> Bool {
+    let a: DomainCert = math_gn_empty_rejected();
+    let b: DomainCert = math_gn_quad_fit();
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    return true;
+}

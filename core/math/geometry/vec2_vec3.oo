@@ -1,0 +1,180 @@
+// # 2D and 3D vector math
+//
+// Logline: Computes dot, cross, magnitude, normalize, angle, lerp, and reflection on Float vectors.
+//
+// Setup: Pure. A vec2 is two Floats. A vec3 is three Floats.
+//
+// Beats:
+//   1. Dot and cross from the coordinate products.
+//   2. Magnitude via sqrt of the self-dot.
+//   3. Normalize divides by magnitude.
+//   4. Angle, lerp, and reflection use those products.
+
+import "std/core/math/constants.oo";
+
+fn v_need(v: List[Float], n: Int) -> Result[Int, String] {
+    if list_len(v) != n { return Err("vec length"); }
+    return Ok(0);
+}
+
+fn v_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn v_atan_unit(z: Float) -> Float {
+    let z2: Float = z * z;
+    let c1: Float = 0.3333333333333333;
+    let c2: Float = 0.2;
+    let c3: Float = 0.14285714285714285;
+    let c4: Float = 0.1111111111111111;
+    let c5: Float = 0.09090909090909091;
+    let poly: Float = z2 * (c1 - (z2 * (c2 - (z2 * (c3 - (z2 * (c4 - (z2 * c5))))))));
+    return z * (1.0 - poly);
+}
+
+fn v_atan(z: Float) -> Float {
+    let a: Float = v_abs(z);
+    if a <= 1.0 {
+        let r: Float = v_atan_unit(a);
+        if z < 0.0 { return 0.0 - r; }
+        return r;
+    }
+    let r: Float = math_half_pi() - v_atan_unit(1.0 / a);
+    if z < 0.0 { return 0.0 - r; }
+    return r;
+}
+
+fn v_atan2(y: Float, x: Float) -> Float {
+    if x > 0.0 { return v_atan(y / x); }
+    if x < 0.0 {
+        if y >= 0.0 { return v_atan(y / x) + math_pi(); }
+        return v_atan(y / x) - math_pi();
+    }
+    if y > 0.0 { return math_half_pi(); }
+    if y < 0.0 { return 0.0 - math_half_pi(); }
+    return 0.0;
+}
+
+fn v_acos(x: Float) -> Float {
+    let mut c: Float = x;
+    if c > 1.0 { c = 1.0; }
+    if c < 0.0 - 1.0 { c = 0.0 - 1.0; }
+    return v_atan2(sqrt(1.0 - c * c), c);
+}
+
+pub fn vec2_vec3_dot(a: List[Float], b: List[Float]) -> Result[Float, String] {
+    if list_len(a) != list_len(b) { return Err("vec length"); }
+    if list_len(a) < 2 { return Err("vec length"); }
+    let mut s: Float = 0.0;
+    let mut i: Int = 0;
+    while i < list_len(a) {
+        s = s + list_get(a, i) * list_get(b, i);
+        i = i + 1;
+    }
+    return Ok(s);
+}
+
+pub fn vec2_vec3_cross2(a: List[Float], b: List[Float]) -> Result[Float, String] {
+    let na: Result[Int, String] = v_need(a, 2);
+    match na {
+        Ok(za)         => {
+            let nb: Result[Int, String] = v_need(b, 2);
+            match nb {
+                Ok(zb) => {
+                    if za != 0 { return Err("vec"); }
+                    if zb != 0 { return Err("vec"); }
+                    return Ok(list_get(a, 0) * list_get(b, 1) - list_get(a, 1) * list_get(b, 0));
+                },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn vec2_vec3_cross3(a: List[Float], b: List[Float]) -> Result[List[Float], String] {
+    if list_len(a) != 3 { return Err("vec length"); }
+    if list_len(b) != 3 { return Err("vec length"); }
+    let mut o: List[Float] = list_new();
+    o = list_push(o, list_get(a, 1) * list_get(b, 2) - list_get(a, 2) * list_get(b, 1));
+    o = list_push(o, list_get(a, 2) * list_get(b, 0) - list_get(a, 0) * list_get(b, 2));
+    o = list_push(o, list_get(a, 0) * list_get(b, 1) - list_get(a, 1) * list_get(b, 0));
+    return Ok(o);
+}
+
+pub fn vec2_vec3_mag(v: List[Float]) -> Result[Float, String] {
+    let d: Result[Float, String] = vec2_vec3_dot(v, v);
+    match d {
+        Ok(s)  => { return Ok(sqrt(s)); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn vec2_vec3_normalize(v: List[Float]) -> Result[List[Float], String] {
+    let m: Result[Float, String] = vec2_vec3_mag(v);
+    match m {
+        Ok(n) => {
+            if n == 0.0 { return Err("vec zero"); }
+            let mut o: List[Float] = list_new();
+            let mut i: Int = 0;
+            while i < list_len(v) {
+                o = list_push(o, list_get(v, i) / n);
+                i = i + 1;
+            }
+            return Ok(o);
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn vec2_vec3_angle(a: List[Float], b: List[Float]) -> Result[Float, String] {
+    let d: Result[Float, String] = vec2_vec3_dot(a, b);
+    match d {
+        Ok(s)                  => {
+            let ma: Result[Float, String] = vec2_vec3_mag(a);
+            match ma {
+                Ok(na)         => {
+                    let mb: Result[Float, String] = vec2_vec3_mag(b);
+                    match mb {
+                        Ok(nb) => {
+                            let den: Float = na * nb;
+                            if den == 0.0 { return Err("vec zero"); }
+                            return Ok(v_acos(s / den));
+                        },
+                        Err(e) => { return Err(e); }
+                    }
+                },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn vec2_vec3_lerp(a: List[Float], b: List[Float], t: Float) -> Result[List[Float], String] {
+    if list_len(a) != list_len(b) { return Err("vec length"); }
+    let mut o: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < list_len(a) {
+        o = list_push(o, list_get(a, i) + (list_get(b, i) - list_get(a, i)) * t);
+        i = i + 1;
+    }
+    return Ok(o);
+}
+
+pub fn vec2_vec3_reflect(inc: List[Float], nrm: List[Float]) -> Result[List[Float], String] {
+    let d: Result[Float, String] = vec2_vec3_dot(inc, nrm);
+    match d {
+        Ok(s) => {
+            let mut o: List[Float] = list_new();
+            let mut i: Int = 0;
+            while i < list_len(inc) {
+                o = list_push(o, list_get(inc, i) - 2.0 * s * list_get(nrm, i));
+                i = i + 1;
+            }
+            return Ok(o);
+        },
+        Err(e) => { return Err(e); }
+    }
+}

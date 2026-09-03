@@ -1,0 +1,221 @@
+// # Complex Plane Field Arithmetic
+//
+// Logline: Cartesian complex field with Euler, exp, principal log, and power on Float pairs.
+//
+// Setup: Pure math module. Zero ambient effects.
+//
+// Beats:
+//   1. Construct Complex and add, subtract, multiply, abs, re, and im.
+//   2. Range-reduce to [-pi, pi], fold to [0, pi/2], Taylor sin/cos (10 terms).
+//   3. Euler e^{i theta} and exp(a+bi) = exp(a) (cos b + i sin b).
+//   4. Principal log and z^w as Result[List[Float], String]; Err at z = 0.
+//   5. Four-quadrant arg via the standard 0.28 atan approximation.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/constants.oo";
+
+pub type Complex = struct {
+    re: Float,
+    im: Float
+};
+
+pub fn complex_new(re: Float, im: Float) -> Complex {
+    return Complex {
+        re: re,
+        im: im
+    };
+}
+
+pub fn complex_re(z: Complex) -> Float {
+    return z.re;
+}
+
+pub fn complex_im(z: Complex) -> Float {
+    return z.im;
+}
+
+pub fn complex_add(a: Complex, b: Complex) -> Complex {
+    let ar: Float = a.re;
+    let ai: Float = a.im;
+    let br: Float = b.re;
+    let bi: Float = b.im;
+    return Complex {
+        re: ar + br,
+        im: ai + bi
+    };
+}
+
+pub fn complex_sub(a: Complex, b: Complex) -> Complex {
+    let ar: Float = a.re;
+    let ai: Float = a.im;
+    let br: Float = b.re;
+    let bi: Float = b.im;
+    return Complex {
+        re: ar - br,
+        im: ai - bi
+    };
+}
+
+pub fn complex_mul(a: Complex, b: Complex) -> Complex {
+    let ar: Float = a.re;
+    let ai: Float = a.im;
+    let br: Float = b.re;
+    let bi: Float = b.im;
+    return Complex {
+        re: ar * br - ai * bi,
+        im: ar * bi + ai * br
+    };
+}
+
+pub fn complex_abs(z: Complex) -> Float {
+    let ar: Float = z.re;
+    let ai: Float = z.im;
+    return sqrt(ar * ar + ai * ai);
+}
+
+fn cf_reduce_pi(x: Float) -> Float {
+    let pi: Float = math_pi();
+    let two_pi: Float = math_two_pi();
+    let mut t: Float = x;
+    while t > pi {
+        t = t - two_pi;
+    }
+    while t < (0.0 - pi) {
+        t = t + two_pi;
+    }
+    return t;
+}
+
+fn cf_sin_taylor(x: Float) -> Float {
+    let z: Float = x * x;
+    let mut p: Float = 0.0 - 0.00000000000000000822063524662433;
+    p = 0.0000000000000028114572543455206 + z * p;
+    p = (0.0 - 0.0000000000007647163731819816) + z * p;
+    p = 0.00000000016059043836821615 + z * p;
+    p = (0.0 - 0.00000002505210838544172) + z * p;
+    p = 0.0000027557319223985893 + z * p;
+    p = (0.0 - 0.0001984126984126984) + z * p;
+    p = 0.008333333333333333 + z * p;
+    p = (0.0 - 0.16666666666666666) + z * p;
+    p = 1.0 + z * p;
+    return x * p;
+}
+
+fn cf_sin(x: Float) -> Float {
+    let pi: Float = math_pi();
+    let half: Float = math_half_pi();
+    let mut t: Float = cf_reduce_pi(x);
+    let mut sign: Float = 1.0;
+    if t < 0.0 {
+        sign = 0.0 - 1.0;
+        t = 0.0 - t;
+    }
+    if t > half {
+        t = pi - t;
+    }
+    return sign * cf_sin_taylor(t);
+}
+
+fn cf_cos(x: Float) -> Float {
+    let half: Float = math_half_pi();
+    return cf_sin(x + half);
+}
+
+fn cf_atan(x: Float) -> Float {
+    let mut sign: Float = 1.0;
+    let mut ax: Float = x;
+    if x < 0.0 {
+        sign = 0.0 - 1.0;
+        ax = 0.0 - x;
+    }
+    let pi_over_2: Float = math_half_pi();
+    if ax <= 1.0 {
+        let poly: Float = ax / (1.0 + 0.28 * ax * ax);
+        return sign * poly;
+    }
+    let poly: Float = (1.0 / ax) / (1.0 + 0.28 / (ax * ax));
+    let res: Float = pi_over_2 - poly;
+    return sign * res;
+}
+
+fn cf_atan2(y: Float, x: Float) -> Float {
+    let pi: Float = math_pi();
+    let half_pi: Float = math_half_pi();
+    if x == 0.0 {
+        if y > 0.0 {
+            return half_pi;
+        }
+        if y < 0.0 {
+            return 0.0 - half_pi;
+        }
+        return 0.0;
+    }
+    let q: Float = cf_atan(y / x);
+    if x > 0.0 {
+        return q;
+    }
+    if y >= 0.0 {
+        return q + pi;
+    }
+    return q - pi;
+}
+
+fn cf_pack(re: Float, im: Float) -> List[Float] {
+    let mut v: List[Float] = list_new();
+    v = list_push(v, re);
+    v = list_push(v, im);
+    return v;
+}
+
+pub fn complex_euler(theta: Float) -> Complex {
+    return Complex {
+        re: cf_cos(theta),
+        im: cf_sin(theta)
+    };
+}
+
+pub fn complex_exp(z: Complex) -> Complex {
+    let a: Float = z.re;
+    let b: Float = z.im;
+    let ea: Float = exp(a);
+    return Complex {
+        re: ea * cf_cos(b),
+        im: ea * cf_sin(b)
+    };
+}
+
+fn cf_log_unchecked(z: Complex) -> Complex {
+    let mag: Float = complex_abs(z);
+    let ar: Float = z.re;
+    let ai: Float = z.im;
+    return Complex {
+        re: ln(mag),
+        im: cf_atan2(ai, ar)
+    };
+}
+
+pub fn complex_log(z: Complex) -> Result[List[Float], String] {
+    let ar: Float = z.re;
+    let ai: Float = z.im;
+    if ar == 0.0 {
+        if ai == 0.0 {
+            return Err("ERR\tcomplex_log\tzero");
+        }
+    }
+    let w: Complex = cf_log_unchecked(z);
+    return Ok(cf_pack(w.re, w.im));
+}
+
+pub fn complex_pow(z: Complex, w: Complex) -> Result[List[Float], String] {
+    let ar: Float = z.re;
+    let ai: Float = z.im;
+    if ar == 0.0 {
+        if ai == 0.0 {
+            return Err("ERR\tcomplex_pow\tzero");
+        }
+    }
+    let lz: Complex = cf_log_unchecked(z);
+    let p: Complex = complex_mul(w, lz);
+    let e: Complex = complex_exp(p);
+    return Ok(cf_pack(e.re, e.im));
+}

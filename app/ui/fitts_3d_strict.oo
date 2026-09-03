@@ -1,0 +1,166 @@
+// # Fitts 2D/3D law — strict (0.001% precision)
+//
+// Logline: 2D Fitts MT = a + b * log2(D/W + 1); 3D extends to MT = a + b * log2(D/W_eff + 1) with W_eff = sqrt(W^2 + (k * depth)^2). All checks to 0.001% (5.7e-6 absolute on the Fitts MT value of 0.5689s).
+//
+// Setup: Pure Float. D > 0, W > 0, depth >= 0, k >= 0, a > 0, b > 0. Hostile inputs fail closed. This is a NEW file (strict) created because the pre-existing std/ui/fitts_3d_theory.oo uses an absolute tolerance of 1e-4 which is 0.0176% relative on the Fitts MT value; the strict version tightens to 5.7e-6 (0.001% relative).
+//
+// RULES.oot 1.7: Under 256 lines; pure Float; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. 2D MT = a + b * log2(D/W + 1) to 0.001% precision (5.7e-6 absolute on 0.5689).
+//   2. 3D MT = a + b * log2(D/W_eff + 1) with W_eff = sqrt(W^2 + (k*depth)^2).
+//   3. ID = log2(D/W + 1) agrees between 2D and 3D depth=0.
+//   4. W_eff for (W=10, depth=50, k=1) = 50.99019514 within 5.1e-6.
+//   5. Hostile: D<=0, W<=0, a<=0, b<=0, k<0 all fail closed.
+//   6. Monotonicity: MT non-decreasing in depth at fixed (D, W, a, b).
+
+import "std/app/ui/ui_invariants.oo";
+import "std/app/ui/fitts_3d_theory.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Float absolute value (uabs) — never use abs_f.
+pub fn fitts_strict_uabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// Float close at 0.001% (5.7e-6 absolute): 1 if |a-b| <= tol, else 0.
+// Tolerance is per-domain: Fitts MT is ~0.5s, so 0.001% = 5e-6.
+pub fn fitts_strict_close_001(a: Float, b: Float, tol: Float) -> Int {
+    let mut d: Float = a - b;
+    if d < 0.0 { d = 0.0 - d; }
+    if d <= tol { return 1; }
+    return 0;
+}
+
+fn fitts_strict_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// 2D Fitts index of difficulty: ID = log2(D/W + 1). D <= 0 or W <= 0 -> Err.
+pub fn fitts_strict_id_2d(distance: Float, width: Float) -> Result[Float, String] {
+    if distance <= 0.0 { return Err("ERR\tfitts\td"); }
+    if width <= 0.0 { return Err("ERR\tfitts\tw"); }
+    let r: Float = distance / width + 1.0;
+    return fitts_log2_safe(r);
+}
+
+// 2D Fitts MT: a + b * ID. a<=0 or b<=0 -> Err.
+pub fn fitts_strict_2d_mt(a: Float, b: Float, distance: Float, width: Float) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tfitts\ta"); }
+    if b <= 0.0 { return Err("ERR\tfitts\tb"); }
+    let id_r: Result[Float, String] = fitts_strict_id_2d(distance, width);
+    if id_r.is_err() { return Err("ERR\tfitts\tid"); }
+    let id: Float = fitts_strict_unwrap(id_r, "ERR");
+    return Ok(a + b * id);
+}
+
+// 3D Fitts effective width: W_eff = sqrt(W^2 + (k*depth)^2). k < 0 -> Err.
+pub fn fitts_strict_effective_width(width: Float, depth: Float, k: Float) -> Result[Float, String] {
+    if width <= 0.0 { return Err("ERR\tfitts\tw"); }
+    if depth < 0.0 { return Err("ERR\tfitts\tdepth"); }
+    if k < 0.0 { return Err("ERR\tfitts\tk"); }
+    let w2: Float = width * width;
+    let kd: Float = k * depth;
+    let kd2: Float = kd * kd;
+    return Ok(sqrt(w2 + kd2));
+}
+
+// Helper: extracts Ok value or returns Err early.
+fn fitts_strict_unwrap(r: Result[Float, String], err: String) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// 3D Fitts MT: a + b * log2(D/W_eff + 1). depth=0 reduces to 2D.
+pub fn fitts_strict_3d_mt(a: Float, b: Float, distance: Float, width: Float, depth: Float, k: Float) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tfitts\ta"); }
+    if b <= 0.0 { return Err("ERR\tfitts\tb"); }
+    if distance <= 0.0 { return Err("ERR\tfitts\td"); }
+    let we_r: Result[Float, String] = fitts_strict_effective_width(width, depth, k);
+    if we_r.is_err() { return Err("ERR\tfitts\twe"); }
+    let we: Float = fitts_strict_unwrap(we_r, "ERR");
+    let r: Float = distance / we + 1.0;
+    let id_r: Result[Float, String] = fitts_log2_safe(r);
+    if id_r.is_err() { return Err("ERR\tfitts\tid"); }
+    let id: Float = fitts_strict_unwrap(id_r, "ERR");
+    return Ok(a + b * id);
+}
+
+// 3D reduces to 2D when depth=0 and k=0.
+pub fn fitts_strict_reduces_to_2d(a: Float, b: Float, distance: Float, width: Float) -> Int {
+    let mt2_r: Result[Float, String] = fitts_strict_2d_mt(a, b, distance, width);
+    let mt3_r: Result[Float, String] = fitts_strict_3d_mt(a, b, distance, width, 0.0, 0.0);
+    let mt2: Float = fitts_strict_got(mt2_r);
+    let mt3: Float = fitts_strict_got(mt3_r);
+    // 0.001% relative on a 0.5s value = 5e-6 absolute.
+    if fitts_strict_close_001(mt2, mt3, 0.000005) == 1 { return 1; }
+    return 0;
+}
+
+// Monotonicity: MT non-increasing in depth for fixed (D, W, a, b).
+// (As depth increases, W_eff increases, ID decreases, MT decreases.)
+pub fn fitts_strict_monotonic(a: Float, b: Float, distance: Float, width: Float, k: Float) -> Int {
+    let mut d: Float = 0.0;
+    let mut last: Float = fitts_strict_got(fitts_strict_3d_mt(a, b, distance, width, d, k));
+    d = d + 25.0;
+    while d <= 200.0 {
+        let mt_d: Float = fitts_strict_got(fitts_strict_3d_mt(a, b, distance, width, d, k));
+        if mt_d > last + 0.0000001 { return 0; }
+        last = mt_d;
+        d = d + 25.0;
+    }
+    return 1;
+}
+
+// DomainCert: holds=1 iff both 2D and 3D compute without error for valid (a, b, D, W, depth, k).
+pub fn fitts_strict_cert(a: Float, b: Float, distance: Float, width: Float, depth: Float, k: Float) -> DomainCert {
+    let mt2: Result[Float, String] = fitts_strict_2d_mt(a, b, distance, width);
+    let mt3: Result[Float, String] = fitts_strict_3d_mt(a, b, distance, width, depth, k);
+    let mut h: Int = 0;
+    if mt2.is_ok() { if mt3.is_ok() { h = 1; } }
+    return domain_cert("ui", "fitts_3d_strict", h);
+}
+
+pub fn verify_fitts_3d_strict() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    // 2D golden: D=100, W=10, a=0.05, b=0.15. log2(11) = 3.4594316186372973.
+    // MT_2d = 0.05 + 0.15 * 3.4594316186372973 = 0.05 + 0.5189147427955956 = 0.5689147427955956.
+    // 0.001% relative on 0.5689 = 5.7e-6 absolute.
+    let mt2: Float = fitts_strict_got(fitts_strict_2d_mt(0.05, 0.15, 100.0, 10.0));
+    let target2: Float = 0.5689147428;
+    let d2d: Float = fitts_strict_uabs(mt2 - target2);
+    if d2d > 0.0000057 { return false; }
+    // ID golden: log2(11) = 3.4594316186372973.
+    let id2: Float = fitts_strict_got(fitts_strict_id_2d(100.0, 10.0));
+    let id_target: Float = 3.4594316186;
+    let did: Float = fitts_strict_uabs(id2 - id_target);
+    if did > 0.0000035 { return false; }
+    // 3D reduction: depth=0 -> 2D.
+    if fitts_strict_reduces_to_2d(0.05, 0.15, 100.0, 10.0) != 1 { return false; }
+    // 3D W_eff golden: W=10, depth=50, k=1.0 -> sqrt(100+2500) = sqrt(2600) = 50.99019514.
+    let we: Float = fitts_strict_got(fitts_strict_effective_width(10.0, 50.0, 1.0));
+    let we_target: Float = 50.99019514;
+    let dwe: Float = fitts_strict_uabs(we - we_target);
+    if dwe > 0.0000051 { return false; }
+    // 3D MT: ID = log2(100/50.99019514 + 1) = log2(2.9612) = 1.56616...; MT = 0.05 + 0.15*1.56616 = 0.28492...
+    let mt3: Float = fitts_strict_got(fitts_strict_3d_mt(0.05, 0.15, 100.0, 10.0, 50.0, 1.0));
+    let target3: Float = 0.284924;
+    let d3: Float = fitts_strict_uabs(mt3 - target3);
+    if d3 > 0.000003 { return false; }
+    // Monotonicity in depth.
+    if fitts_strict_monotonic(0.05, 0.15, 100.0, 10.0, 1.0) != 1 { return false; }
+    // Hostile: D <= 0, W <= 0, a <= 0, b <= 0, k < 0 fail closed.
+    if fitts_strict_2d_mt(0.05, 0.15, 0.0 - 1.0, 10.0).is_ok() { return false; }
+    if fitts_strict_2d_mt(0.05, 0.15, 100.0, 0.0).is_ok() { return false; }
+    if fitts_strict_2d_mt(0.05, 0.15, 100.0, 0.0 - 1.0).is_ok() { return false; }
+    if fitts_strict_2d_mt(0.0, 0.15, 100.0, 10.0).is_ok() { return false; }
+    if fitts_strict_2d_mt(0.05, 0.0, 100.0, 10.0).is_ok() { return false; }
+    if fitts_strict_3d_mt(0.05, 0.15, 100.0, 10.0, 0.0 - 1.0, 0.0).is_ok() { return false; }
+    if fitts_strict_effective_width(10.0, 0.0, 0.0 - 1.0).is_ok() { return false; }
+    // DomainCert round-trip.
+    if fitts_strict_cert(0.05, 0.15, 100.0, 10.0, 50.0, 1.0).holds != 1 { return false; }
+    if fitts_strict_cert(0.05, 0.15, 100.0, 10.0, 50.0, 0.0 - 1.0).holds != 0 { return false; }
+    if fitts_strict_cert(0.0, 0.15, 100.0, 10.0, 50.0, 1.0).holds != 0 { return false; }
+    return true;
+}

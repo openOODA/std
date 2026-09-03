@@ -1,0 +1,63 @@
+// # Hash Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard hash domain library. Re-exports a stable hash_mod_* surface for the most-used public API (SHA-2, SHA-3, BLAKE3, MD5, SHA-1, CRC32, FNV, xxHash, SipHash, Murmur3, Adler32, and the HashMap). Private siblings (core compression routines, codec internals, KATs, theories, laws, principles) remain non-public.
+//
+// Setup: Imports private hash siblings; no caps required for pure functions. KAT verification takes FsReadCap at the call site.
+//
+// Beats:
+//   1. Re-export the SHA-2 family (SHA-256, SHA-512) as hash_mod_sha2_*.
+//   2. Re-export the SHA-3 / Keccak family as hash_mod_sha3_*.
+//   3. Re-export the modern hashes (BLAKE3) as hash_mod_mod_*.
+//   4. Re-export the non-cryptographic hashes (CRC32, FNV, xxHash, SipHash, Murmur3, Adler32) as hash_mod_crc_*, hash_mod_nc_*.
+//   5. Document the private siblings that external callers must NOT import directly: _core, _codec, _state, _word, _sigma, _arithmetic, _stubs, _theory, _law, _principle, _invariants, _kat files.
+
+import "sha256.oo";
+import "sha512.oo";
+import "sha3.oo";
+import "blake3.oo";
+import "crc32.oo";
+import "fnv.oo";
+import "xxhash.oo";
+import "siphash.oo";
+import "murmur3.oo";
+import "adler32_zlib.oo";
+import "map.oo";
+
+// Public SHA-2 surface: hash_mod_sha2_*
+pub fn hash_mod_sha2_sha256(data: String) -> String { return hash_sha256_forward(data); }
+pub fn hash_mod_sha2_sha512(data: String) -> String { return sha512(data); }
+
+// Public SHA-3 / Keccak surface: hash_mod_sha3_*
+pub fn hash_mod_sha3_256(data: String) -> String { return sha3_256(data); }
+pub fn hash_mod_sha3_512(data: String) -> String { return sha3_512(data); }
+pub fn hash_mod_keccak256(data: String) -> String { return keccak256(data); }
+pub fn hash_mod_keccak512(data: String) -> String { return keccak512(data); }
+
+// Public modern hash surface: hash_mod_mod_*
+pub fn hash_mod_blake3(data: String) -> String { return blake3(data); }
+
+// Public non-cryptographic hash surface: hash_mod_nc_*
+pub fn hash_mod_crc32(data: String) -> Int { return crc32(data); }
+pub fn hash_mod_fnv32(data: String) -> Int { return fnv1a_32(data); }
+pub fn hash_mod_xxhash64(data: String, seed: Int) -> Int { return xxhash64(data, seed); }
+pub fn hash_mod_siphash24(data: String, key0: Int, key1: Int) -> Int { return siphash24(data, key0, key1); }
+pub fn hash_mod_murmur3_32(data: String) -> Int { return murmur3_32(data); }
+pub fn hash_mod_adler32(buf: List[Int]) -> Int { return adler32_zlib(buf); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _core files (e.g. blake3_core.oo, sha3_core.oo, sha512_core.oo)
+//   _codec files (e.g. blake3_codec.oo, sha3_codec.oo)
+//   _state files (e.g. sha3_state.oo, sha3_state_set.oo)
+//   _word files (e.g. sha512_words.oo)
+//   _sigma files (e.g. sha512_sigma.oo)
+//   _arithmetic files (e.g. sha512_arith.oo, sha512_compress.oo)
+//   _round files (e.g. sha3_round.oo)
+//   _io files (e.g. sha3_io.oo)
+//   _types files (e.g. sha3_types.oo, sha3_64.oo)
+//   _stubs files (e.g. sha3_stubs.oo)
+//   _law files (e.g. hash_deterministic_law.oo, siphash_prf_law.oo, distinctness_principle.oo, hash_load_factor_principle.oo, merkle_proof_law.oo, sponge_construction_law.oo)
+//   _theory files (e.g. blake2_tree_theory.oo, blake3_tree_theory.oo, aont_invertibility_principle.oo)
+//   _invariants files (e.g. hash_invariants.oo)
+//   _kat files (e.g. hash_kat.oo)
+//   _iso files (e.g. crc32_iso.oo)
+// External callers must import this mod.oo and use the hash_mod_* surface.

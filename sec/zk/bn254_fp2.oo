@@ -1,0 +1,103 @@
+// # BN254 Quadratic Extension Field (F_p2) Arithmetic
+//
+// Logline: Implements quadratic extension field F_p2 = F_p[u]/(u^2+1) arithmetic, conjugate, and non-residue scaling.
+//
+// Setup: F_p2 extension arithmetic over 256-bit base field elements with irreducible polynomial u^2 + 1 = 0.
+//
+// Beats:
+//   1. Represent F_p2 elements as binomial c0 + c1*u with F_p coefficients.
+//   2. Compute extension addition, subtraction, and Karatsuba multiplication.
+//   3. Compute complex conjugate and multiplicative inverse.
+//   4. Compute non-residue multiplication by xi = 9 + u.
+
+import "./bn254_fp.oo";
+
+type Bn254Fp2 = struct {
+    c0: Bn254Fp,
+    c1: Bn254Fp
+};
+
+pub fn bn254_fp2_zero() -> Bn254Fp2 {
+    return Bn254Fp2 {
+        c0: bn254_fp_zero(),
+        c1: bn254_fp_zero()
+    };
+}
+
+pub fn bn254_fp2_one() -> Bn254Fp2 {
+    return Bn254Fp2 {
+        c0: bn254_fp_one(),
+        c1: bn254_fp_zero()
+    };
+}
+
+pub fn bn254_fp2_new(c0: Bn254Fp, c1: Bn254Fp) -> Bn254Fp2 {
+    return Bn254Fp2 {
+        c0: c0,
+        c1: c1
+    };
+}
+
+pub fn bn254_fp2_add(a: Bn254Fp2, b: Bn254Fp2) -> Bn254Fp2 {
+    return Bn254Fp2 {
+        c0: bn254_fp_add(a.c0, b.c0),
+        c1: bn254_fp_add(a.c1, b.c1)
+    };
+}
+
+pub fn bn254_fp2_sub(a: Bn254Fp2, b: Bn254Fp2) -> Bn254Fp2 {
+    return Bn254Fp2 {
+        c0: bn254_fp_sub(a.c0, b.c0),
+        c1: bn254_fp_sub(a.c1, b.c1)
+    };
+}
+
+pub fn bn254_fp2_mul(a: Bn254Fp2, b: Bn254Fp2) -> Bn254Fp2 {
+    let a0b0: Bn254Fp = bn254_fp_mul(a.c0, b.c0);
+    let a1b1: Bn254Fp = bn254_fp_mul(a.c1, b.c1);
+    let a0b1: Bn254Fp = bn254_fp_mul(a.c0, b.c1);
+    let a1b0: Bn254Fp = bn254_fp_mul(a.c1, b.c0);
+
+    let c0: Bn254Fp = bn254_fp_sub(a0b0, a1b1);
+    let c1: Bn254Fp = bn254_fp_add(a0b1, a1b0);
+    return Bn254Fp2 {
+        c0: c0,
+        c1: c1
+    };
+}
+
+pub fn bn254_fp2_conjugate(a: Bn254Fp2) -> Bn254Fp2 {
+    return Bn254Fp2 {
+        c0: a.c0,
+        c1: bn254_fp_sub(bn254_fp_zero(), a.c1)
+    };
+}
+
+pub fn bn254_fp2_mul_nonres(a: Bn254Fp2) -> Bn254Fp2 {
+    let nine: Bn254Fp = bn254_fp_from_int(9);
+    let nine_a0: Bn254Fp = bn254_fp_mul(a.c0, nine);
+    let nine_a1: Bn254Fp = bn254_fp_mul(a.c1, nine);
+
+    let c0: Bn254Fp = bn254_fp_sub(nine_a0, a.c1);
+    let c1: Bn254Fp = bn254_fp_add(a.c0, nine_a1);
+    return Bn254Fp2 {
+        c0: c0,
+        c1: c1
+    };
+}
+
+pub fn bn254_fp2_inv(a: Bn254Fp2) -> Bn254Fp2 {
+    let a0_sq: Bn254Fp = bn254_fp_mul(a.c0, a.c0);
+    let a1_sq: Bn254Fp = bn254_fp_mul(a.c1, a.c1);
+    let norm: Bn254Fp = bn254_fp_add(a0_sq, a1_sq);
+    let inv_norm: Bn254Fp = bn254_fp_inv(norm);
+
+    return Bn254Fp2 {
+        c0: bn254_fp_mul(a.c0, inv_norm),
+        c1: bn254_fp_sub(bn254_fp_zero(), bn254_fp_mul(a.c1, inv_norm))
+    };
+}
+
+pub fn bn254_fp2_equal(a: Bn254Fp2, b: Bn254Fp2) -> Bool {
+    return bn254_fp_equal(a.c0, b.c0) && bn254_fp_equal(a.c1, b.c1);
+}

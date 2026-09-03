@@ -1,0 +1,138 @@
+// # BLAKE3 tree theory
+//
+// Logline: BLAKE3 reduces an n-byte input to a Merkle tree of 1-KiB chunks; the tree has blake3_tree_levels_for_size(n) = ceil(log2(ceil(n / 1024))) levels, and the per-chunk compression uses 7 rounds of the ChaCha20-based mixing function from the BLAKE3 spec.
+//
+// Setup: Pure Int. n is a byte count; 0 returns 0 levels; negative input fails closed (Err). All constants cite the BLAKE3 spec 2020.
+//
+// Beats:
+//   1. blake3_chunk_size is 1024 bytes (1 KiB) per the BLAKE3 spec 2020.
+//   2. blake3_chunk_rounds is 7 per the BLAKE3 spec 2020.
+//   3. blake3_tree_levels_for_size(n) returns ceil(log2(ceil(n / 1024))).
+//   4. 0 bytes yields 0 levels; negative input returns Err.
+//   5. The tree levels of 1 KiB, 2 KiB, 1 MiB are 0, 1, 10.
+
+import "std/core/primitives/domain_cert.oo";
+
+// BLAKE3 chunk size in bytes. The BLAKE3 spec 2020 defines 1-KiB chunks.
+// Source: BLAKE3 spec 2020, https://github.com/BLAKE3-team/BLAKE3 (CHUNK_LEN = 1024).
+pub fn blake3_chunk_size() -> Int {
+    return 1024;
+}
+
+// BLAKE3 chunk compression rounds. The BLAKE3 spec 2020 uses 7 rounds of
+// the ChaCha20-based mixing function. Source: BLAKE3 spec 2020 (compress
+// function uses 7 rounds, vs BLAKE2's 10 or 12).
+pub fn blake3_chunk_rounds() -> Int {
+    return 7;
+}
+
+// Number of tree levels required to reduce n bytes of input to one root.
+// For 0 bytes there is no chunk and no level, so returns 0.
+// For n > 0: levels = ceil(log2(ceil(n / 1024))).
+// Negative input fails closed: returns Err.
+// Source: BLAKE3 spec 2020, "Tree structure" section, binary Merkle tree
+// over 1-KiB chunks, height = ceil(log2(chunk_count)).
+pub fn blake3_tree_levels_for_size(n: Int) -> Result[Int, String] {
+    if n < 0 {
+        return Err("ERR\tblake3_tree\tdomain");
+    }
+    if n == 0 {
+        return Ok(0);
+    }
+    let cs: Int = blake3_chunk_size();
+    let mut chunks: Int = n / cs;
+    let rem: Int = n - (chunks * cs);
+    if rem > 0 {
+        chunks = chunks + 1;
+    }
+    if chunks < 1 {
+        chunks = 1;
+    }
+    let mut levels: Int = 0;
+    let mut c: Int = chunks;
+    while c > 1 {
+        c = c / 2;
+        if (c * 2) < chunks {
+            // round up
+            c = c + 1;
+        }
+        levels = levels + 1;
+        chunks = c;
+    }
+    return Ok(levels);
+}
+
+fn blake3_tree_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// 1 iff the result is a non-negative number of tree levels.
+pub fn blake3_tree_holds(levels: Int) -> Int {
+    if levels < 0 {
+        return 0;
+    }
+    return 1;
+}
+
+// DomainCert for the BLAKE3 tree theory. Holds iff the tree levels for
+// 1 MiB equal 10 and 1 KiB equals 0 (the spec values).
+pub fn blake3_tree_theory() -> DomainCert {
+    let one_mib: Int = 1024 * 1024;
+    let l0: Int = blake3_tree_got(blake3_tree_levels_for_size(1024));
+    let l1: Int = blake3_tree_got(blake3_tree_levels_for_size(2048));
+    let l2: Int = blake3_tree_got(blake3_tree_levels_for_size(one_mib));
+    let ok0: Int = blake3_tree_holds(l0);
+    let ok1: Int = blake3_tree_holds(l1);
+    let ok2: Int = blake3_tree_holds(l2);
+    if l0 != 0 { return domain_cert("hash", "blake3_tree", 0); }
+    if l1 != 1 { return domain_cert("hash", "blake3_tree", 0); }
+    if l2 != 10 { return domain_cert("hash", "blake3_tree", 0); }
+    if ok0 != 1 { return domain_cert("hash", "blake3_tree", 0); }
+    if ok1 != 1 { return domain_cert("hash", "blake3_tree", 0); }
+    if ok2 != 1 { return domain_cert("hash", "blake3_tree", 0); }
+    return domain_cert("hash", "blake3_tree", 1);
+}
+
+pub fn verify_blake3_tree_theory() -> Bool {
+    // Golden: chunk size is 1024 bytes and 7 rounds per chunk.
+    if blake3_chunk_size() != 1024 { return false; }
+    if blake3_chunk_rounds() != 7 { return false; }
+    // Golden: 1 KiB input is a single chunk and needs 0 tree levels.
+    let g0: Result[Int, String] = blake3_tree_levels_for_size(1024);
+    if g0.is_ok() == false { return false; }
+    if blake3_tree_got(g0) != 0 { return false; }
+    // Golden: 2 KiB input is two chunks and needs exactly 1 level.
+    let g1: Result[Int, String] = blake3_tree_levels_for_size(2048);
+    if g1.is_ok() == false { return false; }
+    if blake3_tree_got(g1) != 1 { return false; }
+    // Golden: 1 MiB input is 1024 chunks and needs 10 levels (log2(1024) = 10).
+    let one_mib: Int = 1024 * 1024;
+    let gm: Result[Int, String] = blake3_tree_levels_for_size(one_mib);
+    if gm.is_ok() == false { return false; }
+    if blake3_tree_got(gm) != 10 { return false; }
+    // Golden: 0 bytes returns 0 levels (no tree).
+    let gz: Result[Int, String] = blake3_tree_levels_for_size(0);
+    if gz.is_ok() == false { return false; }
+    if blake3_tree_got(gz) != 0 { return false; }
+    // Golden: intermediate size 3 KiB is 3 chunks -> ceil(log2(3)) = 2.
+    let g3k: Result[Int, String] = blake3_tree_levels_for_size(3072);
+    if g3k.is_ok() == false { return false; }
+    if blake3_tree_got(g3k) != 2 { return false; }
+    // Golden: 5 chunks -> ceil(log2(5)) = 3.
+    let g5k: Result[Int, String] = blake3_tree_levels_for_size(5120);
+    if g5k.is_ok() == false { return false; }
+    if blake3_tree_got(g5k) != 3 { return false; }
+    // Hostile: negative input fails closed (returns Err).
+    if blake3_tree_levels_for_size(0 - 1).is_ok() { return false; }
+    if blake3_tree_levels_for_size(0 - 1024).is_ok() { return false; }
+    // Coupled: BLAKE3 is the parallel tree extension of BLAKE2 - the
+    // chunk_size and round count differ from BLAKE2 (BLAKE2b uses 64-byte
+    // blocks and 12 rounds). We assert chunk size 1024 != 64 and rounds 7
+    // != 10/12 within exact integer comparison.
+    if blake3_chunk_size() == 64 { return false; }
+    if blake3_chunk_rounds() == 10 { return false; }
+    if blake3_chunk_rounds() == 12 { return false; }
+    // DomainCert: the theory holds.
+    if blake3_tree_theory().holds != 1 { return false; }
+    return true;
+}

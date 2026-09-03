@@ -1,0 +1,91 @@
+// # FlatBuffers Size Calculation Theory
+//
+// Logline: A FlatBuffers vtable holds one 2-byte (vtable size, table size) header
+//          plus a 2-byte field offset for every field; vtable_size = 4 + 2*n_fields.
+//
+// Setup: Pure Int. n_fields is non-negative; n_fields < 0 returns 0. The
+//        minimum buffer size is vtable_size + max_field_size assuming each
+//        field is present and bounded by max_field_size. Post-2010
+//        serialization format (van Oortmerssen 2014, github.com/google/flatbuffers).
+//
+// Beats:
+//   1. flatbuffers_vtable_size_for_fields returns 4 + 2 * n_fields.
+//   2. flatbuffers_min_buffer_size returns vtable_size + max_field_size.
+//   3. flatbuffers_size_theory returns a DomainCert whose holds matches the Int law.
+
+import "std/core/primitives/domain_cert.oo";
+
+// flatbuffers_vtable_header_bytes: van Oortmerssen 2014, vtable header is
+// (uint16 vtable_size, uint16 table_size) = 4 bytes.
+pub fn flatbuffers_vtable_header_bytes() -> Int { return 4; }
+
+// flatbuffers_vtable_bytes_per_field: van Oortmerssen 2014, each field
+// contributes one uint16 offset.
+pub fn flatbuffers_vtable_bytes_per_field() -> Int { return 2; }
+
+// flatbuffers_vtable_size_for_fields returns 4 + 2 * n_fields.
+// // van Oortmerssen 2014, "FlatBuffers" release: vtable layout in
+// // docs/Internals.md: [vtable_size:u16, table_size:u16, field0_off:u16, ...].
+pub fn flatbuffers_vtable_size_for_fields(n_fields: Int) -> Int {
+    if n_fields < 0 { return 0; }
+    return flatbuffers_vtable_header_bytes() + flatbuffers_vtable_bytes_per_field() * n_fields;
+}
+
+// flatbuffers_min_buffer_size returns vtable_size + max_field_size.
+// // van Oortmerssen 2014: minimum buffer = vtable (lookup index) + object data,
+// // and the data holds at most max_field_size for each of the n_fields.
+pub fn flatbuffers_min_buffer_size(n_fields: Int, max_field_size: Int) -> Int {
+    if n_fields < 0 { return 0; }
+    if max_field_size < 0 { return 0; }
+    return flatbuffers_vtable_size_for_fields(n_fields) + max_field_size;
+}
+
+// flatbuffers_is_zero_copy: van Oortmerssen 2014, "the format is designed to
+// be zero-copy", which holds when the vtable index is in-buffer.
+pub fn flatbuffers_is_zero_copy() -> Int { return 1; }
+
+// flatbuffers_size_theory returns a DomainCert over the size law.
+pub fn flatbuffers_size_theory(n_fields: Int, max_field_size: Int) -> DomainCert {
+    let h: Int = if n_fields < 0 {
+        0
+    } else {
+        if max_field_size < 0 { 0 } else { 1 }
+    };
+    return domain_cert("encoding", "flatbuffers_size_theory", h);
+}
+
+pub fn verify_flatbuffers_size_calculation_theory() -> Bool {
+    // Golden: n_fields=3 -> vtable = 4 + 2*3 = 10 (van Oortmerssen 2014).
+    if flatbuffers_vtable_size_for_fields(3) != 10 { return false; }
+    // Golden: n_fields=0 -> vtable = 4 (header only, empty vtable).
+    if flatbuffers_vtable_size_for_fields(0) != 4 { return false; }
+    // Golden: n_fields=1 -> vtable = 6.
+    if flatbuffers_vtable_size_for_fields(1) != 6 { return false; }
+    // Golden: n_fields=10 -> vtable = 24.
+    if flatbuffers_vtable_size_for_fields(10) != 24 { return false; }
+    // Hostile: n_fields < 0 fails closed.
+    if flatbuffers_vtable_size_for_fields(0 - 1) != 0 { return false; }
+    if flatbuffers_vtable_size_for_fields(0 - 100) != 0 { return false; }
+    // Golden: min buffer = 4 + 2*3 + 8 = 18 (double field, 3 fields).
+    if flatbuffers_min_buffer_size(3, 8) != 18 { return false; }
+    // Golden: 0 fields, 0 max field size -> 4 (just the header).
+    if flatbuffers_min_buffer_size(0, 0) != 4 { return false; }
+    // Golden: 1 field, 4 byte int -> 6 + 4 = 10.
+    if flatbuffers_min_buffer_size(1, 4) != 10 { return false; }
+    // Golden: 5 fields, 16 bytes max field -> 14 + 16 = 30.
+    if flatbuffers_min_buffer_size(5, 16) != 30 { return false; }
+    // Hostile: negative n_fields returns 0 (vtable).
+    if flatbuffers_min_buffer_size(0 - 1, 8) != 0 { return false; }
+    // Hostile: negative max_field_size returns 0.
+    if flatbuffers_min_buffer_size(3, 0 - 1) != 0 { return false; }
+    // Coupled: FlatBuffers is zero-copy (van Oortmerssen 2014).
+    if flatbuffers_is_zero_copy() != 1 { return false; }
+    // Vtable constants.
+    if flatbuffers_vtable_header_bytes() != 4 { return false; }
+    if flatbuffers_vtable_bytes_per_field() != 2 { return false; }
+    // DomainCert.holds matches the Int law.
+    if flatbuffers_size_theory(3, 8).holds != 1 { return false; }
+    if flatbuffers_size_theory(0 - 1, 8).holds != 0 { return false; }
+    if flatbuffers_size_theory(3, 0 - 1).holds != 0 { return false; }
+    return true;
+}

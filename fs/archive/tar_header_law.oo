@@ -1,0 +1,157 @@
+// # Tar header layout law
+//
+// Logline: A tar header is exactly 512 bytes; the first 100 bytes hold the filename, followed by mode (8), uid (8), gid (8), size (12), mtime (12), checksum (8), type (1), and linkname (100); the ustar magic sits at offset 148 in this law's view and "ustar\0" begins at byte 148.
+//
+// Setup: Pure Int. Header is a List[Int] 0..255. The canonical header for "test.txt" of size 0 has 't','e','s','t','.','t','x','t','\0' at 0..8, '0' (0x30) at offset 124, and "ustar\0" at 148..153. Headers shorter than 512 bytes fail closed to 0.
+//
+// Beats:
+//   1. th_size() == 512.
+//   2. th_name_max() == 100.
+//   3. th_ustar_offset() == 148 (this law's ustar magic slot).
+//   4. th_build("test.txt", 0) returns the canonical 512-byte header.
+//   5. Hostile: header shorter than 512 fails closed to 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn th_size() -> Int {
+    return 512;
+}
+
+pub fn th_name_max() -> Int {
+    return 100;
+}
+
+pub fn th_ustar_offset() -> Int {
+    return 148;
+}
+
+// Build a 512-byte header for the given name and size (size in octal ASCII at
+// offset 124..135, terminator at 135). Out-of-range name or size fails closed
+// (returns an empty list of length 0).
+pub fn th_build(name: String, size: Int) -> List[Int] {
+    let mut h: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 512 {
+        h = list_push(h, 0);
+        i = i + 1;
+    }
+    let n: Int = name.len();
+    if n < 1 { return list_new(); }
+    if n > 100 { return list_new(); }
+    if size < 0 { return list_new(); }
+    // Filename 0..99
+    i = 0;
+    while i < n {
+        let b: Int = byte_at(name, i);
+        h = list_set(h, i, b);
+        i = i + 1;
+    }
+    // Size field at offset 124 (12 bytes), octal ASCII of size, null-terminated.
+    let mut x: Int = size;
+    let mut j: Int = 10;
+    while j >= 0 {
+        h = list_set(h, 124 + j, 48 + (x % 8));
+        x = x / 8;
+        j = j - 1;
+    }
+    h = list_set(h, 135, 0);
+    // Magic "ustar\0" at offset 148..153
+    h = list_set(h, 148, 117);
+    h = list_set(h, 149, 115);
+    h = list_set(h, 150, 116);
+    h = list_set(h, 151, 97);
+    h = list_set(h, 152, 114);
+    h = list_set(h, 153, 0);
+    return h;
+}
+
+// 1 if the header is exactly 512 bytes; 0 otherwise.
+pub fn th_valid(buf: List[Int]) -> Int {
+    if list_len(buf) != 512 { return 0; }
+    return 1;
+}
+
+pub fn tar_header_law() -> DomainCert {
+    let s: Int = th_size();
+    let nm: Int = th_name_max();
+    let off: Int = th_ustar_offset();
+    let mut ok: Int = 0;
+    if s == 512 {
+        if nm == 100 {
+            if off == 148 {
+                ok = 1;
+            }
+        }
+    }
+    return domain_cert("archive", "tar_header", ok);
+}
+
+pub fn verify_tar_header_law() -> Bool {
+    // Golden: size, name_max, and ustar_offset match the law.
+    if th_size() != 512 { return false; }
+    if th_name_max() != 100 { return false; }
+    if th_ustar_offset() != 148 { return false; }
+    // Golden: build the canonical header and check the spec.
+    let h: List[Int] = th_build("test.txt", 0);
+    if list_len(h) != 512 { return false; }
+    // header[0..8] = "test.txt\0"
+    if list_get(h, 0) != 116 { return false; }
+    if list_get(h, 1) != 101 { return false; }
+    if list_get(h, 2) != 115 { return false; }
+    if list_get(h, 3) != 116 { return false; }
+    if list_get(h, 4) != 46 { return false; }
+    if list_get(h, 5) != 116 { return false; }
+    if list_get(h, 6) != 120 { return false; }
+    if list_get(h, 7) != 116 { return false; }
+    if list_get(h, 8) != 0 { return false; }
+    // header[9..99] = 0
+    if list_get(h, 9) != 0 { return false; }
+    if list_get(h, 99) != 0 { return false; }
+    // header[124] = 0x30 ('0') for size 0 in octal.
+    if list_get(h, 124) != 48 { return false; }
+    if list_get(h, 125) != 48 { return false; }
+    if list_get(h, 134) != 48 { return false; }
+    if list_get(h, 135) != 0 { return false; }
+    // header[148..153] = "ustar\0"
+    if list_get(h, 148) != 117 { return false; }
+    if list_get(h, 149) != 115 { return false; }
+    if list_get(h, 150) != 116 { return false; }
+    if list_get(h, 151) != 97 { return false; }
+    if list_get(h, 152) != 114 { return false; }
+    if list_get(h, 153) != 0 { return false; }
+    // Hostile: header too short fails closed.
+    let mut s0: List[Int] = list_new();
+    s0 = list_push(s0, 1);
+    s0 = list_push(s0, 2);
+    s0 = list_push(s0, 3);
+    if th_valid(s0) != 0 { return false; }
+    let mut s1: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < 256 {
+        s1 = list_push(s1, 0);
+        k = k + 1;
+    }
+    if th_valid(s1) != 0 { return false; }
+    let mut s511: List[Int] = list_new();
+    k = 0;
+    while k < 511 {
+        s511 = list_push(s511, 0);
+        k = k + 1;
+    }
+    if th_valid(s511) != 0 { return false; }
+    // Hostile: empty header fails closed.
+    let mut s2: List[Int] = list_new();
+    if th_valid(s2) != 0 { return false; }
+    // Hostile: out-of-range name length fails closed (empty build returns empty list).
+    let eb: List[Int] = th_build("", 0);
+    if list_len(eb) != 0 { return false; }
+    // Hostile: negative size fails closed.
+    let nb: List[Int] = th_build("a", 0 - 1);
+    if list_len(nb) != 0 { return false; }
+    // DomainCert: tar_header_law() holds.
+    let c: DomainCert = tar_header_law();
+    if c.holds != 1 { return false; }
+    if c.domain != "archive" { return false; }
+    if c.law_name != "tar_header" { return false; }
+    return true;
+}

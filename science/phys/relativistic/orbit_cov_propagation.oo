@@ -1,0 +1,28 @@
+// # Orbital State Error Covariance Propagation
+//
+// Logline: Propagates 6x6 state error covariance matrices via State Transition Matrix (STM) Phi(t, t0).
+//
+// Setup: Pure linearized statistical orbit determination and conjunction collision risk uncertainty propagation.
+//
+// Beats:
+//   1. Diagonal covariance position/velocity trace integer query.
+//   2. Propagate state covariance P_k = Phi * P_0 * Phi^T + Q.
+//   3. Compute position uncertainty ellipsoid semi-major axes.
+//   4. Calculate state variance trace Tr(P) and Mahalanobis distance.
+
+pub fn cov_trace() -> Int {
+    return 4;
+}
+
+/// Computes 3D position variance trace: Tr(P_pos) = sigma_x^2 + sigma_y^2 + sigma_z^2.
+pub fn covariance_position_trace(var_x: Float, var_y: Float, var_z: Float) -> Float {
+    return var_x + var_y + var_z;
+}
+
+/// Computes Mahalanobis distance squared: d^2 = dx^2 / var_x + dy^2 / var_y + dz^2 / var_z.
+pub fn mahalanobis_distance_sq(
+    dx: Float, dy: Float, dz: Float,
+    var_x: Float, var_y: Float, var_z: Float
+) -> Float {
+    return ((dx * dx) / var_x) + ((dy * dy) / var_y) + ((dz * dz) / var_z);
+}

@@ -1,0 +1,251 @@
+// # Topological Data Analysis: Vietoris-Rips Filtration Core
+//
+// Logline: Vietoris-Rips filtrations, persistent Betti numbers, and components on flat point clouds.
+//
+// Setup: PointCloud is a flat List[Float]. Union-find uses parent and rank vectors.
+//
+// Beats:
+//   1. PointCloud construction fails closed on non-positive dim or leftover coords.
+//   2. Euclidean distance, union-find, VR 1-skeleton, Betti-0/1, filtration, persistent curves.
+
+type PointCloud = struct {
+    flat: List[Float],
+    dim: Int,
+    n: Int
+};
+
+type UnionFind = struct {
+    parent: List[Int],
+    rank: List[Int]
+};
+
+pub fn int_list_set(xs: List[Int], idx: Int, val: Int) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx { out = list_push(out, val); } else { out = list_push(out, list_get(xs, i)); }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn point_cloud_new(flat: List[Float], dim: Int) -> Result[PointCloud, String] {
+    if dim < 1 { return Err("ERR\tpc\tdim"); }
+    let nflat: Int = list_len(flat);
+    if (nflat % dim) != 0 { return Err("ERR\tpc\tshape"); }
+    return Ok(PointCloud { flat: flat, dim: dim, n: nflat / dim });
+}
+
+pub fn pc_n_points(pc: PointCloud) -> Int {
+    return pc.n;
+}
+
+pub fn pc_distance(pc: PointCloud, i: Int, j: Int) -> Result[Float, String] {
+    let nn: Int = pc.n;
+    if i < 0 { return Err("ERR\tpc\tindex"); }
+    if j < 0 { return Err("ERR\tpc\tindex"); }
+    if i >= nn { return Err("ERR\tpc\tindex"); }
+    if j >= nn { return Err("ERR\tpc\tindex"); }
+    let dim: Int = pc.dim;
+    let mut acc: Float = 0.0;
+    let bi: Int = i * dim;
+    let bj: Int = j * dim;
+    let mut k: Int = 0;
+    while k < dim {
+        let d: Float = list_get(pc.flat, bi + k) - list_get(pc.flat, bj + k);
+        acc = acc + d * d;
+        k = k + 1;
+    }
+    return Ok(sqrt(acc));
+}
+
+pub fn uf_new(n: Int) -> UnionFind {
+    let mut parent: List[Int] = list_new();
+    let mut rank: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        parent = list_push(parent, i);
+        rank = list_push(rank, 0);
+        i = i + 1;
+    }
+    return UnionFind { parent: parent, rank: rank };
+}
+
+pub fn uf_find(uf: UnionFind, x: Int) -> Int {
+    let px: Int = list_get(uf.parent, x);
+    if px == x { return x; }
+    return uf_find(uf, px);
+}
+
+pub fn uf_union(uf: UnionFind, a: Int, b: Int) -> UnionFind {
+    let ra: Int = uf_find(uf, a);
+    let rb: Int = uf_find(uf, b);
+    if ra == rb { return uf; }
+    let rka: Int = list_get(uf.rank, ra);
+    let rkb: Int = list_get(uf.rank, rb);
+    let mut np: List[Int] = uf.parent;
+    let mut nr: List[Int] = uf.rank;
+    if rka < rkb {
+        np = int_list_set(np, ra, rb);
+    } else {
+        if rka > rkb {
+            np = int_list_set(np, rb, ra);
+        } else {
+            np = int_list_set(np, rb, ra);
+            nr = int_list_set(nr, ra, rka + 1);
+        }
+    }
+    return UnionFind { parent: np, rank: nr };
+}
+
+pub fn uf_count(uf: UnionFind) -> Int {
+    let n: Int = list_len(uf.parent);
+    let mut roots: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let r: Int = uf_find(uf, i);
+        let m: Int = list_len(roots);
+        let mut found: Int = 0;
+        let mut j: Int = 0;
+        while j < m {
+            if list_get(roots, j) == r { found = 1; }
+            j = j + 1;
+        }
+        if found == 0 { roots = list_push(roots, r); }
+        i = i + 1;
+    }
+    return list_len(roots);
+}
+
+pub fn vr_complex_at(pc: PointCloud, radius: Float) -> List[Int] {
+    let n: Int = pc.n;
+    let mut out: List[Int] = list_new();
+    if n < 2 { return out; }
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = i + 1;
+        while j < n {
+            let dr: Result[Float, String] = pc_distance(pc, i, j);
+            if dr.is_ok() {
+                let dv: Float = match dr { Ok(x) => x, Err(_) => 0.0 };
+                if dv <= radius {
+                    out = list_push(out, i);
+                    out = list_push(out, j);
+                }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn vr_betti_curve(pc: PointCloud, radius: Float) -> List[Int] {
+    let n: Int = pc.n;
+    if n < 1 { return list_new(); }
+    let mut uf: UnionFind = uf_new(n);
+    let edges: List[Int] = vr_complex_at(pc, radius);
+    let ne: Int = list_len(edges) / 2;
+    let mut i: Int = 0;
+    while i < ne {
+        uf = uf_union(uf, list_get(edges, i * 2), list_get(edges, i * 2 + 1));
+        i = i + 1;
+    }
+    let c: Int = uf_count(uf);
+    let mut b1: Int = ne - n + c;
+    if b1 < 0 { b1 = 0; }
+    let mut out: List[Int] = list_new();
+    out = list_push(out, c);
+    out = list_push(out, b1);
+    return out;
+}
+
+pub fn vr_betti_0(pc: PointCloud, radius: Float) -> Int {
+    return list_get(vr_betti_curve(pc, radius), 0);
+}
+
+pub fn vr_betti_1(pc: PointCloud, radius: Float) -> Int {
+    return list_get(vr_betti_curve(pc, radius), 1);
+}
+
+pub fn is_connected_under_radius(pc: PointCloud, radius: Float) -> Bool {
+    if pc.n == 1 { return true; }
+    return vr_betti_0(pc, radius) == 1;
+}
+
+pub fn float_list_unique_sorted(xs: List[Float]) -> List[Float] {
+    let m: Int = list_len(xs);
+    let mut out: List[Float] = list_new();
+    let mut k: Int = 0;
+    while k < m {
+        let v: Float = list_get(xs, k);
+        let ms: Int = list_len(out);
+        let mut ns: List[Float] = list_new();
+        let mut placed: Int = 0;
+        let mut s: Int = 0;
+        while s < ms {
+            let cs: Float = list_get(out, s);
+            if placed == 0 {
+                if v < cs {
+                    ns = list_push(ns, v);
+                    placed = 1;
+                } else {
+                    if v == cs { placed = 1; }
+                }
+            }
+            ns = list_push(ns, cs);
+            s = s + 1;
+        }
+        if placed == 0 { ns = list_push(ns, v); }
+        out = ns;
+        k = k + 1;
+    }
+    return out;
+}
+
+pub fn vr_filtration(pc: PointCloud, max_radius: Float, n_steps: Int) -> List[Float] {
+    let n: Int = pc.n;
+    let mut all: List[Float] = list_new();
+    if n < 2 || max_radius < 0.0 { return all; }
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = i + 1;
+        while j < n {
+            let dr: Result[Float, String] = pc_distance(pc, i, j);
+            if dr.is_ok() {
+                let dv: Float = match dr { Ok(x) => x, Err(_) => 0.0 };
+                if dv <= max_radius { all = list_push(all, dv); }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return float_list_unique_sorted(all);
+}
+
+pub fn persistent_curve(pc: PointCloud, max_radius: Float, n_steps: Int, mode: String) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if n_steps < 1 || max_radius < 0.0 { return out; }
+    let dn: Float = 1.0 * (n_steps);
+    let mut k: Int = 0;
+    while k < n_steps {
+        let thr: Float = 1.0 * (k) / dn * max_radius;
+        let mut v: Int = 0;
+        if mode == "b0" {
+            v = vr_betti_0(pc, thr);
+        } else {
+            v = vr_betti_1(pc, thr);
+        }
+        out = list_push(out, v);
+        k = k + 1;
+    }
+    return out;
+}
+pub fn persistent_betti_0(pc: PointCloud, max_radius: Float, n_steps: Int) -> List[Int] {
+    return persistent_curve(pc, max_radius, n_steps, "b0");
+}
+
+pub fn persistent_betti_1(pc: PointCloud, max_radius: Float, n_steps: Int) -> List[Int] {
+    return persistent_curve(pc, max_radius, n_steps, "b1");
+}

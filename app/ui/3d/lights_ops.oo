@@ -1,0 +1,25 @@
+// # Lighting ops
+//
+// Logline: LightOp destubbed off nested LightColor ops.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed to Int floor.
+
+type LightOp = struct {
+    kind: Int,
+    intensity: Int
+};
+
+pub fn light_op_new(kind: Int, intensity: Int) -> LightOp {
+    return LightOp { kind: kind, intensity: intensity };
+}
+
+pub fn light_op_intensity(op: LightOp) -> Int {
+    return op.intensity;
+}

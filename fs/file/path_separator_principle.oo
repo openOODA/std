@@ -1,0 +1,78 @@
+// # Path Separator Principle
+//
+// Logline: The POSIX path separator is ASCII 47 (slash); a path beginning with 47 is absolute.
+//
+// Setup: Pure Int. Bytes are 0..255; out-of-range bytes fail closed to 0. POSIX only.
+//
+// Beats:
+//   1. fs_path_separator_byte returns 47.
+//   2. fs_is_absolute_path returns 1 iff the first byte is 47.
+//   3. fs_count_separators counts the 47 bytes in a four-byte window.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn fs_path_separator_byte() -> Int {
+    return 47;
+}
+
+pub fn fs_is_absolute_path(first_byte: Int) -> Int {
+    if first_byte < 0 {
+        return 0;
+    }
+    if first_byte > 255 {
+        return 0;
+    }
+    if first_byte == 47 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn fs_count_separators(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
+    let mut count: Int = 0;
+    if b0 == 47 {
+        count = count + 1;
+    }
+    if b1 == 47 {
+        count = count + 1;
+    }
+    if b2 == 47 {
+        count = count + 1;
+    }
+    if b3 == 47 {
+        count = count + 1;
+    }
+    return count;
+}
+
+pub fn fs_path_separator_law(first_byte: Int) -> DomainCert {
+    return domain_cert("fs", "path_separator", fs_is_absolute_path(first_byte));
+}
+
+pub fn verify_path_separator_principle() -> Bool {
+    // Golden: separator byte is 47.
+    if fs_path_separator_byte() != 47 { return false; }
+    // Golden: 47 starts an absolute path.
+    if fs_is_absolute_path(47) != 1 { return false; }
+    // Hostile: 65 ('A') does not start an absolute path.
+    if fs_is_absolute_path(65) != 0 { return false; }
+    // Hostile: 46 ('.') does not start an absolute path.
+    if fs_is_absolute_path(46) != 0 { return false; }
+    // Hostile: 48 ('0') does not start an absolute path.
+    if fs_is_absolute_path(48) != 0 { return false; }
+    // Hostile: out-of-range first byte fails closed.
+    if fs_is_absolute_path(-1) != 0 { return false; }
+    if fs_is_absolute_path(256) != 0 { return false; }
+    // Golden: 47,65,66,47 contains 2 separators.
+    if fs_count_separators(47, 65, 66, 47) != 2 { return false; }
+    // Golden: 65,66,67,68 contains 0 separators.
+    if fs_count_separators(65, 66, 67, 68) != 0 { return false; }
+    // Golden: 47,47,47,47 contains 4 separators.
+    if fs_count_separators(47, 47, 47, 47) != 4 { return false; }
+    // Hostile: 97,98,99,100 contains 0 separators.
+    if fs_count_separators(97, 98, 99, 100) != 0 { return false; }
+    // DomainCert.holds matches the Int law.
+    if fs_path_separator_law(47).holds != 1 { return false; }
+    if fs_path_separator_law(65).holds != 0 { return false; }
+    return true;
+}

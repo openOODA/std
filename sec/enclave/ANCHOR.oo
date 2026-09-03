@@ -1,0 +1,27 @@
+// # Enclave Submodule Hub -- Zero-Drag
+//
+// Logline: Trusted execution environments (Intel SGX, AWS Nitro, AMD SEV-SNP, attestation), and secret-handling taint analysis. Re-exports a stable enc_mod_* surface for the most-used public API.
+//
+// Setup: Most operations take SysCap at the call site. Pure secret-handling taint analysis is no-cap.
+//
+// Beats:
+//   1. Re-export TEE surface: Intel SGX, AWS Nitro, AMD SEV-SNP (enc_mod_sgx_*, enc_mod_nitro_*, enc_mod_sev_snp_*).
+//   2. Re-export attestation quote and measurement surface (enc_mod_attest_*).
+//   3. Re-export secret-handling taint analysis (the secret_*_fail/pass.oo test files).
+//   4. Re-export constant-time and zeroize surface.
+//   5. Document private siblings (the secret_* test corpus, _types files).
+
+import "attestation.oo";
+import "enclave.oo";
+import "enclave_types.oo";
+import "intel_sgx.oo";
+import "nitro.oo";
+import "sev_snp.oo";
+import "constant_time.oo";
+import "zeroize_buffer.oo";
+
+pub fn enc_mod_attest_measurement_create(domain: String, label: String, hash_hex: String, pcr_index: Int) -> AttestationMeasurement { return attestation_measurement_create(domain, label, hash_hex, pcr_index); }
+pub fn enc_mod_sgx_quote_generate(report_data: String) -> SgxQuote { return intel_sgx_quote_generate(report_data); }
+pub fn enc_mod_nitro_attest(nonce: String) -> NitroAttestation { return nitro_attest(nonce); }
+pub fn enc_mod_sev_snp_report(request: String) -> SevSnpReport { return sev_snp_report(request); }
+pub fn enc_mod_zeroize(buf: List[Int]) -> Bool { return zeroize_buffer(buf); }

@@ -1,0 +1,93 @@
+// # Special Relativity, Lorentz Transformations, and Relativistic Mechanics
+//
+// Logline: Calculates Lorentz gamma factors, time dilation, length contraction, and relativistic energy-momentum invariant.
+//
+// Setup: Exact special relativistic equations based on the invariant speed of light c (299,792,458 m/s).
+//
+// Beats:
+//   1. Dimensionless velocity ratio beta = v / c.
+//   2. Lorentz gamma factor γ = 1 / sqrt(1 - beta^2).
+//   3. Relativistic time dilation Δt = γ * Δt_0 and length contraction L = L_0 / γ.
+//   4. Relativistic total energy E = γ * m_0 * c^2 and rest energy E_0 = m_0 * c^2.
+//   5. Relativistic momentum p = γ * m_0 * v.
+
+import "std/science/phys/classical/phys_constants.oo";
+
+// Velocity ratio beta = v / c (dimensionless, 0.0 <= beta < 1.0)
+pub fn rel_beta(velocity_m_per_s: Float) -> Float {
+    let c: Float = phys_speed_of_light();
+    let mut b: Float = velocity_m_per_s / c;
+    if b < 0.0 { b = 0.0 - b; }
+    if b >= 1.0 { b = 0.999999999999; }
+    return b;
+}
+
+// Lorentz factor γ = 1 / sqrt(1 - (v/c)^2)
+pub fn rel_gamma(velocity_m_per_s: Float) -> Float {
+    let beta: Float = rel_beta(velocity_m_per_s);
+    let term: Float = 1.0 - (beta * beta);
+    if term <= 0.0 { return 1000000000000.0; }
+    return 1.0 / sqrt(term);
+}
+
+// Relativistic time dilation: observed time Δt for rest proper time Δt_0 (seconds)
+pub fn rel_time_dilation(proper_time_seconds: Float, velocity_m_per_s: Float) -> Float {
+    let gamma: Float = rel_gamma(velocity_m_per_s);
+    return gamma * proper_time_seconds;
+}
+
+// Relativistic length contraction: observed length L for rest proper length L_0 (meters)
+pub fn rel_length_contraction(proper_length_meters: Float, velocity_m_per_s: Float) -> Float {
+    let gamma: Float = rel_gamma(velocity_m_per_s);
+    if gamma <= 0.0 { return proper_length_meters; }
+    return proper_length_meters / gamma;
+}
+
+// Rest mass energy E_0 = m_0 * c^2 (Joules)
+pub fn rel_rest_energy(rest_mass_kg: Float) -> Float {
+    let c: Float = phys_speed_of_light();
+    return rest_mass_kg * c * c;
+}
+
+// Total relativistic energy E = γ * m_0 * c^2 (Joules)
+pub fn rel_total_energy(rest_mass_kg: Float, velocity_m_per_s: Float) -> Float {
+    let gamma: Float = rel_gamma(velocity_m_per_s);
+    let e0: Float = rel_rest_energy(rest_mass_kg);
+    return gamma * e0;
+}
+
+// Relativistic momentum p = γ * m_0 * v (kg·m/s)
+pub fn rel_momentum(rest_mass_kg: Float, velocity_m_per_s: Float) -> Float {
+    let gamma: Float = rel_gamma(velocity_m_per_s);
+    return gamma * rest_mass_kg * velocity_m_per_s;
+}
+
+pub fn verify_lorentz_gamma() -> Bool {
+    let g0: Float = rel_gamma(0.0);
+    let mut d: Float = g0 - 1.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    let c: Float = 299792458.0;
+    let v: Float = 0.88 * c;
+    let g: Float = rel_gamma(v);
+    let l: Float = rel_length_contraction(1.0, v);
+    d = l - (1.0 / g);
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    d = g - 2.1053;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.01 {
+        return false;
+    }
+    return true;
+}

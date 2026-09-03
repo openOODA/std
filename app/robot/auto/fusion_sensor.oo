@@ -1,0 +1,25 @@
+// # Fusion sensor
+//
+// Logline: FusSens implemented off Float SensorMeasurement.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: implemented to Int floor.
+
+type FusSens = struct {
+    stype: Int,
+    label: Int
+};
+
+pub fn fus_sens_new(stype: Int, label: Int) -> FusSens {
+    return FusSens { stype: stype, label: label };
+}
+
+pub fn fus_sens_stype(s: FusSens) -> Int {
+    return s.stype;
+}

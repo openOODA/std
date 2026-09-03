@@ -1,0 +1,26 @@
+// # Wasm GC heap types
+//
+// Logline: WasmGcHeap defines heap-type structures and nullable kind flags.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+
+type WasmGcHeap = struct {
+    kind: Int,
+    nullable: Int
+};
+
+pub fn wasm_gc_heap_new(kind: Int, nullable: Int) -> WasmGcHeap {
+    return WasmGcHeap {
+        kind: kind,
+        nullable: nullable
+    };
+}
+
+pub fn wasm_gc_heap_kind(h: WasmGcHeap) -> Int {
+    return h.kind;
+}

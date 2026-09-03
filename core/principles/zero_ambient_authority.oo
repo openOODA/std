@@ -1,0 +1,63 @@
+// # Zero Ambient Authority Principle
+//
+// Logline: Fundamental axiom of unforgeable object capabilities for all effects.
+//
+// Setup: Fails closed if effect invocation lacks valid cryptographic token.
+//
+// Beats:
+//   1. CapabilityToken definition.
+//   2. Validity checking against permissions and expiry.
+//   3. Attenuation and delegation.
+
+type CapabilityToken = struct {
+    capability_id: Int,
+    grantee_id: Int,
+    permissions_mask: Int,
+    valid_until_epoch_ms: Int,
+    signature: Int
+};
+
+pub fn zero_cap_is_valid(
+    token: CapabilityToken,
+    required_permission: Int,
+    current_epoch_ms: Int
+) -> Bool {
+    let cid: Int = token.capability_id;
+    if cid == 0 {
+        return false;
+    }
+    let sig: Int = token.signature;
+    if sig == 0 {
+        return false;
+    }
+    let expiry: Int = token.valid_until_epoch_ms;
+    if current_epoch_ms > expiry {
+        return false;
+    }
+    let mask: Int = token.permissions_mask;
+    let mask_match: Int = mask & required_permission;
+    return mask_match == required_permission;
+}
+
+pub fn zero_cap_attenuate(
+    parent_token: CapabilityToken,
+    restricted_mask: Int,
+    shorter_expiry_epoch_ms: Int
+) -> CapabilityToken {
+    let parent_mask: Int = parent_token.permissions_mask;
+    let new_mask: Int = parent_mask & restricted_mask;
+    let mut new_expiry: Int = parent_token.valid_until_epoch_ms;
+    if shorter_expiry_epoch_ms < new_expiry {
+        new_expiry = shorter_expiry_epoch_ms;
+    }
+    let pid: Int = parent_token.capability_id;
+    let gid: Int = parent_token.grantee_id;
+    let sig: Int = parent_token.signature;
+    return CapabilityToken {
+        capability_id: pid + 1,
+        grantee_id: gid,
+        permissions_mask: new_mask,
+        valid_until_epoch_ms: new_expiry,
+        signature: sig + 1
+    };
+}

@@ -1,0 +1,152 @@
+// # Zip CRC-32 theory
+//
+// Logline: CRC-32 over a byte buffer uses the reversed PKZIP polynomial 0xEDB88320; the residue on "abc" is 0x352441C2 (891568578) and on "123456789" is 0xCBF43926 (3421780262); the closed (single byte) and coupled (stream: accumulated over all bytes) views agree bit-for-bit.
+//
+// Setup: Pure Int. Each byte 0..255. Out-of-range byte or negative state fails closed (0). Polynomial = 0xEDB88320 = 3988292384. Mask = 0xFFFFFFFF = 4294967295. XOR = (a|b) - (a&b).
+//
+// Beats:
+//   1. Closed: zc_step(state, byte) does one 8-bit polynomial step from state.
+//   2. Coupled: zc_stream(data) starts from all-ones, feeds each byte through zc_step, final-xor all-ones.
+//   3. Golden: zc_stream("abc") == 0x352441C2 == 891568578.
+//   4. Golden: zc_stream("123456789") == 0xCBF43926 == 3421780262.
+//   5. Hostile: empty input yields 0; out-of-range byte fails closed.
+//   6. Coupled: streaming "a" then "b" equals "ab" all at once.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Bitwise XOR: a^b == (a|b) - (a&b).
+fn zc_xor(a: Int, b: Int) -> Int {
+    return (a | b) - (a & b);
+}
+
+// CRC-32 polynomial 0xEDB88320 (3988292384), the reversed PKZIP polynomial.
+pub fn zc_poly() -> Int {
+    return 3988292384;
+}
+
+// 32-bit mask 0xFFFFFFFF.
+pub fn zc_mask() -> Int {
+    return 4294967295;
+}
+
+fn zc_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Closed: single-byte step. XOR the byte into the low byte, then run 8 polynomial
+// shifts on the residue. Out-of-range byte or negative state is Err (0 is in-band residue).
+pub fn zc_step(state: Int, b: Int) -> Result[Int, String] {
+    if state < 0 { return Err("ERR\tzc\tdomain"); }
+    if b < 0 { return Err("ERR\tzc\tdomain"); }
+    if b > 255 { return Err("ERR\tzc\tdomain"); }
+    let mut c: Int = zc_xor(state, b);
+    let mut k: Int = 0;
+    while k < 8 {
+        let bit: Int = c & 1;
+        c = c >> 1;
+        if bit != 0 {
+            c = zc_xor(c, zc_poly());
+        }
+        c = c & zc_mask();
+        k = k + 1;
+    }
+    return Ok(c);
+}
+
+// Coupled: stream the bytes through the closed step starting from all-ones,
+// then final-xor all-ones. Empty buffer is Ok(0).
+pub fn zc_stream(data: String) -> Result[Int, String] {
+    let mut c: Int = zc_mask();
+    let n: Int = data.len();
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(data, i);
+        let sr: Result[Int, String] = zc_step(c, b);
+        if sr.is_ok() == false { return sr; }
+        c = zc_got(sr);
+        i = i + 1;
+    }
+    return Ok(zc_xor(c, zc_mask()));
+}
+
+// 1 if got == want; 0 otherwise.
+pub fn zc_golden_match(got: Int, want: Int) -> Int {
+    if got == want {
+        return 1;
+    }
+    return 0;
+}
+
+// DomainCert: holds iff the streamed CRC of "abc" matches the well-known 32-bit value.
+pub fn zc_theory() -> DomainCert {
+    let gotr: Result[Int, String] = zc_stream("abc");
+    if gotr.is_ok() == false { return domain_cert("archive", "zip_crc32", 0); }
+    let ok: Int = zc_golden_match(zc_got(gotr), 891568578);
+    return domain_cert("archive", "zip_crc32", ok);
+}
+
+pub fn verify_zip_crc32_theory() -> Bool {
+    // Golden: CRC32 of "abc" is 0x352441C2 = 891568578.
+    let r1: Int = zc_got(zc_stream("abc"));
+    if r1 != 891568578 { return false; }
+    // Golden: CRC32 of "123456789" is 0xCBF43926 = 3421780262.
+    let r2: Int = zc_got(zc_stream("123456789"));
+    if r2 != 3421780262 { return false; }
+    // Golden: polynomial and mask constants are the standard values.
+    if zc_poly() != 3988292384 { return false; }
+    if zc_mask() != 4294967295 { return false; }
+    // Golden: a single byte step from all-ones is non-zero and not the empty residue.
+    let s0: Int = zc_got(zc_step(zc_mask(), 0));
+    if s0 == 0 { return false; }
+    // Empty input is Ok(0) (final-xor of unmasked state).
+    let zempty: Result[Int, String] = zc_stream("");
+    if zempty.is_ok() == false { return false; }
+    if zc_got(zempty) != 0 { return false; }
+    // Hostile: out-of-range byte is Err (0 is in-band residue).
+    if zc_step(zc_mask(), 0 - 1).is_ok() { return false; }
+    if zc_step(zc_mask(), 256).is_ok() { return false; }
+    if zc_step(zc_mask(), 1000).is_ok() { return false; }
+    // Hostile: negative state is Err.
+    if zc_step(0 - 1, 65).is_ok() { return false; }
+    if zc_step(0 - 100, 0).is_ok() { return false; }
+    // Coupled: streaming "a" then "b" equals "ab" all at once.
+    let s_a: Int = zc_got(zc_step(zc_mask(), 97));
+    let s_ab: Int = zc_got(zc_step(s_a, 98));
+    let full_ab: Int = zc_got(zc_stream("ab"));
+    if zc_xor(s_ab, zc_mask()) != full_ab { return false; }
+    // Coupled: streaming "ab" then "c" equals "abc" all at once.
+    let s_abc: Int = zc_got(zc_step(s_ab, 99));
+    let full_abc: Int = zc_got(zc_stream("abc"));
+    if zc_xor(s_abc, zc_mask()) != full_abc { return false; }
+    // Coupled: the same input yields the same residue twice.
+    let r4: Int = zc_got(zc_stream("hello"));
+    let r5: Int = zc_got(zc_stream("hello"));
+    if r4 != r5 { return false; }
+    // Coupled: different inputs yield different residues (single-byte case).
+    let rA: Int = zc_got(zc_stream("a"));
+    let rB: Int = zc_got(zc_stream("b"));
+    if rA == rB { return false; }
+    // Coupled: appending the same single byte twice yields a predictable, non-zero,
+    // stream-distinct residue (round-trip via the closed step). 'a' = 97.
+    let sA: Int = zc_got(zc_step(zc_mask(), 97));
+    let sAA: Int = zc_got(zc_step(sA, 97));
+    let full_aa: Int = zc_got(zc_stream("aa"));
+    if zc_xor(sAA, zc_mask()) != full_aa { return false; }
+    if full_aa == 0 { return false; }
+    // Coupled: appending the same two bytes twice (length-coupled extension)
+    // gives a deterministic, non-zero residue distinct from the single stream.
+    let p1: Int = zc_got(zc_step(zc_mask(), 97));
+    let p2: Int = zc_got(zc_step(p1, 98));
+    let sab2: Int = zc_got(zc_step(p2, 97));
+    let sab2_full: Int = zc_got(zc_stream("aba"));
+    if zc_xor(sab2, zc_mask()) != sab2_full { return false; }
+    if sab2_full == full_ab { return false; }
+    // DomainCert: zip_crc32 theory holds for "abc".
+    if zc_theory().holds != 1 { return false; }
+    if zc_theory().domain != "archive" { return false; }
+    if zc_theory().law_name != "zip_crc32" { return false; }
+    // DomainCert: a miss does not hold.
+    let miss: DomainCert = domain_cert("archive", "zip_crc32", 0);
+    if miss.holds != 0 { return false; }
+    return true;
+}

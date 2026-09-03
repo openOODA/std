@@ -1,0 +1,63 @@
+// # Stack-Transient String Encryption Types & Key Schedules
+//
+// Logline: Defines encrypted payload envelopes and dynamic rolling XOR key schedule structures.
+//
+// Setup: Pure. Prevents static string constant analysis in binary text sections.
+//
+// Beats:
+//   1. Define EncryptedStringPayload holding ciphertext, length, initial key, and CRC checksum.
+//   2. Define RollingKeySchedule structure for dynamic round key generation.
+//   3. Provide payload constructors and rolling key computation primitives.
+
+type EncryptedStringPayload = struct {
+    ciphertext: List[Int],
+    length: Int,
+    xor_key: Int,
+    checksum: Int
+};
+
+type RollingKeySchedule = struct {
+    base_key: Int,
+    step_multiplier: Int,
+    current_key: Int,
+    rounds: Int
+};
+
+pub fn encrypted_payload_new(
+    ct: List[Int],
+    len: Int,
+    key: Int,
+    csum: Int
+) -> EncryptedStringPayload {
+    return EncryptedStringPayload {
+        ciphertext: ct,
+        length: len,
+        xor_key: key,
+        checksum: csum
+    };
+}
+
+pub fn key_schedule_new(base_k: Int, mult: Int) -> RollingKeySchedule {
+    let initial_k: Int = (base_k * mult + 101) & 255;
+    return RollingKeySchedule {
+        base_key: base_k,
+        step_multiplier: mult,
+        current_key: initial_k,
+        rounds: 0
+    };
+}
+
+pub fn key_schedule_compute_byte_key(base_k: Int, idx: Int) -> Int {
+    // Non-linear rolling formula combining linear and quadratic strides modulo 256
+    let step: Int = idx * 37 + idx * idx * 13;
+    let k: Int = (base_k + step + 73) & 255;
+    return k;
+}
+
+pub fn key_schedule_next(sched: RollingKeySchedule, round_idx: Int) -> Int {
+    let k: Int = key_schedule_compute_byte_key(
+        sched.base_key,
+        sched.rounds + round_idx
+    );
+    return k;
+}

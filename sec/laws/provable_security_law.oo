@@ -1,0 +1,169 @@
+// # Provable Security Law (Bellare-Rogaway 1993)
+//
+// Logline: A scheme is provably secure if its advantage against a security goal is polynomially bounded by the advantage against a hard problem; IND-CCA2 is the standard adaptive chosen-ciphertext goal.
+//
+// Setup: Pure Int reduction flags, IND-* codes, and a reduction-chain length. Out-of-range and broken reductions fail closed.
+//
+// Beats:
+//   1. Security goals: 1 IND-CPA, 2 IND-CCA, 3 IND-CCA2 (Bellare-Rogaway 1993, Cramer-Shoup 1998).
+//   2. Reduction chain: a valid reduction has length >= 1 and each step is polynomial.
+//   3. IND-CCA2 implies IND-CPA (Rackoff-Simon 1991; Bellare-Rogaway 1993).
+//   4. Random Oracle Model (ROM) is admissible as a heuristic; many proofs use ROM (Bellare-Rogaway 1993).
+//   5. Coupled: valid reduction + ROM usage yields a complete provable-security statement.
+//   6. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Security goal codes (Bellare-Rogaway 1993, Cramer-Shoup 1998).
+pub fn ps_goal_ind_cpa() -> Int { return 1; }   // Indistinguishability under chosen-plaintext attack.
+pub fn ps_goal_ind_cca() -> Int { return 2; }   // Indistinguishability under (non-adaptive) chosen-ciphertext attack.
+pub fn ps_goal_ind_cca2() -> Int { return 1 + 2; } // Indistinguishability under adaptive chosen-ciphertext attack.
+
+// Bellare-Rogaway 1993 publication year.
+pub fn ps_br_year() -> Int { return 1993; }
+
+// Reduction chain length: this is the count of polynomial reduction steps in the proof.
+// A "chain" is 1 (single reduction) or more. length 0 means no reduction -> insecure.
+pub fn ps_reduction_chain_length() -> Int { return 2; }
+
+// Reduction step flag: 1 valid (polynomial, correct), 0 invalid.
+pub fn ps_reduction_step_is_valid(flag: Int) -> Int {
+    if flag == 1 { return 1; }
+    return 0;
+}
+
+// IND-CCA2 -> IND-CPA implication (Rackoff-Simon 1991; restated in Bellare-Rogaway 1993).
+// 1 if the higher goal holds and the lower goal is named.
+pub fn ps_ind_cca2_implies_ind_cpa(higher_goal: Int, lower_goal: Int) -> Int {
+    if higher_goal != ps_goal_ind_cca2() { return 0; }
+    if lower_goal != ps_goal_ind_cpa() { return 0; }
+    return 1;
+}
+
+// Random Oracle Model flag: 1 if the proof uses ROM (Bellare-Rogaway 1993).
+pub fn ps_rom_used(rom_flag: Int) -> Int {
+    if rom_flag == 1 { return 1; }
+    return 0;
+}
+
+// provable_security_reduction_holds: 1 if every reduction step in a chain is valid.
+pub fn provable_security_reduction_holds(steps_valid_mask: Int, chain_length: Int) -> Int {
+    if steps_valid_mask < 0 { return 0; }
+    if chain_length <= 0 { return 0; }
+    let mut i: Int = 0;
+    let mut bit: Int = 1;
+    while i < chain_length {
+        if i >= 32 { return 0; }
+        let step_ok: Int = steps_valid_mask & bit;
+        if step_ok == 0 { return 0; }
+        i = i + 1;
+        bit = bit * 2;
+    }
+    return 1;
+}
+
+// 0.001% precision check (1 ppm tolerance per unit expected).
+pub fn ps_close_enough(actual: Int, expected: Int, tolerance_ppm: Int) -> Int {
+    if expected < 0 { return 0; }
+    if tolerance_ppm < 0 { return 0; }
+    let diff_pos: Int = actual - expected;
+    let diff_neg: Int = expected - actual;
+    let mut diff: Int = diff_pos;
+    if diff_neg > diff_pos { diff = diff_neg; }
+    if expected == 0 {
+        if diff == 0 { return 1; }
+        return 0;
+    }
+    let bound: Int = diff * 100000;
+    let allowed: Int = tolerance_ppm * expected;
+    if bound <= allowed { return 1; }
+    return 0;
+}
+
+// Domain certificate: provable-security reduction is valid.
+pub fn provable_security_reduction_law(steps_valid_mask: Int, chain_length: Int) -> DomainCert {
+    let h: Int = provable_security_reduction_holds(steps_valid_mask, chain_length);
+    return domain_cert("sec", "provable_security_reduction", h);
+}
+
+// Domain certificate: IND-CCA2 implies IND-CPA.
+pub fn provable_security_implication_law(higher: Int, lower: Int) -> DomainCert {
+    let h: Int = ps_ind_cca2_implies_ind_cpa(higher, lower);
+    return domain_cert("sec", "provable_security_implication", h);
+}
+
+// Coupled law: valid reduction AND IND-CCA2->IND-CPA AND ROM is acknowledged.
+pub fn provable_security_coupled_law(
+    steps_valid_mask: Int,
+    chain_length: Int,
+    higher: Int,
+    lower: Int,
+    rom_flag: Int
+) -> Int {
+    if provable_security_reduction_holds(steps_valid_mask, chain_length) != 1 { return 0; }
+    if ps_ind_cca2_implies_ind_cpa(higher, lower) != 1 { return 0; }
+    if ps_rom_used(rom_flag) != 1 { return 0; }
+    return 1;
+}
+
+pub fn provable_security_coupled_cert(
+    steps_valid_mask: Int,
+    chain_length: Int,
+    higher: Int,
+    lower: Int,
+    rom_flag: Int
+) -> DomainCert {
+    let h: Int = provable_security_coupled_law(steps_valid_mask, chain_length, higher, lower, rom_flag);
+    return domain_cert("sec", "provable_security_coupled", h);
+}
+
+// KAT and hostile cases for the provable security law.
+pub fn verify_provable_security_law() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if ps_goal_ind_cpa() != 1 { return false; }
+    if ps_goal_ind_cca() != 2 { return false; }
+    if ps_goal_ind_cca2() != 3 { return false; }
+    if ps_br_year() != 1993 { return false; }
+    if ps_reduction_chain_length() != 2 { return false; }
+    if ps_reduction_step_is_valid(1) != 1 { return false; }
+    if ps_reduction_step_is_valid(0) != 0 { return false; }
+    if ps_reduction_step_is_valid(2) != 0 { return false; }
+    if ps_ind_cca2_implies_ind_cpa(3, 1) != 1 { return false; }
+    if ps_ind_cca2_implies_ind_cpa(2, 1) != 0 { return false; }
+    if ps_ind_cca2_implies_ind_cpa(3, 2) != 0 { return false; }
+    if ps_ind_cca2_implies_ind_cpa(1, 1) != 0 { return false; }
+    if ps_ind_cca2_implies_ind_cpa(0 - 1, 1) != 0 { return false; }
+    if ps_rom_used(1) != 1 { return false; }
+    if ps_rom_used(0) != 0 { return false; }
+    if ps_rom_used(2) != 0 { return false; }
+    if provable_security_reduction_holds(3, 2) != 1 { return false; }
+    if provable_security_reduction_holds(1, 1) != 1 { return false; }
+    if provable_security_reduction_holds(0, 1) != 0 { return false; }
+    if provable_security_reduction_holds(3, 0) != 0 { return false; }
+    if provable_security_reduction_holds(0 - 1, 2) != 0 { return false; }
+    if provable_security_reduction_holds(2, 2) != 0 { return false; }
+    let r1: DomainCert = provable_security_reduction_law(3, 2);
+    if r1.holds != 1 { return false; }
+    let r2: DomainCert = provable_security_reduction_law(0, 2);
+    if r2.holds != 0 { return false; }
+    let r3: DomainCert = provable_security_reduction_law(3, 0);
+    if r3.holds != 0 { return false; }
+    let i1: DomainCert = provable_security_implication_law(3, 1);
+    if i1.holds != 1 { return false; }
+    let i2: DomainCert = provable_security_implication_law(2, 1);
+    if i2.holds != 0 { return false; }
+    let c1: DomainCert = provable_security_coupled_cert(3, 2, 3, 1, 1);
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = provable_security_coupled_cert(0, 2, 3, 1, 1);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = provable_security_coupled_cert(3, 2, 2, 1, 1);
+    if c3.holds != 0 { return false; }
+    let c4: DomainCert = provable_security_coupled_cert(3, 2, 3, 1, 0);
+    if c4.holds != 0 { return false; }
+    if ps_close_enough(2, 2, 1) != 1 { return false; }
+    if ps_close_enough(0, 0, 1) != 1 { return false; }
+    if ps_close_enough(1, 2, 1) != 0 { return false; }
+    return true;
+}

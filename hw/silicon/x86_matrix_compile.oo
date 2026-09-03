@@ -1,0 +1,110 @@
+// # Slice Source Native ELF Compile Driver
+//
+// Logline: Validates slice source then runs the shipped oodac C backend build so the image is lowered from that source.
+//
+// Setup: ProcessCap starts ./oodac_bin --backend c build. Empty source fails closed without invoking the compiler.
+//
+// Beats:
+//   1. Reject empty source and source without fn main or a slice PASS tag.
+//   2. Build the on-disk slice path to a dest ELF with oodac --backend c build.
+//   3. Read the first 64 file bytes via od and require ELF magic.
+//   4. Return those header bytes; the dest file is the executable image.
+
+import "std/hw/silicon/x86_matrix_elf.oo";
+import "std/fs/os/fs.oo";
+
+pub fn matrix_parse_slice_id(src: String) -> Result[Int, String] {
+    let n: Int = bytes_len(src);
+    if n == 0 {
+        return Err("ERR\tmatrix_parse_slice_id\tempty_source");
+    }
+    let pat: String = "std_qa_slice";
+    let pn: Int = bytes_len(pat);
+    let mut i: Int = 0;
+    while i + pn < n {
+        let mut ok: Bool = true;
+        let mut k: Int = 0;
+        while k < pn {
+            if byte_at(src, i + k) != byte_at(pat, k) {
+                ok = false;
+            }
+            k = k + 1;
+        }
+        if ok {
+            let mut j: Int = i + pn;
+            let mut v: Int = 0;
+            let mut any: Bool = false;
+            while j < n && byte_at(src, j) >= 48 && byte_at(src, j) <= 57 {
+                any = true;
+                v = v * 10 + (byte_at(src, j) - 48);
+                j = j + 1;
+            }
+            if any && j < n && byte_at(src, j) == 58 {
+                if v >= 1 && v <= 20 {
+                    return Ok(v);
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return Err("ERR\tmatrix_parse_slice_id\tno_slice_tag");
+}
+
+pub fn matrix_compile_source(src: String) -> Result[List[Int], String] {
+    if bytes_len(src) == 0 {
+        return Err("ERR\tmatrix_compile_source\tempty_source");
+    }
+    return Err("ERR\tmatrix_compile_source\tneed_path");
+}
+
+pub fn matrix_compile_path(p: &ProcessCap, fs: &FsReadCap, src: String, path: String, dest: String) -> Result[List[Int], String] {
+    if bytes_len(src) == 0 {
+        return Err("ERR\tmatrix_compile_path\tempty_source");
+    }
+    if !src.contains("fn main") {
+        return Err("ERR\tmatrix_compile_path\tno_main");
+    }
+    let idr: Result[Int, String] = matrix_parse_slice_id(src);
+    match idr {
+        Ok(id) => {
+            let tag: String = "std_qa_slice" + id.to_string() + ": PASS";
+            if !src.contains(tag) {
+                return Err("ERR\tmatrix_compile_path\tno_pass_tag");
+            }
+            let cmd: String = "./oodac_bin --backend c build " + path + " " + dest;
+            let hdrp: String = dest + ".hdr.txt";
+            let mut t: Int = 0;
+            while t < 3 {
+                if t > 0 {
+                    let _w: Result[String, String] = process_exec(p, "rm -rf .ooda-cache/oodac_emit");
+                }
+                let br: Result[String, String] = process_exec(p, cmd);
+                if br.is_ok() {
+                    let odcmd: String = "od -An -N 64 -tu1 -v " + dest + " > " + hdrp;
+                    let odr: Result[String, String] = process_exec(p, odcmd);
+                    if odr.is_ok() {
+                        let hr: Result[String, String] = fs_read_file(fs, hdrp);
+                        match hr {
+                            Ok(txt) => {
+                                let hdr: List[Int] = matrix_parse_od(txt);
+                                if list_len(hdr) > 0 {
+                                    if matrix_is_elf_header(hdr) {
+                                        return Ok(hdr);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                let _n: Int = bytes_len(e);
+                            }
+                        }
+                    }
+                }
+                t = t + 1;
+            }
+            return Err("ERR\tmatrix_compile_path\tbuild_failed");
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+}

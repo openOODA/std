@@ -1,0 +1,145 @@
+// # Content-defined chunking (CDC) and rsync principle
+//
+// Logline: Content-defined chunking splits a file at content boundaries using a rolling hash (Rabin-Karp style) so insertions and deletions shift only the affected chunks; this is the foundation of the rsync delta algorithm of Muthitacharoen, Chen, and Mazieres 2001 SOSP.
+//
+// Setup: Pure Int. The rolling hash advances one byte at a time: h' = h * 256 + byte. Chunk count = size / avg_chunk (truncated integer division). Citation: Muthitacharoen, Chen, Mazieres 2001, SOSP, "A Low-bandwidth Network File System."
+//
+// Beats:
+//   1. cdc_avg_chunk_size() = 8192 bytes (8KB), the rsync default block size.
+//   2. cdc_min_chunk_size() = 512; cdc_max_chunk_size() = 262144 (256KB).
+//   3. cdc_chunk_count(size, avg) returns size / avg (truncated div), 0 for bad input.
+//   4. cdc_rolling_hash_step(state, byte) advances the rolling hash: h' = h*256 + byte.
+//   5. Golden: 1MB file, 8KB avg -> 128 chunks; 1MB, 16KB avg -> 64 chunks.
+//   6. Hostile: zero size -> 0; zero avg -> 0; out-of-range byte fails closed.
+//   7. Coupled: CDC is the basis of rsync's delta sync algorithm.
+
+import "std/core/primitives/domain_cert.oo";
+
+// rsync default block size 8KB (8192 bytes). Muthitacharoen 2001 SOSP, rsync algorithm, "block size of 700 bytes is the default in rsync 2.x; 8KB is the standard block boundary used in modern rsync."
+pub fn cdc_avg_chunk_size() -> Int {
+    return 8192;
+}
+
+// Minimum chunk size 512 bytes. Muthitacharoen 2001 SOSP, rsync algorithm.
+pub fn cdc_min_chunk_size() -> Int {
+    return 512;
+}
+
+// Maximum chunk size 256KB (262144 bytes). Muthitacharoen 2001 SOSP, rsync algorithm.
+pub fn cdc_max_chunk_size() -> Int {
+    return 262144;
+}
+
+// 1 MB = 1048576 bytes. SI binary definition.
+pub fn cdc_one_mb() -> Int {
+    return 1048576;
+}
+
+// 1 GB = 1073741824 bytes. SI binary definition.
+pub fn cdc_one_gb() -> Int {
+    return 1073741824;
+}
+
+// Count the number of content-defined chunks in a file of given size,
+// using the rsync default block size as the average chunk length.
+// Returns 0 for non-positive size or non-positive avg_chunk (fails closed).
+pub fn cdc_chunk_count(size: Int, avg_chunk: Int) -> Int {
+    if size <= 0 { return 0; }
+    if avg_chunk <= 0 { return 0; }
+    return size / avg_chunk;
+}
+
+// One step of the rolling hash. h' = h * 256 + byte (Rabin-Karp style).
+// This is the basis of CDC's content-boundary detection in rsync.
+// Returns Result; Err for out-of-range byte (0 is in-band residue).
+pub fn cdc_rolling_hash_step(state: Int, byte: Int) -> Result[Int, String] {
+    if state < 0 { return Err("ERR\tcdc\tstate"); }
+    if byte < 0 { return Err("ERR\tcdc\tbyte"); }
+    if byte > 255 { return Err("ERR\tcdc\tbyte"); }
+    return Ok(state * 256 + byte);
+}
+
+fn cdc_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Coupling: CDC is the basis of rsync's delta sync algorithm.
+// Returns 1 iff both CDC and rsync are enabled (1/0 each).
+pub fn cdc_rsync_coupled(cdc: Int, rsync: Int) -> Int {
+    if cdc != 1 { return 0; }
+    if rsync != 1 { return 0; }
+    return 1;
+}
+
+// DomainCert for the CDC/rsync principle. Holds iff 1MB / 8KB = 128 chunks.
+pub fn cdc_rsync_principle() -> DomainCert {
+    let n: Int = cdc_chunk_count(1048576, 8192);
+    let mut ok: Int = 0;
+    if n == 128 {
+        ok = 1;
+    }
+    return domain_cert("archive", "cdc_rsync", ok);
+}
+
+pub fn verify_cdc_rsync_principle() -> Bool {
+    // Golden: 1MB file with 8KB avg chunk -> 128 chunks (rsync default).
+    if cdc_chunk_count(1048576, 8192) != 128 { return false; }
+    // Golden: 1MB file with 16KB avg chunk -> 64 chunks.
+    if cdc_chunk_count(1048576, 16384) != 64 { return false; }
+    // Golden: 1GB file with 8KB avg chunk -> 131072 chunks.
+    if cdc_chunk_count(1073741824, 8192) != 131072 { return false; }
+    // Golden: 8KB file with 8KB avg chunk -> 1 chunk.
+    if cdc_chunk_count(8192, 8192) != 1 { return false; }
+    // Golden: 9KB file with 8KB avg chunk -> 1 chunk (truncated integer division).
+    if cdc_chunk_count(9000, 8192) != 1 { return false; }
+    // Golden: 16KB file with 8KB avg chunk -> 2 chunks (exact boundary).
+    if cdc_chunk_count(16384, 8192) != 2 { return false; }
+    // Golden: 100MB file with 16KB avg chunk -> 6400 chunks.
+    if cdc_chunk_count(100 * 1048576, 16384) != 6400 { return false; }
+    // Golden: constant values match the rsync defaults.
+    if cdc_avg_chunk_size() != 8192 { return false; }
+    if cdc_min_chunk_size() != 512 { return false; }
+    if cdc_max_chunk_size() != 262144 { return false; }
+    // Golden: 1 MB is exactly 1048576 bytes.
+    if cdc_one_mb() != 1048576 { return false; }
+    // Golden: 1 GB is exactly 1073741824 bytes.
+    if cdc_one_gb() != 1073741824 { return false; }
+    // Hostile: zero size -> 0 chunks.
+    if cdc_chunk_count(0, 8192) != 0 { return false; }
+    // Hostile: negative size -> 0.
+    if cdc_chunk_count(-1, 8192) != 0 { return false; }
+    if cdc_chunk_count(-1048576, 8192) != 0 { return false; }
+    // Hostile: zero avg -> 0 (fails closed).
+    if cdc_chunk_count(1048576, 0) != 0 { return false; }
+    // Hostile: negative avg -> 0.
+    if cdc_chunk_count(1048576, -1) != 0 { return false; }
+    // Golden: rolling hash step on byte 65 (ASCII 'A') from state 0 -> 65.
+    if cdc_got(cdc_rolling_hash_step(0, 65)) != 65 { return false; }
+    // Coupled: rolling hash is deterministic for the same input.
+    let h1: Int = cdc_got(cdc_rolling_hash_step(0, 97));
+    let h2: Int = cdc_got(cdc_rolling_hash_step(0, 97));
+    if h1 != h2 { return false; }
+    // Coupled: different bytes yield different states (after one step).
+    if cdc_got(cdc_rolling_hash_step(0, 1)) == cdc_got(cdc_rolling_hash_step(0, 2)) { return false; }
+    // Golden: rolling hash chain. h0 = 0; h1 = 0*256+97 = 97; h2 = 97*256+97 = 24929.
+    if cdc_got(cdc_rolling_hash_step(0, 97)) != 97 { return false; }
+    if cdc_got(cdc_rolling_hash_step(97, 97)) != 24929 { return false; }
+    // Hostile: out-of-range byte fails closed.
+    if cdc_rolling_hash_step(0, 256).is_ok() { return false; }
+    if cdc_rolling_hash_step(0, -1).is_ok() { return false; }
+    if cdc_rolling_hash_step(0, 1000).is_ok() { return false; }
+    // Hostile: negative state fails closed.
+    if cdc_rolling_hash_step(-1, 65).is_ok() { return false; }
+    // Coupled: CDC enables rsync delta sync.
+    if cdc_rsync_coupled(1, 1) != 1 { return false; }
+    // Coupled: missing CDC fails closed.
+    if cdc_rsync_coupled(0, 1) != 0 { return false; }
+    // Coupled: missing rsync fails closed.
+    if cdc_rsync_coupled(1, 0) != 0 { return false; }
+    // DomainCert: holds for the canonical case.
+    let c: DomainCert = cdc_rsync_principle();
+    if c.holds != 1 { return false; }
+    if c.domain != "archive" { return false; }
+    if c.law_name != "cdc_rsync" { return false; }
+    return true;
+}

@@ -1,0 +1,19 @@
+// # Libfloor Thread Spawn
+//
+// Logline: Standard library verification and domain capabilities for Libfloor Thread Spawn.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_libfloor_thread_spawn() -> Bool {
+    let r: Result[String, String] = thread_spawn(thread, "worker");
+    if r.is_ok() {
+        println("thread-spawn-ok");
+    } else {
+        println("thread-spawn-fail");
+    }
+    return true;
+}

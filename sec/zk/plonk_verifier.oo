@@ -1,0 +1,172 @@
+// # PLONK Zero-Knowledge SNARK Verification Engine
+//
+// Logline: Verifies PLONK arithmetic proofs with Fiat-Shamir sponge challenges and batched KZG10 pairing checks.
+//
+// Setup: Fail-closed PLONK verifier evaluating constraint polynomial linearization and 2-point KZG opening proofs over BN254.
+//
+// Beats:
+//   1. Squeeze Fiat-Shamir challenges (beta, gamma, alpha, zeta, v, u) from proof commitments.
+//   2. Compute vanishing polynomial Z_H(zeta) and public inputs evaluation PI(zeta).
+//   3. Aggregate commitment points [F]_1 with powers of evaluation challenge v.
+//   4. Execute batched KZG10 pairing check e(W1, [x]_2) == e(W2, [1]_2).
+
+import "./bn254_fp.oo";
+import "./bn254_g1.oo";
+import "./bn254_g2.oo";
+import "./bn254_fp12.oo";
+import "./bn254_pairing.oo";
+import "./plonk_domain.oo";
+import "./plonk_transcript.oo";
+import "./plonk_linearization.oo";
+
+type PlonkVerifyingKey = struct {
+    domain_size: Int,
+    q_l: Bn254G1Affine,
+    q_r: Bn254G1Affine,
+    q_o: Bn254G1Affine,
+    q_m: Bn254G1Affine,
+    q_c: Bn254G1Affine,
+    sigma_1: Bn254G1Affine,
+    sigma_2: Bn254G1Affine,
+    sigma_3: Bn254G1Affine,
+    x_2: Bn254G2Affine
+};
+
+type PlonkProof = struct {
+    a_commit: Bn254G1Affine,
+    b_commit: Bn254G1Affine,
+    c_commit: Bn254G1Affine,
+    z_commit: Bn254G1Affine,
+    t_lo_commit: Bn254G1Affine,
+    t_mid_commit: Bn254G1Affine,
+    t_hi_commit: Bn254G1Affine,
+    w_zeta_commit: Bn254G1Affine,
+    w_zeta_omega_commit: Bn254G1Affine,
+    a_eval: Bn254Fp,
+    b_eval: Bn254Fp,
+    c_eval: Bn254Fp,
+    s1_eval: Bn254Fp,
+    s2_eval: Bn254Fp,
+    zw_eval: Bn254Fp,
+    is_valid: Bool
+};
+
+pub fn plonk_verify(vk: PlonkVerifyingKey, proof: PlonkProof, public_inputs: List[Int]) -> Result[Bool, String] {
+    if !proof.is_valid {
+        return Err("ERR\tplonk_verify: malformed proof structure");
+    }
+
+    let mut tr: PlonkTranscript = plonk_transcript_new();
+    tr = plonk_transcript_absorb_g1(tr, proof.a_commit);
+    tr = plonk_transcript_absorb_g1(tr, proof.b_commit);
+    tr = plonk_transcript_absorb_g1(tr, proof.c_commit);
+    let beta: Bn254Fp = plonk_transcript_squeeze(tr);
+
+    tr = plonk_transcript_absorb_fp(tr, beta);
+    let gamma: Bn254Fp = plonk_transcript_squeeze(tr);
+
+    tr = plonk_transcript_absorb_g1(tr, proof.z_commit);
+    let alpha: Bn254Fp = plonk_transcript_squeeze(tr);
+
+    tr = plonk_transcript_absorb_g1(tr, proof.t_lo_commit);
+    tr = plonk_transcript_absorb_g1(tr, proof.t_mid_commit);
+    tr = plonk_transcript_absorb_g1(tr, proof.t_hi_commit);
+    let zeta: Bn254Fp = plonk_transcript_squeeze(tr);
+
+    tr = plonk_transcript_absorb_fp(tr, proof.a_eval);
+    tr = plonk_transcript_absorb_fp(tr, proof.b_eval);
+    tr = plonk_transcript_absorb_fp(tr, proof.c_eval);
+    tr = plonk_transcript_absorb_fp(tr, proof.s1_eval);
+    tr = plonk_transcript_absorb_fp(tr, proof.s2_eval);
+    tr = plonk_transcript_absorb_fp(tr, proof.zw_eval);
+    let v: Bn254Fp = plonk_transcript_squeeze(tr);
+
+    tr = plonk_transcript_absorb_g1(tr, proof.w_zeta_commit);
+    tr = plonk_transcript_absorb_g1(tr, proof.w_zeta_omega_commit);
+    let u: Bn254Fp = plonk_transcript_squeeze(tr);
+
+    let domain: PlonkDomain = plonk_domain_new(vk.domain_size);
+    let zh: Bn254Fp = plonk_eval_vanishing(domain, zeta);
+    let l1: Bn254Fp = plonk_eval_lagrange_1(domain, zeta);
+
+    let mut pi_val: Bn254Fp = bn254_fp_zero();
+    let n_pi: Int = list_len(public_inputs);
+    let mut i: Int = 0;
+    while i < n_pi {
+        let inp: Int = list_get(public_inputs, i);
+        let inp_fp: Bn254Fp = bn254_fp_from_int(inp);
+        pi_val = bn254_fp_add(pi_val, bn254_fp_mul(inp_fp, l1));
+        i = i + 1;
+    }
+
+    let g1_gen: Bn254G1Affine = bn254_g1_generator();
+    let g2_gen: Bn254G2Affine = bn254_g2_generator();
+
+    let qm_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(vk.q_m, bn254_fp_mul(proof.a_eval, proof.b_eval));
+    let ql_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(vk.q_l, proof.a_eval);
+    let qr_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(vk.q_r, proof.b_eval);
+    let qo_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(vk.q_o, proof.c_eval);
+    let mut r_gate: Bn254G1Affine = bn254_g1_add(bn254_g1_add(qm_term, ql_term), bn254_g1_add(qr_term, qo_term));
+    r_gate = bn254_g1_add(r_gate, vk.q_c);
+    let pi_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(g1_gen, pi_val);
+    r_gate = bn254_g1_add(r_gate, pi_term);
+
+    let beta_zeta: Bn254Fp = bn254_fp_mul(beta, zeta);
+    let ta: Bn254Fp = bn254_fp_add(bn254_fp_add(proof.a_eval, beta_zeta), gamma);
+    let tb: Bn254Fp = bn254_fp_add(bn254_fp_add(proof.b_eval, bn254_fp_mul(bn254_fp_from_int(2), beta_zeta)), gamma);
+    let tc: Bn254Fp = bn254_fp_add(bn254_fp_add(proof.c_eval, bn254_fp_mul(bn254_fp_from_int(3), beta_zeta)), gamma);
+    let p1_scalar: Bn254Fp = bn254_fp_mul(bn254_fp_mul(ta, tb), bn254_fp_mul(tc, alpha));
+    let p3_scalar: Bn254Fp = bn254_fp_mul(bn254_fp_mul(alpha, alpha), l1);
+    let z_coeff: Bn254Fp = bn254_fp_add(p1_scalar, p3_scalar);
+    let z_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(proof.z_commit, z_coeff);
+
+    let sig_a: Bn254Fp = bn254_fp_add(bn254_fp_add(proof.a_eval, bn254_fp_mul(beta, proof.s1_eval)), gamma);
+    let sig_b: Bn254Fp = bn254_fp_add(bn254_fp_add(proof.b_eval, bn254_fp_mul(beta, proof.s2_eval)), gamma);
+    let sig_coeff: Bn254Fp = bn254_fp_mul(bn254_fp_mul(sig_a, sig_b), bn254_fp_mul(bn254_fp_mul(alpha, beta), proof.zw_eval));
+    let sig_term: Bn254G1Affine = bn254_g1_neg(bn254_g1_scalar_mul_fp(vk.sigma_3, sig_coeff));
+    let r_perm: Bn254G1Affine = bn254_g1_add(z_term, sig_term);
+
+    let zeta_n: Bn254Fp = bn254_fp_add(zh, bn254_fp_one());
+    let zeta_2n: Bn254Fp = bn254_fp_mul(zeta_n, zeta_n);
+    let t_mid_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(proof.t_mid_commit, zeta_n);
+    let t_hi_term: Bn254G1Affine = bn254_g1_scalar_mul_fp(proof.t_hi_commit, zeta_2n);
+    let t_commit: Bn254G1Affine = bn254_g1_add(bn254_g1_add(proof.t_lo_commit, t_mid_term), t_hi_term);
+    let t_zh: Bn254G1Affine = bn254_g1_neg(bn254_g1_scalar_mul_fp(t_commit, zh));
+    let r_commit: Bn254G1Affine = bn254_g1_add(bn254_g1_add(r_gate, r_perm), t_zh);
+
+    let v2: Bn254Fp = bn254_fp_mul(v, v);
+    let v3: Bn254Fp = bn254_fp_mul(v2, v);
+    let v4: Bn254Fp = bn254_fp_mul(v3, v);
+    let v5: Bn254Fp = bn254_fp_mul(v4, v);
+
+    let mut f_commit: Bn254G1Affine = r_commit;
+    f_commit = bn254_g1_add(f_commit, bn254_g1_scalar_mul_fp(proof.a_commit, v));
+    f_commit = bn254_g1_add(f_commit, bn254_g1_scalar_mul_fp(proof.b_commit, v2));
+    f_commit = bn254_g1_add(f_commit, bn254_g1_scalar_mul_fp(proof.c_commit, v3));
+    f_commit = bn254_g1_add(f_commit, bn254_g1_scalar_mul_fp(vk.sigma_1, v4));
+    f_commit = bn254_g1_add(f_commit, bn254_g1_scalar_mul_fp(vk.sigma_2, v5));
+
+    let mut e_eval: Bn254Fp = bn254_fp_zero();
+    e_eval = bn254_fp_add(e_eval, bn254_fp_mul(proof.a_eval, v));
+    e_eval = bn254_fp_add(e_eval, bn254_fp_mul(proof.b_eval, v2));
+    e_eval = bn254_fp_add(e_eval, bn254_fp_mul(proof.c_eval, v3));
+    e_eval = bn254_fp_add(e_eval, bn254_fp_mul(proof.s1_eval, v4));
+    e_eval = bn254_fp_add(e_eval, bn254_fp_mul(proof.s2_eval, v5));
+
+    let u_zeta_omega: Bn254Fp = bn254_fp_mul(u, bn254_fp_mul(zeta, domain.omega));
+    let p1: Bn254G1Affine = bn254_g1_add(proof.w_zeta_commit, bn254_g1_scalar_mul_fp(proof.w_zeta_omega_commit, u));
+
+    let p2_part1: Bn254G1Affine = bn254_g1_add(bn254_g1_scalar_mul_fp(proof.w_zeta_commit, zeta), bn254_g1_scalar_mul_fp(proof.w_zeta_omega_commit, u_zeta_omega));
+    let p2_part2: Bn254G1Affine = bn254_g1_sub(f_commit, bn254_g1_scalar_mul_fp(g1_gen, e_eval));
+    let u_zw: Bn254Fp = bn254_fp_mul(u, proof.zw_eval);
+    let p2_part3: Bn254G1Affine = bn254_g1_sub(bn254_g1_scalar_mul_fp(proof.z_commit, u), bn254_g1_scalar_mul_fp(g1_gen, u_zw));
+    let p2: Bn254G1Affine = bn254_g1_add(bn254_g1_add(p2_part1, p2_part2), p2_part3);
+
+    let e1: Bn254Gt = bn254_pairing(p1, vk.x_2);
+    let e2: Bn254Gt = bn254_pairing(p2, g2_gen);
+
+    if bn254_fp12_equal(e1.val, e2.val) {
+        return Ok(true);
+    }
+    return Ok(false);
+}

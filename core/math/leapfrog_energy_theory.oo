@@ -1,0 +1,67 @@
+// # Symplectic leapfrog theory
+//
+// Logline: Harmonic leapfrog keeps energy near E0 for small dt. dt<=0 or nsteps<1 is Err.
+//
+// Setup: Imports std/math/ode/symplectic_leapfrog.oo. Holds 1 or 0.
+//
+// Beats:
+//   1. Reject dt<=0.
+//   2. After 10 steps, |E-E0| is small versus E0.
+//   3. domain_cert boxes both.
+
+import "std/core/math/ode/symplectic_leapfrog.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn math_leapfrog_dt_rejected() -> DomainCert {
+    let r: Result[List[Float], String] = leapfrog_harmonic(1.0, 0.0, 0.0, 10, 1.0);
+    let mut h: Int = 0;
+    match r {
+        Ok(_xs) => {
+            h = 0;
+        }
+        Err(_e) => {
+            h = 1;
+        }
+    }
+    return domain_cert("math", "leapfrog_dt_rejected", h);
+}
+
+pub fn math_leapfrog_energy_bound() -> DomainCert {
+    let r: Result[List[Float], String] = leapfrog_harmonic(1.0, 0.0, 0.01, 10, 1.0);
+    let mut h: Int = 0;
+    match r {
+        Ok(xs) => {
+            if list_len(xs) >= 4 {
+                let e: Float = list_get(xs, 2);
+                let e0: Float = list_get(xs, 3);
+                let den: Float = 1.0 + abs_f(e0);
+                if abs_f(e - e0) / den <= 0.05 {
+                    h = 1;
+                }
+            }
+        }
+        Err(_e) => {
+            h = 0;
+        }
+    }
+    return domain_cert("math", "leapfrog_energy_near", h);
+}
+
+pub fn verify_leapfrog_theory() -> Bool {
+    let a: DomainCert = math_leapfrog_dt_rejected();
+    let b: DomainCert = math_leapfrog_energy_bound();
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    return true;
+}

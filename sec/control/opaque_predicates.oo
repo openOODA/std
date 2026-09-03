@@ -1,0 +1,71 @@
+// # Quadratic Residue Number-Theoretic Opaque Predicates
+//
+// Logline: Injects algebraic number-theoretic invariants statically unresolvable by SMT solvers.
+//
+// Setup: Pure. Exploits quadratic residues mod 7 and mod 5 to construct invariant branches.
+//
+// Beats:
+//   1. Normalize modular arithmetic across arbitrary signed integer inputs.
+//   2. Evaluate quadratic non-residue modulo 7 invariant (7y^2 - 1 != x^2 mod 7).
+//   3. Evaluate auxiliary invariant predicates and dynamic state scramblers.
+
+fn math_mod_pos(val: Int, modulus: Int) -> Int {
+    let rem: Int = val % modulus;
+    if rem < 0 {
+        return rem + modulus;
+    }
+    return rem;
+}
+
+pub fn opaque_predicate_eval(x: Int, y: Int) -> Bool {
+    // Invariant: 7*y^2 - 1 == 6 (mod 7).
+    // Quadratic residues modulo 7 are {0, 1, 2, 4}.
+    // 6 is not a quadratic residue modulo 7.
+    // Thus, (7*y^2 - 1) % 7 != (x^2) % 7 is universally true for all x, y in Z.
+    let lhs: Int = math_mod_pos((7 * y * y) - 1, 7);
+    let rhs: Int = math_mod_pos(x * x, 7);
+    return lhs != rhs;
+}
+
+pub fn opaque_pred_mod7_inequality(x: Int, y: Int) -> Bool {
+    return opaque_predicate_eval(x, y);
+}
+
+pub fn opaque_pred_mod7_equality(x: Int, y: Int) -> Bool {
+    let lhs: Int = math_mod_pos((7 * y * y) - 1, 7);
+    let rhs: Int = math_mod_pos(x * x, 7);
+    return lhs == rhs;
+}
+
+pub fn opaque_pred_mod5_inequality(x: Int, y: Int) -> Bool {
+    // Invariant: 5*y^2 + 2 == 2 (mod 5).
+    // Quadratic residues modulo 5 are {0, 1, 4}.
+    // 2 is not a quadratic residue modulo 5.
+    // Thus, (5*y^2 + 2) % 5 != (x^2) % 5 is universally true for all x, y in Z.
+    let lhs: Int = math_mod_pos((5 * y * y) + 2, 5);
+    let rhs: Int = math_mod_pos(x * x, 5);
+    return lhs != rhs;
+}
+
+pub fn opaque_pred_consecutive_even(x: Int) -> Bool {
+    // Invariant: x * (x + 1) is always even for any integer x.
+    let prod: Int = x * (x + 1);
+    let rem: Int = math_mod_pos(prod, 2);
+    return rem == 0;
+}
+
+pub fn opaque_pred_scramble_state(
+    cur_state: Int,
+    x: Int,
+    y: Int,
+    a_mult: Int,
+    b_add: Int
+) -> Int {
+    if opaque_predicate_eval(x, y) {
+        // Legitimate branch: affine state transition (a * state + b) & 0xFFFFFFFF
+        let next_st: Int = (a_mult * cur_state + b_add) & 4294967295;
+        return next_st;
+    }
+    // Bogus dead branch trap unreachable at runtime
+    return -999999;
+}

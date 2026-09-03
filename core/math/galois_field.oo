@@ -1,0 +1,86 @@
+// # Abstract Algebra and Galois Finite Field Arithmetic
+//
+// Logline: Exact arithmetic over prime finite fields F_p supporting addition, multiplication, modular inverse, and exponentiation.
+//
+// Setup: Pure algebraic field structures for cryptographic polynomial arithmetic and error correction codes.
+//
+// Beats:
+//   1. Field element representation bounded by prime modulus p.
+//   2. Constant-time addition and subtraction in F_p.
+//   3. Modular multiplication with non-negative remainder reduction.
+//   4. Exponentiation by squaring for fast polynomial evaluation.
+//   5. Modular inverse via Fermat's Little Theorem (a^(p-2) mod p).
+
+type GaloisField = struct {
+    modulus: Int
+};
+
+type FieldElement = struct {
+    val: Int,
+    field: GaloisField
+};
+
+pub fn gf_new(prime_modulus: Int) -> GaloisField {
+    let mut p: Int = prime_modulus;
+    if p < 2 { p = 2; }
+    return GaloisField { modulus: p };
+}
+
+pub fn gf_elem(f: GaloisField, v: Int) -> FieldElement {
+    let p: Int = f.modulus;
+    let mut r: Int = v % p;
+    if r < 0 { r = r + p; }
+    return FieldElement { val: r, field: f };
+}
+
+pub fn gf_add(a: FieldElement, b: FieldElement) -> FieldElement {
+    let p: Int = a.field.modulus;
+    let sum: Int = (a.val + b.val) % p;
+    return FieldElement { val: sum, field: a.field };
+}
+
+pub fn gf_sub(a: FieldElement, b: FieldElement) -> FieldElement {
+    let p: Int = a.field.modulus;
+    let mut diff: Int = (a.val - b.val) % p;
+    if diff < 0 { diff = diff + p; }
+    return FieldElement { val: diff, field: a.field };
+}
+
+pub fn gf_mul(a: FieldElement, b: FieldElement) -> FieldElement {
+    let p: Int = a.field.modulus;
+    let prod: Int = (a.val * b.val) % p;
+    return FieldElement { val: prod, field: a.field };
+}
+
+pub fn gf_pow(a: FieldElement, exp: Int) -> FieldElement {
+    let p: Int = a.field.modulus;
+    if exp <= 0 {
+        return FieldElement { val: 1, field: a.field };
+    }
+    let mut res: Int = 1;
+    let mut base: Int = a.val;
+    let mut e: Int = exp;
+    while e > 0 {
+        if (e & 1) == 1 {
+            res = (res * base) % p;
+        }
+        base = (base * base) % p;
+        e = e >> 1;
+    }
+    return FieldElement { val: res, field: a.field };
+}
+
+pub fn gf_inv(a: FieldElement) -> FieldElement {
+    let p: Int = a.field.modulus;
+    if a.val == 0 {
+        // Zero has no multiplicative inverse in a field
+        return FieldElement { val: 0, field: a.field };
+    }
+    // Fermat's Little Theorem: a^(p-2) mod p = a^(-1) mod p
+    return gf_pow(a, p - 2);
+}
+
+pub fn gf_div(a: FieldElement, b: FieldElement) -> FieldElement {
+    let inv_b: FieldElement = gf_inv(b);
+    return gf_mul(a, inv_b);
+}

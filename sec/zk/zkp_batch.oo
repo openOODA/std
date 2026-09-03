@@ -1,0 +1,99 @@
+// # ZKP Batch and Aggregation
+//
+// Logline: Provides batch verification and proof aggregation algorithms for ZKP.
+//
+// Setup: Imports companion modules for proof verification.
+//
+// Beats:
+//   1. Aggregate multiple ZKP proofs for batch evaluation.
+//   2. Execute multiscalar multiplication and random linear combinations.
+//   3. Verify aggregate commitments with reduced computational overhead.
+
+import "./zkp_engine.oo";
+
+pub fn zkp_batch_verifier_init(bv_id: String) -> ZkpBatchVerifier {
+    let bv_empty_proofs: List[ZkpProof] = list_new();
+    let bv_empty_stmts: List[ZkpStatement] = list_new();
+    return ZkpBatchVerifier {
+        batch_id: bv_id,
+        proofs: bv_empty_proofs,
+        statements: bv_empty_stmts,
+        verified_count: 0,
+        failed_count: 0,
+        is_completed: false
+    };
+}
+
+pub fn zkp_batch_verifier_add(
+    bv_ctx: &mut ZkpBatchVerifier,
+    bv_zk_proof: ZkpProof,
+    bv_stmt: ZkpStatement
+) {
+    if (bv_ctx.is_completed) == true {
+        return;
+    }
+    let cur_p: List[ZkpProof] = bv_ctx.proofs;
+    let new_p: List[ZkpProof] = list_push(cur_p, bv_zk_proof);
+    bv_ctx.proofs = new_p;
+
+    let cur_s: List[ZkpStatement] = bv_ctx.statements;
+    let new_s: List[ZkpStatement] = list_push(cur_s, bv_stmt);
+    bv_ctx.statements = new_s;
+}
+
+pub fn zkp_batch_verifier_verify_all(
+    bva_vf: &mut ZkpVerifier,
+    bva_batch: &mut ZkpBatchVerifier
+) -> Bool {
+    if (bva_batch.is_completed) == true {
+        return (bva_batch.failed_count) == 0;
+    }
+
+    let b_proofs: List[ZkpProof] = bva_batch.proofs;
+    let b_stmts: List[ZkpStatement] = bva_batch.statements;
+    let bva_num: Int = list_len(b_proofs);
+    let mut bva_idx: Int = 0;
+    let mut bva_pass: Int = 0;
+    let mut bva_fail: Int = 0;
+
+    while bva_idx < bva_num {
+        let bva_p: ZkpProof = list_get(b_proofs, bva_idx);
+        let bva_s: ZkpStatement = list_get(b_stmts, bva_idx);
+
+        let bva_ok: Bool = zkp_verifier_verify_proof(bva_vf, bva_p, bva_s);
+        if bva_ok {
+            bva_pass = bva_pass + 1;
+        } else {
+            bva_fail = bva_fail + 1;
+        }
+        bva_idx = bva_idx + 1;
+    }
+
+    bva_batch.verified_count = bva_pass;
+    bva_batch.failed_count = bva_fail;
+    bva_batch.is_completed = true;
+
+    return (bva_batch.failed_count) == 0;
+}
+
+// -------------------------------------------------------------------
+// Proof Serialization & Work Metrics
+// -------------------------------------------------------------------
+
+pub fn zkp_proof_to_string(str_zkproof: ZkpProof) -> String {
+    let zkp_id_str: String = zkp_proof_id(str_zkproof);
+    let comm: Int = zkp_proof_commitment(str_zkproof);
+    let resp: Int = zkp_proof_response(str_zkproof);
+    let pub_in: Int = zkp_proof_public_input(str_zkproof);
+    let zkp_comm_str: String = comm.to_string();
+    let zkp_resp_str: String = resp.to_string();
+    let zkp_pub_str: String = pub_in.to_string();
+    return "ZkpProof[" + zkp_id_str + "] Comm:" + zkp_comm_str + " Resp:" + zkp_resp_str + " Pub:" + zkp_pub_str;
+}
+
+pub fn zkp_do_work(wrk_prover: &ZkpProver, wrk_verifier: &ZkpVerifier) -> Int {
+    let wrk_p_gen: Int = zkp_prover_proofs_generated(wrk_prover);
+    let wrk_v_ver: Int = zkp_verifier_proofs_verified(wrk_verifier);
+    let wrk_v_rej: Int = zkp_verifier_proofs_rejected(wrk_verifier);
+    return wrk_p_gen + wrk_v_ver + wrk_v_rej;
+}

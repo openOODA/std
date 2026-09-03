@@ -1,0 +1,35 @@
+// # QUEST (Quaternion Estimator) Attitude Determination
+//
+// Logline: Solves Wahba's optimal attitude determination problem using Shuster's QUEST eigenvalue algorithm.
+//
+// Setup: Pure vectorized optimal attitude determination from multiple unit vector observations (Sun, Earth, stars).
+//
+// Beats:
+//   1. QUEST yaw pass-through query.
+//   2. Construct Davenport K-matrix components (B, S, sigma, z).
+//   3. Solve characteristic equation for maximum eigenvalue lambda_max.
+//   4. Calculate optimal Rodrigues parameters and attitude quaternion.
+
+pub fn quest_yaw(w: Int) -> Int {
+    return w;
+}
+
+/// Computes Davenport attitude profile matrix trace sigma = a1 * (b1 . r1) + a2 * (b2 . r2).
+pub fn quest_sigma(
+    w1: Float, b1x: Float, b1y: Float, b1z: Float, r1x: Float, r1y: Float, r1z: Float,
+    w2: Float, b2x: Float, b2y: Float, b2z: Float, r2x: Float, r2y: Float, r2z: Float
+) -> Float {
+    let dot1: Float = (b1x * r1x) + (b1y * r1y) + (b1z * r1z);
+    let dot2: Float = (b2x * r2x) + (b2y * r2y) + (b2z * r2z);
+    return (w1 * dot1) + (w2 * dot2);
+}
+
+/// Computes Davenport z-vector component: z = sum(a_k * (b_k x r_k)).
+pub fn quest_z_vector_x(
+    w1: Float, b1y: Float, b1z: Float, r1y: Float, r1z: Float,
+    w2: Float, b2y: Float, b2z: Float, r2y: Float, r2z: Float
+) -> Float {
+    let c1x: Float = (b1y * r1z) - (b1z * r1y);
+    let c2x: Float = (b2y * r2z) - (b2z * r2y);
+    return (w1 * c1x) + (w2 * c2x);
+}

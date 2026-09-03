@@ -1,0 +1,43 @@
+// # Cyclic group inverse law
+//
+// Logline: In Z_n, a + (-a) is the identity. Unknown n<=0 is folded by group_new.
+//
+// Setup: Imports std/math/algebra/group_theory.oo. Holds 1 or 0.
+//
+// Beats:
+//   1. combine(a, inverse(a)) equals identity for a sample a in Z_5.
+//   2. identity combined with identity is identity.
+//   3. domain_cert boxes the holds bit.
+
+import "std/core/math/algebra/group_theory.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn gil_got(r: Result[Group, String]) -> Group {
+    match r { Ok(v) => { return v; }, Err(_) => { return Group { n: 1 }; } }
+}
+
+pub fn math_group_inverse_law(n: Int, a: Int) -> DomainCert {
+    let gr: Result[Group, String] = group_new(n);
+    if gr.is_ok() == false { return domain_cert("math", "group_a_plus_inv", 0); }
+    let g: Group = gil_got(gr);
+    let e: Int = group_identity(g);
+    let s: Int = group_combine(g, a, group_inverse(g, a));
+    let mut h: Int = 0;
+    if s == e {
+        h = 1;
+    }
+    return domain_cert("math", "group_a_plus_inv", h);
+}
+
+pub fn math_group_identity_law(n: Int) -> DomainCert {
+    let gr: Result[Group, String] = group_new(n);
+    if gr.is_ok() == false { return domain_cert("math", "group_id_id", 0); }
+    let g: Group = gil_got(gr);
+    let e: Int = group_identity(g);
+    let s: Int = group_combine(g, e, e);
+    let mut h: Int = 0;
+    if s == e {
+        h = 1;
+    }
+    return domain_cert("math", "group_id_id", h);
+}

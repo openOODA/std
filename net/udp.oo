@@ -1,0 +1,27 @@
+// # Net UDP ◈ ZERO-DRAG
+//
+// Logline: Flat-prefix UDP wrapper with minimal UdpCap.
+//
+// Setup: Requires &UdpCap for bind and recv.
+//
+// Beats:
+//   1. Bind UDP socket via UdpCap.
+//   2. Receive datagram via UdpCap.
+//   3. Return Result, no fallback.
+
+// ## CAPs
+//   UdpCap:  bind_udp, udp_recv
+
+pub fn net_udp_bind(
+  udp: &UdpCap,
+  port: Int
+) -> Result[Int, String] {
+  return bind_udp(udp, port);
+}
+
+pub fn net_udp_recv(
+  udp: &UdpCap,
+  fd: Int
+) -> Result[String, String] {
+  return udp_recv(udp, fd);
+}

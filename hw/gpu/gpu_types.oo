@@ -1,0 +1,77 @@
+// # Sovereign GPU Standard Library Types
+//
+// Logline: Defines core data types and descriptors for GPU accelerators, buffers, and compute pipelines.
+//
+// Setup: Pure type declarations for device models, memory buffers, and grid indexing.
+//
+// Beats:
+//   1. Define GpuDim3 for 1D, 2D, and 3D thread and block coordinates.
+//   2. Define GpuDevice descriptor for hardware and CPU SIMT targets.
+//   3. Define GpuBuffer descriptor for typed memory allocations.
+//   4. Define GpuKernel and GpuPipeline execution wrappers.
+
+type GpuDim3 = struct {
+    x: Int,
+    y: Int,
+    z: Int
+};
+
+type GpuDevice = struct {
+    id: Int,
+    name: String,
+    backend: String,
+    is_hardware: Bool,
+    vram_bytes: Int
+};
+
+type GpuBuffer = struct {
+    handle: Int,
+    size_bytes: Int,
+    elem_count: Int,
+    is_unified: Bool
+};
+
+type GpuKernel = struct {
+    name: String,
+    target: String,
+    code: String
+};
+
+type GpuPipeline = struct {
+    kernel: GpuKernel,
+    grid_dim: GpuDim3,
+    block_dim: GpuDim3
+};
+
+pub fn gpu_dim3_new(x: Int, y: Int, z: Int) -> GpuDim3 {
+    let mut dx: Int = x;
+    let mut dy: Int = y;
+    let mut dz: Int = z;
+    if dx <= 0 { dx = 1; }
+    if dy <= 0 { dy = 1; }
+    if dz <= 0 { dz = 1; }
+    return GpuDim3 { x: dx, y: dy, z: dz };
+}
+
+pub fn gpu_dim3_raw(x: Int, y: Int, z: Int) -> GpuDim3 {
+    return GpuDim3 { x: x, y: y, z: z };
+}
+
+pub fn gpu_device_new(id: Int, name: String, backend: String, is_hw: Bool, vram: Int) -> GpuDevice {
+    return GpuDevice {
+        id: id,
+        name: name,
+        backend: backend,
+        is_hardware: is_hw,
+        vram_bytes: vram
+    };
+}
+
+pub fn gpu_buffer_new(handle: Int, size_bytes: Int, elem_count: Int, is_unified: Bool) -> GpuBuffer {
+    return GpuBuffer {
+        handle: handle,
+        size_bytes: size_bytes,
+        elem_count: elem_count,
+        is_unified: is_unified
+    };
+}

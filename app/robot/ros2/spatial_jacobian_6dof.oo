@@ -1,0 +1,66 @@
+// # 6-DoF Spatial Manipulator Jacobian
+//
+// Logline: Computes the 6x6 geometric spatial Jacobian for a 6-DoF serial DH manipulator.
+//
+// Setup: Pure differential kinematics. No capability tokens. Uses List for row-major matrix output.
+//
+// Beats:
+//   1. Validate the joint list contains exactly six joints.
+//   2. Forward-chain DH frames to collect each joint axis and origin.
+//   3. Compute z_i x (p_ee - p_i) for each joint's linear contribution.
+//   4. Assemble six rows of six columns into a flat row-major List[Float].
+// residual: Numeric SVD and damped least-squares inverse are residual.
+
+import "std/app/robot/ros2/dh_parameters.oo";
+
+fn sj6_list_len_ok(joints: List[DhJoint]) -> Int {
+    let n: Int = list_len(joints);
+    if n != 6 { return 1; }
+    return 0;
+}
+
+fn sj6_pick(r: Int, jx: Float, jy: Float, jz: Float, zx: Float, zy: Float, zz: Float) -> Float {
+    if r == 0 { return jx; }
+    if r == 1 { return jy; }
+    if r == 2 { return jz; }
+    if r == 3 { return zx; }
+    if r == 4 { return zy; }
+    return zz;
+}
+
+pub fn compute_jacobian_6x6(joints: List[DhJoint]) -> Result[List[Float], String] {
+    if sj6_list_len_ok(joints) != 0 {
+        return Err("ERR\tcompute_jacobian_6x6\tjoint_count_not_six");
+    }
+    let mut T: Matrix4x4Homogeneous = matrix4x4_identity();
+    let mut frames: List[Matrix4x4Homogeneous] = list_new();
+    frames = list_push(frames, T);
+    let mut i: Int = 0;
+    while i < 6 {
+        let j: DhJoint = list_get(joints, i);
+        let tj: Matrix4x4Homogeneous = dh_joint_matrix(&j);
+        T = matrix4x4_multiply(T, tj);
+        frames = list_push(frames, T);
+        i = i + 1;
+    }
+    let ee: Matrix4x4Homogeneous = T;
+    let mut jac: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < 6 {
+        let mut c: Int = 0;
+        while c < 6 {
+            let Ti: Matrix4x4Homogeneous = list_get(frames, c);
+            let dpx: Float = ee.tx - Ti.tx;
+            let dpy: Float = ee.ty - Ti.ty;
+            let dpz: Float = ee.tz - Ti.tz;
+            let jx: Float = (Ti.r23 * dpz) - (Ti.r33 * dpy);
+            let jy: Float = (Ti.r33 * dpx) - (Ti.r13 * dpz);
+            let jz: Float = (Ti.r13 * dpy) - (Ti.r23 * dpx);
+            let val: Float = sj6_pick(r, jx, jy, jz, Ti.r13, Ti.r23, Ti.r33);
+            jac = list_push(jac, val);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return Ok(jac);
+}

@@ -1,0 +1,96 @@
+// # Cauchy-Schwarz equality law
+//
+// Logline: |x.y| = ||x|| * ||y|| iff x and y are linearly dependent.
+//
+// Setup: Imports std/math/blas_level1.oo. Slack 1e-9.
+//
+// Beats:
+//   1. Equality holds when ad/dot/(nrm2(x)*nrm2(y)) is within 1e-9 of 1.
+//   2. Orthogonal x,y fail closed to 0.
+//   3. Mismatched lengths and zero norm fail closed to 0.
+
+import "std/core/math/blas_level1.oo";
+import "std/core/math/cauchy_schwarz_law.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn cauchy_schwarz_equality(x: List[Float], y: List[Float]) -> DomainCert {
+    let nx: Int = list_len(x);
+    let ny: Int = list_len(y);
+    let mut h: Int = 0;
+    if nx != ny { return domain_cert("math", "cauchy_schwarz_equality", h); }
+    if nx == 0 { h = 1; return domain_cert("math", "cauchy_schwarz_equality", h); }
+    let d: Float = blas_dot(x, y);
+    let nx_n: Float = blas_nrm2(x);
+    let ny_n: Float = blas_nrm2(y);
+    let denom: Float = nx_n * ny_n;
+    if denom == 0.0 { return domain_cert("math", "cauchy_schwarz_equality", h); }
+    let mut ad: Float = d;
+    if ad < 0.0 { ad = 0.0 - ad; }
+    let ratio: Float = ad / denom;
+    if pabs(ratio - 1.0) <= 0.000000001 { h = 1; }
+    return domain_cert("math", "cauchy_schwarz_equality", h);
+}
+
+pub fn math_cauchy_schwarz_equality_colinear_2d() -> DomainCert {
+    let mut x: List[Float] = list_new();
+    x = list_push(x, 1.0);
+    x = list_push(x, 2.0);
+    let mut y: List[Float] = list_new();
+    y = list_push(y, 2.0);
+    y = list_push(y, 4.0);
+    return cauchy_schwarz_equality(x, y);
+}
+
+pub fn math_cauchy_schwarz_equality_orthogonal_2d() -> DomainCert {
+    let mut x: List[Float] = list_new();
+    x = list_push(x, 1.0);
+    x = list_push(x, 0.0);
+    let mut y: List[Float] = list_new();
+    y = list_push(y, 0.0);
+    y = list_push(y, 1.0);
+    return cauchy_schwarz_equality(x, y);
+}
+
+pub fn math_cauchy_schwarz_equality_mismatch_len() -> DomainCert {
+    let mut x: List[Float] = list_new();
+    x = list_push(x, 1.0);
+    x = list_push(x, 2.0);
+    x = list_push(x, 3.0);
+    let mut y: List[Float] = list_new();
+    y = list_push(y, 4.0);
+    y = list_push(y, 5.0);
+    return cauchy_schwarz_equality(x, y);
+}
+
+pub fn math_cauchy_schwarz_equality_coupled_with_law() -> DomainCert {
+    let mut x: List[Float] = list_new();
+    x = list_push(x, 1.0);
+    x = list_push(x, 0.0);
+    let mut y: List[Float] = list_new();
+    y = list_push(y, 0.0);
+    y = list_push(y, 1.0);
+    let eq: DomainCert = cauchy_schwarz_equality(x, y);
+    let law: DomainCert = math_cauchy_schwarz_law(x, y);
+    let mut h: Int = 0;
+    if eq.holds == 0 {
+        if law.holds == 1 { h = 1; }
+    }
+    return domain_cert("math", "cauchy_schwarz_equality_coupled", h);
+}
+
+pub fn verify_cauchy_schwarz_equality_law() -> Bool {
+    let a: DomainCert = math_cauchy_schwarz_equality_colinear_2d();
+    let b: DomainCert = math_cauchy_schwarz_equality_orthogonal_2d();
+    let c: DomainCert = math_cauchy_schwarz_equality_mismatch_len();
+    let d: DomainCert = math_cauchy_schwarz_equality_coupled_with_law();
+    if a.holds != 1 { return false; }
+    if b.holds != 0 { return false; }
+    if c.holds != 0 { return false; }
+    if d.holds != 1 { return false; }
+    return true;
+}

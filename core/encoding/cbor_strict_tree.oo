@@ -1,0 +1,124 @@
+// # Canonical CBOR tree decoder
+//
+// Logline: Parses a definite CBOR buffer into a recursive CborValue tree, exposing kind, num, bytes, and child byte-offset pairs.
+//
+// Setup: Pure. Imports cbor_strict.oo for the CborValue struct and accessors, and cbor_strict_dec.oo for the additional-info reader. Returns Result[CborValue, String].
+//
+// Beats:
+//   1. Walk one top-level item, then recurse on arrays and maps.
+//   2. Use cbor_d_size to slice children without unwrapping a Result[Struct, String].
+//   3. Build a CborValue with child byte-offset pairs into the original input.
+//   4. Reject truncated buffers, non-shortest integers, and extra trailing bytes.
+
+import "std/core/encoding/cbor_strict.oo";
+import "std/core/encoding/cbor_strict_dec.oo";
+
+// Byte width consumed by one CBOR item at pos, or -1 on error. Used to
+// slice out children and recurse without a struct-returning helper.
+fn cbor_d_size(buf: List[Int], pos: Int, depth: Int) -> Int {
+    if pos >= list_len(buf) { return 0 - 1; }
+    if pos >= list_len(buf) { return 0 - 1; }
+    if depth > 32 { return 0 - 1; }
+    let h: Int = list_get(buf, pos) & 255;
+    let major: Int = h / 32;
+    let ai: Int = h - major * 32;
+    if ai == 31 { return 0 - 1; }
+    let ar: ByteOut = cbor_arg(buf, pos, ai);
+    if ar.flag < 1 { return 0 - 1; }
+    let av: Int = list_get(ar.bytes, 0);
+    let nxt: Int = list_get(ar.bytes, 1);
+    if major < 2 { return nxt - pos; }
+    if major < 4 { return nxt + av - pos; }
+    if major == 4 {
+        let mut cur: Int = nxt;
+        let mut k: Int = 0;
+        while k < av {
+            let sz: Int = cbor_d_size(buf, cur, depth + 1);
+            if sz < 0 { return 0 - 1; }
+            cur = cur + sz;
+            k = k + 1;
+        }
+        return cur - pos;
+    }
+    if major != 5 { return 0 - 1; }
+    let mut cur2: Int = nxt;
+    let mut k2: Int = 0;
+    while k2 < av {
+        let ks: Int = cbor_d_size(buf, cur2, depth + 1);
+        if ks < 0 { return 0 - 1; }
+        let vs: Int = cbor_d_size(buf, cur2 + ks, depth + 1);
+        if vs < 0 { return 0 - 1; }
+        cur2 = cur2 + ks + vs;
+        k2 = k2 + 1;
+    }
+    return cur2 - pos;
+}
+
+// Build a CborValue for one top-level item. Aggregates store children
+// as [start, end) byte-offset pairs into the original input buffer.
+pub fn cbor_decode_at_offset(buf: List[Int], pos: Int) -> Result[CborValue, String] {
+    if pos >= list_len(buf) { return Err("ERR\tcbor_decode\ttruncated"); }
+    let h: Int = list_get(buf, pos) & 255;
+    let major: Int = h / 32;
+    let ai: Int = h - major * 32;
+    if ai == 31 { return Err("ERR\tcbor_decode\tindefinite"); }
+    let ar: ByteOut = cbor_arg(buf, pos, ai);
+    if ar.flag < 1 { return Err("ERR\tcbor_decode\tbad_arg"); }
+    let av: Int = list_get(ar.bytes, 0);
+    let nxt: Int = list_get(ar.bytes, 1);
+    if major == 0 { return Ok(CborValue { kind: 0, num: av, bytes: list_new(), children: list_new() }); }
+    if major == 1 { return Ok(CborValue { kind: 1, num: 0 - 1 - av, bytes: list_new(), children: list_new() }); }
+    if major == 2 {
+        let end: Int = nxt + av;
+        if end > list_len(buf) { return Err("ERR\tcbor_decode\ttruncated_bstr"); }
+        return Ok(CborValue { kind: 2, num: 0, bytes: cbor_d_slice(buf, nxt, end), children: list_new() });
+    }
+    if major == 3 {
+        let end2: Int = nxt + av;
+        if end2 > list_len(buf) { return Err("ERR\tcbor_decode\ttruncated_tstr"); }
+        return Ok(CborValue { kind: 3, num: 0, bytes: cbor_d_slice(buf, nxt, end2), children: list_new() });
+    }
+    if major == 4 {
+        let mut kids: List[Int] = list_new();
+        let mut cur: Int = nxt;
+        let mut k: Int = 0;
+        while k < av {
+            let sz: Int = cbor_d_size(buf, cur, 1);
+            if sz < 0 { return Err("ERR\tcbor_decode\tbad_array_child"); }
+            kids = list_push(kids, cur);
+            kids = list_push(kids, cur + sz);
+            cur = cur + sz;
+            k = k + 1;
+        }
+        return Ok(CborValue { kind: 4, num: av, bytes: list_new(), children: kids });
+    }
+    if major != 5 { return Err("ERR\tcbor_decode\tbad_major"); }
+    let mut kids2: List[Int] = list_new();
+    let mut cur2: Int = nxt;
+    let mut k2: Int = 0;
+    while k2 < av {
+        let ks: Int = cbor_d_size(buf, cur2, 1);
+        if ks < 0 { return Err("ERR\tcbor_decode\tbad_map_key"); }
+        let vs: Int = cbor_d_size(buf, cur2 + ks, 1);
+        if vs < 0 { return Err("ERR\tcbor_decode\tbad_map_val"); }
+        kids2 = list_push(kids2, cur2);
+        kids2 = list_push(kids2, cur2 + ks);
+        kids2 = list_push(kids2, cur2 + ks);
+        kids2 = list_push(kids2, cur2 + ks + vs);
+        cur2 = cur2 + ks + vs;
+        k2 = k2 + 1;
+    }
+    return Ok(CborValue { kind: 5, num: av, bytes: list_new(), children: kids2 });
+}
+
+pub fn cbor_decode(buf: List[Int]) -> Result[CborValue, String] {
+    if list_len(buf) < 1 { return Err("ERR\tcbor_decode\tempty"); }
+    let total: Int = cbor_d_size(buf, 0, 1);
+    if total < 0 { return Err("ERR\tcbor_decode\tbad_header"); }
+    if total != list_len(buf) { return Err("ERR\tcbor_decode\textra_bytes"); }
+    return cbor_decode_at_offset(buf, 0);
+}
+
+pub fn cbor_decode_child(buf: List[Int], start: Int, end: Int) -> Result[CborValue, String] {
+    return cbor_decode_at_offset(cbor_d_slice(buf, start, end), 0);
+}

@@ -1,0 +1,27 @@
+// # MessagePack tree decoder
+//
+// Logline: Wraps the byte-level MessagePack type-tag parser with a Result[MsgValue, String] interface that classifies the parsed item into a MsgValue tree.
+//
+// Setup: Pure. Imports msgpack_pure.oo for the MsgValue struct and accessors, and msgpack_pure_dec.oo for the underlying tag parser.
+//
+// Beats:
+//   1. Call msgpack_pure_dec_parse to get a tagged MsgOut.
+//   2. Project the MsgOut into kind, num, and payload.
+//   3. Build a MsgValue with an empty children list (children are reserved for future expansion).
+//   4. Propagate parse failures as Err.
+
+import "std/core/encoding/msgpack_pure.oo";
+import "std/core/encoding/msgpack_pure_dec.oo";
+
+// Public decoder. Returns Ok(MsgValue) on a recognized type tag, Err on
+// truncated input, an unknown tag, or any other parse failure. The
+// underlying tag parser handles positive/negative fixint, nil, bool,
+// int8/16/32, str8/16, bin8/16, fixarray, and fixmap.
+pub fn msgpack_decode(buf: List[Int]) -> Result[MsgValue, String] {
+    let m: MsgOut = msgpack_pure_dec_parse(buf);
+    if m.flag < 1 { return Err(m.err); }
+    let kind: Int = m.kind;
+    let num: Int = m.n;
+    let payload: List[Int] = m.bytes;
+    return Ok(MsgValue { kind: kind, num: num, bytes: payload, children: list_new() });
+}

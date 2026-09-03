@@ -1,0 +1,66 @@
+// # AArch64 SHA-256 One-Shot Hex Digest
+//
+// Logline: Pads the message, runs 64-round SHA-256, and writes a 64-char lowercase hex digest.
+//
+// Setup: K table is interned hex. Uses 32-bit masked GPR adds. Heap bump for pad and W[64].
+//
+// Beats:
+//   1. Decode the 256-byte K table from interned hex once per call.
+//   2. Pad the message with 0x80, zeros, and big-endian bit length.
+//   3. Compress each 64-byte block into eight 32-bit state words.
+//   4. Emit 64 hex digits and NUL as crypto_sha256_internal.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_sha256c.oo";
+
+pub fn a64rt_sha_khex() -> String {
+    return "428a2f9871374491b5c0fbcfe9b5dba53956c25b59f111f1923f82a4ab1c5ed5d807aa9812835b01243185be550c7dc372be5d7480deb1fe9bdc06a7c19bf174e49b69c1efbe47860fc19dc6240ca1cc2de92c6f4a7484aa5cb0a9dc76f988da983e5152a831c66db00327c8bf597fc7c6e00bf3d5a7914706ca63511429296727b70a852e1b21384d2c6dfc53380d13650a7354766a0abb81c2c92e92722c85a2bfe8a1a81a664bc24b8b70c76c51a3d192e819d6990624f40e3585106aa07019a4c1161e376c082748774c34b0bcb5391c0cb34ed8aa4a5b9cca4f682e6ff3748f82ee78a5636f84c878148cc7020890befffaa4506cebbef9a3f7c67178f2";
+}
+
+fn a64rt_sha_n(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha256_raw");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 48));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_str(1, 31, 8));
+    x = a64x_intern(x, a64rt_sha_khex());
+    x = a64x_str_ref(x);
+    x = a64x_bl(x, "__sha_unhex_k");
+    x = a64x_emit(x, arm64_word_str(0, 31, 16));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 8));
+    x = a64x_bl(x, "__sha_pad");
+    x = a64x_emit(x, arm64_word_str(0, 31, 24));
+    x = a64x_emit(x, arm64_word_str(1, 31, 32));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 24));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 32));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 16));
+    x = a64x_bl(x, "__sha_compress");
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 48));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "__sha256_n");
+    x = a64rt_prol(r.x);
+    x = a64x_bl(x, "__sha256_raw");
+    x = a64x_bl(x, "__sha_hex32");
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_sha256(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "crypto_sha256_internal");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 16));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_bl(x, "__sha256_n");
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 16));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_sha_n(r);
+    return a64rt_sha256c(r);
+}

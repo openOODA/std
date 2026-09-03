@@ -1,0 +1,148 @@
+// # x86-64 ELF64 Executable Linker
+//
+// Logline: Pack x86-64 machine code and rodata into a standalone, statically-linked ELF64 executable with PT_LOAD segment and _start entrypoint.
+//
+// Setup: Pure byte stream synthesizer. Caller provides a flat machine code byte list and an optional rodata byte list; this builds a valid Linux ELF64 ET_EXEC binary.
+//
+// Beats:
+//   1. Emit the 64-byte ELF64 header with executable type, x86-64 machine, and entry-point address.
+//   2. Emit a 56-byte PT_LOAD program header covering the entire binary (RWX) at a 0x400000 base.
+//   3. Concatenate the .text (machine code) and .rodata (string constants) sections.
+//   4. Build a complete runnable binary as a raw byte list ready for write_file.
+//
+// residual: dynamic linking, RELRO, BIND_NOW, NX segments stay later.
+
+pub fn elf64_emit_magic() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 127);
+    out = list_push(out, 69);
+    out = list_push(out, 76);
+    out = list_push(out, 70);
+    out = list_push(out, 2);
+    out = list_push(out, 1);
+    out = list_push(out, 1);
+    out = list_push(out, 0);
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, 0);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn elf64_emit_header(entry_vaddr: Int, pheader_off: Int) -> List[Int] {
+    let mut out: List[Int] = elf64_emit_magic();
+    out = list_push(out, 2);
+    out = list_push(out, 0);
+    out = list_push(out, 62);
+    out = list_push(out, 0);
+    out = list_push(out, 1);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = elf64_emit_u64(out, entry_vaddr);
+    out = elf64_emit_u64(out, pheader_off);
+    out = elf64_emit_u64(out, 0);
+    out = elf64_emit_u32(out, 0);
+    out = elf64_emit_u16(out, 64);
+    out = elf64_emit_u16(out, 56);
+    out = elf64_emit_u16(out, 1);
+    out = elf64_emit_u16(out, 0);
+    out = elf64_emit_u16(out, 0);
+    out = elf64_emit_u16(out, 1);
+    return out;
+}
+
+pub fn elf64_emit_pheader(vaddr: Int, filesz: Int, memsz: Int, flags: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = elf64_emit_u32(out, 1);
+    out = elf64_emit_u32(out, flags);
+    out = elf64_emit_u64(out, 0);
+    out = elf64_emit_u64(out, vaddr);
+    out = elf64_emit_u64(out, vaddr);
+    out = elf64_emit_u64(out, filesz);
+    out = elf64_emit_u64(out, memsz);
+    out = elf64_emit_u64(out, 4096);
+    return out;
+}
+
+pub fn elf64_emit_u16(out: List[Int], n: Int) -> List[Int] {
+    let mut r: List[Int] = out;
+    r = list_push(r, n & 255);
+    r = list_push(r, (n >> 8) & 255);
+    return r;
+}
+
+pub fn elf64_emit_u32(out: List[Int], n: Int) -> List[Int] {
+    let mut r: List[Int] = out;
+    r = list_push(r, n & 255);
+    r = list_push(r, (n >> 8) & 255);
+    r = list_push(r, (n >> 16) & 255);
+    r = list_push(r, (n >> 24) & 255);
+    return r;
+}
+
+pub fn elf64_emit_u64(out: List[Int], n: Int) -> List[Int] {
+    let mut r: List[Int] = out;
+    r = list_push(r, n & 255);
+    r = list_push(r, (n >> 8) & 255);
+    r = list_push(r, (n >> 16) & 255);
+    r = list_push(r, (n >> 24) & 255);
+    r = list_push(r, (n >> 32) & 255);
+    r = list_push(r, (n >> 40) & 255);
+    r = list_push(r, (n >> 48) & 255);
+    r = list_push(r, (n >> 56) & 255);
+    return r;
+}
+
+pub fn elf64_concat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn elf64_default_base() -> Int {
+    return 4194304;
+}
+
+pub fn elf64_header_size() -> Int {
+    return 64;
+}
+
+pub fn elf64_pheader_size() -> Int {
+    return 56;
+}
+
+pub fn elf64_link_executable(text: List[Int], rodata: List[Int]) -> List[Int] {
+    let base: Int = elf64_default_base();
+    let text_len: Int = list_len(text);
+    let rodata_len: Int = list_len(rodata);
+    let total_size: Int = elf64_header_size() + elf64_pheader_size() + text_len + rodata_len;
+    let entry_off: Int = elf64_header_size() + elf64_pheader_size();
+    let entry_vaddr: Int = base + entry_off;
+    let pheader_off: Int = elf64_header_size();
+    let mut out: List[Int] = elf64_emit_header(entry_vaddr, pheader_off);
+    out = elf64_concat(out, elf64_emit_pheader(base, total_size, total_size, 7));
+    out = elf64_concat(out, text);
+    out = elf64_concat(out, rodata);
+    return out;
+}
+
+pub fn elf64_link_with_layout(text_base: Int, text: List[Int], rodata: List[Int]) -> List[Int] {
+    let base: Int = elf64_default_base();
+    let text_len: Int = list_len(text);
+    let rodata_len: Int = list_len(rodata);
+    let header_total: Int = elf64_header_size() + elf64_pheader_size();
+    let total_size: Int = header_total + text_len + rodata_len;
+    let entry_vaddr: Int = base + header_total;
+    let mut out: List[Int] = elf64_emit_header(entry_vaddr, elf64_header_size());
+    out = elf64_concat(out, elf64_emit_pheader(base, total_size, total_size, 7));
+    out = elf64_concat(out, text);
+    out = elf64_concat(out, rodata);
+    return out;
+}

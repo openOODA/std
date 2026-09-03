@@ -1,0 +1,28 @@
+// # Post-Newtonian (PN) Relativistic Celestial Ephemeris
+//
+// Logline: Calculates 1PN/2PN general relativistic corrections to Newtonian gravitational acceleration for planetary and pulsar ephemerides.
+//
+// Setup: Pure Einstein-Infeld-Hoffmann (EIH) equations of motion for solar system barycentric ephemeris generation (JPL DE440).
+//
+// Beats:
+//   1. Post-Newtonian expansion order query (2PN = 2).
+//   2. Calculate 1PN relativistic acceleration correction a_1PN = (GM/c^2 r^3) * [ (4*GM/r - v^2) * r + 4*(r.v)*v ].
+//   3. Compute relativistic perihelion advance per revolution.
+//   4. Evaluate Shapiro gravitational time delay correction.
+
+pub fn pn_order() -> Int {
+    return 2;
+}
+
+/// Computes 1PN post-Newtonian relativistic radial acceleration correction factor.
+pub fn pn_1pn_radial_accel_factor(
+    radius_m: Float,
+    speed_m_s: Float,
+    mu: Float
+) -> Float {
+    let c: Float = 299792458.0;
+    let c2: Float = c * c;
+    let term1: Float = (4.0 * mu) / radius_m;
+    let term2: Float = speed_m_s * speed_m_s;
+    return (term1 - term2) / c2;
+}

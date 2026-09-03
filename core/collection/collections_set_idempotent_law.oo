@@ -1,0 +1,47 @@
+// # Set insert idempotent law
+//
+// Logline: Inserting an element already in the set does not change its size.
+//
+// Setup: Pure Int. Models the (size_before, was_present) decision.
+//
+// Beats:
+//   1. set_size_after_insert(m, 1) returns m when the element was present.
+//   2. set_size_after_insert(m, 0) returns m + 1 when the element was absent.
+//   3. Two idempotent inserts in a row leave the size unchanged.
+
+pub fn set_size_after_insert(size_before: Int, was_present: Int) -> Int {
+    if was_present == 1 {
+        return size_before;
+    }
+    return size_before + 1;
+}
+
+pub fn verify_collections_set_idempotent_law() -> Bool {
+    // golden: an idempotent insert keeps the size.
+    if set_size_after_insert(5, 1) != 5 {
+        return false;
+    }
+    if set_size_after_insert(0, 1) != 0 {
+        return false;
+    }
+    if set_size_after_insert(10, 1) != 10 {
+        return false;
+    }
+    // hostile: a not-present insert grows the size by 1.
+    if set_size_after_insert(5, 0) != 6 {
+        return false;
+    }
+    if set_size_after_insert(0, 0) != 1 {
+        return false;
+    }
+    if set_size_after_insert(99, 0) != 100 {
+        return false;
+    }
+    // golden: two idempotent inserts in a row leave the size unchanged.
+    let s1: Int = set_size_after_insert(7, 1);
+    let s2: Int = set_size_after_insert(s1, 1);
+    if s2 != 7 {
+        return false;
+    }
+    return true;
+}

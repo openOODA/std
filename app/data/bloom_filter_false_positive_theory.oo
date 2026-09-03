@@ -1,0 +1,158 @@
+// # Bloom Filter False-Positive Probability Theory
+//
+// Logline: FPP = (1 - exp(-k*n/m))^k for k hash functions, n insertions, m bits. Scaled by 1e6 (so 8200 = 0.82%). Out-of-range fails closed to -1.
+//
+// Setup: Pure Int. m > 0 bits, n >= 0 insertions, k >= 1 hashes. Uses math_ln/math_exp as float helpers. Hosts data_invariants.oo stem and uses domain_cert("data", ...).
+//
+// Beats:
+//   1. bloom_fpp returns 1e6 * (1 - exp(-k*n/m))^k via a polynomial-safe fixed-point approximation.
+//   2. Optimal k* = (m/n) * ln(2)  (milli-units scale).
+//   3. m <= 0, n < 0, k < 1 fail closed to -1.
+
+import "std/app/data/data_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn bf_ln(x: Float) -> Float {
+    return ln(x);
+}
+
+fn bf_exp(x: Float) -> Float {
+    return exp(x);
+}
+
+// dabs: absolute value of a Float (double). Local helper per task rule.
+fn dabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// False-positive probability of a Bloom filter.
+//   fpp = (1 - exp(-k*n/m))^k
+// Returned as fixed-point Int scaled by 1e6 (e.g. 8200 = 0.82%). -1 on bad input.
+fn bf_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn bloom_fpp(m_bits: Int, n_inserts: Int, k_hashes: Int) -> Result[Int, String] {
+    if m_bits <= 0 { return Err("ERR\tbloom\tm"); }
+    if n_inserts < 0 { return Err("ERR\tbloom\tn"); }
+    if k_hashes < 1 { return Err("ERR\tbloom\tk"); }
+    let m_f: Float = bf_ln(0.0 + 1.0) * 0.0 + 0.0;
+    let mut mf: Float = 0.0;
+    let mut mi: Int = 0;
+    while mi < m_bits { mf = mf + 1.0; mi = mi + 1; }
+    let mut nf: Float = 0.0;
+    let mut ni: Int = 0;
+    while ni < n_inserts { nf = nf + 1.0; ni = ni + 1; }
+    let mut kf: Float = 0.0;
+    let mut ki: Int = 0;
+    while ki < k_hashes { kf = kf + 1.0; ki = ki + 1; }
+    // exp_arg = -k*n/m
+    let exp_arg: Float = 0.0 - (kf * nf / mf);
+    let one_minus: Float = 1.0 - bf_exp(exp_arg);
+    if one_minus < 0.0 { return Err("ERR\tbloom\tfpp"); }
+    if one_minus > 1.0 { return Err("ERR\tbloom\tfpp"); }
+    // (1 - exp(-k*n/m))^k via exp(k*ln(1-e))  (1-e in (0,1), ln defined).
+    let ln_base: Float = bf_ln(one_minus);
+    let pow_arg: Float = kf * ln_base;
+    let fpp_f: Float = bf_exp(pow_arg);
+    // Scale by 1e6 and round to nearest Int.
+    let scaled: Float = fpp_f * 1000000.0;
+    if scaled < 0.0 { return Ok(0); }
+    let mut out: Int = 0;
+    let mut i: Int = 0;
+    while i < 1000000 {
+        if (i + 1) > scaled { out = i; i = 1000000; } else { i = i + 1; }
+    }
+    if scaled > 1000000.0 { out = 1000000; }
+    return Ok(out);
+}
+
+pub fn bloom_optimal_k_milli(m_bits: Int, n_inserts: Int) -> Result[Int, String] {
+    if m_bits <= 0 { return Err("ERR\tbloom\tm"); }
+    if n_inserts <= 0 { return Err("ERR\tbloom\tn"); }
+    let mut mf: Float = 0.0;
+    let mut mi: Int = 0;
+    while mi < m_bits { mf = mf + 1.0; mi = mi + 1; }
+    let mut nf: Float = 0.0;
+    let mut ni: Int = 0;
+    while ni < n_inserts { nf = nf + 1.0; ni = ni + 1; }
+    let ratio: Float = mf / nf;
+    let ln2: Float = 0.6931471805599453;
+    let k_star: Float = ratio * ln2;
+    let scaled: Float = k_star * 100.0;
+    if scaled < 0.0 { return Ok(0); }
+    let mut out: Int = 0;
+    let mut i: Int = 0;
+    while i < 100000 {
+        if ((i + 1) + 0) > scaled { out = i; i = 100000; } else { i = i + 1; }
+    }
+    if scaled > 100000.0 { out = 100000; }
+    return Ok(out);
+}
+
+pub fn bloom_fpp_golden_cert() -> DomainCert {
+    let data_inv_ok: Int = data_table_ok("orders");
+    let mut holds: Int = 0;
+    let fpp: Int = bf_got(bloom_fpp(1000, 100, 7));
+    if data_inv_ok == 1 {
+        if fpp >= 7781 { if fpp <= 8620 { holds = 1; } }
+    }
+    return domain_cert("data", "bloom_fpp_golden", holds);
+}
+
+pub fn bloom_optimal_k_coupled_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    let k_star: Int = bf_got(bloom_optimal_k_milli(1000, 100));
+    if k_star >= 658 { if k_star <= 728 { holds = 1; } }
+    return domain_cert("data", "bloom_optimal_k_coupled", holds);
+}
+
+pub fn bloom_fpp_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if bloom_fpp(0, 100, 7).is_ok() == false {
+        if bloom_fpp(0 - 1, 100, 7).is_ok() == false {
+            if bloom_fpp(1000, 0 - 1, 7).is_ok() == false {
+                if bloom_fpp(1000, 100, 0).is_ok() == false {
+                    if bloom_fpp(1000, 100, 0 - 1).is_ok() == false { holds = 1; }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "bloom_fpp_hostile", holds);
+}
+
+pub fn verify_bloom_filter_false_positive_theory() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    let f1: Int = bf_got(bloom_fpp(1000, 100, 7));
+    if f1 < 7781 { return false; }
+    if f1 > 8620 { return false; }
+    let f2: Int = bf_got(bloom_fpp(1000, 100, 10));
+    if f2 < f1 { return false; }
+    let f_big: Int = bf_got(bloom_fpp(10000, 100, 7));
+    if f_big > f1 { return false; }
+    if bf_got(bloom_fpp(1000, 0, 7)) != 0 { return false; }
+    if bloom_fpp(0, 100, 7).is_ok() { return false; }
+    if bloom_fpp(0 - 1, 100, 7).is_ok() { return false; }
+    if bloom_fpp(1000, 0 - 1, 7).is_ok() { return false; }
+    if bloom_fpp(1000, 100, 0).is_ok() { return false; }
+    if bloom_fpp(1000, 100, 0 - 1).is_ok() { return false; }
+    let k1: Int = bf_got(bloom_optimal_k_milli(1000, 100));
+    if k1 < 658 { return false; }
+    if k1 > 728 { return false; }
+    let k_diff: Int = 693 - k1;
+    let mut abs_diff: Int = k_diff;
+    if k_diff < 0 { abs_diff = 0 - k_diff; }
+    if abs_diff > 5 { return false; }
+    if bloom_optimal_k_milli(0, 100).is_ok() { return false; }
+    if bloom_optimal_k_milli(1000, 0).is_ok() { return false; }
+    if bloom_optimal_k_milli(1000, 0 - 1).is_ok() { return false; }
+    let a: DomainCert = bloom_fpp_golden_cert();
+    let b: DomainCert = bloom_optimal_k_coupled_cert();
+    let c: DomainCert = bloom_fpp_hostile_cert();
+    if a.holds != 1 { return false; }
+    if b.holds != 1 { return false; }
+    if c.holds != 1 { return false; }
+    return true;
+}

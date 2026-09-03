@@ -1,0 +1,121 @@
+// # Eigen quasispecies error-threshold law
+//
+// Logline: Replication of the master sequence is preserved iff mu < 1 / ln(sigma) where mu is the per-replication mutation rate and sigma is the selective advantage of the master sequence. Coupled to Kimura 1962: neutral drift dominates when |s| < 1 / N_e. Hostile sigma <= 1 or mu < 0 fail closed.
+//
+// Setup: Pure Float. sigma (dimensionless selective advantage ratio, > 1), mu (per-replication mutation probability, [0, 1)), N_e (effective population size, > 0). The law is unit-agnostic.
+//
+// Beats:
+//   1. Error threshold: replication preserved iff mu < 1 / ln(sigma).
+//   2. Threshold return: 1 when below threshold (replication preserved), 0 when above.
+//   3. Kimura neutral regime: drift dominates when |s| < 1 / N_e.
+//   4. Domain certificate via domain_cert("bio", "eigen_quasispecies", holds).
+//   5. Reference: Eigen 1971, Naturwissenschaften 58, 465; modern formulation Saakian arXiv:q-bio/0703037, Bull. Math. Biol. 72, 1431. Kimura 1962, Genetics 47, 713.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/trig.oo";
+
+fn biabs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn biclose(got: Float, want: Float, tol: Float) -> Int {
+    let d: Float = biabs(got - want);
+    if d <= tol {
+        return 1;
+    }
+    return 0;
+}
+
+fn eq_inputs_valid(sigma: Float, mu: Float) -> Int {
+    if sigma <= 1.0 { return 0; }
+    if mu < 0.0 { return 0; }
+    if mu >= 1.0 { return 0; }
+    return 1;
+}
+
+pub fn eigen_error_threshold(sigma: Float) -> Result[Float, String] {
+    if sigma <= 1.0 {
+        return Err("ERR\teq\tdomain");
+    }
+    let ln_s: Float = math_ln(sigma);
+    if ln_s <= 0.0 {
+        return Err("ERR\teq\tln");
+    }
+    return Ok(1.0 / ln_s);
+}
+
+pub fn eigen_replication_holds(sigma: Float, mu: Float) -> Result[Int, String] {
+    if eq_inputs_valid(sigma, mu) != 1 {
+        return Err("ERR\teq\tdomain");
+    }
+    let thr: Float = 1.0 / math_ln(sigma);
+    if mu < thr {
+        return Ok(1);
+    }
+    return Ok(0);
+}
+
+pub fn eigen_replication_holds_unit(sigma: Float, mu: Float) -> Int {
+    let r: Result[Int, String] = eigen_replication_holds(sigma, mu);
+    match r { Ok(v) => { return v; }, Err(_) => { return 0; } }
+}
+
+pub fn kimura_neutral_regime(sel_coef: Float, n_e: Float) -> Result[Int, String] {
+    if n_e <= 0.0 {
+        return Err("ERR\teq\tdomain");
+    }
+    let s_abs: Float = biabs(sel_coef);
+    let crit: Float = 1.0 / n_e;
+    if s_abs < crit {
+        return Ok(1);
+    }
+    return Ok(0);
+}
+
+fn eq_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn eq_igot(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn eigen_quasispecies_cert(sigma: Float, mu: Float) -> DomainCert {
+    let h: Int = eigen_replication_holds_unit(sigma, mu);
+    return domain_cert("bio", "eigen_quasispecies", h);
+}
+
+pub fn verify_eigen_quasispecies_law() -> Bool {
+    let thr: Float = eq_got(eigen_error_threshold(2.0));
+    if biclose(thr, 1.4426950408889634, 0.0001) != 1 { return false; }
+
+    if eigen_replication_holds_unit(2.0, 0.5) != 1 { return false; }
+    if eigen_quasispecies_cert(2.0, 0.5).holds != 1 { return false; }
+
+    if eigen_replication_holds_unit(2.0, 2.0) != 0 { return false; }
+
+    let thr10: Float = eq_got(eigen_error_threshold(10.0));
+    if biclose(thr10, 0.4342944819032518, 0.0001) != 1 { return false; }
+    if eigen_replication_holds_unit(10.0, 0.4) != 1 { return false; }
+    if eigen_replication_holds_unit(10.0, 0.5) != 0 { return false; }
+
+    if eigen_replication_holds_unit(2.0, 0.0) != 1 { return false; }
+
+    if eq_igot(kimura_neutral_regime(0.0001, 1000.0)) != 1 { return false; }
+    if eq_igot(kimura_neutral_regime(0.01, 1000.0)) != 0 { return false; }
+    if eq_igot(kimura_neutral_regime(0.00005, 1000.0)) != 1 { return false; }
+
+    if eigen_error_threshold(1.0).is_ok() { return false; }
+    if eigen_error_threshold(0.5).is_ok() { return false; }
+    if eigen_replication_holds(2.0, 1.0).is_ok() { return false; }
+    if eigen_replication_holds(2.0, 0.0 - 0.1).is_ok() { return false; }
+    if eigen_replication_holds(0.5, 0.1).is_ok() { return false; }
+    if kimura_neutral_regime(0.01, 0.0).is_ok() { return false; }
+    if kimura_neutral_regime(0.01, 0.0 - 1.0).is_ok() { return false; }
+    if eigen_quasispecies_cert(0.5, 0.1).holds != 0 { return false; }
+    if eigen_quasispecies_cert(2.0, 0.0 - 0.1).holds != 0 { return false; }
+    return true;
+}

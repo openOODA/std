@@ -1,0 +1,201 @@
+// # Physical Hardware Physics and Cache Mechanics
+//
+// Logline: Calculate 64-byte cache-line alignment, false-sharing padding bounds, AVX-512 vector lane saturation, and memory bus bandwidth.
+//
+// Setup: Pure hardware physics calculation with zero ambient authority.
+//
+// Beats:
+//   1. Calculate 64-byte cache-line aligned addresses and padding overhead.
+//   2. Validate false-sharing thread isolation distance bounds.
+//   3. Compute AVX-512 and SIMD vector lane saturation efficiencies.
+//   4. Model hierarchical cache access latency and memory bus throughput.
+
+type VectorSaturation = struct {
+    active_lanes: Int,
+    total_lanes: Int,
+    is_64bit: Bool,
+    saturation_pct: Float,
+    is_fully_saturated: Bool
+};
+
+type MemoryHierarchyModel = struct {
+    l1_hit_ratio: Float,
+    l2_hit_ratio: Float,
+    l3_hit_ratio: Float,
+    dram_hit_ratio: Float,
+    effective_latency_ns: Float,
+    bus_bandwidth_gbps: Float
+};
+
+type CacheLineMetrics = struct {
+    payload_bytes: Int,
+    padded_bytes: Int,
+    pad_overhead_bytes: Int,
+    waste_percentage: Float,
+    is_aligned_64: Bool
+};
+
+pub fn hw_int_to_float(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 5 { return 5.0; }
+    if n == 6 { return 6.0; }
+    if n == 8 { return 8.0; }
+    if n == 16 { return 16.0; }
+    if n == 64 { return 64.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = 0.0 - 1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + (d_f * mult);
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}
+
+// Canonical hardware CPU cache line size in bytes (x86-64 and AArch64)
+pub fn cache_line_size() -> Int {
+    return 64;
+}
+
+// Round address or size up to nearest 64-byte cache-line boundary
+pub fn cache_line_align(address: Int) -> Int {
+    if address <= 0 {
+        return 0;
+    }
+    let rem: Int = address % 64;
+    if rem == 0 {
+        return address;
+    }
+    let add: Int = 64 - rem;
+    return address + add;
+}
+
+// Contract Function: Calculate padding bytes required to prevent false sharing
+pub fn cache_line_pad_size(payload_bytes: Int) -> Int {
+    if payload_bytes <= 0 {
+        return 64;
+    }
+    let rem: Int = payload_bytes % 64;
+    if rem == 0 {
+        return 0;
+    }
+    return 64 - rem;
+}
+
+// Total size allocated including 64-byte cache-line padding
+pub fn cache_line_total_padded(payload_bytes: Int) -> Int {
+    let pad: Int = cache_line_pad_size(payload_bytes);
+    return payload_bytes + pad;
+}
+
+// Calculate padding overhead waste percentage: (pad / total) * 100%
+pub fn cache_line_waste_pct(payload_bytes: Int) -> Float {
+    if payload_bytes <= 0 {
+        return 100.0;
+    }
+    let pad: Int = cache_line_pad_size(payload_bytes);
+    if pad == 0 {
+        return 0.0;
+    }
+    let total: Int = payload_bytes + pad;
+    let pad_f: Float = hw_int_to_float(pad);
+    let total_f: Float = hw_int_to_float(total);
+    let fraction: Float = pad_f / total_f;
+    return fraction * 100.0;
+}
+
+// False-sharing predicate: check if two memory addresses reside in distinct cache lines
+pub fn is_false_sharing_free(addr_a: Int, addr_b: Int) -> Bool {
+    let line_a: Int = addr_a / 64;
+    let line_b: Int = addr_b / 64;
+    if line_a != line_b {
+        return true;
+    }
+    return false;
+}
+
+// AVX-512 SIMD Vector Lane Saturation: 16 lanes for 32-bit Float, 8 lanes for 64-bit Float
+pub fn calculate_avx512_saturation(active_lanes: Int, is_64bit: Bool) -> VectorSaturation {
+    let total: Int = if is_64bit { 8 } else { 16 };
+    let mut active: Int = active_lanes;
+    if active < 0 {
+        active = 0;
+    }
+    if active > total {
+        active = total;
+    }
+    let active_f: Float = hw_int_to_float(active);
+    let total_f: Float = hw_int_to_float(total);
+    let ratio: Float = active_f / total_f;
+    let pct: Float = ratio * 100.0;
+    let fully_saturated: Bool = active == total;
+    return VectorSaturation {
+        active_lanes: active,
+        total_lanes: total,
+        is_64bit: is_64bit,
+        saturation_pct: pct,
+        is_fully_saturated: fully_saturated
+    };
+}
+
+// Memory Hierarchy Effective Access Time: tau_eff = sum(N_i * tau_i) / N_total
+pub fn calculate_effective_access_time(l1_hits: Float, tau_l1_ns: Float, l2_hits: Float, tau_l2_ns: Float, l3_hits: Float, tau_l3_ns: Float, dram_hits: Float, tau_dram_ns: Float) -> Float {
+    let total_accesses: Float = l1_hits + l2_hits + l3_hits + dram_hits;
+    if total_accesses <= 0.0 {
+        return 0.0;
+    }
+    let time_l1: Float = l1_hits * tau_l1_ns;
+    let time_l2: Float = l2_hits * tau_l2_ns;
+    let time_l3: Float = l3_hits * tau_l3_ns;
+    let time_dram: Float = dram_hits * tau_dram_ns;
+    let total_time: Float = time_l1 + time_l2 + time_l3 + time_dram;
+    return total_time / total_accesses;
+}
+
+// Memory Bus Bandwidth in Gigabytes per second (GB/s): BW = (width_bits * clock_MHz * transfers * channels) / 8000
+pub fn calculate_memory_bus_bandwidth_gbps(bus_width_bits: Int, bus_clock_mhz: Float, transfers_per_clock: Float, channel_count: Int) -> Float {
+    if bus_width_bits <= 0 || channel_count <= 0 {
+        return 0.0;
+    }
+    let width_f: Float = hw_int_to_float(bus_width_bits);
+    let chan_f: Float = hw_int_to_float(channel_count);
+    let bits_per_cycle: Float = width_f * transfers_per_clock * chan_f;
+    let total_bits_per_sec: Float = bits_per_cycle * bus_clock_mhz * 1000000.0;
+    let bytes_per_sec: Float = total_bits_per_sec / 8.0;
+    let gbps: Float = bytes_per_sec / 1000000000.0;
+    return gbps;
+}
+
+// Comprehensive hardware cache line metrics evaluation
+pub fn evaluate_hardware_cache_metrics(payload_bytes: Int) -> CacheLineMetrics {
+    let pad: Int = cache_line_pad_size(payload_bytes);
+    let total: Int = payload_bytes + pad;
+    let waste: Float = cache_line_waste_pct(payload_bytes);
+    let aligned: Bool = pad == 0;
+    return CacheLineMetrics {
+        payload_bytes: payload_bytes,
+        padded_bytes: total,
+        pad_overhead_bytes: pad,
+        waste_percentage: waste,
+        is_aligned_64: aligned
+    };
+}

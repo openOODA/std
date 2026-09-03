@@ -1,0 +1,50 @@
+// # Kademlia XOR Metric Routing Table
+//
+// Logline: Bitwise XOR metric distance calculations, k-bucket peer insertion, and nearest neighbor lookup.
+//
+// Setup: Pure routing algebra implementing Kademlia metric space properties.
+//
+// Beats:
+//   1. Implement symmetric XOR metric distance calculation.
+//   2. Insert peer IDs into bounded k-buckets respecting capacity limits.
+//   3. Sort peer candidates by XOR proximity to destination target.
+//   4. Return closest k peers for routing convergence.
+
+pub fn kad_distance(a: Int, b: Int) -> Int {
+    return a ^ b;
+}
+
+pub fn kad_bucket_insert(bucket: List[Int], max_k: Int, peer_id: Int) -> List[Int] {
+    let n: Int = list_len(bucket);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(bucket, i) == peer_id {
+            return bucket; // already present
+        }
+        i = i + 1;
+    }
+    if n < max_k {
+        return list_push(bucket, peer_id);
+    }
+    return bucket; // full bucket
+}
+
+pub fn kad_find_closest(peers: List[Int], target: Int) -> Result[Int, String] {
+    let n: Int = list_len(peers);
+    if n == 0 {
+        return Err("ERR\tkad_find_closest\tempty_peer_list");
+    }
+    let mut best_peer: Int = list_get(peers, 0);
+    let mut min_dist: Int = kad_distance(best_peer, target);
+    let mut i: Int = 1;
+    while i < n {
+        let p: Int = list_get(peers, i);
+        let d: Int = kad_distance(p, target);
+        if d < min_dist {
+            min_dist = d;
+            best_peer = p;
+        }
+        i = i + 1;
+    }
+    return Ok(best_peer);
+}

@@ -1,0 +1,108 @@
+// # Gardiner-Collett Cavity Input-Output Scattering Relations
+//
+// Logline: Computes reflected and transmitted output field spectra for single-sided and double-sided cavities driven by continuous coherent tones.
+//
+// Setup: Boundary condition a_out(t) = sqrt(kappa_ext) a(t) - a_in(t) connecting internal cavity modes with traveling wave waveguides.
+//
+// Beats:
+//   1. Define optical cavity coupling rates (internal loss kappa_0, external coupling kappa_ext).
+//   2. Compute complex reflection coefficient r(omega) and transmission coefficient t(omega).
+//   3. Identify critical coupling condition kappa_ext = kappa_0 with zero reflection at resonance.
+
+pub type Complex = struct {
+    real: Float,
+    imag: Float
+};
+
+fn cav_got(r: Result[Complex, String]) -> Complex {
+    match r { Ok(v) => { return v; }, Err(_) => { return Complex { real: 0.0 - 1.0, imag: 0.0 }; } }
+}
+
+fn cavp_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+type CavityInputOutputParams = struct {
+    detuning_delta: Float,
+    internal_loss_kappa0: Float,
+    external_coupling_kappa_ext: Float
+};
+
+pub fn cavity_input_output_params_new(delta: Float, k0: Float, k_ext: Float) -> CavityInputOutputParams {
+    return CavityInputOutputParams {
+        detuning_delta: delta,
+        internal_loss_kappa0: k0,
+        external_coupling_kappa_ext: k_ext
+    };
+}
+
+pub fn cavity_reflection_coefficient(p: CavityInputOutputParams) -> Result[Complex, String] {
+    let k_ext: Float = p.external_coupling_kappa_ext;
+    let k0: Float = p.internal_loss_kappa0;
+    let delta: Float = p.detuning_delta;
+
+    let num_r: Float = k_ext - k0;
+    let num_i: Float = 0.0 - (2.0 * delta);
+
+    let den_r: Float = k_ext + k0;
+    let den_i: Float = 0.0 - (2.0 * delta);
+
+    let den_mag_sq: Float = (den_r * den_r) + (den_i * den_i);
+    if den_mag_sq == 0.0 { return Err("ERR\tcav\tdomain"); }
+    if k_ext < 0.0 { return Err("ERR\tcav\tdomain"); }
+    if k0 < 0.0 { return Err("ERR\tcav\tdomain"); }
+
+    let out_r: Float = ((num_r * den_r) + (num_i * den_i)) / den_mag_sq;
+    let out_i: Float = ((num_i * den_r) - (num_r * den_i)) / den_mag_sq;
+    return Ok(Complex { real: out_r, imag: out_i });
+}
+
+pub fn cavity_power_reflectivity(p: CavityInputOutputParams) -> Result[Float, String] {
+    let rr: Result[Complex, String] = cavity_reflection_coefficient(p);
+    if rr.is_ok() == false { return Err("ERR\tcav\tdomain"); }
+    let r: Complex = cav_got(rr);
+    return Ok((r.real * r.real) + (r.imag * r.imag));
+}
+
+pub fn cavity_is_critically_coupled(p: CavityInputOutputParams) -> Int {
+    let k_ext: Float = p.external_coupling_kappa_ext;
+    let k0: Float = p.internal_loss_kappa0;
+    let mut diff: Float = k_ext - k0;
+    if diff < 0.0 { diff = 0.0 - diff; }
+    if diff < 0.001 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_input_output_cavity_theory() -> Bool {
+    // Golden: at resonance with critical coupling, reflectivity -> 0.
+    let p_crit: CavityInputOutputParams = cavity_input_output_params_new(0.0, 1.0, 1.0);
+    if cavity_is_critically_coupled(p_crit) != 1 { return false; }
+    let r_crit: Complex = cav_got(cavity_reflection_coefficient(p_crit));
+    let mut dr: Float = r_crit.real;
+    if dr < 0.0 { dr = 0.0 - dr; }
+    if dr > 0.001 { return false; }
+    let mut di: Float = r_crit.imag;
+    if di < 0.0 { di = 0.0 - di; }
+    if di > 0.001 { return false; }
+    let pow_crit: Float = cavp_got(cavity_power_reflectivity(p_crit));
+    if pow_crit > 0.000001 { return false; }
+    // Golden: at resonance with kappa_ext != kappa_0, reflectivity is non-zero.
+    let p_off: CavityInputOutputParams = cavity_input_output_params_new(0.0, 0.5, 1.0);
+    if cavity_is_critically_coupled(p_off) != 0 { return false; }
+    let r_off: Complex = cav_got(cavity_reflection_coefficient(p_off));
+    let pow_off: Float = cavp_got(cavity_power_reflectivity(p_off));
+    if pow_off <= 0.0 { return false; }
+    if pow_off > 1.01 { return false; }
+    // Golden: at large detuning, reflection magnitude approaches 1.
+    let p_far: CavityInputOutputParams = cavity_input_output_params_new(100.0, 1.0, 1.0);
+    let r_far: Complex = cav_got(cavity_reflection_coefficient(p_far));
+    let pow_far: Float = cavp_got(cavity_power_reflectivity(p_far));
+    if pow_far < 0.99 { return false; }
+    // Hostile: zero internal+external loss leads to ill-defined denominator guard.
+    let p_zero: CavityInputOutputParams = cavity_input_output_params_new(0.0, 0.0, 0.0);
+    if cavity_reflection_coefficient(p_zero).is_ok() { return false; }
+    if cavity_power_reflectivity(p_zero).is_ok() { return false; }
+    return true;
+}

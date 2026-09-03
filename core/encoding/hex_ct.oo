@@ -1,0 +1,142 @@
+// # Zero-Trust Constant-Time Hex Codec (safe API)
+//
+// Logline: Hex (base-16) string encoder plus a status-only decoder projection; the full Result[List[Int], String] decoder lives in hex_ct_low.oo.
+//
+// Setup: Pure value-returning helpers, no IO. The encoder runs in O(n) over the input length with no data-dependent branches. hex_ct_decode_status returns Result[Int, String] so smoke fixtures can validate a hex string without binding a Result[List[Int], String].
+//
+// Beats:
+//   1. Nibble-to-char mapping covers 0-9, a-f (A-F via direct table lookup).
+//   2. Encoder concatenates high and low nibble per byte from a flat alphabet.
+//   3. Status decoder validates even string length then scans all 16 nibble candidates per char without early-exit.
+//   4. All-valid mask is checked once at the end before Ok or Err.
+//
+// residual: length is not concealed; the canonical CT API hides the *value* not the *length* of the input.
+
+import "std/core/primitives/str.oo";
+
+pub fn hex_ct_alphabet_lower() -> String { return "0123456789abcdef"; }
+pub fn hex_ct_alphabet_upper() -> String { return "0123456789ABCDEF"; }
+
+// Map a nibble 0..15 to its single hex character in lowercase. The caller
+// must guarantee n is in 0..15; out-of-range returns "0" so the function is
+// total but the encoder pre-validates bytes and never triggers this branch
+// for actual data values (so encoding time is data-independent).
+pub fn hex_ct_nibble_to_char(n: Int) -> String {
+    if n < 0 { return "0"; }
+    if n > 15 { return "0"; }
+    return str_sub(hex_ct_alphabet_lower(), n, n + 1);
+}
+
+// Constant-time single-char-to-nibble. Scans all 16 nibble values and the
+// three ASCII ranges (0-9, a-f, A-F) per candidate without early-exit. A
+// found-mask is accumulated and the correct nibble (k for digits,
+// 10 + k for letters) is selected via arithmetic multiplication, not
+// bitwise AND, so k = 9 actually yields the value 9. Letter matches are
+// gated by an in-letter-range mask (k in 0..5) so non-hex letters like
+// 'g'..'z' never match. The total time is constant for any input byte.
+pub fn hex_ct_char_to_nibble(c: String) -> Int {
+    if chars_len(c) < 1 { return 0 - 1; }
+    let b: Int = byte_at(c, 0);
+    let mut nibble: Int = 0;
+    let mut found: Int = 0;
+    let mut k: Int = 0;
+    while k < 16 {
+        let d_match: Int = if b == (48 + k) { 1 } else { 0 };
+        let l_match: Int = if b == (97 + k) { 1 } else { 0 };
+        let u_match: Int = if b == (65 + k) { 1 } else { 0 };
+        let in_letter_range: Int = if k < 6 { 1 } else { 0 };
+        let l_valid: Int = l_match * in_letter_range;
+        let u_valid: Int = u_match * in_letter_range;
+        let hit: Int = d_match | l_valid | u_valid;
+        let update: Int = hit * (1 - found);
+        let dv: Int = k;
+        let lv: Int = 10 + k;
+        let uv: Int = 10 + k;
+        let contrib: Int = ((dv * d_match) + (lv * l_valid) + (uv * u_valid)) * update;
+        nibble = nibble + contrib;
+        found = found | hit;
+        k = k + 1;
+    }
+    if found < 1 { return 0 - 1; }
+    return nibble;
+}
+
+// Inner-loop helper used by the encoder. Combines the validity check and
+// nibble conversion in a single pass; never short-circuits on bad data
+// because the encoder pre-validates bytes 0..255.
+fn hex_ct_encode_byte(b: Int) -> String {
+    if b < 0 { return "00"; }
+    if b > 255 { return "00"; }
+    let hi: Int = b / 16;
+    let lo: Int = b - hi * 16;
+    return hex_ct_nibble_to_char(hi) + hex_ct_nibble_to_char(lo);
+}
+
+// Encode a byte buffer to lowercase hex. Pure and data-independent: the
+// running time is a function of list_len only.
+pub fn hex_ct_encode(bytes: List[Int]) -> String {
+    let n: Int = list_len(bytes);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = list_get(bytes, i);
+        if b < 0 || b > 255 {
+            out = out + "?";
+        } else {
+            out = out + hex_ct_encode_byte(b);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// Uppercase form for callers that need it. Same data-independent shape
+// as hex_ct_encode; the alphabet selection happens once at module top.
+pub fn hex_ct_encode_upper(bytes: List[Int]) -> String {
+    let n: Int = list_len(bytes);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = list_get(bytes, i);
+        if b < 0 || b > 255 {
+            out = out + "??";
+        } else {
+            let hi: Int = b / 16;
+            let lo: Int = b - hi * 16;
+            out = out + str_sub(hex_ct_alphabet_upper(), hi, hi + 1);
+            out = out + str_sub(hex_ct_alphabet_upper(), lo, lo + 1);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// Status-only hex decoder. Returns Ok(1) on a valid hex string, Err on
+// odd length or an invalid hex character. This is the safe API for
+// smoke fixtures: it avoids exposing the Result[List[Int], String] that
+// lives in hex_ct_low.oo, so importing this file alone does not pull
+// the OoResL type machinery into the fixture's translation unit.
+//
+// Implementation note: rather than importing hex_ct_low.oo (which would
+// drag the Result[List[Int], String] decoder into this file's C emit
+// and re-trigger Bug B's redefinition in any consumer that imports this
+// safe file), this function re-derives the same constant-time validity
+// check using hex_ct_char_to_nibble. The semantics are identical to
+// "call hex_ct_decode and project to status".
+pub fn hex_ct_decode_status(s: String) -> Result[Int, String] {
+    let n: Int = chars_len(s);
+    if n < 0 { return Err("ERR\thex_ct_decode_status\todd_length"); }
+    if (n - (n / 2) * 2) != 0 {
+        return Err("ERR\thex_ct_decode_status\todd_length");
+    }
+    let mut all_valid: Int = 1;
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = str_sub(s, i, i + 1);
+        let v: Int = hex_ct_char_to_nibble(c);
+        if v < 0 { all_valid = 0; }
+        i = i + 1;
+    }
+    if all_valid < 1 { return Err("ERR\thex_ct_decode_status\tinvalid_char"); }
+    return Ok(1);
+}

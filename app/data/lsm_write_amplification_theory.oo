@@ -1,0 +1,162 @@
+// # LSM-Tree Write Amplification Theory
+//
+// Logline: For levelled compaction, write amplification W_A = (T/R) * (1 + 1/2 + 1/4 + ... + 1/2^(L-1)) where T is the size ratio, R is the entry size, L is the number of levels (O'Neil et al. 1996, Acta Informatica 33(4):351-385; modern review Dayan et al. 2018, arXiv:1812.07527).
+//
+// Setup: Pure Int. T_milli >= 1, R_milli >= 1, L >= 1. Returns Int WA in milli. Hosts data_invariants.oo stem and uses domain_cert("data", ...).
+//
+// Beats:
+//   1. lsm_wa_levelled_milli returns 1000 * (T/R) * (1 + 1/2 + ... + 1/2^(L-1)).
+//   2. Geometric sum closed form: 1 + 1/2 + ... + 1/2^(L-1) = 2 - 1/2^(L-1).
+//   3. Golden: T=10, R=1, L=4 -> W_A_milli = 10000 * 1875 / 1000 = 18750 (18.75).
+//   4. Hostile: T < 1, R < 1, or L < 1 fail closed to 0.
+//   5. Coupled: B-tree W_A = 1 (in-place updates) but higher read amplification; LSM trades W_A for sequential writes.
+
+import "std/app/data/data_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Geometric sum s = 1 + 1/2 + ... + 1/2^(L-1) computed in milli (1000 = 1.0).
+// L < 1 fails closed to 0. L is bounded to <= 30 to keep denominators finite in Int.
+pub fn lsm_geometric_sum_milli(l: Int) -> Int {
+    if l < 1 { return 0; }
+    if l > 30 { return 0; }
+    let mut sum: Int = 0;
+    let mut i: Int = 0;
+    while i < l {
+        let mut denom: Int = 1;
+        let mut j: Int = 0;
+        while j < i { denom = denom * 2; j = j + 1; }
+        let term: Int = 1000 / denom;
+        sum = sum + term;
+        i = i + 1;
+    }
+    return sum;
+}
+
+// Closed-form geometric sum in milli: 2 - 1/2^(L-1) -> 2000 - 1000/2^(L-1).
+// Returns 0 for invalid L. Cross-check of lsm_geometric_sum_milli.
+pub fn lsm_geometric_sum_closed_milli(l: Int) -> Int {
+    if l < 1 { return 0; }
+    if l > 30 { return 0; }
+    let mut denom: Int = 1;
+    let mut j: Int = 0;
+    while j < (l - 1) { denom = denom * 2; j = j + 1; }
+    let tail: Int = 1000 / denom;
+    return 2000 - tail;
+}
+
+// Write amplification for levelled compaction, in milli.
+// T_milli = T * 1000 (size ratio), R_milli = R * 1000 (entry size), L >= 1.
+pub fn lsm_wa_levelled_milli(t_milli: Int, r_milli: Int, l: Int) -> Result[Int, String] {
+    if t_milli < 1 { return Err("ERR\tlsm\tt"); }
+    if r_milli < 1 { return Err("ERR\tlsm\tr"); }
+    if l < 1 { return Err("ERR\tlsm\tl"); }
+    let sum_milli: Int = lsm_geometric_sum_milli(l);
+    // WA_milli = (T_milli * sum_milli) / R_milli
+    let wa_milli: Int = (t_milli * sum_milli) / r_milli;
+    return Ok(wa_milli);
+}
+
+// Helper: extract Int from Result[Int, String] (or -1 on Err).
+pub fn lsm_int_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// B-tree write amplification witness: 1 (in-place update). Contrast to LSM.
+pub fn lsm_btree_wa_milli() -> Int {
+    return 1000;
+}
+
+pub fn lsm_wa_golden_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok == 1 {
+        let wa: Int = lsm_int_got(lsm_wa_levelled_milli(10000, 1000, 4));
+        // T=10, R=1, L=4 -> W_A = 10 * (1 + 0.5 + 0.25 + 0.125) = 10 * 1.875 = 18.75 -> 18750 milli.
+        if wa == 18750 { holds = 1; }
+    }
+    return domain_cert("data", "lsm_wa_golden", holds);
+}
+
+pub fn lsm_wa_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if lsm_wa_levelled_milli(0, 1000, 4).is_ok() == false {
+        if lsm_wa_levelled_milli(0 - 1, 1000, 4).is_ok() == false {
+            if lsm_wa_levelled_milli(10000, 0, 4).is_ok() == false {
+                if lsm_wa_levelled_milli(10000, 0 - 1, 4).is_ok() == false {
+                    if lsm_wa_levelled_milli(10000, 1000, 0).is_ok() == false {
+                        if lsm_wa_levelled_milli(10000, 1000, 0 - 1).is_ok() == false {
+                            if lsm_geometric_sum_milli(0) == 0 {
+                                if lsm_geometric_sum_milli(0 - 1) == 0 {
+                                    if lsm_geometric_sum_milli(31) == 0 {
+                                        if lsm_geometric_sum_closed_milli(0) == 0 { holds = 1; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "lsm_wa_hostile", holds);
+}
+
+pub fn lsm_wa_coupled_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    // Coupled: B-tree W_A = 1, LSM W_A > 1 (for typical tuning).
+    let btree: Int = lsm_btree_wa_milli();
+    let lsm: Int = lsm_int_got(lsm_wa_levelled_milli(10000, 1000, 4));
+    if btree == 1000 {
+        if lsm == 18750 { holds = 1; }
+    }
+    return domain_cert("data", "lsm_wa_coupled", holds);
+}
+
+pub fn verify_lsm_write_amplification_theory() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    // Closed-form vs iterative agreement.
+    let s1: Int = lsm_geometric_sum_milli(1);
+    if s1 != 1000 { return false; }
+    let s2: Int = lsm_geometric_sum_milli(2);
+    if s2 != 1500 { return false; }
+    let s3: Int = lsm_geometric_sum_milli(3);
+    if s3 != 1750 { return false; }
+    let s4: Int = lsm_geometric_sum_milli(4);
+    if s4 != 1875 { return false; }
+    // Closed form cross-check.
+    if lsm_geometric_sum_closed_milli(1) != 1000 { return false; }
+    if lsm_geometric_sum_closed_milli(2) != 1500 { return false; }
+    if lsm_geometric_sum_closed_milli(3) != 1750 { return false; }
+    if lsm_geometric_sum_closed_milli(4) != 1875 { return false; }
+    // Golden: T=10, R=1, L=4 -> W_A_milli = 18750.
+    let wa1: Int = lsm_int_got(lsm_wa_levelled_milli(10000, 1000, 4));
+    if wa1 != 18750 { return false; }
+    // Golden: T=4, R=1, L=3 -> sum = 1.75 -> WA = 4 * 1.75 = 7.0 -> 7000 milli.
+    let wa2: Int = lsm_int_got(lsm_wa_levelled_milli(4000, 1000, 3));
+    if wa2 != 7000 { return false; }
+    // Golden: T=2, R=1, L=2 -> sum = 1.5 -> WA = 2 * 1.5 = 3.0 -> 3000 milli.
+    let wa3: Int = lsm_int_got(lsm_wa_levelled_milli(2000, 1000, 2));
+    if wa3 != 3000 { return false; }
+    // Hostile.
+    if lsm_wa_levelled_milli(0, 1000, 4).is_ok() { return false; }
+    if lsm_wa_levelled_milli(0 - 1, 1000, 4).is_ok() { return false; }
+    if lsm_wa_levelled_milli(10000, 0, 4).is_ok() { return false; }
+    if lsm_wa_levelled_milli(10000, 0 - 1, 4).is_ok() { return false; }
+    if lsm_wa_levelled_milli(10000, 1000, 0).is_ok() { return false; }
+    if lsm_wa_levelled_milli(10000, 1000, 0 - 1).is_ok() { return false; }
+    if lsm_geometric_sum_milli(0) != 0 { return false; }
+    if lsm_geometric_sum_milli(0 - 1) != 0 { return false; }
+    if lsm_geometric_sum_milli(31) != 0 { return false; }
+    if lsm_geometric_sum_closed_milli(0) != 0 { return false; }
+    // B-tree witness.
+    if lsm_btree_wa_milli() != 1000 { return false; }
+    // DomainCerts.
+    let ga: DomainCert = lsm_wa_golden_cert();
+    let ha: DomainCert = lsm_wa_hostile_cert();
+    let ca: DomainCert = lsm_wa_coupled_cert();
+    if ga.holds != 1 { return false; }
+    if ha.holds != 1 { return false; }
+    if ca.holds != 1 { return false; }
+    return true;
+}

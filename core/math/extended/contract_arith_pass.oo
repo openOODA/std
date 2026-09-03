@@ -1,0 +1,27 @@
+// # Contract Arith Pass
+//
+// Logline: Standard library verification and domain capabilities for Contract Arith Pass.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn shifted(x: Int) -> Int
+    requires x + 1 > 0
+{
+    return x + 1;
+}
+
+pub fn any_pos_nonneg(a: Int, b: Int, c: Int) -> Int
+    requires (a > 0 || b > 0) && c >= 0
+{
+    return a + b + c;
+}
+
+pub fn verify_contract_arith_pass() -> Bool {
+    println(shifted(0));
+    println(any_pos_nonneg(0, 2, 1));
+    return true;
+}

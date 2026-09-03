@@ -1,0 +1,22 @@
+// # Collections index bounds law
+//
+// Logline: An out-of-range index is not a valid element access.
+//
+// Setup: Pure. Imports domain_cert.oo. idx < 0 or idx >= len yields holds 0 for in_range.
+//
+// Beats:
+//   1. collections_in_range(idx, len) holds 1 only when 0 <= idx < len.
+//   2. Negative idx fails closed.
+//   3. idx equal to len fails closed.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn collections_in_range(idx: Int, len: Int) -> DomainCert {
+    if idx < 0 {
+        return domain_cert("collections", "in_range", 0);
+    }
+    if idx >= len {
+        return domain_cert("collections", "in_range", 0);
+    }
+    return domain_cert("collections", "in_range", 1);
+}

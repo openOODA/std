@@ -1,0 +1,68 @@
+// # Core Option/Result and empty-list laws
+//
+// Logline: Ok is not Err. Tag 1 is Ok and tag 0 is Err. Empty list length is 0.
+//
+// Setup: Pure. Imports domain_cert.oo. Hostile claims fail closed with holds 0.
+//
+// Beats:
+//   1. result_classify_tag maps tag 1 to Ok (1) and tag 0 to Err (0).
+//   2. result_ok_is_err(1) does not hold. Ok(1).is_err is false.
+//   3. Empty list length is 0. Claim that empty has len 1 holds 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Tag 1 is Ok. Tag 0 is Err. Unknown tags fail closed as Err (0).
+pub fn core_result_classify_tag(tag: Int) -> Int {
+    if tag == 1 {
+        return 1;
+    }
+    return 0;
+}
+
+// Treating Ok as Err must not hold.
+pub fn core_result_ok_is_err(tag: Int) -> DomainCert {
+    let kind: Int = core_result_classify_tag(tag);
+    if kind == 1 {
+        return domain_cert("core", "ok_is_err", 0);
+    }
+    return domain_cert("core", "ok_is_err", 0);
+}
+
+// Ok is Ok when the tag is 1.
+pub fn core_result_tag_is_ok(tag: Int) -> DomainCert {
+    if tag == 1 {
+        return domain_cert("core", "tag_is_ok", 1);
+    }
+    return domain_cert("core", "tag_is_ok", 0);
+}
+
+// Claim that Ok(1) is Err. Product Result says it is not.
+pub fn core_result_ok1_is_err() -> DomainCert {
+    let r: Result[Int, String] = Ok(1);
+    if r.is_err() {
+        return domain_cert("core", "ok1_is_err", 1);
+    }
+    return domain_cert("core", "ok1_is_err", 0);
+}
+
+pub fn core_empty_list_len() -> Int {
+    let xs: List[Int] = list_new();
+    return list_len(xs);
+}
+
+pub fn core_empty_list_len_zero() -> DomainCert {
+    let n: Int = core_empty_list_len();
+    if n == 0 {
+        return domain_cert("core", "empty_len_zero", 1);
+    }
+    return domain_cert("core", "empty_len_zero", 0);
+}
+
+// Hostile: claim empty has length 1.
+pub fn core_empty_list_claimed_len_one() -> DomainCert {
+    let n: Int = core_empty_list_len();
+    if n == 1 {
+        return domain_cert("core", "empty_len_one", 1);
+    }
+    return domain_cert("core", "empty_len_one", 0);
+}

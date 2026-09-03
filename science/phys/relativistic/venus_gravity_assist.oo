@@ -1,0 +1,51 @@
+// # Venus Gravity Assist (VGA) Flyby Trajectory
+//
+// Logline: Calculates hyperbolic flyby turning angle, heliocentric velocity boost, and orbital energy gain from Venus gravity assist.
+//
+// Setup: Pure patched-conic gravity assist mechanics for interplanetary missions (Galileo / Cassini / Parker Solar Probe).
+//
+// Beats:
+//   1. Nominal Venus gravity assist delta-v gain query in m/s (~4000 m/s).
+//   2. Calculate hyperbolic turning angle delta = 2 * arcsin(1 / (1 + r_p * v_inf^2 / mu_venus)).
+//   3. Compute heliocentric velocity change vector Delta_V_helio.
+//   4. Calculate post-flyby aphelion/perihelion reduction for solar probe trajectories.
+
+pub fn venus_assist_dv() -> Int {
+    return 4000;
+}
+
+pub fn venus_mu_km3_s2() -> Float {
+    return 324858.592;
+}
+
+pub fn venus_asin(x: Float) -> Float {
+    let mut u: Float = x;
+    if u > 1.0 { u = 1.0; }
+    if u < -1.0 { u = -1.0; }
+    let u2: Float = u * u;
+    let u3: Float = u2 * u;
+    let u5: Float = u3 * u2;
+    let u7: Float = u5 * u2;
+    return u + (u3 * 0.1666666667) + (u5 * 0.075) + (u7 * 0.0446428571);
+}
+
+/// Computes Venus gravity assist turning angle (radians) given periapsis radius (km) and excess velocity v_inf (km/s).
+pub fn venus_flyby_turning_angle(
+    r_periapsis_km: Float,
+    v_infinity_km_s: Float
+) -> Float {
+    let mu_v: Float = venus_mu_km3_s2();
+    let denom: Float = 1.0 + ((r_periapsis_km * (v_infinity_km_s * v_infinity_km_s)) / mu_v);
+    let sin_half_delta: Float = 1.0 / denom;
+    return 2.0 * venus_asin(sin_half_delta);
+}
+
+/// Computes maximum achievable heliocentric delta-v boost from Venus flyby: Delta_v_max = 2 * v_inf * sin(delta / 2).
+pub fn venus_max_delta_v_boost(
+    r_periapsis_km: Float,
+    v_infinity_km_s: Float
+) -> Float {
+    let delta: Float = venus_flyby_turning_angle(r_periapsis_km, v_infinity_km_s);
+    let sin_half: Float = sin(0.5 * delta);
+    return 2.0 * v_infinity_km_s * sin_half * 1000.0; // Return in m/s
+}

@@ -1,0 +1,87 @@
+// # x86-64 Architecture Register Definitions and Prefix Encoders
+//
+// Logline: Hardware register mappings, REX prefix synthesis, and ModR/M byte encoding for x86-64 machine code.
+//
+// Setup: Pure architecture encoding module for 64-bit x86 processors.
+//
+// Beats:
+//   1. Define 64-bit general purpose register constants (RAX through R15).
+//   2. Define 128-bit XMM register constants (XMM0 through XMM15).
+//   3. Compute REX prefix byte with W, R, X, B bits.
+//   4. Compute ModR/M and SIB encoding bytes.
+
+pub fn x86_rax() -> Int { return 0; }
+pub fn x86_rcx() -> Int { return 1; }
+pub fn x86_rdx() -> Int { return 2; }
+pub fn x86_rbx() -> Int { return 3; }
+pub fn x86_rsp() -> Int { return 4; }
+pub fn x86_rbp() -> Int { return 5; }
+pub fn x86_rsi() -> Int { return 6; }
+pub fn x86_rdi() -> Int { return 7; }
+pub fn x86_r8() -> Int { return 8; }
+pub fn x86_r9() -> Int { return 9; }
+pub fn x86_r10() -> Int { return 10; }
+pub fn x86_r11() -> Int { return 11; }
+pub fn x86_r12() -> Int { return 12; }
+pub fn x86_r13() -> Int { return 13; }
+pub fn x86_r14() -> Int { return 14; }
+pub fn x86_r15() -> Int { return 15; }
+
+pub fn x86_xmm0() -> Int { return 0; }
+pub fn x86_xmm1() -> Int { return 1; }
+pub fn x86_xmm2() -> Int { return 2; }
+pub fn x86_xmm3() -> Int { return 3; }
+pub fn x86_xmm4() -> Int { return 4; }
+pub fn x86_xmm5() -> Int { return 5; }
+pub fn x86_xmm6() -> Int { return 6; }
+pub fn x86_xmm7() -> Int { return 7; }
+pub fn x86_xmm8() -> Int { return 8; }
+pub fn x86_xmm9() -> Int { return 9; }
+pub fn x86_xmm10() -> Int { return 10; }
+pub fn x86_xmm11() -> Int { return 11; }
+pub fn x86_xmm12() -> Int { return 12; }
+pub fn x86_xmm13() -> Int { return 13; }
+pub fn x86_xmm14() -> Int { return 14; }
+pub fn x86_xmm15() -> Int { return 15; }
+
+pub fn x86_is_extended(reg: Int) -> Bool {
+    return reg >= 8 && reg <= 15;
+}
+
+pub fn x86_is_xmm_extended(xmm: Int) -> Bool {
+    return xmm >= 8 && xmm <= 15;
+}
+
+pub fn x86_reg_code(reg: Int) -> Int {
+    if reg >= 8 && reg <= 15 {
+        return reg - 8;
+    }
+    return reg;
+}
+
+pub fn x86_xmm_code(xmm: Int) -> Int {
+    if xmm >= 8 && xmm <= 15 {
+        return xmm - 8;
+    }
+    return xmm;
+}
+
+pub fn x86_rex_prefix(w_64: Bool, reg_ext: Bool, rm_ext: Bool) -> Int {
+    let mut prefix: Int = 64; // 0x40
+    if w_64 {
+        prefix = prefix | 8; // REX.W = 0x48
+    }
+    if reg_ext {
+        prefix = prefix | 4; // REX.R
+    }
+    if rm_ext {
+        prefix = prefix | 1; // REX.B
+    }
+    return prefix;
+}
+
+pub fn x86_modrm(mod_mode: Int, reg: Int, rm: Int) -> Int {
+    let r_code: Int = x86_reg_code(reg);
+    let rm_code: Int = x86_reg_code(rm);
+    return ((mod_mode & 3) << 6) | ((r_code & 7) << 3) | (rm_code & 7);
+}

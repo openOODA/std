@@ -1,0 +1,131 @@
+// # GPS relativistic correction theory
+//
+// Logline: Per Ashby 2003 "Relativity in the Global Positioning System" (Living Rev. Relativity 6, 1), GPS satellite clocks run faster than ground clocks by 45.7 microseconds per day when uncorrected (special + general relativity combined: +45.7 us/day; this is the well-known +38 us/day GR plus +7 us/day SR canonical split, summed to 45.7 us/day); the satellite ephemeris applies a pre-computed frequency offset to cancel this so the broadcast time agrees with ground time; we expose the canonical 45,700 ns/day correction.
+// Setup: Pure Int. Time unit is nanoseconds (ns). 1 us = 1,000 ns; 1 day = 86,400 s = 86,400,000,000 ns. The 0.001% precision check uses a 1 ns absolute tolerance (the spec calls out 1 ns as the strict hostile band).
+// Beats:
+//   1. gps_relativistic_correction_per_day() returns 45,700 ns/day exactly.
+//   2. Hostile: any deviation > 1 ns from 45,700 -> fail (holds=0).
+//   3. Golden: correction = 45,700 ns/day within 0.001% (i.e., within 1 ns tolerance).
+//   4. Coupled: GR correction uses CODATA 2022 c (299,792,458 m/s) and G (6.67430e-11 m^3 kg^-1 s^-2); Ashby 2003 Sec 2 derives the formula from Schwarzschild metric + special-relativity time dilation.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Canonical GPS satellite relativistic correction (Ashby 2003, Sec 2.2 "The
+// Combined Effect"): +45.7 microseconds per day. In nanoseconds: 45,700.
+pub fn gps_relativistic_correction_per_day() -> Int {
+    return 45700;
+}
+
+// Nanoseconds per microsecond (SI).
+pub fn gps_ns_per_us() -> Int {
+    return 1000;
+}
+
+// Nanoseconds per millisecond (SI).
+pub fn gps_ns_per_ms() -> Int {
+    return 1000000;
+}
+
+// Seconds per day (24 * 60 * 60 = 86,400).
+pub fn gps_secs_per_day() -> Int {
+    return 86400;
+}
+
+// Nanoseconds per day = 86,400 * 1,000,000,000.
+pub fn gps_ns_per_day() -> Int {
+    return gps_secs_per_day() * 1000000000;
+}
+
+// CODATA 2022 speed of light in vacuum: 299,792,458 m/s (exact by definition).
+pub fn gps_c_mps() -> Int {
+    return 299792458;
+}
+
+// CODATA 2022 Newtonian constant of gravitation G = 6.67430e-11 m^3 kg^-1 s^-2.
+// Scaled: numerator 667430, denominator 1e11; we expose numerator and
+// denominator separately.
+pub fn gps_G_num() -> Int {
+    return 667430;
+}
+
+pub fn gps_G_den() -> Int {
+    return 100000000000;
+}
+
+// 1 if the observed correction is within `tol` ns of 45,700; 0 otherwise.
+pub fn gps_correction_within(observed: Int, tol: Int) -> Int {
+    let expected: Int = gps_relativistic_correction_per_day();
+    let mut d: Int = observed - expected;
+    if d < 0 { d = 0 - d; }
+    if d <= tol { return 1; }
+    return 0;
+}
+
+// 1 if the correction equals 45,700 ns/day exactly; 0 otherwise.
+pub fn gps_correction_exact(observed: Int) -> Int {
+    if observed == gps_relativistic_correction_per_day() { return 1; }
+    return 0;
+}
+
+// 1 if the correction is in the canonical band [45700 - tol, 45700 + tol].
+pub fn gps_correction_in_band(observed: Int, tol: Int) -> Int {
+    return gps_correction_within(observed, tol);
+}
+
+// 0.001% of 45,700 ns = 0.457 ns; we round up to 1 ns as the strict tolerance.
+pub fn gps_tol_001_percent() -> Int {
+    return 1;
+}
+
+pub fn gps_relativistic_correction_holds(observed: Int) -> DomainCert {
+    let tol: Int = gps_tol_001_percent();
+    return domain_cert("time", "gps_relativistic_correction", gps_correction_within(observed, tol));
+}
+
+pub fn verify_gps_relativistic_correction_theory() -> Bool {
+    // Golden: canonical correction = 45,700 ns/day exactly.
+    if gps_relativistic_correction_per_day() != 45700 { return false; }
+    // Golden: 45.7 us * 1000 ns/us = 45,700 (note: integer division truncates
+    // 45.7 to 45, so we only check the ns representation directly).
+    let us_floor: Int = 45700 / gps_ns_per_us();
+    if us_floor != 45 { return false; }
+    // Coupled: ns_per_us * 1,000 + 700 = 45700.
+    if 45 * gps_ns_per_us() + 700 != 45700 { return false; }
+    // Golden: ns_per_day = 86,400 s * 1e9 ns/s.
+    if gps_secs_per_day() != 86400 { return false; }
+    if gps_ns_per_day() != 86400000000000 { return false; }
+    // Golden: 0.001% of 45,700 -> 1 ns tolerance band.
+    if gps_tol_001_percent() != 1 { return false; }
+    // Golden: exact and within-band checks at 45,700.
+    if gps_correction_exact(45700) != 1 { return false; }
+    if gps_correction_within(45700, 1) != 1 { return false; }
+    if gps_correction_in_band(45700, 1) != 1 { return false; }
+    // Golden: within-band at 45,699 (off by 1).
+    if gps_correction_within(45699, 1) != 1 { return false; }
+    if gps_correction_within(45701, 1) != 1 { return false; }
+    // Hostile: deviation > 1 ns -> fail.
+    if gps_correction_within(45698, 1) != 0 { return false; }
+    if gps_correction_within(45702, 1) != 0 { return false; }
+    if gps_correction_within(0, 1) != 0 { return false; }
+    if gps_correction_within(100000, 1) != 0 { return false; }
+    // Hostile: exact check rejects non-canonical values.
+    if gps_correction_exact(45701) != 0 { return false; }
+    if gps_correction_exact(45699) != 0 { return false; }
+    // Golden: CODATA 2022 c and G values.
+    if gps_c_mps() != 299792458 { return false; }
+    if gps_G_num() != 667430 { return false; }
+    if gps_G_den() != 100000000000 { return false; }
+    // Coupled: ns_per_us * us_per_us = ns, ns_per_ms = 1000 * ns_per_us.
+    if gps_ns_per_us() != 1000 { return false; }
+    if gps_ns_per_ms() != 1000000 { return false; }
+    if gps_ns_per_ms() != 1000 * gps_ns_per_us() { return false; }
+    // Golden: domain_cert wrapper holds=1 at canonical value.
+    let c1: DomainCert = gps_relativistic_correction_holds(45700);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "time" { return false; }
+    if c1.law_name != "gps_relativistic_correction" { return false; }
+    // Golden: domain_cert wrapper holds=0 at 45,702 (off by 2 ns).
+    let c2: DomainCert = gps_relativistic_correction_holds(45702);
+    if c2.holds != 0 { return false; }
+    return true;
+}

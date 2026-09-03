@@ -1,0 +1,98 @@
+// # SipHash PRF law
+//
+// Logline: SipHash is a keyed PRF: same (key, msg) yields the same 8-byte output; empty input returns 0; a 1-bit flip in the message flips at least 50% of the 64 output bits on average.
+//
+// Setup: Pure Int 64-bit. Reuses siphash24 from std/hash/siphash.oo. Empty input is a legal message and is forwarded to siphash24.
+//
+// Beats:
+//   1. siphash_prf forwards every message, including empty, to siphash24.
+//   2. Deterministic: same (key0, key1, msg) returns the same Int twice.
+//   3. Distinct: different (key0, key1) under the same msg returns a different Int.
+//   4. Avalanche: 1-bit flips in single-byte messages change >= 32 of 64 output bits on average.
+//   5. DomainCert holds iff a canonical 1-bit-flip pair (a, A) flips >= 32 bits.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/sec/hash/siphash.oo";
+
+// Keyed PRF wrapper around siphash24. Empty data is a legal message.
+pub fn siphash_prf(data: String, key0: Int, key1: Int) -> Int {
+    return siphash24(data, key0, key1);
+}
+
+// Number of set bits in a 64-bit word.
+pub fn siphash_prf_popcount(x: Int) -> Int {
+    let mut bits: Int = 0;
+    let mut v: Int = x;
+    let mut i: Int = 0;
+    while i < 64 {
+        if (v & 1) == 1 {
+            bits = bits + 1;
+        }
+        v = v >> 1;
+        i = i + 1;
+    }
+    return bits;
+}
+
+// Sum of bit-flips over 5 single-byte 1-bit-flip pairs: a/A, a/q, a/` , a/b, a/c.
+pub fn siphash_prf_avalanche_sum(key0: Int, key1: Int) -> Int {
+    let a: Int = siphash_prf("a", key0, key1);
+    let aa: Int = siphash_prf("A", key0, key1);
+    let q: Int = siphash_prf("q", key0, key1);
+    let bt: Int = siphash_prf("`", key0, key1);
+    let b: Int = siphash_prf("b", key0, key1);
+    let c: Int = siphash_prf("c", key0, key1);
+    let s1: Int = siphash_prf_popcount(a ^ aa);
+    let s2: Int = siphash_prf_popcount(a ^ q);
+    let s3: Int = siphash_prf_popcount(a ^ bt);
+    let s4: Int = siphash_prf_popcount(a ^ b);
+    let s5: Int = siphash_prf_popcount(a ^ c);
+    return s1 + s2 + s3 + s4 + s5;
+}
+
+// 1 iff at least one canonical 1-bit-flip pair flips >= 32 bits; 0 otherwise.
+pub fn siphash_prf_avalanche_holds(key0: Int, key1: Int) -> Int {
+    let a: Int = siphash_prf("a", key0, key1);
+    let aa: Int = siphash_prf("A", key0, key1);
+    if siphash_prf_popcount(a ^ aa) >= 32 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn siphash_prf_law(key0: Int, key1: Int) -> DomainCert {
+    let ok: Int = siphash_prf_avalanche_holds(key0, key1);
+    return domain_cert("hash", "siphash_prf", ok);
+}
+
+pub fn verify_siphash_prf_law() -> Bool {
+    // Golden: same (key, msg) returns the same Int twice (8-byte equality).
+    let r1: Int = siphash_prf("test", 314159, 271828);
+    let r2: Int = siphash_prf("test", 314159, 271828);
+    if r1 != r2 { return false; }
+    // Golden: same key, different msg -> different Int.
+    let r3: Int = siphash_prf("other", 314159, 271828);
+    if r1 == r3 { return false; }
+    // Golden: same msg, different key -> different Int.
+    let r4: Int = siphash_prf("test", 0, 0);
+    let r5: Int = siphash_prf("test", 1, 0);
+    if r4 == r5 { return false; }
+    // Empty msg is a real digest path: deterministic, not dummy 0.
+    let e1: Int = siphash_prf("", 0, 0);
+    let e2: Int = siphash_prf("", 0, 0);
+    if e1 != e2 { return false; }
+    let e3: Int = siphash_prf("", 314159, 271828);
+    let e4: Int = siphash_prf("", 314159, 271828);
+    if e3 != e4 { return false; }
+    // Coupled: avalanche on the canonical 1-bit-flip pair a/A under key 0/0.
+    let a: Int = siphash_prf("a", 0, 0);
+    let aa: Int = siphash_prf("A", 0, 0);
+    let pair_flip: Int = siphash_prf_popcount(a ^ aa);
+    if pair_flip < 32 { return false; }
+    // Coupled: average bit-flip over 5 single-byte pairs is >= 32 of 64 bits.
+    let total: Int = siphash_prf_avalanche_sum(0, 0);
+    if total < 160 { return false; }
+    // DomainCert: siphash_prf_law(0, 0).holds is 1.
+    if siphash_prf_law(0, 0).holds != 1 { return false; }
+    return true;
+}

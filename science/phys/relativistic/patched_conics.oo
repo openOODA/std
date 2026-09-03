@@ -1,0 +1,60 @@
+// # Patched Conics Trajectory Approximation
+//
+// Logline: Calculates Sphere of Influence (SOI) boundaries, hyperbolic excess velocities, and turning angles for interplanetary transfers.
+//
+// Setup: Classical Laplace sphere of influence patched-conic approximation for multi-body trajectory transitions.
+//
+// Beats:
+//   1. Two-body minimum interaction count query.
+//   2. Calculate Laplace Sphere of Influence (SOI) radius r_soi = R * (m / M)^(2/5).
+//   3. Compute hyperbolic excess velocity v_infinity from hyperbolic periapsis state.
+//   4. Calculate hyperbolic flyby turning angle delta.
+
+pub fn patched_bodies() -> Int {
+    return 2;
+}
+
+pub fn patched_conic_asin(x: Float) -> Float {
+    let mut u: Float = x;
+    if u > 1.0 { u = 1.0; }
+    if u < -1.0 { u = -1.0; }
+    let u2: Float = u * u;
+    let u3: Float = u2 * u;
+    let u5: Float = u3 * u2;
+    let u7: Float = u5 * u2;
+    return u + (u3 * 0.1666666667) + (u5 * 0.075) + (u7 * 0.0446428571);
+}
+
+/// Computes Laplace Sphere of Influence radius: r_soi = orbital_radius * (m_secondary / M_primary)^(2/5).
+pub fn patched_conic_soi_radius(
+    orbital_radius_m: Float,
+    secondary_mass_kg: Float,
+    primary_mass_kg: Float
+) -> Float {
+    if primary_mass_kg <= 0.000001 { return 0.0; }
+    let mass_ratio: Float = secondary_mass_kg / primary_mass_kg;
+    let factor: Float = pow(mass_ratio, 0.4);
+    return orbital_radius_m * factor;
+}
+
+/// Computes hyperbolic excess velocity v_infinity = sqrt(v^2 - 2*mu/r).
+pub fn hyperbolic_excess_velocity(
+    velocity_m_s: Float,
+    radius_m: Float,
+    mu: Float
+) -> Float {
+    let term: Float = (velocity_m_s * velocity_m_s) - ((2.0 * mu) / radius_m);
+    if term <= 0.0 { return 0.0; }
+    return sqrt(term);
+}
+
+/// Computes hyperbolic gravity assist turning angle (radians): delta = 2 * arcsin(1 / (1 + r_p * v_inf^2 / mu)).
+pub fn hyperbolic_turning_angle(
+    periapsis_radius_m: Float,
+    v_infinity_m_s: Float,
+    mu: Float
+) -> Float {
+    let denom: Float = 1.0 + ((periapsis_radius_m * (v_infinity_m_s * v_infinity_m_s)) / mu);
+    let sin_half_delta: Float = 1.0 / denom;
+    return 2.0 * patched_conic_asin(sin_half_delta);
+}

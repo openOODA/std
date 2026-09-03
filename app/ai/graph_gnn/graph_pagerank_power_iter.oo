@@ -1,0 +1,87 @@
+// # PageRank & Personalized PageRank Power Iteration
+//
+// Logline: Computes stationary random walk distributions via damped power iteration for global and personalized PageRank.
+//
+// Setup: Stochastic matrix power iteration engine computing eigenvector centrality and localized graph proximity distributions.
+//
+// Beats:
+//   1. Formulate transition probability matrix P = D^{-1} * A with dangling node redistribution.
+//   2. Apply damping factor alpha and teleportation preference vector v.
+//   3. Iterate power method until convergence criteria is reached.
+
+type PageRankConfig = struct {
+    num_nodes: Int,
+    damping_factor_milli: Int,
+    max_iterations: Int,
+    tolerance_milli: Int
+};
+
+pub fn pagerank_config_new(
+    n: Int,
+    alpha_milli: Int,
+    max_iters: Int,
+    tol_milli: Int
+) -> PageRankConfig {
+    return PageRankConfig {
+        num_nodes: n,
+        damping_factor_milli: alpha_milli,
+        max_iterations: max_iters,
+        tolerance_milli: tol_milli
+    };
+}
+
+pub fn pagerank_power_iteration_step(
+    cfg: PageRankConfig,
+    current_p: List[Int],
+    teleport_v: List[Int],
+    node_in_neighbors: List[Int],
+    node_in_offsets: List[Int],
+    node_out_degrees: List[Int]
+) -> List[Int] {
+    let n: Int = cfg.num_nodes;
+    let alpha: Int = cfg.damping_factor_milli;
+
+    // Calculate probability mass from dangling nodes (out_degree == 0)
+    let mut dangling_sum: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let deg: Int = list_get(node_out_degrees, i);
+        if deg == 0 {
+            let p_i: Int = list_get(current_p, i);
+            dangling_sum = dangling_sum + p_i;
+        }
+        i = i + 1;
+    }
+
+    let mut next_p: List[Int] = list_new();
+    let mut target: Int = 0;
+    while target < n {
+        let v_tele: Int = list_get(teleport_v, target);
+        let start_in: Int = list_get(node_in_offsets, target);
+        let mut next_target: Int = target + 1;
+        let end_in: Int = list_get(node_in_offsets, next_target);
+
+        let mut in_flow: Int = 0;
+        let mut k: Int = start_in;
+        while k < end_in {
+            let src: Int = list_get(node_in_neighbors, k);
+            let p_src: Int = list_get(current_p, src);
+            let deg_src: Int = list_get(node_out_degrees, src);
+            if deg_src > 0 {
+                let flow_part: Int = p_src / deg_src;
+                in_flow = in_flow + flow_part;
+            }
+            k = k + 1;
+        }
+
+        let d_part: Int = dangling_sum / n;
+        let mut sum_flow: Int = in_flow + d_part;
+        let part1: Int = (alpha * sum_flow) / 1000;
+        let rem_alpha: Int = 1000 - alpha;
+        let part2: Int = (rem_alpha * v_tele) / 1000;
+        let val: Int = part1 + part2;
+        next_p = list_push(next_p, val);
+        target = target + 1;
+    }
+    return next_p;
+}

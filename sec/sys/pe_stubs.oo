@@ -1,0 +1,50 @@
+// # PE Fail-Closed Stubs
+//
+// Logline: Fail-closed process_exit residuals for PE image load, execute, Authenticode, driver map, and section inject.
+//
+// Setup: Default-deny per RULES.oot 1.4 (require &SysCap). oodac lacks Win32 LoadLibraryEx, NtLoadDriver, PKCS#7 / WinVerifyTrust, and in-place PE patch FFI.
+//
+// Beats:
+//   1. pe_load_image_sys: refuse kernel image load without Win32 host FFI.
+//   2. pe_execute_entrypoint_sys: refuse thread-level PE entry-point execution.
+//   3. pe_verify_authenticode_sys: refuse PKCS#7 / WinVerifyTrust signature validation.
+//   4. pe_map_driver_image_sys: refuse kernel-mode NtLoadDriver memory map.
+//   5. pe_inject_section_sys: refuse in-place PE section rewrite and checksum recalc.
+//   6. fail-closed error: default-deny on unbuilt kernel FFI surface.
+//
+// residual: not a real PE loader; integrate host platform runtime.
+
+pub fn pe_load_image_sys(sys: &SysCap, filepath: String) -> Result[PeImage, String] {
+    // COMPILER LIMITATION: openOODA lacks native C-FFI / Win32 LoadLibraryEx host bindings for kernel image loading.
+    // Memory mapping of PE images must be executed by host platform runtime.
+    return Err("Unimplemented: kernel pe_load_image requires native host FFI lowering");
+}
+
+pub fn pe_execute_entrypoint_sys(sys: &SysCap, image: &PeImage) -> Result[Int, String] {
+    // COMPILER LIMITATION: openOODA lacks low-level JIT / native thread entry point execution FFI.
+    // Binary execution requires sub-process invocation via ooda::os::proc.
+    return Err("Unimplemented: kernel pe_execute_entrypoint requires native thread execution lowering");
+}
+
+pub fn pe_verify_authenticode_sys(sys: &SysCap, image: &PeImage, raw_bytes: String) -> Result[Bool, String] {
+    // COMPILER LIMITATION: openOODA lacks PKCS#7 / WinVerifyTrust Crypto API host lowering.
+    // Digital certificate signature validation requires native host cryptography bindings.
+    return Err("Unimplemented: kernel pe_verify_authenticode requires native host Crypto API lowering");
+}
+
+pub fn pe_map_driver_image_sys(sys: &SysCap, filepath: String, target_address: Int) -> Result[Bool, String] {
+    // COMPILER LIMITATION: openOODA lacks kernel-mode memory mapping and NtLoadDriver syscall lowering.
+    // Driver loading requires OS kernel driver manager permissions.
+    return Err("Unimplemented: kernel pe_map_driver_image requires native host kernel driver lowering");
+}
+
+pub fn pe_inject_section_sys(
+    sys: &SysCap,
+    image_path: String,
+    section: &SectionHeader,
+    content: String
+) -> Result[Bool, String] {
+    // COMPILER LIMITATION: openOODA lacks in-place PE binary modification & checksum recalculation kernel FFI.
+    // Binary section rewriting must be performed via specialized binary patch tools.
+    return Err("Unimplemented: kernel pe_inject_section requires native host binary patching lowering");
+}

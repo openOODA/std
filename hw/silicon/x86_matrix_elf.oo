@@ -1,0 +1,56 @@
+// # ELF Header Byte Parser For Matrix Compile
+//
+// Logline: Parses `od` decimal bytes and checks ELF64 magic on a compiled image header.
+//
+// Setup: Pure parser. Callers pass the stdout of od -An -N 64 -tu1 -v on a built file.
+//
+// Beats:
+//   1. Scan decimal byte tokens from od output into a List[Int].
+//   2. Reject an empty token list.
+//   3. Check 127, 69, 76, 70 at the start of the header.
+//   4. Return the header bytes for the compile Result.
+
+pub fn matrix_parse_od(s: String) -> List[Int] {
+    let n: Int = bytes_len(s);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    let mut v: Int = 0;
+    let mut in_num: Bool = false;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b >= 48 && b <= 57 {
+            in_num = true;
+            v = v * 10 + (b - 48);
+        } else {
+            if in_num {
+                out = list_push(out, v & 255);
+                v = 0;
+                in_num = false;
+            }
+        }
+        i = i + 1;
+    }
+    if in_num {
+        out = list_push(out, v & 255);
+    }
+    return out;
+}
+
+pub fn matrix_is_elf_header(b: List[Int]) -> Bool {
+    if list_len(b) < 4 {
+        return false;
+    }
+    if list_get(b, 0) != 127 {
+        return false;
+    }
+    if list_get(b, 1) != 69 {
+        return false;
+    }
+    if list_get(b, 2) != 76 {
+        return false;
+    }
+    if list_get(b, 3) != 70 {
+        return false;
+    }
+    return true;
+}

@@ -1,0 +1,140 @@
+// # Maxwell Stress Tensor and Electrodynamic Force Densities
+//
+// Logline: Computes 3x3 Maxwell stress tensor, electromagnetic momentum density, and field energy densities.
+//
+// Setup: Solves T_ij = eps0 * (E_i E_j - 0.5 delta_ij E^2) + (1/mu0) * (B_i B_j - 0.5 delta_ij B^2).
+//
+// Beats:
+//   1. Exact vacuum permittivity and permeability constants.
+//   2. Compute 3x3 Maxwell stress tensor as struct and flat 9-element list.
+//   3. Compute electromagnetic momentum density vector g = eps0 * (E x B).
+//   4. Calculate total EM energy density u and verify trace(T) = -u.
+
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type Tensor3x3 = struct {
+    xx: Float,
+    xy: Float,
+    xz: Float,
+    yx: Float,
+    yy: Float,
+    yz: Float,
+    zx: Float,
+    zy: Float,
+    zz: Float
+};
+
+// Vacuum permittivity eps0 in F/m (~8.8541878128e-12)
+pub fn maxwell_vacuum_permittivity() -> Float {
+    return 8.8541878128 / 1000000000000.0;
+}
+
+// Vacuum permeability mu0 in H/m (~1.25663706212e-6)
+pub fn maxwell_vacuum_permeability() -> Float {
+    return 1.25663706212 / 1000000.0;
+}
+
+// Compute total EM energy density u = 0.5 * (eps0 * E^2 + (1/mu0) * B^2) (J/m^3)
+pub fn maxwell_energy_density(e_vec: Vec3, b_vec: Vec3) -> Float {
+    let eps0: Float = maxwell_vacuum_permittivity();
+    let mu0: Float = maxwell_vacuum_permeability();
+    let e_sq: Float = (e_vec.x * e_vec.x) + (e_vec.y * e_vec.y) + (e_vec.z * e_vec.z);
+    let b_sq: Float = (b_vec.x * b_vec.x) + (b_vec.y * b_vec.y) + (b_vec.z * b_vec.z);
+    let u_e: Float = 0.5 * eps0 * e_sq;
+    let u_b: Float = 0.5 * (1.0 / mu0) * b_sq;
+    return u_e + u_b;
+}
+
+// Compute 3x3 Maxwell stress tensor struct
+pub fn maxwell_stress_tensor_struct(e_vec: Vec3, b_vec: Vec3) -> Tensor3x3 {
+    let eps0: Float = maxwell_vacuum_permittivity();
+    let mu0: Float = maxwell_vacuum_permeability();
+    let inv_mu0: Float = 1.0 / mu0;
+
+    let ex: Float = e_vec.x;
+    let ey: Float = e_vec.y;
+    let ez: Float = e_vec.z;
+    let bx: Float = b_vec.x;
+    let by: Float = b_vec.y;
+    let bz: Float = b_vec.z;
+
+    let e_sq: Float = (ex * ex) + (ey * ey) + (ez * ez);
+    let b_sq: Float = (bx * bx) + (by * by) + (bz * bz);
+    let half_e: Float = 0.5 * eps0 * e_sq;
+    let half_b: Float = 0.5 * inv_mu0 * b_sq;
+
+    let t_xx: Float = (eps0 * ex * ex - half_e) + (inv_mu0 * bx * bx - half_b);
+    let t_yy: Float = (eps0 * ey * ey - half_e) + (inv_mu0 * by * by - half_b);
+    let t_zz: Float = (eps0 * ez * ez - half_e) + (inv_mu0 * bz * bz - half_b);
+
+    let t_xy: Float = (eps0 * ex * ey) + (inv_mu0 * bx * by);
+    let t_xz: Float = (eps0 * ex * ez) + (inv_mu0 * bx * bz);
+    let t_yz: Float = (eps0 * ey * ez) + (inv_mu0 * by * bz);
+
+    return Tensor3x3 {
+        xx: t_xx,
+        xy: t_xy,
+        xz: t_xz,
+        yx: t_xy,
+        yy: t_yy,
+        yz: t_yz,
+        zx: t_xz,
+        zy: t_yz,
+        zz: t_zz
+    };
+}
+
+// Compute 3x3 Maxwell stress tensor as flat 9-element list [xx, xy, xz, yx, yy, yz, zx, zy, zz]
+pub fn maxwell_stress_tensor(e_vec: List[Float], b_vec: List[Float]) -> List[Float] {
+    let mut ex: Float = 0.0;
+    let mut ey: Float = 0.0;
+    let mut ez: Float = 0.0;
+    let mut bx: Float = 0.0;
+    let mut by: Float = 0.0;
+    let mut bz: Float = 0.0;
+
+    if list_len(e_vec) >= 3 {
+        ex = list_get(e_vec, 0);
+        ey = list_get(e_vec, 1);
+        ez = list_get(e_vec, 2);
+    }
+    if list_len(b_vec) >= 3 {
+        bx = list_get(b_vec, 0);
+        by = list_get(b_vec, 1);
+        bz = list_get(b_vec, 2);
+    }
+
+    let v_e: Vec3 = Vec3 { x: ex, y: ey, z: ez };
+    let v_b: Vec3 = Vec3 { x: bx, y: by, z: bz };
+    let t: Tensor3x3 = maxwell_stress_tensor_struct(v_e, v_b);
+
+    let mut res: List[Float] = list_new();
+    res = list_push(res, t.xx);
+    res = list_push(res, t.xy);
+    res = list_push(res, t.xz);
+    res = list_push(res, t.yx);
+    res = list_push(res, t.yy);
+    res = list_push(res, t.yz);
+    res = list_push(res, t.zx);
+    res = list_push(res, t.zy);
+    res = list_push(res, t.zz);
+    return res;
+}
+
+// Compute electromagnetic momentum density g = eps0 * (E x B) (kg/(m^2 * s))
+pub fn maxwell_momentum_density(e_vec: Vec3, b_vec: Vec3) -> Vec3 {
+    let eps0: Float = maxwell_vacuum_permittivity();
+    let gx: Float = eps0 * ((e_vec.y * b_vec.z) - (e_vec.z * b_vec.y));
+    let gy: Float = eps0 * ((e_vec.z * b_vec.x) - (e_vec.x * b_vec.z));
+    let gz: Float = eps0 * ((e_vec.x * b_vec.y) - (e_vec.y * b_vec.x));
+    return Vec3 { x: gx, y: gy, z: gz };
+}
+
+// Compute tensor trace: tr(T) = T_xx + T_yy + T_zz
+pub fn maxwell_tensor_trace(t: Tensor3x3) -> Float {
+    return t.xx + t.yy + t.zz;
+}

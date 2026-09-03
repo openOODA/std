@@ -1,0 +1,94 @@
+// # Linux AArch64 Supervisor Call Sequences
+//
+// Logline: Emits svc #0 sequences that load Linux AArch64 syscall numbers into x8 and arguments into x0..x5.
+//
+// Setup: Uses AAPCS64 argument registers and the encoder MOVZ plus SVC helpers. Numbers are the Linux aarch64 table.
+//
+// Beats:
+//   1. Name sys_read 63, sys_write 64, sys_close 57, sys_mmap 222, and sys_exit 93.
+//   2. Load the syscall number into x8 with MOVZ, then load arguments into x0..x5.
+//   3. Finish each sequence with SVC #0.
+//   4. Provide a stdout write path that places file descriptor 1 in x0.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+
+pub fn aarch64_sys_read() -> Int {
+    return 63;
+}
+
+pub fn aarch64_sys_write() -> Int {
+    return 64;
+}
+
+pub fn aarch64_sys_close() -> Int {
+    return 57;
+}
+
+pub fn aarch64_sys_mmap() -> Int {
+    return 222;
+}
+
+pub fn aarch64_sys_exit() -> Int {
+    return 93;
+}
+
+pub fn aarch64_emit_svc0() -> List[Int] {
+    return arm64_encode_svc(0);
+}
+
+fn a64_sc_movz(xd: Int, imm: Int) -> List[Int] {
+    return arm64_encode_movz(xd, imm & 65535, 0);
+}
+
+fn a64_sc_append(out: List[Int], more: List[Int]) -> List[Int] {
+    return arm64_concat(out, more);
+}
+
+pub fn aarch64_emit_sys_write(fd: Int, buf: Int, count: Int) -> List[Int] {
+    let mut out: List[Int] = a64_sc_movz(abi_sys_reg(), aarch64_sys_write());
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(0), fd));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(1), buf));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(2), count));
+    out = a64_sc_append(out, aarch64_emit_svc0());
+    return out;
+}
+
+pub fn aarch64_emit_sys_read(fd: Int, buf: Int, count: Int) -> List[Int] {
+    let mut out: List[Int] = a64_sc_movz(abi_sys_reg(), aarch64_sys_read());
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(0), fd));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(1), buf));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(2), count));
+    out = a64_sc_append(out, aarch64_emit_svc0());
+    return out;
+}
+
+pub fn aarch64_emit_sys_close(fd: Int) -> List[Int] {
+    let mut out: List[Int] = a64_sc_movz(abi_sys_reg(), aarch64_sys_close());
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(0), fd));
+    out = a64_sc_append(out, aarch64_emit_svc0());
+    return out;
+}
+
+pub fn aarch64_emit_sys_mmap(addr: Int, length: Int, prot: Int, flags: Int, fd: Int, offset: Int) -> List[Int] {
+    let mut out: List[Int] = a64_sc_movz(abi_sys_reg(), aarch64_sys_mmap());
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(0), addr));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(1), length));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(2), prot));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(3), flags));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(4), fd));
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(5), offset));
+    out = a64_sc_append(out, aarch64_emit_svc0());
+    return out;
+}
+
+pub fn aarch64_emit_sys_exit(code: Int) -> List[Int] {
+    let mut out: List[Int] = a64_sc_movz(abi_sys_reg(), aarch64_sys_exit());
+    out = a64_sc_append(out, a64_sc_movz(abi_arg_reg(0), code));
+    out = a64_sc_append(out, aarch64_emit_svc0());
+    return out;
+}
+
+pub fn aarch64_emit_stdout_write(buf: Int, count: Int) -> List[Int] {
+    return aarch64_emit_sys_write(1, buf, count);
+}

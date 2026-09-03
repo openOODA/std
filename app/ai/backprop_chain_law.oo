@@ -1,0 +1,92 @@
+// # Backpropagation Chain Rule Law
+//
+// Logline: The gradient of a composition is the product of local gradients (chain rule).
+//
+// Setup: Pure Float. Local gradients are passed in. Sigmoid y outside [0, 1] is Err. Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Single-step chain: grad = upstream * local.
+//   2. Multi-step chain: grad = upstream * product(local_i).
+//   3. Empty chain: grad = upstream.
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+
+// Single-step chain: grad = upstream * local.
+pub fn bp_single(upstream: Float, local: Float) -> Float {
+    return upstream * local;
+}
+
+// Multi-step chain: product of locals multiplied by upstream. Empty locals returns upstream.
+pub fn bp_chain(upstream: Float, locals: List[Float]) -> Float {
+    let n: Int = list_len(locals);
+    if n <= 0 { return upstream; }
+    let mut acc: Float = upstream;
+    let mut i: Int = 0;
+    while i < n {
+        let l: Float = list_get(locals, i);
+        acc = acc * l;
+        i = i + 1;
+    }
+    return acc;
+}
+
+// Local gradient for sigmoid at output y: dy/dx = y * (1 - y). y in [0, 1]; endpoints are Ok(0).
+pub fn bp_sigmoid_local(y: Float) -> Result[Float, String] {
+    if y < 0.0 { return Err("ERR\tbp\tdomain"); }
+    if y > 1.0 { return Err("ERR\tbp\tdomain"); }
+    let one_minus: Float = 1.0 - y;
+    return Ok(y * one_minus);
+}
+
+// Local gradient for ReLU: dy/dx = 1 if y > 0 else 0.
+pub fn bp_relu_local(y: Float) -> Float {
+    if y > 0.0 { return 1.0; }
+    return 0.0;
+}
+
+fn bp_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// KAT and hostile cases for the backpropagation chain law.
+pub fn verify_backprop_chain_law() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    let g1: Float = bp_single(2.0, 0.5);
+    let mut d: Float = g1 - 1.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let g2: Float = bp_single(2.0, 0.0);
+    if g2 != 0.0 { return false; }
+    let g3: Float = bp_single(2.0, 0.0 - 0.5);
+    let target: Float = 0.0 - 1.0;
+    let mut d3: Float = g3 - target;
+    if d3 < 0.0 { d3 = 0.0 - d3; }
+    if d3 > 0.0001 { return false; }
+    let mut locals: List[Float] = list_new();
+    locals = list_push(locals, 0.5);
+    locals = list_push(locals, 0.5);
+    locals = list_push(locals, 0.5);
+    let g4: Float = bp_chain(2.0, locals);
+    let target4: Float = 2.0 * 0.125;
+    let mut d4: Float = g4 - target4;
+    if d4 < 0.0 { d4 = 0.0 - d4; }
+    if d4 > 0.0001 { return false; }
+    let mut empty: List[Float] = list_new();
+    let g5: Float = bp_chain(2.0, empty);
+    if g5 != 2.0 { return false; }
+    let sg: Float = bp_got(bp_sigmoid_local(0.5));
+    let target_sg: Float = 0.25;
+    let mut dsg: Float = sg - target_sg;
+    if dsg < 0.0 { dsg = 0.0 - dsg; }
+    if dsg > 0.0001 { return false; }
+    if bp_got(bp_sigmoid_local(0.0)) != 0.0 { return false; }
+    if bp_got(bp_sigmoid_local(1.0)) != 0.0 { return false; }
+    if bp_sigmoid_local(0.0 - 0.1).is_ok() { return false; }
+    if bp_sigmoid_local(1.1).is_ok() { return false; }
+    if bp_relu_local(0.5) != 1.0 { return false; }
+    if bp_relu_local(0.0) != 0.0 { return false; }
+    if bp_relu_local(0.0 - 0.1) != 0.0 { return false; }
+    return true;
+}

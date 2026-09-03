@@ -1,0 +1,223 @@
+// # FIPS 203 ML-KEM CPA-Secure Public Key Encryption (K-PKE)
+//
+// Logline: Implements K-PKE.KeyGen, K-PKE.Encrypt, and K-PKE.Decrypt algorithms for ML-KEM-1024.
+//
+// Setup: FIPS 203 Algorithms 12, 13, and 14 over R_q module lattices (k=4, q=3329).
+//
+// Beats:
+//   1. K-PKE.KeyGen producing public key pk and secret key sk.
+//   2. K-PKE.Encrypt transforming 32-byte plaintext into ciphertext (c1, c2).
+//   3. K-PKE.Decrypt recovering plaintext via lattice inner product and rounding.
+//   4. Type conversion and byte-array packing helpers.
+
+import "./ml_kem_params.oo";
+import "./ml_kem_poly.oo";
+import "./ml_kem_polyvec.oo";
+import "./ml_kem_ntt.oo";
+import "./ml_kem_compress.oo";
+import "./ml_kem_symmetric.oo";
+import "./ml_kem_sampling.oo";
+
+type KPkeKeyPair = struct {
+    pk: List[Int],
+    sk: List[Int]
+};
+
+pub fn k_pke_keygen(d: List[Int], k: Int) -> KPkeKeyPair {
+    let mut in_g: List[Int] = list_new();
+    let d_len: Int = list_len(d);
+    let mut i: Int = 0;
+    while i < d_len { in_g = list_push(in_g, list_get(d, i)); i = i + 1; }
+    in_g = list_push(in_g, k & 255);
+    let g_out: List[Int] = ml_kem_hash_g(in_g);
+
+    let mut rho: List[Int] = list_new();
+    let mut sigma: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        rho = list_push(rho, list_get(g_out, i));
+        sigma = list_push(sigma, list_get(g_out, i + 32));
+        i = i + 1;
+    }
+
+    let a_hat_coeffs: List[Int] = ml_kem_sample_matrix_a(rho, k);
+    let mut s_coeffs: List[Int] = list_new();
+    let mut e_coeffs: List[Int] = list_new();
+    let mut n_cnt: Int = 0;
+
+    i = 0;
+    while i < k {
+        let prf_s: List[Int] = ml_kem_prf(2, sigma, n_cnt); n_cnt = n_cnt + 1;
+        let p_s: MlKemPoly = ml_kem_sample_poly_cbd2(prf_s);
+        let mut idx: Int = 0;
+        while idx < 256 { s_coeffs = list_push(s_coeffs, list_get(p_s.coeffs, idx)); idx = idx + 1; }
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < k {
+        let prf_e: List[Int] = ml_kem_prf(2, sigma, n_cnt); n_cnt = n_cnt + 1;
+        let p_e: MlKemPoly = ml_kem_sample_poly_cbd2(prf_e);
+        let mut idx: Int = 0;
+        while idx < 256 { e_coeffs = list_push(e_coeffs, list_get(p_e.coeffs, idx)); idx = idx + 1; }
+        i = i + 1;
+    }
+
+    let s_vec: MlKemPolyVec = MlKemPolyVec { coeffs: s_coeffs, k: k };
+    let e_vec: MlKemPolyVec = MlKemPolyVec { coeffs: e_coeffs, k: k };
+    let s_hat: MlKemPolyVec = ml_kem_polyvec_ntt_fwd(s_vec);
+    let e_hat: MlKemPolyVec = ml_kem_polyvec_ntt_fwd(e_vec);
+
+    let as_hat: MlKemPolyVec = ml_kem_matvec_mul_ntt(a_hat_coeffs, s_hat, k);
+    let t_hat: MlKemPolyVec = ml_kem_polyvec_add(as_hat, e_hat);
+
+    let mut pk_bytes: List[Int] = list_new();
+    let mut sk_bytes: List[Int] = list_new();
+
+    i = 0;
+    while i < k {
+        let mut chunk_t: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 { chunk_t = list_push(chunk_t, list_get(t_hat.coeffs, i * 256 + j)); j = j + 1; }
+        let enc_t: List[Int] = ml_kem_encode_12(chunk_t);
+        let mut b_idx: Int = 0;
+        while b_idx < 384 { pk_bytes = list_push(pk_bytes, list_get(enc_t, b_idx)); b_idx = b_idx + 1; }
+        i = i + 1;
+    }
+    i = 0;
+    while i < 32 { pk_bytes = list_push(pk_bytes, list_get(rho, i)); i = i + 1; }
+
+    i = 0;
+    while i < k {
+        let mut chunk_s: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 { chunk_s = list_push(chunk_s, list_get(s_hat.coeffs, i * 256 + j)); j = j + 1; }
+        let enc_s: List[Int] = ml_kem_encode_12(chunk_s);
+        let mut b_idx: Int = 0;
+        while b_idx < 384 { sk_bytes = list_push(sk_bytes, list_get(enc_s, b_idx)); b_idx = b_idx + 1; }
+        i = i + 1;
+    }
+    return KPkeKeyPair { pk: pk_bytes, sk: sk_bytes };
+}
+
+pub fn k_pke_encrypt(pk_bytes: List[Int], m: List[Int], r: List[Int], k: Int) -> List[Int] {
+    let mut t_hat_coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut chunk: List[Int] = list_new();
+        let mut b_idx: Int = 0;
+        while b_idx < 384 { chunk = list_push(chunk, list_get(pk_bytes, i * 384 + b_idx)); b_idx = b_idx + 1; }
+        let dec_t: List[Int] = ml_kem_decode_12(chunk);
+        let mut j: Int = 0;
+        while j < 256 { t_hat_coeffs = list_push(t_hat_coeffs, list_get(dec_t, j)); j = j + 1; }
+        i = i + 1;
+    }
+    let t_hat: MlKemPolyVec = MlKemPolyVec { coeffs: t_hat_coeffs, k: k };
+
+    let mut rho: List[Int] = list_new();
+    i = 0;
+    while i < 32 { rho = list_push(rho, list_get(pk_bytes, 384 * k + i)); i = i + 1; }
+
+    let at_hat_coeffs: List[Int] = ml_kem_sample_matrix_at(rho, k);
+    let mut r_prime_coeffs: List[Int] = list_new();
+    let mut e1_coeffs: List[Int] = list_new();
+    let mut n_cnt: Int = 0;
+
+    i = 0;
+    while i < k {
+        let prf_r: List[Int] = ml_kem_prf(2, r, n_cnt); n_cnt = n_cnt + 1;
+        let p_r: MlKemPoly = ml_kem_sample_poly_cbd2(prf_r);
+        let mut j: Int = 0;
+        while j < 256 { r_prime_coeffs = list_push(r_prime_coeffs, list_get(p_r.coeffs, j)); j = j + 1; }
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < k {
+        let prf_e1: List[Int] = ml_kem_prf(2, r, n_cnt); n_cnt = n_cnt + 1;
+        let p_e1: MlKemPoly = ml_kem_sample_poly_cbd2(prf_e1);
+        let mut j: Int = 0;
+        while j < 256 { e1_coeffs = list_push(e1_coeffs, list_get(p_e1.coeffs, j)); j = j + 1; }
+        i = i + 1;
+    }
+
+    let prf_e2: List[Int] = ml_kem_prf(2, r, n_cnt);
+    let e2: MlKemPoly = ml_kem_sample_poly_cbd2(prf_e2);
+
+    let r_prime_vec: MlKemPolyVec = MlKemPolyVec { coeffs: r_prime_coeffs, k: k };
+    let e1_vec: MlKemPolyVec = MlKemPolyVec { coeffs: e1_coeffs, k: k };
+    let r_prime_hat: MlKemPolyVec = ml_kem_polyvec_ntt_fwd(r_prime_vec);
+
+    let atr_hat: MlKemPolyVec = ml_kem_matvec_mul_ntt(at_hat_coeffs, r_prime_hat, k);
+    let atr_inv: MlKemPolyVec = ml_kem_polyvec_ntt_inv(atr_hat);
+    let u: MlKemPolyVec = ml_kem_polyvec_add(atr_inv, e1_vec);
+
+    let tr_hat: MlKemPoly = ml_kem_polyvec_dot_ntt(t_hat, r_prime_hat);
+    let tr_inv: MlKemPoly = ml_kem_ntt_inv(tr_hat);
+    let mu: MlKemPoly = ml_kem_poly_decompress(ml_kem_decode_1(m), 1);
+    let v_part: MlKemPoly = ml_kem_poly_add(tr_inv, e2);
+    let v: MlKemPoly = ml_kem_poly_add(v_part, mu);
+
+    let mut ct_bytes: List[Int] = list_new();
+    i = 0;
+    while i < k {
+        let mut chunk_u: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 { chunk_u = list_push(chunk_u, list_get(u.coeffs, i * 256 + j)); j = j + 1; }
+        let u_i: MlKemPoly = MlKemPoly { coeffs: chunk_u, degree: 256, modulus: 3329 };
+        let comp_u: List[Int] = ml_kem_poly_compress(u_i, 11);
+        let enc_u: List[Int] = ml_kem_encode_11(comp_u);
+        let mut b_idx: Int = 0;
+        while b_idx < 352 { ct_bytes = list_push(ct_bytes, list_get(enc_u, b_idx)); b_idx = b_idx + 1; }
+        i = i + 1;
+    }
+
+    let comp_v: List[Int] = ml_kem_poly_compress(v, 5);
+    let enc_v: List[Int] = ml_kem_encode_5(comp_v);
+    i = 0;
+    while i < 160 { ct_bytes = list_push(ct_bytes, list_get(enc_v, i)); i = i + 1; }
+    return ct_bytes;
+}
+
+pub fn k_pke_decrypt(sk_bytes: List[Int], ct_bytes: List[Int], k: Int) -> List[Int] {
+    let mut u_coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut chunk: List[Int] = list_new();
+        let mut b_idx: Int = 0;
+        while b_idx < 352 { chunk = list_push(chunk, list_get(ct_bytes, i * 352 + b_idx)); b_idx = b_idx + 1; }
+        let dec_u: List[Int] = ml_kem_decode_11(chunk);
+        let poly_u: MlKemPoly = ml_kem_poly_decompress(dec_u, 11);
+        let mut j: Int = 0;
+        while j < 256 { u_coeffs = list_push(u_coeffs, list_get(poly_u.coeffs, j)); j = j + 1; }
+        i = i + 1;
+    }
+    let u: MlKemPolyVec = MlKemPolyVec { coeffs: u_coeffs, k: k };
+
+    let mut chunk_v: List[Int] = list_new();
+    i = 0;
+    while i < 160 { chunk_v = list_push(chunk_v, list_get(ct_bytes, 352 * k + i)); i = i + 1; }
+    let dec_v: List[Int] = ml_kem_decode_5(chunk_v);
+    let v: MlKemPoly = ml_kem_poly_decompress(dec_v, 5);
+
+    let mut s_hat_coeffs: List[Int] = list_new();
+    i = 0;
+    while i < k {
+        let mut chunk_s: List[Int] = list_new();
+        let mut b_idx: Int = 0;
+        while b_idx < 384 { chunk_s = list_push(chunk_s, list_get(sk_bytes, i * 384 + b_idx)); b_idx = b_idx + 1; }
+        let dec_s: List[Int] = ml_kem_decode_12(chunk_s);
+        let mut j: Int = 0;
+        while j < 256 { s_hat_coeffs = list_push(s_hat_coeffs, list_get(dec_s, j)); j = j + 1; }
+        i = i + 1;
+    }
+    let s_hat: MlKemPolyVec = MlKemPolyVec { coeffs: s_hat_coeffs, k: k };
+
+    let u_hat: MlKemPolyVec = ml_kem_polyvec_ntt_fwd(u);
+    let su_hat: MlKemPoly = ml_kem_polyvec_dot_ntt(s_hat, u_hat);
+    let su_inv: MlKemPoly = ml_kem_ntt_inv(su_hat);
+    let w: MlKemPoly = ml_kem_poly_sub(v, su_inv);
+
+    let comp_w: List[Int] = ml_kem_poly_compress(w, 1);
+    return ml_kem_encode_1(comp_w);
+}

@@ -1,0 +1,216 @@
+// # ISA 1976 Standard Atmospheric Model & 256-bit SIMD Vector Module
+//
+// Logline: Calculate temperature, pressure, density, and speed of sound across troposphere and stratosphere altitudes with 8-lane SIMD vectorization.
+//
+// Setup: Pure aerodynamic computation with zero ambient authority importing std/simd/simd_vec8f.oo and std/simd/fma_law.oo.
+//
+// Beats:
+//   1. Calculate troposphere and stratosphere thermodynamic states.
+//   2. Compute barometric pressure, exponential air density, and dynamic pressure.
+//   3. Compute local speed of sound in dry air.
+//   4. Vectorize atmospheric thermodynamic states and dynamic pressure using 8-lane f32x8 SIMD registers.
+
+import "std/sec/simd/simd_vec8f.oo";
+import "std/sec/simd/fma_law.oo";
+
+type IsaAtmosphere = struct {
+    altitude_m: Float,
+    temperature_k: Float,
+    pressure_pa: Float,
+    density_kg_m3: Float,
+    speed_of_sound_mps: Float,
+    density_ratio: Float,
+    pressure_ratio: Float,
+    temperature_ratio: Float
+};
+
+type IsaAtmosphere8 = struct {
+    altitude_m: f32x8,
+    temperature_k: f32x8,
+    pressure_pa: f32x8,
+    density_kg_m3: f32x8,
+    speed_of_sound_mps: f32x8,
+    density_ratio: f32x8,
+    pressure_ratio: f32x8,
+    temperature_ratio: f32x8
+};
+
+pub fn isa_gas_constant() -> Float { return 287.058; }
+pub fn isa_gamma() -> Float { return 1.4; }
+pub fn isa_standard_gravity() -> Float { return 9.80665; }
+pub fn isa_sea_level_temperature() -> Float { return 288.15; }
+pub fn isa_sea_level_pressure() -> Float { return 101325.0; }
+pub fn isa_sea_level_density() -> Float { return 1.2250; }
+pub fn isa_sea_level_speed_of_sound() -> Float { return 340.294; }
+
+pub fn isa_temperature_at(alt_m: Float) -> Float {
+    if alt_m <= 11000.0 {
+        if alt_m < 0.0 { return 288.15; }
+        return 288.15 - (0.0065 * alt_m);
+    }
+    return 216.65;
+}
+
+pub fn isa_pressure_at(alt_m: Float) -> Float {
+    if alt_m <= 11000.0 {
+        if alt_m < 0.0 { return 101325.0; }
+        let t_ratio: Float = isa_temperature_at(alt_m) / 288.15;
+        return 101325.0 * pow(t_ratio, 5.255877);
+    }
+    let h_diff: Float = alt_m - 11000.0;
+    let exp_term: Float = (0.0 - (9.80665 * h_diff)) / (287.058 * 216.65);
+    return 22632.06 * exp(exp_term);
+}
+
+pub fn isa_density_at(alt_m: Float) -> Float {
+    let t: Float = isa_temperature_at(alt_m);
+    let p: Float = isa_pressure_at(alt_m);
+    if t <= 0.0 { return 1.2250; }
+    return p / (287.058 * t);
+}
+
+pub fn isa_speed_of_sound_at(alt_m: Float) -> Float {
+    let t: Float = isa_temperature_at(alt_m);
+    if t <= 0.0 { return 340.294; }
+    return sqrt(1.4 * 287.058 * t);
+}
+
+pub fn isa_atmosphere_at(alt_m: Float) -> IsaAtmosphere {
+    let t: Float = isa_temperature_at(alt_m);
+    let p: Float = isa_pressure_at(alt_m);
+    let rho: Float = isa_density_at(alt_m);
+    let a: Float = isa_speed_of_sound_at(alt_m);
+    let t0: Float = 288.15;
+    let p0: Float = 101325.0;
+    let rho0: Float = 1.2250;
+    return IsaAtmosphere {
+        altitude_m: alt_m,
+        temperature_k: t,
+        pressure_pa: p,
+        density_kg_m3: rho,
+        speed_of_sound_mps: a,
+        density_ratio: rho / rho0,
+        pressure_ratio: p / p0,
+        temperature_ratio: t / t0
+    };
+}
+
+pub fn isa_atmosphere_feet(alt_ft: Float) -> IsaAtmosphere {
+    let alt_m: Float = alt_ft * 0.3048;
+    return isa_atmosphere_at(alt_m);
+}
+
+pub fn altitude_meters_to_feet(m: Float) -> Float { return m * 3.280839895; }
+pub fn altitude_feet_to_meters(ft: Float) -> Float { return ft * 0.3048; }
+pub fn density_slug_ft3(density_kg_m3: Float) -> Float { return density_kg_m3 * 0.00194032; }
+pub fn pressure_psf(pressure_pa: Float) -> Float { return pressure_pa * 0.02088543; }
+pub fn speed_mps_to_knots(mps: Float) -> Float { return mps * 1.94384449; }
+pub fn speed_knots_to_mps(kts: Float) -> Float { return kts * 0.51444444; }
+pub fn speed_mps_to_fps(mps: Float) -> Float { return mps * 3.280839895; }
+pub fn speed_fps_to_mps(fps: Float) -> Float { return fps * 0.3048; }
+
+pub fn barometric_density(alt_ft: Float) -> Float {
+    let rho0: Float = 0.002377;
+    let h: Float = if alt_ft < 0.0 { 0.0 } else { alt_ft };
+    return rho0 * exp((0.0 - h) / 23622.0);
+}
+
+pub fn dynamic_pressure(alt_ft: Float, velocity_fps: Float) -> Float {
+    let rho: Float = barometric_density(alt_ft);
+    if rho <= 0.0 || velocity_fps <= 0.0 { return 0.0; }
+    return 0.5 * rho * (velocity_fps * velocity_fps);
+}
+
+// 256-bit SIMD Vectorized Atmosphere Functions (f32x8)
+
+pub fn isa_temperature_f32x8(alt_m: f32x8) -> f32x8 {
+    return f32x8_new(
+        isa_temperature_at(alt_m.v0),
+        isa_temperature_at(alt_m.v1),
+        isa_temperature_at(alt_m.v2),
+        isa_temperature_at(alt_m.v3),
+        isa_temperature_at(alt_m.v4),
+        isa_temperature_at(alt_m.v5),
+        isa_temperature_at(alt_m.v6),
+        isa_temperature_at(alt_m.v7)
+    );
+}
+
+pub fn isa_pressure_f32x8(alt_m: f32x8) -> f32x8 {
+    return f32x8_new(
+        isa_pressure_at(alt_m.v0),
+        isa_pressure_at(alt_m.v1),
+        isa_pressure_at(alt_m.v2),
+        isa_pressure_at(alt_m.v3),
+        isa_pressure_at(alt_m.v4),
+        isa_pressure_at(alt_m.v5),
+        isa_pressure_at(alt_m.v6),
+        isa_pressure_at(alt_m.v7)
+    );
+}
+
+pub fn isa_density_f32x8(alt_m: f32x8) -> f32x8 {
+    return f32x8_new(
+        isa_density_at(alt_m.v0),
+        isa_density_at(alt_m.v1),
+        isa_density_at(alt_m.v2),
+        isa_density_at(alt_m.v3),
+        isa_density_at(alt_m.v4),
+        isa_density_at(alt_m.v5),
+        isa_density_at(alt_m.v6),
+        isa_density_at(alt_m.v7)
+    );
+}
+
+pub fn isa_speed_of_sound_f32x8(alt_m: f32x8) -> f32x8 {
+    return f32x8_new(
+        isa_speed_of_sound_at(alt_m.v0),
+        isa_speed_of_sound_at(alt_m.v1),
+        isa_speed_of_sound_at(alt_m.v2),
+        isa_speed_of_sound_at(alt_m.v3),
+        isa_speed_of_sound_at(alt_m.v4),
+        isa_speed_of_sound_at(alt_m.v5),
+        isa_speed_of_sound_at(alt_m.v6),
+        isa_speed_of_sound_at(alt_m.v7)
+    );
+}
+
+pub fn barometric_density_f32x8(alt_ft: f32x8) -> f32x8 {
+    return f32x8_new(
+        barometric_density(alt_ft.v0),
+        barometric_density(alt_ft.v1),
+        barometric_density(alt_ft.v2),
+        barometric_density(alt_ft.v3),
+        barometric_density(alt_ft.v4),
+        barometric_density(alt_ft.v5),
+        barometric_density(alt_ft.v6),
+        barometric_density(alt_ft.v7)
+    );
+}
+
+pub fn dynamic_pressure_f32x8(alt_ft: f32x8, velocity_fps: f32x8) -> f32x8 {
+    let rho: f32x8 = barometric_density_f32x8(alt_ft);
+    let v_sq: f32x8 = f32x8_mul(velocity_fps, velocity_fps);
+    let half_rho: f32x8 = f32x8_scale(rho, 0.5);
+    return f32x8_mul(half_rho, v_sq);
+}
+
+pub fn isa_atmosphere_batch_f32x8(alt_m: f32x8) -> IsaAtmosphere8 {
+    let t: f32x8 = isa_temperature_f32x8(alt_m);
+    let p: f32x8 = isa_pressure_f32x8(alt_m);
+    let rho: f32x8 = isa_density_f32x8(alt_m);
+    let a: f32x8 = isa_speed_of_sound_f32x8(alt_m);
+    let t0: f32x8 = f32x8_splat(288.15);
+    let p0: f32x8 = f32x8_splat(101325.0);
+    let rho0: f32x8 = f32x8_splat(1.2250);
+    return IsaAtmosphere8 {
+        altitude_m: alt_m,
+        temperature_k: t,
+        pressure_pa: p,
+        density_kg_m3: rho,
+        speed_of_sound_mps: a,
+        density_ratio: f32x8_div(rho, rho0),
+        pressure_ratio: f32x8_div(p, p0),
+        temperature_ratio: f32x8_div(t, t0)
+    };
+}

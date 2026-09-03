@@ -1,0 +1,254 @@
+// # AArch64 Multi-Function Program Compiler
+// Logline: Lowers a full .oo file with ProcessCap fns, match, calls, and println to ELF64 EM_AARCH64.
+// Setup: Scans top-level items, lowers each fn with xstmt, patches BL/ADR, links via aarch64_link_executable.
+// Beats:
+//   1. Fail closed on empty source, missing fn main, or an unresolved callee.
+//   2. mmap a bump heap in _start, then STP/BL main/svc-exit and each user function.
+//   3. Patch BL with found-at instruction offsets; ADR uses the instruction PC.
+//   4. Emit list/string/exec runtime and pack the text with the shipped ELF linker.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_syscalls.oo";
+import "std/hw/silicon/aarch64_linker.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+import "std/hw/silicon/aarch64_xtypes.oo";
+import "std/hw/silicon/aarch64_xfn.oo";
+import "std/hw/silicon/aarch64_xstmt.oo";
+import "std/hw/silicon/aarch64_xrt_list.oo";
+import "std/hw/silicon/aarch64_xrt_str.oo";
+import "std/hw/silicon/aarch64_xrt_exec.oo";
+import "std/hw/silicon/aarch64_xrt_fmath.oo";
+import "std/hw/silicon/aarch64_xrt_cstr.oo";
+import "std/hw/silicon/aarch64_xrt_bytes.oo";
+import "std/hw/silicon/aarch64_xrt_affix.oo";
+import "std/hw/silicon/aarch64_xrt_host.oo";
+import "std/hw/silicon/aarch64_xrt_sha256.oo";
+import "std/hw/silicon/aarch64_xrt_heap.oo";
+import "std/hw/silicon/aarch64_xrt_puts_int.oo";
+
+fn a64p_emit_start(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(a64x_emit(x0, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16)), arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_movz(0, 0, 0)), arm64_word_movz(1, 128, 1)), arm64_word_movz(2, 3, 0));
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_movz(3, 34, 0)), arm64_word_movz(4, 0, 0)), arm64_word_movz(5, 0, 0));
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_movz(abi_sys_reg(), aarch64_sys_mmap(), 0)), arm64_word_svc(0)), arm64_word_mov_reg(28, 0));
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_add_imm(1, 28, 64)), arm64_word_str(1, 28, 0)), arm64_word_movz(2, 128, 1));
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_add_reg(2, 28, 2)), arm64_word_str(2, 28, 8)), arm64_word_str(31, 28, 16));
+    x = a64x_bl(a64x_emit(x, arm64_word_str(31, 28, 24)), "main");
+    return a64x_emit(a64x_emit(a64x_emit(x, arm64_word_movz(0, 0, 0)), arm64_word_movz(abi_sys_reg(), aarch64_sys_exit(), 0)), arm64_word_svc(0));
+}
+
+fn a64p_str_off(strs: List[String], nstr: Int, idx: Int, str_base: Int) -> Int {
+    let mut off: Int = str_base;
+    let mut i: Int = 0;
+    while i < idx && i < nstr { off = off + bytes_len(list_get(strs, i)) + 1; i = i + 1; }
+    return off;
+}
+
+fn a64p_find_fn(fnames: List[String], foffs: List[Int], nfn: Int, nm: String) -> Int {
+    let mut j: Int = 0;
+    while j < nfn {
+        if list_get(fnames, j) == nm { return list_get(foffs, j); }
+        j = j + 1;
+    }
+    return -1;
+}
+
+fn a64p_patch_at(x: A64X, fnames: List[String], foffs: List[Int], nfn: Int, str_base: Int, at: Int, nm: String) -> Int {
+    if bytes_len(nm) >= 2 && byte_at(nm, 0) == 35 && byte_at(nm, 1) == 115 {
+        let mut si: Int = 0;
+        let mut k: Int = 2;
+        while k < bytes_len(nm) {
+            si = si * 10 + (byte_at(nm, k) - 48);
+            k = k + 1;
+        }
+        return arm64_word_adr(0, a64p_str_off(x.st.strs, list_len(x.st.strs), si, str_base) - at * 4);
+    }
+    let found: Int = (0 + a64p_find_fn(fnames, foffs, nfn, nm));
+    if found < 0 { return 0 - 1; }
+    return arm64_word_bl(found - at);
+}
+
+fn a64p_patch(x: A64X, fnames: List[String], foffs: List[Int], nfn: Int, str_base: Int) -> A64X {
+    let nbl: Int = list_len(x.st.bl_at);
+    let nms: List[String] = x.st.bl_nm;
+    let mut i: Int = 0;
+    while i < nbl {
+        let nm: String = list_get(nms, i);
+        if nm != "#brk" && nm != "#brk_done" && !(bytes_len(nm) >= 2 && byte_at(nm, 0) == 35 && byte_at(nm, 1) == 115) {
+            if (0 + a64p_find_fn(fnames, foffs, nfn, nm)) < 0 { return a64x_fail(x, "ERR\ta64p_patch\tunresolved\t" + nm); }
+        }
+        i = i + 1;
+    }
+    let srcw: List[Int] = x.p.words;
+    let nw: Int = list_len(srcw);
+    let mut out: List[Int] = list_new();
+    let mut wi: Int = 0;
+    while wi < nw {
+        let mut w: Int = list_get(srcw, wi);
+        let mut j: Int = 0;
+        while j < nbl {
+            if list_get(x.st.bl_at, j) == wi {
+                let nmj: String = list_get(nms, j);
+                if nmj != "#brk" && nmj != "#brk_done" { w = a64p_patch_at(x, fnames, foffs, nfn, str_base, wi, nmj); }
+            }
+            j = j + 1;
+        }
+        out = list_push(out, w);
+        wi = wi + 1;
+    }
+    return a64x_set_words(x, out);
+}
+
+fn a64p_any(bl: List[String], fnm: List[String], s: String) -> Bool {
+    return a64x_name_in(bl, s) && !a64x_name_in(fnm, s);
+}
+
+fn a64p_need(bl: List[String], fnm: List[String], k: Int) -> Bool {
+    if k == 1 { return a64p_any(bl, fnm, "list_new") || a64p_any(bl, fnm, "list_push") || a64p_any(bl, fnm, "list_len") || a64p_any(bl, fnm, "list_get") || a64p_any(bl, fnm, "list_set"); }
+    if k == 2 {
+        if a64p_any(bl, fnm, "to_string") || a64p_any(bl, fnm, "parse_int") || a64p_any(bl, fnm, "contains") || a64p_any(bl, fnm, "trim") || a64p_any(bl, fnm, "str_trim") { return true; }
+        if a64p_any(bl, fnm, "to_lowercase") || a64p_any(bl, fnm, "str_to_lowercase") || a64p_any(bl, fnm, "to_uppercase") || a64p_any(bl, fnm, "str_to_uppercase") { return true; }
+        return a64p_any(bl, fnm, "str_repeat") || a64p_any(bl, fnm, "repeat") || a64p_any(bl, fnm, "byte_at") || a64p_any(bl, fnm, "bytes_len") || a64p_any(bl, fnm, "chars_len") || a64p_any(bl, fnm, "len") || a64p_any(bl, fnm, "ord") || a64p_any(bl, fnm, "byte_in_range") || a64p_any(bl, fnm, "byte_clamp");
+    }
+    if k == 3 {
+        if a64p_any(bl, fnm, "char_at") || a64p_any(bl, fnm, "str_slice") || a64p_any(bl, fnm, "str_index_of") || a64p_any(bl, fnm, "__strcmp") || a64p_any(bl, fnm, "str_eq") { return true; }
+        if a64p_any(bl, fnm, "str_split") || a64p_any(bl, fnm, "str_starts_with") || a64p_any(bl, fnm, "str_ends_with") || a64p_any(bl, fnm, "str_sub") || a64p_any(bl, fnm, "str_replace") { return true; }
+        return a64p_any(bl, fnm, "char_is_digit") || a64p_any(bl, fnm, "char_is_alpha") || a64p_any(bl, fnm, "char_is_space") || a64p_any(bl, fnm, "byte_len") || a64p_any(bl, fnm, "byte_get") || a64p_any(bl, fnm, "byte_slice");
+    }
+    if k == 4 {
+        if a64p_any(bl, fnm, "bytes_new") || a64p_any(bl, fnm, "bytes_push") || a64p_any(bl, fnm, "bytes_get") || a64p_any(bl, fnm, "bytes_to_str") || a64p_any(bl, fnm, "bytes_eq") { return true; }
+        return a64p_any(bl, fnm, "bytes_from_str") || a64p_any(bl, fnm, "bytes_concat") || a64p_any(bl, fnm, "byte_buf_new") || a64p_any(bl, fnm, "byte_buf_push") || a64p_any(bl, fnm, "byte_buf_get") || a64p_any(bl, fnm, "byte_buf_to_str");
+    }
+    if k == 5 { return a64p_any(bl, fnm, "str_starts_with") || a64p_any(bl, fnm, "str_ends_with") || a64p_any(bl, fnm, "str_strip_prefix") || a64p_any(bl, fnm, "str_strip_suffix") || a64p_any(bl, fnm, "str_join"); }
+    if k == 6 {
+        if a64p_any(bl, fnm, "sqrt") || a64p_any(bl, fnm, "math_sqrt") || a64p_any(bl, fnm, "sin") || a64p_any(bl, fnm, "math_sin") || a64p_any(bl, fnm, "cos") || a64p_any(bl, fnm, "math_cos") { return true; }
+        return a64p_any(bl, fnm, "ln") || a64p_any(bl, fnm, "math_ln") || a64p_any(bl, fnm, "exp") || a64p_any(bl, fnm, "math_exp") || a64p_any(bl, fnm, "pow") || a64p_any(bl, fnm, "math_pow");
+    }
+    if k == 7 {
+        if a64p_any(bl, fnm, "now_ms") || a64p_any(bl, fnm, "sleep_ms") || a64p_any(bl, fnm, "path_exists") || a64p_any(bl, fnm, "oo_fs_is_dir") || a64p_any(bl, fnm, "file_size") || a64p_any(bl, fnm, "oo_file_size") { return true; }
+        if a64p_any(bl, fnm, "channel_new") || a64p_any(bl, fnm, "channel_send") || a64p_any(bl, fnm, "channel_recv") || a64p_any(bl, fnm, "fetch") || a64p_any(bl, fnm, "parse_int_digits") || a64p_any(bl, fnm, "res_unwrap_or") { return true; }
+        return a64p_any(bl, fnm, "oo_fs_read_dir") || a64p_any(bl, fnm, "oo_path_exists") || a64p_any(bl, fnm, "oo_read_file") || a64p_any(bl, fnm, "oo_write_file");
+    }
+    if k == 8 { return a64p_any(bl, fnm, "crypto_sha256_internal") || a64p_any(bl, fnm, "crypto_hmac_sha256_internal") || a64p_any(bl, fnm, "sha256") || a64p_any(bl, fnm, "hmac_sha256"); }
+    if k == 9 { return a64p_any(bl, fnm, "process_exec") || a64p_any(bl, fnm, "oo_sys_kill") || a64p_any(bl, fnm, "oo_sys_spawn") || a64p_any(bl, fnm, "oo_sys_wait") || a64p_any(bl, fnm, "oo_sys_args"); }
+    if k == 10 { return a64p_any(bl, fnm, "oo_a64_alloc") || a64p_any(bl, fnm, "oo_a64_free") || a64p_any(bl, fnm, "oo_a64_realloc") || a64p_any(bl, fnm, "alloc") || a64p_any(bl, fnm, "free") || a64p_any(bl, fnm, "realloc"); }
+    return false;
+}
+
+fn a64p_emit_rt(x0: A64X, fnames0: List[String], foffs0: List[Int], nfn0: Int) -> A64R {
+    let mut r: A64R = A64R { x: x0, fnames: fnames0, foffs: foffs0, nfn: nfn0 };
+    let mut pass: Int = 0;
+    while pass < 5 {
+        let n0: Int = r.nfn;
+        let rx: A64X = r.x;
+        let bl: List[String] = rx.st.bl_nm;
+        let fnm: List[String] = r.fnames;
+        if a64p_any(bl, fnm, "__strlen") { r = a64rt_strlen(r); }
+        if a64p_any(bl, fnm, "__puts") { r = a64rt_puts(r); }
+        if a64p_any(bl, fnm, "__puts_int") { r = a64rt_puts_int(r); }
+        if a64p_any(bl, fnm, "__puts_float") { r = a64rt_puts_float(r); }
+        if a64p_any(bl, fnm, "__concat") { r = a64rt_concat(r); }
+        if a64p_any(bl, fnm, "is_ok") || a64p_any(bl, fnm, "is_err") { r = a64rt_isok(r); }
+        if a64p_need(bl, fnm, 1) { r = a64rt_list(r); }
+        if a64p_need(bl, fnm, 2) { r = a64rt_str(r); }
+        if a64p_need(bl, fnm, 3) { r = a64rt_cstr(r); }
+        if a64p_need(bl, fnm, 4) { r = a64rt_bytes(r); }
+        if a64p_need(bl, fnm, 5) { r = a64rt_affixes(r); }
+        if a64p_need(bl, fnm, 6) { r = a64rt_fmath(r); }
+        if a64p_need(bl, fnm, 7) { r = a64rt_host(r); }
+        if a64p_need(bl, fnm, 8) { r = a64rt_sha256(r); }
+        if a64p_need(bl, fnm, 9) { r = a64rt_exec(r); }
+        if a64p_need(bl, fnm, 10) { r = a64rt_heap(r); }
+        if r.nfn == n0 { pass = 5; } else { pass = pass + 1; }
+    }
+    return r;
+}
+
+pub fn aarch64_compile_program_elf(src: String) -> List[Int] {
+    if bytes_len(src) == 0 { return list_new(); }
+    let scanned: A64X = a64x_scan_types(src);
+    if scanned.st.err != "" { return list_new(); }
+    let mut x: A64X = a64p_emit_start(a64x_keep_fields(src, scanned));
+    let mut fnames: List[String] = list_new();
+    let mut foffs: List[Int] = list_new();
+    let mut nfn: Int = 0;
+    let mut pass: Int = 0;
+    let nsrc: Int = bytes_len(src);
+    while pass < 40 {
+        let n0: Int = nfn;
+        x = a64x_rewind(x);
+        let mut guard: Int = 0;
+        while guard < nsrc + 2 {
+            x = a64x_skip(x);
+            if a64_peek(a64x_as_p(x)) < 0 { break; }
+            if a64_starts(a64x_as_p(x), "import") {
+                x = a64x_skip_import(x);
+            } else {
+                if a64_starts(a64x_as_p(x), "verify") {
+                    x = a64x_skip_verify(x);
+                } else {
+                let mut is_type: Bool = a64_starts(a64x_as_p(x), "type");
+                if a64_starts(a64x_as_p(x), "pub") {
+                    let mut y: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x), "pub"), x);
+                    y = a64x_skip(y);
+                    if a64_starts(a64x_as_p(y), "type") { is_type = true; x = y; }
+                }
+                if is_type {
+                    x = a64x_skip_type(x);
+                } else {
+                    if a64_starts(a64x_as_p(x), "pub") || a64_starts(a64x_as_p(x), "fn") {
+                        x = a64x_reset_locals(x);
+                        x = a64x_fn_header(x);
+                        if x.st.err != "" { return list_new(); }
+                        let nm: String = x.p.text;
+                        let skipb: Bool = a64x_name_in(fnames, nm) || (nm != "main" && !a64x_name_in(x.st.bl_nm, nm));
+                        if skipb {
+                            x = a64x_skip_braces(x);
+                        } else {
+                            let off: Int = list_len(x.p.words);
+                            fnames = list_push(fnames, nm);
+                            foffs = list_push(foffs, off);
+                            nfn = nfn + 1;
+                            let narg: Int = x.p.ival;
+                            x = a64x_from_p(a64_eat(a64x_as_p(x), 123), x);
+                            x = a64x_prologue(x, narg);
+                            x = a64x_stmts(x);
+                            x = a64x_from_p(a64_eat(a64x_as_p(x), 125), x);
+                            x = a64x_epilogue(x);
+                            if x.st.err != "" { return list_new(); }
+                        }
+                    } else { return list_new(); }
+                } }
+            }
+            guard = guard + 1;
+        }
+        if nfn == n0 { pass = 40; } else { pass = pass + 1; }
+    }
+    if !a64x_name_in(fnames, "main") { return list_new(); }
+    let rt: A64R = a64p_emit_rt(x, fnames, foffs, nfn);
+    let rtx: A64X = rt.x;
+    let str_base: Int = list_len(rtx.p.words) * 4;
+    x = a64p_patch(rt.x, rt.fnames, rt.foffs, rt.nfn, str_base);
+    if x.st.err != "" { return list_new(); }
+    let mut text: List[Int] = arm64_words_to_bytes(x.p.words);
+    let ns: Int = list_len(x.st.strs);
+    let xstrs: List[String] = x.st.strs;
+    let mut si: Int = 0;
+    while si < ns {
+        let s: String = list_get(xstrs, si);
+        let ln: Int = bytes_len(s);
+        let mut k: Int = 0;
+        while k < ln {
+            text = list_push(text, byte_at(s, k) & 255);
+            k = k + 1;
+        }
+        text = list_push(text, 0);
+        si = si + 1;
+    }
+    return aarch64_link_executable(text, list_new());
+}

@@ -1,0 +1,67 @@
+// # AArch64 SHA-256 Blocks And Message Schedule
+//
+// Logline: Walks padded blocks, fills W[0..63], copies H into work, and adds rounds back.
+//
+// Setup: x0 msg, x1 len, x2 K, x3 H, x4 W. Work is 64 heap bytes of eight slots.
+//
+// Beats:
+//   1. For each 64-byte block load 16 BE words into W.
+//   2. Extend W[16..63] with sigma0 and sigma1.
+//   3. Copy H to work and BL __sha_rounds.
+//   4. Add the 32-bit work words back into H.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_sha256r.oo";
+
+pub fn a64rt_sha256g(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_blocks");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 64));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_str(1, 31, 8));
+    x = a64x_emit(x, arm64_word_str(2, 31, 16));
+    x = a64x_emit(x, arm64_word_str(3, 31, 24));
+    x = a64x_emit(x, arm64_word_str(4, 31, 32));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_movz(1, 64, 0));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 1));
+    x = a64x_emit(x, arm64_word_str(0, 31, 40));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_str(0, 31, 48));
+    let blp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 48));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 8));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+    let bdn: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 48));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 32));
+    x = a64x_bl(x, "__sha_wfill");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 32));
+    x = a64x_bl(x, "__sha_wext");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 24));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 40));
+    x = a64x_bl(x, "__sha_hcopy");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 40));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 32));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 16));
+    x = a64x_bl(x, "__sha_rounds");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 24));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 40));
+    x = a64x_bl(x, "__sha_hadd");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 48));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 64));
+    x = a64x_emit(x, arm64_word_str(0, 31, 48));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(blp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bdn, arm64_word_b_cond(arm64_cond_ge(), done - bdn)));
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 64));
+    r = a64rt_setx(r, a64rt_epi(x));
+    return a64rt_sha256r(r);
+}

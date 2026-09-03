@@ -1,0 +1,209 @@
+// # Robin Hood FlatHashMap
+//
+// Logline: Open-addressed flat hash table with Robin Hood displacement, per-slot probe sequence length, and backward-shift deletion for cache-friendly key-value lookups.
+//
+// Setup: Pure associative map. Keys and values are Int. Capacity is the next power of two at or above the requested initial capacity.
+//
+// Beats:
+//   1. Hash a key and mask it to a power-of-two capacity.
+//   2. Insert via probe that swaps entries when the existing PSL exceeds the new PSL, then continues the displaced entry.
+//   3. Lookup stops probing as soon as the running probe count meets or exceeds the current PSL.
+//   4. Delete by marking the slot empty and backward-shifting any downstream entries with a non-zero PSL.
+
+import "std/core/primitives/list.oo";
+import "std/core/primitives/result.oo";
+
+type RobinHoodMap = struct {
+    keys: List[Int],
+    values: List[Int],
+    psl: List[Int],
+    cap: Int,
+    count: Int,
+    mask: Int
+};
+
+fn rh_next_pow2(n: Int) -> Int {
+    let mut c: Int = 8;
+    while c < n {
+        c = c * 2;
+    }
+    return c;
+}
+
+fn rh_empty_table(c: Int) -> List[Int] {
+    let mut t: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < c {
+        t = list_push(t, 0 - 1);
+        i = i + 1;
+    }
+    return t;
+}
+
+pub fn robin_hood_new() -> RobinHoodMap {
+    return robin_hood_with_capacity(16);
+}
+
+pub fn robin_hood_with_capacity(initial_cap: Int) -> RobinHoodMap {
+    let c: Int = rh_next_pow2(initial_cap);
+    let empty: List[Int] = rh_empty_table(c);
+    return RobinHoodMap {
+        keys: empty,
+        values: empty,
+        psl: empty,
+        cap: c,
+        count: 0,
+        mask: c - 1
+    };
+}
+
+pub fn robin_hood_len(m: RobinHoodMap) -> Int {
+    return m.count;
+}
+
+pub fn robin_hood_has(m: RobinHoodMap, key: Int) -> Bool {
+    if m.count == 0 { return false; }
+    let cap_v: Int = m.cap;
+    let mask_v: Int = m.mask;
+    let mut idx: Int = key & mask_v;
+    let mut probe: Int = 0;
+    while probe < cap_v {
+        let s: Int = list_get(m.psl, idx);
+        if s < probe { return false; }
+        if list_get(m.keys, idx) == key { return true; }
+        probe = probe + 1;
+        idx = (idx + 1) & mask_v;
+    }
+    return false;
+}
+
+pub fn robin_hood_get(m: RobinHoodMap, key: Int) -> Result[Int, String] {
+    if m.count == 0 { return Err("ERR\trobin_hood_get\tkey_not_found"); }
+    let cap_v: Int = m.cap;
+    let mask_v: Int = m.mask;
+    let mut idx: Int = key & mask_v;
+    let mut probe: Int = 0;
+    while probe < cap_v {
+        let s: Int = list_get(m.psl, idx);
+        if s < probe { return Err("ERR\trobin_hood_get\tkey_not_found"); }
+        if list_get(m.keys, idx) == key { return Ok(list_get(m.values, idx)); }
+        probe = probe + 1;
+        idx = (idx + 1) & mask_v;
+    }
+    return Err("ERR\trobin_hood_get\tkey_not_found");
+}
+
+pub fn robin_hood_set(m: RobinHoodMap, key: Int, val: Int) -> RobinHoodMap {
+    let threshold: Int = (m.cap * 3) / 4;
+    let mut work: RobinHoodMap = m;
+    if work.count >= threshold {
+        work = robin_hood_grow(work, work.cap * 2);
+    }
+    let cap_v: Int = work.cap;
+    let mask_v: Int = work.mask;
+    let mut k: List[Int] = work.keys;
+    let mut v: List[Int] = work.values;
+    let mut p: List[Int] = work.psl;
+    let mut idx: Int = key & mask_v;
+    let mut probe: Int = 0;
+    let mut cur_key: Int = key;
+    let mut cur_val: Int = val;
+    let mut cur_psl: Int = 0;
+    while probe < cap_v {
+        let s: Int = list_get(p, idx);
+        if s == 0 - 1 {
+            k = list_set(k, idx, cur_key);
+            v = list_set(v, idx, cur_val);
+            p = list_set(p, idx, cur_psl);
+            return RobinHoodMap {
+                keys: k, values: v, psl: p,
+                cap: cap_v, count: work.count + 1, mask: mask_v
+            };
+        }
+        if list_get(k, idx) == cur_key {
+            v = list_set(v, idx, cur_val);
+            return RobinHoodMap {
+                keys: k, values: v, psl: p,
+                cap: cap_v, count: work.count, mask: mask_v
+            };
+        }
+        if s < cur_psl {
+            let swap_key: Int = list_get(k, idx);
+            let swap_val: Int = list_get(v, idx);
+            k = list_set(k, idx, cur_key);
+            v = list_set(v, idx, cur_val);
+            p = list_set(p, idx, cur_psl);
+            cur_key = swap_key;
+            cur_val = swap_val;
+            cur_psl = s;
+        }
+        probe = probe + 1;
+        cur_psl = cur_psl + 1;
+        idx = (idx + 1) & mask_v;
+    }
+    let grown: RobinHoodMap = robin_hood_grow(work, work.cap * 2);
+    return robin_hood_set(grown, cur_key, cur_val);
+}
+
+fn robin_hood_grow(m: RobinHoodMap, new_cap: Int) -> RobinHoodMap {
+    let c: Int = rh_next_pow2(new_cap);
+    let empty: List[Int] = rh_empty_table(c);
+    let fresh: RobinHoodMap = RobinHoodMap {
+        keys: empty, values: empty, psl: empty,
+        cap: c, count: 0, mask: c - 1
+    };
+    let mut out: RobinHoodMap = fresh;
+    let cap_v: Int = m.cap;
+    let mut i: Int = 0;
+    while i < cap_v {
+        let psl_i: Int = list_get(m.psl, i);
+        if psl_i >= 0 {
+            out = robin_hood_set(out, list_get(m.keys, i), list_get(m.values, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn robin_hood_delete(m: RobinHoodMap, key: Int) -> RobinHoodMap {
+    if m.count == 0 { return m; }
+    let cap_v: Int = m.cap;
+    let mask_v: Int = m.mask;
+    let mut k: List[Int] = m.keys;
+    let mut v: List[Int] = m.values;
+    let mut p: List[Int] = m.psl;
+    let mut idx: Int = key & mask_v;
+    let mut probe: Int = 0;
+    while probe < cap_v {
+        let s: Int = list_get(p, idx);
+        if s < probe { return m; }
+        if list_get(k, idx) == key { break; }
+        probe = probe + 1;
+        idx = (idx + 1) & mask_v;
+    }
+    if probe < cap_v {
+        if list_get(k, idx) == key {
+            let mut next: Int = (idx + 1) & mask_v;
+            let stop: Int = probe;
+            while probe < cap_v {
+                let psl_next: Int = list_get(p, next);
+                if psl_next < 1 { break; }
+                k = list_set(k, idx, list_get(k, next));
+                v = list_set(v, idx, list_get(v, next));
+                p = list_set(p, idx, psl_next - 1);
+                idx = next;
+                next = (next + 1) & mask_v;
+                if next == 0 && mask_v == 0 { break; }
+                if probe == stop { probe = probe; }
+            }
+            k = list_set(k, idx, 0);
+            v = list_set(v, idx, 0);
+            p = list_set(p, idx, 0 - 1);
+            return RobinHoodMap {
+                keys: k, values: v, psl: p,
+                cap: cap_v, count: m.count - 1, mask: mask_v
+            };
+        }
+    }
+    return m;
+}

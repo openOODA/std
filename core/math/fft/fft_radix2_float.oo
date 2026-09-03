@@ -1,0 +1,141 @@
+// # IEEE-754 Radix-2 Fast Fourier Transform
+//
+// Logline: Computes a decimation-in-time radix-2 FFT and IFFT on interleaved Float pairs.
+//
+// Setup: Pure math. Length n is 2, 4, or 8. Twiddles use in-module cosine and sine.
+//
+// Beats:
+//   1. Reject a length that is not a supported power of two.
+//   2. Bit-reverse the interleaved (re, im) sequence.
+//   3. Combine radix-2 butterflies with exp(-2 pi i k / n) twiddles.
+//   4. Invert by conjugate, forward FFT, conjugate, and scale by 1/n.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/constants.oo";
+
+fn fft_pi() -> Float { return math_pi(); }
+
+fn fft_cos(x: Float) -> Float {
+    let pi: Float = fft_pi();
+    let two_pi: Float = math_two_pi();
+    let half: Float = math_half_pi();
+    let mut t: Float = x;
+    while t > pi { t = t - two_pi; }
+    while t < (0.0 - pi) { t = t + two_pi; }
+    let mut s: Float = 1.0;
+    if t < 0.0 { t = 0.0 - t; }
+    if t > half {
+        t = pi - t;
+        s = 0.0 - 1.0;
+    }
+    let t2: Float = t * t;
+    return s * (1.0 + t2 * ((0.0 - 0.5) + t2 * (1.0 / 24.0 + t2 * ((0.0 - 1.0 / 720.0) + t2 * (1.0 / 40320.0)))));
+}
+
+fn fft_sin(x: Float) -> Float {
+    return fft_cos(x - math_half_pi());
+}
+
+fn fft_bits(n: Int) -> Int {
+    if n == 2 { return 1; }
+    if n == 4 { return 2; }
+    if n == 8 { return 3; }
+    return 0;
+}
+
+fn fft_bitrev(idx: Int, bits: Int) -> Int {
+    let mut x: Int = idx;
+    let mut y: Int = 0;
+    let mut b: Int = 0;
+    while b < bits {
+        y = y * 2 + (x - (x / 2) * 2);
+        x = x / 2;
+        b = b + 1;
+    }
+    return y;
+}
+
+fn fft_nf(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        f = f + 1.0;
+        i = i + 1;
+    }
+    return f;
+}
+
+fn fft_dit(a: List[Float], n: Int, sign: Float) -> List[Float] {
+    let bits: Int = fft_bits(n);
+    let mut x: List[Float] = a;
+    let mut i: Int = 0;
+    while i < n {
+        let j: Int = fft_bitrev(i, bits);
+        if j > i {
+            let re: Float = list_get(x, 2 * i);
+            let im: Float = list_get(x, 2 * i + 1);
+            x = list_set(x, 2 * i, list_get(x, 2 * j));
+            x = list_set(x, 2 * i + 1, list_get(x, 2 * j + 1));
+            x = list_set(x, 2 * j, re);
+            x = list_set(x, 2 * j + 1, im);
+        }
+        i = i + 1;
+    }
+    let mut len: Int = 2;
+    while len <= n {
+        let mut lf: Float = 0.0;
+        let mut t: Int = 0;
+        while t < len {
+            lf = lf + 1.0;
+            t = t + 1;
+        }
+        let ang: Float = sign * math_two_pi() / lf;
+        let mut k: Int = 0;
+        while k < n {
+            let mut j: Int = 0;
+            let mut kf: Float = 0.0;
+            while j < (len / 2) {
+                let theta: Float = ang * kf;
+                let wr: Float = fft_cos(theta);
+                let wi: Float = fft_sin(theta);
+                let i0: Int = k + j;
+                let i1: Int = i0 + (len / 2);
+                let ar: Float = list_get(x, 2 * i0);
+                let ai: Float = list_get(x, 2 * i0 + 1);
+                let br: Float = list_get(x, 2 * i1);
+                let bi: Float = list_get(x, 2 * i1 + 1);
+                let tr: Float = wr * br - wi * bi;
+                let ti: Float = wr * bi + wi * br;
+                x = list_set(x, 2 * i0, ar + tr);
+                x = list_set(x, 2 * i0 + 1, ai + ti);
+                x = list_set(x, 2 * i1, ar - tr);
+                x = list_set(x, 2 * i1 + 1, ai - ti);
+                j = j + 1;
+                kf = kf + 1.0;
+            }
+            k = k + len;
+        }
+        len = len * 2;
+    }
+    return x;
+}
+
+pub fn fft_forward(reim: List[Float], n: Int) -> Result[List[Float], String] {
+    if fft_bits(n) == 0 { return Err("ERR\tfft\tn"); }
+    if list_len(reim) != n * 2 { return Err("ERR\tfft\tsize"); }
+    return Ok(fft_dit(reim, n, 0.0 - 1.0));
+}
+
+pub fn fft_inverse(reim: List[Float], n: Int) -> Result[List[Float], String] {
+    if fft_bits(n) == 0 { return Err("ERR\tfft\tn"); }
+    if list_len(reim) != n * 2 { return Err("ERR\tfft\tsize"); }
+    let y: List[Float] = fft_dit(reim, n, 1.0);
+    let nf: Float = fft_nf(n);
+    let mut o: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n * 2 {
+        o = list_push(o, list_get(y, i) / nf);
+        i = i + 1;
+    }
+    return Ok(o);
+}

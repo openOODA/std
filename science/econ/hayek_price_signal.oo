@@ -1,0 +1,131 @@
+// # Hayekian Decentralized Price Discovery
+//
+// Logline: A simple tatonnement-style price adjustment loop where each agent reports local supply and demand, and a global price emerges without central coordination.
+//
+// Setup: Pure double-precision simulation. Each agent has a private reservation price and quantity; the market computes a clearing price via excess demand adjustment.
+//
+// Beats:
+//   1. agent_new constructs an agent with reservation price p and quantity q (positive = supply, negative = demand).
+//   2. market_excess_demand returns the sum of (q_i * (p_central - p_i) > 0) net positions.
+//   3. tatonnement_step adjusts the central price by step_size in the direction of clearing excess demand.
+//   4. tatonnement_run runs n_steps iterations to find a market-clearing price.
+//   5. clearing_price_estimate returns the final price after n_steps of tatonnement.
+//
+// residual: This is a simplified Walrasian tatonnement; agents do not strategically misrepresent preferences.
+
+type Agent = struct {
+    reservation_price: Float,
+    quantity: Float
+};
+
+type Market = struct {
+    agents: List[Float],
+    quantities: List[Float]
+};
+
+pub fn market_new() -> Market {
+    return Market { agents: list_new(), quantities: list_new() };
+}
+
+pub fn market_add_agent(m: Market, reservation: Float, quantity: Float) -> Market {
+    let mut agents: List[Float] = m.agents;
+    let mut quantities: List[Float] = m.quantities;
+    agents = list_push(agents, reservation);
+    quantities = list_push(quantities, quantity);
+    return Market { agents: agents, quantities: quantities };
+}
+
+// Net demand at the current central price: positive quantity is supply, demand is negative quantity.
+// Demand at price p: agents willing to buy if p < reservation. Supply: agents willing to sell if p > reservation.
+pub fn market_excess_demand(m: Market, central_price: Float) -> Float {
+    let n: Int = list_len(m.agents);
+    let mut excess: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p_i: Float = list_get(m.agents, i);
+        let q_i: Float = list_get(m.quantities, i);
+        if central_price < p_i {
+            excess = excess + q_i;
+        } else {
+            if central_price > p_i {
+                excess = excess + q_i;
+            }
+        }
+        i = i + 1;
+    }
+    return 0.0 - excess;
+}
+
+// One tatonnement step: price += step * excess_demand; bounded to [0, 1000].
+pub fn tatonnement_step(m: Market, current_price: Float, step: Float) -> Float {
+    let excess: Float = market_excess_demand(m, current_price);
+    let mut new_price: Float = current_price + step * excess;
+    if new_price < 0.0 {
+        new_price = 0.0;
+    }
+    if new_price > 1000.0 {
+        new_price = 1000.0;
+    }
+    return new_price;
+}
+
+// Run n_steps of tatonnement, starting at p0. Returns the final price.
+pub fn tatonnement_run(m: Market, p0: Float, step: Float, n_steps: Int) -> Float {
+    let mut p: Float = p0;
+    if p < 0.0 {
+        p = 0.0;
+    }
+    if p > 1000.0 {
+        p = 1000.0;
+    }
+    let mut iter: Int = 0;
+    while iter < n_steps {
+        p = tatonnement_step(m, p, step);
+        iter = iter + 1;
+    }
+    return p;
+}
+
+// Convergence test: returns true if excess demand is within epsilon of zero.
+pub fn is_market_clearing(m: Market, price: Float, epsilon: Float) -> Bool {
+    let excess: Float = market_excess_demand(m, price);
+    if excess < 0.0 {
+        let pos: Float = 0.0 - excess;
+        if pos <= epsilon {
+            return true;
+        }
+    } else {
+        if excess <= epsilon {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Price signal efficiency: ratio of total transaction volume to the sum of |agent.quantity|.
+// A clearing market achieves 1.0; far-from-clearing markets have lower efficiency.
+pub fn price_signal_efficiency(m: Market, price: Float) -> Float {
+    let n: Int = list_len(m.agents);
+    if n == 0 {
+        return 0.0;
+    }
+    let mut total_transacted: Float = 0.0;
+    let mut total_capacity: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let q_i: Float = list_get(m.quantities, i);
+        let mut abs_q: Float = q_i;
+        if q_i < 0.0 {
+            abs_q = 0.0 - q_i;
+        }
+        total_capacity = total_capacity + abs_q;
+        if price > 0.0 {
+            total_transacted = total_transacted + abs_q;
+        }
+        i = i + 1;
+    }
+    if total_capacity <= 0.0 {
+        return 0.0;
+    }
+    return total_transacted / total_capacity;
+}

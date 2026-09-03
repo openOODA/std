@@ -1,0 +1,214 @@
+// # Arithmetic coding theory
+//
+// Logline: Arithmetic coding maps a sequence of symbols to a single value in [0,1) such that decoding recovers the original sequence exactly.
+//
+// Setup: Pure Int. A symbol alphabet {0,1,2,3} and a uniform 4-symbol distribution. encode produces a fixed-point value v; decode recovers the sequence. Hostile input fails closed.
+//
+// Beats:
+//   1. Closed: encode("ABAB") yields a single value; decode returns "ABAB" exactly.
+//   2. Range coding variant: same alphabet and distribution; round-trip holds.
+//   3. Hostile: empty input fails closed; symbol out of [0,3] fails closed.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Uniform 4-symbol arithmetic encoder. Symbols are integers in [0, 4).
+// Return: a 3-element List[Int] = [low, total_scale, n].
+// The encoder tracks the "low" endpoint and the current "range" of the interval.
+// On each step, range is divided by 4 and step is s * (range/4).
+// total_scale must be large enough that 4^n never underflows to 0 for the intended n.
+pub fn compression_arith_encode(symbols: List[Int]) -> List[Int] {
+    let n: Int = list_len(symbols);
+    if n < 1 {
+        return list_new();
+    }
+    // total_scale = 4^5 = 1024 keeps width >= 1 for n <= 5.
+    if n > 5 {
+        return list_new();
+    }
+    let total_scale: Int = 1024;
+    let mut low: Int = 0;
+    let mut range: Int = total_scale;
+    let mut i: Int = 0;
+    while i < n {
+        let s: Int = list_get(symbols, i);
+        if s < 0 {
+            return list_new();
+        }
+        if s > 3 {
+            return list_new();
+        }
+        let width: Int = range / 4;
+        if width < 1 {
+            return list_new();
+        }
+        let step: Int = s * width;
+        low = low + step;
+        range = width;
+        i = i + 1;
+    }
+    let mut out: List[Int] = list_new();
+    out = list_push(out, low);
+    out = list_push(out, total_scale);
+    out = list_push(out, n);
+    return out;
+}
+
+// Range coder variant: tracks the same interval narrowing and couples with the closed encoder.
+pub fn compression_arith_range_encode(symbols: List[Int]) -> List[Int] {
+    let n: Int = list_len(symbols);
+    if n < 1 {
+        return list_new();
+    }
+    if n > 5 {
+        return list_new();
+    }
+    let total_scale: Int = 1024;
+    let mut low: Int = 0;
+    let mut range: Int = total_scale;
+    let mut i: Int = 0;
+    while i < n {
+        let s: Int = list_get(symbols, i);
+        if s < 0 {
+            return list_new();
+        }
+        if s > 3 {
+            return list_new();
+        }
+        let width: Int = range / 4;
+        if width < 1 {
+            return list_new();
+        }
+        let step: Int = s * width;
+        low = low + step;
+        range = width;
+        i = i + 1;
+    }
+    let mut out: List[Int] = list_new();
+    out = list_push(out, low);
+    out = list_push(out, total_scale);
+    out = list_push(out, n);
+    return out;
+}
+
+// Decoder for the closed-form encoder. Walks the n symbols and recovers the original sequence.
+// Decoder mirrors the encoder: at each step, pos = cur_low - (cur_low / cur_range) * cur_range,
+// then s = pos / width, and the new cur_low strips the consumed symbol band.
+pub fn compression_arith_decode(encoded: List[Int]) -> List[Int] {
+    if list_len(encoded) < 3 {
+        return list_new();
+    }
+    let low: Int = list_get(encoded, 0);
+    let total_scale: Int = list_get(encoded, 1);
+    let n: Int = list_get(encoded, 2);
+    if n < 1 {
+        return list_new();
+    }
+    if total_scale < 1 {
+        return list_new();
+    }
+    let mut out: List[Int] = list_new();
+    let mut cur_low: Int = low;
+    let mut cur_range: Int = total_scale;
+    let mut i: Int = 0;
+    while i < n {
+        let pos: Int = cur_low - (cur_low / cur_range) * cur_range;
+        let width: Int = cur_range / 4;
+        if width < 1 {
+            return list_new();
+        }
+        let mut s: Int = pos / width;
+        if s > 3 {
+            s = 3;
+        }
+        out = list_push(out, s);
+        cur_low = cur_low - (s * width);
+        cur_range = width;
+        i = i + 1;
+    }
+    return out;
+}
+
+// Theory check: arith_round_trip_holds(symbols) returns DomainCert holds=1 when encode then decode recovers the input.
+pub fn compression_arith_round_trip_holds(symbols: List[Int]) -> DomainCert {
+    let n: Int = list_len(symbols);
+    if n < 1 {
+        return domain_cert("compression", "arith_round_trip", 0);
+    }
+    let enc: List[Int] = compression_arith_encode(symbols);
+    if list_len(enc) < 3 {
+        return domain_cert("compression", "arith_round_trip", 0);
+    }
+    let dec: List[Int] = compression_arith_decode(enc);
+    if list_len(dec) != n {
+        return domain_cert("compression", "arith_round_trip", 0);
+    }
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(dec, i) != list_get(symbols, i) {
+            return domain_cert("compression", "arith_round_trip", 0);
+        }
+        i = i + 1;
+    }
+    return domain_cert("compression", "arith_round_trip", 1);
+}
+
+// Range coding round trip.
+pub fn compression_arith_range_round_trip_holds(symbols: List[Int]) -> DomainCert {
+    let n: Int = list_len(symbols);
+    if n < 1 {
+        return domain_cert("compression", "arith_range_round_trip", 0);
+    }
+    let enc: List[Int] = compression_arith_range_encode(symbols);
+    if list_len(enc) < 3 {
+        return domain_cert("compression", "arith_range_round_trip", 0);
+    }
+    let dec: List[Int] = compression_arith_decode(enc);
+    if list_len(dec) != n {
+        return domain_cert("compression", "arith_range_round_trip", 0);
+    }
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(dec, i) != list_get(symbols, i) {
+            return domain_cert("compression", "arith_range_round_trip", 0);
+        }
+        i = i + 1;
+    }
+    return domain_cert("compression", "arith_range_round_trip", 1);
+}
+
+pub fn verify_compression_arithmetic_coding_theory() -> Bool {
+    // Golden: encode "ABAB" (0,1,0,1) -> round trip holds.
+    let mut abab: List[Int] = list_new();
+    abab = list_push(abab, 0);
+    abab = list_push(abab, 1);
+    abab = list_push(abab, 0);
+    abab = list_push(abab, 1);
+    if cert_holds(compression_arith_round_trip_holds(abab)) != 1 { return false; }
+
+    // Golden: encode "AABB" (0,0,1,1) -> round trip holds.
+    let mut aabb: List[Int] = list_new();
+    aabb = list_push(aabb, 0);
+    aabb = list_push(aabb, 0);
+    aabb = list_push(aabb, 1);
+    aabb = list_push(aabb, 1);
+    if cert_holds(compression_arith_round_trip_holds(aabb)) != 1 { return false; }
+
+    // Golden: range coder round trip on "ABAB" holds.
+    if cert_holds(compression_arith_range_round_trip_holds(abab)) != 1 { return false; }
+
+    // Hostile: empty input fails closed to 0.
+    let mut empty: List[Int] = list_new();
+    if cert_holds(compression_arith_round_trip_holds(empty)) != 0 { return false; }
+
+    // Hostile: out-of-alphabet symbol 4 fails closed.
+    let mut bad: List[Int] = list_new();
+    bad = list_push(bad, 4);
+    if cert_holds(compression_arith_round_trip_holds(bad)) != 0 { return false; }
+
+    // Hostile: negative symbol fails closed.
+    let mut neg: List[Int] = list_new();
+    neg = list_push(neg, 0 - 1);
+    if cert_holds(compression_arith_round_trip_holds(neg)) != 0 { return false; }
+
+    return true;
+}

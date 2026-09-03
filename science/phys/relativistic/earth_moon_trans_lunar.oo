@@ -1,0 +1,67 @@
+// # Earth-Moon Trans-Lunar Injection (TLI) Trajectory
+//
+// Logline: Calculates Apollo/Artemis Trans-Lunar Injection (TLI) delta-v, hyperbolic arrival energy (C3), and transfer duration.
+//
+// Setup: Pure patched-conic and CR3BP translunar trajectory mechanics for lunar mission design.
+//
+// Beats:
+//   1. Nominal TLI delta-v budget integer query.
+//   2. TLI mission configuration defaults and parameter structures.
+//   3. Compute translunar insertion delta-v from parking orbit.
+//   4. Calculate hyperbolic departure energy C3 and time of flight.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astro_advanced_earth_moon_trans_lunar() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type TliMissionParams = struct {
+    r_park_km: Float,
+    r_moon_km: Float,
+    flight_time_hours: Float,
+    insertion_angle_deg: Float
+};
+
+type TliTransferSolution = struct {
+    delta_v_m_s: Float,
+    c3_energy_km2_s2: Float,
+    transfer_semi_major_km: Float,
+    tof_seconds: Float
+};
+
+pub fn tli_delta_v() -> Int {
+    return 3140;
+}
+
+pub fn tli_params_default() -> TliMissionParams {
+    return TliMissionParams {
+        r_park_km: 6571.0, // 200 km LEO parking orbit
+        r_moon_km: 384400.0, // Moon semi-major axis
+        flight_time_hours: 72.0, // 3-day transfer
+        insertion_angle_deg: 28.5
+    };
+}
+
+/// Computes complete TLI transfer solution from mission parameters.
+pub fn tli_compute_transfer(params: TliMissionParams) -> TliTransferSolution {
+    let mu_earth: Float = 398600.4418; // km^3/s^2
+    let r1: Float = params.r_park_km;
+    let r2: Float = params.r_moon_km;
+    let a_tli: Float = 0.5 * (r1 + r2);
+
+    let v_park: Float = sqrt(mu_earth / r1);
+    let v_tli: Float = sqrt(mu_earth * ((2.0 / r1) - (1.0 / a_tli)));
+    let mut dv: Float = (v_tli - v_park) * 1000.0;
+    if dv < 0.0 { dv = 0.0 - dv; }
+
+    let v_esc: Float = sqrt((2.0 * mu_earth) / r1);
+    let c3: Float = (v_tli * v_tli) - (v_esc * v_esc);
+
+    let pi: Float = circ_pi_std_phys_astro_advanced_earth_moon_trans_lunar();
+    let a3_over_mu: Float = (a_tli * a_tli * a_tli) / mu_earth;
+    let tof: Float = pi * sqrt(a3_over_mu);
+
+    return TliTransferSolution {
+        delta_v_m_s: dv,
+        c3_energy_km2_s2: c3,
+        transfer_semi_major_km: a_tli,
+        tof_seconds: tof
+    };
+}

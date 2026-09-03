@@ -1,0 +1,77 @@
+// # Control Flow Flattening & Dispatcher State Machine
+//
+// Logline: Runtime simulation and C-emit data structures for control flow flattening.
+//
+// Setup: Shared FlattenedBlock/FlattenedFunction types used by the compiler's c_emit_flatten and the security runtime.
+//
+// Beats:
+//   1. Define FlattenedBlock with AstStatement stmts and state transitions.
+//   2. Provide flattened_function_new / add_block / step for runtime simulation.
+//   3. Provide flattened_blocks_from_function to drive C switch-dispatcher emit.
+// residual: Quadratic-residue opaque predicates and per-instruction cfg edges are residual.
+
+import "std/sec/defense/ast_morpher_types.oo";
+
+type FlattenedBlock = struct {
+    state_id: Int,
+    next_state_id: Int,
+    stmts: List[AstStatement]
+};
+
+type FlattenedFunction = struct {
+    function_name: String,
+    initial_state: Int,
+    exit_state: Int,
+    blocks: List[FlattenedBlock],
+    dispatcher_switch_var: Int
+};
+
+pub fn flattened_block_new(state_id: Int, next_state_id: Int, stmts: List[AstStatement]) -> FlattenedBlock {
+    let fb: FlattenedBlock = FlattenedBlock {
+        state_id: state_id,
+        next_state_id: next_state_id,
+        stmts: stmts
+    };
+    return fb;
+}
+
+fn _ast_morpher_use() -> Int {
+    let s: AstStatement = ast_statement_new(0, 0, "", 0);
+    return s.stmt_id;
+}
+
+pub fn flattened_function_create(name: String, init_st: Int, exit_st: Int, blks: List[FlattenedBlock]) -> FlattenedFunction {
+    return FlattenedFunction {
+        function_name: name,
+        initial_state: init_st,
+        exit_state: exit_st,
+        blocks: blks,
+        dispatcher_switch_var: init_st
+    };
+}
+
+pub fn flattened_function_new(name: String, init_st: Int, exit_st: Int) -> FlattenedFunction {
+    let empty_blocks: List[FlattenedBlock] = list_new();
+    return flattened_function_create(name, init_st, exit_st, empty_blocks);
+}
+
+pub fn flattened_function_add_block(ff: &mut FlattenedFunction, b: FlattenedBlock) {
+    ff.blocks = list_push(ff.blocks, b);
+}
+
+pub fn flattened_function_step(ff: &mut FlattenedFunction) -> Bool {
+    let cur: Int = ff.dispatcher_switch_var;
+    if cur == ff.exit_state { return false; }
+    let mut i: Int = 0;
+    let n: Int = list_len(ff.blocks);
+    while i < n {
+        let b: FlattenedBlock = list_get(ff.blocks, i);
+        if b.state_id == cur {
+            ff.dispatcher_switch_var = b.next_state_id;
+            return true;
+        }
+        i = i + 1;
+    }
+    ff.dispatcher_switch_var = ff.exit_state;
+    return false;
+}

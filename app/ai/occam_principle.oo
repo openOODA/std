@@ -1,0 +1,72 @@
+// # Occam's Razor Principle
+//
+// Logline: Among models with similar training loss, the simpler model is preferred.
+//
+// Setup: Pure Int. Complexity is parameter count or bits. Loss and complexity are non-negative. Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Penalized score: loss + lambda * complexity.
+//   2. Better: 1 if model A's score is lower than B's.
+//   3. Tied: 1 if scores are equal and complexity differs.
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+
+fn occ_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Penalized score: loss + lambda * complexity. Negative inputs return Err. (0,0,lambda) is Ok(0).
+pub fn occ_penalized_score(loss: Int, complexity: Int, lambda: Int) -> Result[Int, String] {
+    if loss < 0 { return Err("ERR\tocc\tdomain"); }
+    if complexity < 0 { return Err("ERR\tocc\tdomain"); }
+    if lambda < 0 { return Err("ERR\tocc\tdomain"); }
+    return Ok(loss + (lambda * complexity));
+}
+
+// Model A is better: 1 if A's penalized score < B's score. Illegal score is 0.
+pub fn occ_better(a_loss: Int, a_complexity: Int, b_loss: Int, b_complexity: Int, lambda: Int) -> Int {
+    let ar: Result[Int, String] = occ_penalized_score(a_loss, a_complexity, lambda);
+    let br: Result[Int, String] = occ_penalized_score(b_loss, b_complexity, lambda);
+    if ar.is_ok() == false { return 0; }
+    if br.is_ok() == false { return 0; }
+    let a_score: Int = occ_got(ar);
+    let b_score: Int = occ_got(br);
+    if a_score < b_score { return 1; }
+    return 0;
+}
+
+// Tied loss + simpler wins: 1 if losses equal and A's complexity is lower.
+pub fn occ_simpler_wins(a_loss: Int, a_complexity: Int, b_loss: Int, b_complexity: Int) -> Int {
+    if a_loss < 0 { return 0; }
+    if b_loss < 0 { return 0; }
+    if a_complexity < 0 { return 0; }
+    if b_complexity < 0 { return 0; }
+    if a_loss != b_loss { return 0; }
+    if a_complexity < b_complexity { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for Occam's razor principle.
+pub fn verify_occam_principle() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    if occ_got(occ_penalized_score(10, 5, 2)) != 20 { return false; }
+    if occ_got(occ_penalized_score(10, 0, 2)) != 10 { return false; }
+    if occ_got(occ_penalized_score(0, 5, 2)) != 10 { return false; }
+    let zocc: Result[Int, String] = occ_penalized_score(0, 0, 2);
+    if zocc.is_ok() == false { return false; }
+    if occ_got(zocc) != 0 { return false; }
+    if occ_penalized_score(0 - 1, 5, 2).is_ok() { return false; }
+    if occ_penalized_score(10, 0 - 1, 2).is_ok() { return false; }
+    if occ_penalized_score(10, 5, 0 - 1).is_ok() { return false; }
+    if occ_better(5, 1, 5, 2, 1) != 1 { return false; }
+    if occ_better(5, 2, 5, 1, 1) != 0 { return false; }
+    if occ_better(5, 1, 5, 1, 1) != 0 { return false; }
+    if occ_simpler_wins(5, 1, 5, 2) != 1 { return false; }
+    if occ_simpler_wins(5, 2, 5, 1) != 0 { return false; }
+    if occ_simpler_wins(5, 1, 6, 1) != 0 { return false; }
+    if occ_simpler_wins(5, 1, 5, 1) != 0 { return false; }
+    if occ_simpler_wins(0 - 1, 1, 5, 1) != 0 { return false; }
+    return true;
+}

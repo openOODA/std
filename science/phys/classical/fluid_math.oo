@@ -1,0 +1,158 @@
+// # Fluid Mechanics Vector Math & SPH Smoothing Kernels
+//
+// Logline: Provides 3D vector operations and Smoothed Particle Hydrodynamics smoothing kernels.
+//
+// Setup: Pure Float vector arithmetic and SPH kernel evaluation without ambient authority.
+//
+// Beats:
+//   1. Define 3D vector structures and arithmetic operators.
+//   2. Implement vector norms, dot, cross, and normalization routines.
+//   3. Implement Muller SPH poly6, spiky gradient, and viscosity laplacian kernels.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_physics_fluid_math() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type FluidVec3 = struct {
+    x: Int,
+    y: Int,
+    z: Int
+};
+
+type SPHKernel = struct {
+    h: Float,
+    h2: Float,
+    h3: Float,
+    h6: Float,
+    h9: Float,
+    poly6_coeff: Float,
+    spiky_coeff: Float,
+    visc_coeff: Float
+};
+
+pub fn vec3_new(x: Float, y: Float, z: Float) -> Vec3 {
+    return Vec3 { x: x, y: y, z: z };
+}
+
+pub fn vec3_zero() -> Vec3 {
+    return Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+}
+
+pub fn vec3_one() -> Vec3 {
+    return Vec3 { x: 1.0, y: 1.0, z: 1.0 };
+}
+
+pub fn vec3_add(a: Vec3, b: Vec3) -> Vec3 {
+    return Vec3 {
+        x: a.x + b.x,
+        y: a.y + b.y,
+        z: a.z + b.z
+    };
+}
+
+pub fn vec3_sub(a: Vec3, b: Vec3) -> Vec3 {
+    return Vec3 {
+        x: a.x - b.x,
+        y: a.y - b.y,
+        z: a.z - b.z
+    };
+}
+
+pub fn vec3_scale(v: Vec3, s: Float) -> Vec3 {
+    return Vec3 {
+        x: v.x * s,
+        y: v.y * s,
+        z: v.z * s
+    };
+}
+
+pub fn vec3_dot(a: Vec3, b: Vec3) -> Float {
+    return ((a.x * b.x) + (a.y * b.y)) + (a.z * b.z);
+}
+
+pub fn vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
+    let nx: Float = (a.y * b.z) - (a.z * b.y);
+    let ny: Float = (a.z * b.x) - (a.x * b.z);
+    let nz: Float = (a.x * b.y) - (a.y * b.x);
+    return Vec3 { x: nx, y: ny, z: nz };
+}
+
+pub fn vec3_length_sq(v: Vec3) -> Float {
+    return vec3_dot(v, v);
+}
+
+pub fn vec3_length(v: Vec3) -> Float {
+    return sqrt(vec3_length_sq(v));
+}
+
+pub fn vec3_normalize(v: Vec3) -> Vec3 {
+    let len: Float = vec3_length(v);
+    if len < 0.000001 {
+        return vec3_zero();
+    }
+    return vec3_scale(v, 1.0 / len);
+}
+
+pub fn vec3_neg(v: Vec3) -> Vec3 {
+    return Vec3 {
+        x: 0.0 - v.x,
+        y: 0.0 - v.y,
+        z: 0.0 - v.z
+    };
+}
+
+pub fn fluid_vec3_new(x: Int, y: Int, z: Int) -> FluidVec3 {
+    return FluidVec3 { x: x, y: y, z: z };
+}
+
+pub fn fluid_vec3_x(v: FluidVec3) -> Int {
+    return v.x;
+}
+
+pub fn sph_kernel_new(h: Float) -> SPHKernel {
+    let pi: Float = circ_pi_std_phys_physics_fluid_math();
+    let h2: Float = h * h;
+    let h3: Float = h2 * h;
+    let h6: Float = h3 * h3;
+    let h9: Float = h6 * h3;
+
+    return SPHKernel {
+        h: h,
+        h2: h2,
+        h3: h3,
+        h6: h6,
+        h9: h9,
+        poly6_coeff: 315.0 / (64.0 * pi * h9),
+        spiky_coeff: (0.0 - 45.0) / (pi * h6),
+        visc_coeff: 45.0 / (pi * h6)
+    };
+}
+
+pub fn sph_kernel_poly6(r: Float, kernel: SPHKernel) -> Float {
+    let r2: Float = r * r;
+    if r2 >= kernel.h2 || r < 0.0 {
+        return 0.0;
+    }
+    let diff: Float = kernel.h2 - r2;
+    return kernel.poly6_coeff * (diff * diff * diff);
+}
+
+pub fn sph_kernel_spiky_grad(r: Float, kernel: SPHKernel) -> Float {
+    if r >= kernel.h || r <= 0.000001 {
+        return 0.0;
+    }
+    let diff: Float = kernel.h - r;
+    return kernel.spiky_coeff * (diff * diff);
+}
+
+pub fn sph_kernel_visc_lap(r: Float, kernel: SPHKernel) -> Float {
+    if r >= kernel.h || r <= 0.000001 {
+        return 0.0;
+    }
+    let diff: Float = kernel.h - r;
+    return kernel.visc_coeff * diff;
+}

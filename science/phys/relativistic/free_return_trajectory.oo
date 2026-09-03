@@ -1,0 +1,26 @@
+// # Circum-Lunar Free-Return Trajectory
+//
+// Logline: Calculates circum-lunar free-return orbital mechanics, pericynthion altitude, and Earth return entry corridor (Apollo 8/13).
+//
+// Setup: Pure patched-conic and CR3BP free-return trajectory mechanics ensuring safe ballistic return without propulsion.
+//
+// Beats:
+//   1. Nominal free-return time of flight integer query (72 hours).
+//   2. Calculate lunar flyby pericynthion altitude and turning angle.
+//   3. Compute Earth return vacuum perigee and atmospheric entry velocity.
+//   4. Evaluate abort delta-v sensitivity for non-free-return trajectories.
+
+pub fn free_return_tof_hours() -> Int {
+    return 72;
+}
+
+/// Computes Earth return atmospheric entry speed v_entry = sqrt(v_inf^2 + 2*mu_earth / r_entry) in m/s.
+pub fn free_return_entry_speed(
+    v_infinity_return_m_s: Float,
+    r_entry_km: Float
+) -> Float {
+    let mu_earth: Float = 398600.4418 * 1000000000.0; // m^3/s^2
+    let r_entry_m: Float = r_entry_km * 1000.0;
+    let v_inf_sq: Float = v_infinity_return_m_s * v_infinity_return_m_s;
+    return sqrt(v_inf_sq + ((2.0 * mu_earth) / r_entry_m));
+}

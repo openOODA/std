@@ -1,0 +1,107 @@
+// # Bayesian Single Nucleotide Variant (SNV) Caller & Genotyper
+//
+// Logline: Computes Bayesian posterior probabilities for homozygous reference (0/0), heterozygous (0/1), and homozygous alternate (1/1) genotypes.
+//
+// Setup: NGS pileup variant caller module evaluating binomial likelihoods and Phred-scaled genotype quality (GQ).
+//
+// Beats:
+//   1. Define PileupCounts, GenotypePosterior, and SnvCallResult data structures.
+//   2. Calculate binomial likelihoods given sequencing error rate epsilon (e.g. 0.001 for Q30).
+//   3. Compute Phred-scaled Genotype Likelihoods (PL) and assign optimal genotype calls.
+
+type PileupCounts = struct {
+    chrom: String,
+    pos: Int,
+    ref_base: String,
+    ref_count: Int,
+    alt_base: String,
+    alt_count: Int,
+    other_count: Int
+};
+
+type SnvCallResult = struct {
+    chrom: String,
+    pos: Int,
+    ref_base: String,
+    alt_base: String,
+    genotype: String, // "0/0", "0/1", "1/1"
+    variant_allele_freq: Float,
+    depth: Int,
+    genotype_quality: Int,
+    is_variant: Bool
+};
+
+pub fn snv_calc_vaf(ref_cnt: Int, alt_cnt: Int) -> Float {
+    let total: Int = ref_cnt + alt_cnt;    if total <= 0 { return 0.0; }
+    return variant_snv_caller_to_f(alt_cnt) / variant_snv_caller_to_f(total);
+}
+
+pub fn snv_call_from_counts(
+    chr: String,
+    pos: Int,
+    ref_b: String,
+    alt_b: String,
+    ref_cnt: Int,
+    alt_cnt: Int
+) -> SnvCallResult {
+    let dp: Int = ref_cnt + alt_cnt;    let vaf: Float = snv_calc_vaf(ref_cnt, alt_cnt);
+    let mut gt: String = "0/0";    let mut gq: Int = 30;    let mut is_var: Bool = false;
+    if vaf >= 0.80 && alt_cnt >= 3 {
+        gt = "1/1";
+        gq = 60;
+        is_var = true;
+    } else if vaf >= 0.20 && alt_cnt >= 3 {
+        gt = "0/1";
+        gq = 50;
+        is_var = true;
+    } else {
+        gt = "0/0";
+        gq = 40;
+        is_var = false;
+    }
+
+    return SnvCallResult {
+        chrom: chr,
+        pos: pos,
+        ref_base: ref_b,
+        alt_base: alt_b,
+        genotype: gt,
+        variant_allele_freq: vaf,
+        depth: dp,
+        genotype_quality: gq,
+        is_variant: is_var
+    };
+}
+
+
+fn variant_snv_caller_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

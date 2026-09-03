@@ -1,0 +1,50 @@
+// # SHA-256 Bytes-to-Words and Hex Codec
+//
+// Logline: Pads a byte string into 64-byte blocks, loads 16 big-endian 32-bit words per block, and emits 8 words as 64 lowercase hex chars.
+//
+// Setup: Pure Int 32-bit. Sibling of sha256_core.oo, called by sha256.oo.
+//
+// Beats:
+//   1. s2_padb: pad a message to a 64-byte block with 0x80 and big-endian 64-bit length.
+//   2. s2_be32: pack 4 padded bytes into a 32-bit big-endian word.
+//   3. s2_load: load 16 words from a padded block.
+//   4. s2_hexb / s2_hexw: emit hex bytes and hex state.
+
+import "./sha256_core.oo";
+
+pub fn s2_padb(data: String, n: Int, total: Int, pos: Int) -> Int {
+    if pos < n {
+        return byte_at(data, pos);
+    }
+    if pos == n {
+        return 128;
+    }
+    if pos < total - 8 {
+        return 0;
+    }
+    let shift: Int = (total - 1 - pos) * 8;
+    return ((n * 8) >> shift) & 255;
+}
+
+pub fn s2_be32(data: String, n: Int, total: Int, pos: Int) -> Int {
+    let b0: Int = s2_padb(data, n, total, pos);
+    let b1: Int = s2_padb(data, n, total, pos + 1);
+    let b2: Int = s2_padb(data, n, total, pos + 2);
+    let b3: Int = s2_padb(data, n, total, pos + 3);
+    return s2_mask((b0 << 24) + (b1 << 16) + (b2 << 8) + b3);
+}
+
+pub fn s2_load(data: String, n: Int, total: Int, base: Int, i: Int) -> Int {
+    return s2_be32(data, n, total, base + i * 4);
+}
+
+pub fn s2_hexb(v: Int) -> String {
+    let hx: String = "0123456789abcdef";
+    let b: Int = v & 255;
+    return char_at(hx, (b >> 4) & 15) + char_at(hx, b & 15);
+}
+
+pub fn s2_hexw(w: Int) -> String {
+    let v: Int = s2_mask(w);
+    return s2_hexb(v >> 24) + s2_hexb((v >> 16) & 255) + s2_hexb((v >> 8) & 255) + s2_hexb(v & 255);
+}

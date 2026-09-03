@@ -1,0 +1,75 @@
+// # HTTP Cross-Origin Thread Isolation Middleware Module
+//
+// Logline: Injects COOP and COEP security headers into HTTP responses for WebAssembly shared memory isolation.
+//
+// Setup: Pure data transformations on HttpResponse and HeaderMap abstractions.
+//
+// Beats:
+//   1. Define standard cross-origin isolation header constants (COOP, COEP, CORP, OAC).
+//   2. Provide http_response_with_coop_coep to enrich HttpResponse instances.
+//   3. Provide http_server_make_isolated_response for direct wire formatting.
+//   4. Support isolated 200 OK and custom status code constructors.
+// RULES.oot 1.4: Pure data module, zero ambient effects.
+// RULES.oot 1.7: Under 256 lines.
+
+import "std/net/http_response.oo";
+
+pub fn http_header_coop_key() -> String {
+    return "Cross-Origin-Opener-Policy";
+}
+
+pub fn http_header_coop_val() -> String {
+    return "same-origin";
+}
+
+pub fn http_header_coep_key() -> String {
+    return "Cross-Origin-Embedder-Policy";
+}
+
+pub fn http_header_coep_val() -> String {
+    return "require-corp";
+}
+
+pub fn http_header_corp_key() -> String {
+    return "Cross-Origin-Resource-Policy";
+}
+
+pub fn http_header_corp_val() -> String {
+    return "cross-origin";
+}
+
+pub fn http_header_oac_key() -> String {
+    return "Origin-Agent-Cluster";
+}
+
+pub fn http_header_oac_val() -> String {
+    return "?1";
+}
+
+pub fn http_response_with_coop_coep(resp: HttpResponse) -> HttpResponse {
+    let mut r: HttpResponse = http_response_with_header(resp, http_header_coop_key(), http_header_coop_val());
+    r = http_response_with_header(r, http_header_coep_key(), http_header_coep_val());
+    r = http_response_with_header(r, http_header_corp_key(), http_header_corp_val());
+    r = http_response_with_header(r, http_header_oac_key(), http_header_oac_val());
+    return r;
+}
+
+pub fn http_server_make_isolated_response(status: Int, status_text: String, content_type: String, body: String) -> String {
+    let s_str: String = status.to_string();
+    let blen: Int = chars_len(body);
+    let blen_str: String = blen.to_string();
+    let mut resp: String = "HTTP/1.1 " + s_str + " " + status_text + "\r\n";
+    resp = resp + "Content-Type: " + content_type + "\r\n";
+    resp = resp + "Content-Length: " + blen_str + "\r\n";
+    resp = resp + http_header_coop_key() + ": " + http_header_coop_val() + "\r\n";
+    resp = resp + http_header_coep_key() + ": " + http_header_coep_val() + "\r\n";
+    resp = resp + http_header_corp_key() + ": " + http_header_corp_val() + "\r\n";
+    resp = resp + http_header_oac_key() + ": " + http_header_oac_val() + "\r\n";
+    resp = resp + "Connection: close\r\n\r\n";
+    resp = resp + body;
+    return resp;
+}
+
+pub fn http_server_make_isolated_200(content_type: String, body: String) -> String {
+    return http_server_make_isolated_response(200, "OK", content_type, body);
+}

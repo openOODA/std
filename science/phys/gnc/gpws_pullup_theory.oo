@@ -1,0 +1,74 @@
+// # GPWS terrain pull-up
+//
+// Logline: Pull-up if radio altitude is below clearance or time-to-impact is below the limit.
+//
+// Setup: Pure Float. Descent rate is dh/dt (negative when descending). Climbing TTI is Err.
+//
+// Beats:
+//   1. TTI = h / |dh/dt| when descending. Climbing is Err, not a dummy large TTI.
+//   2. tti_limit <= 0 or min_clearance < 0 fails closed to no command.
+//   3. h_agl <= 0 or h_agl < clearance or TTI < limit fires pull-up.
+
+pub fn gpws_time_to_impact(h_agl: Float, descent_rate: Float) -> Result[Float, String] {
+    if h_agl <= 0.0 {
+        return Ok(0.0);
+    }
+    if descent_rate >= 0.0 {
+        return Err("ERR\tgpws\tclimb");
+    }
+    return Ok(h_agl / (0.0 - descent_rate));
+}
+
+pub fn gpws_pullup_required(h_agl: Float, descent_rate: Float, tti_limit: Float, min_clearance: Float) -> Int {
+    if tti_limit <= 0.0 {
+        return 0;
+    }
+    if min_clearance < 0.0 {
+        return 0;
+    }
+    if h_agl <= 0.0 {
+        return 1;
+    }
+    if h_agl < min_clearance {
+        return 1;
+    }
+    let tr: Result[Float, String] = gpws_time_to_impact(h_agl, descent_rate);
+    match tr {
+        Ok(tti) => { if tti < tti_limit { return 1; } },
+        Err(_)  => { }
+    }
+    return 0;
+}
+
+pub fn verify_gpws_pullup_theory() -> Bool {
+    if gpws_pullup_required(50.0, 0.0 - 25.0, 4.0, 100.0) != 1 {
+        return false;
+    }
+    if gpws_pullup_required(1000.0, 0.0 - 10.0, 4.0, 50.0) != 0 {
+        return false;
+    }
+    if gpws_pullup_required(50.0, 0.0 - 25.0, 0.0, 100.0) != 0 {
+        return false;
+    }
+    let tti_r: Result[Float, String] = gpws_time_to_impact(100.0, 0.0 - 20.0);
+    let mut tti: Float = 0.0;
+    match tti_r {
+        Ok(v)  => { tti = v; },
+        Err(_) => { return false; }
+    }
+    let mut d: Float = tti - 5.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    let z: Result[Float, String] = gpws_time_to_impact(0.0, 0.0 - 10.0);
+    match z {
+        Ok(v)  => { if v != 0.0 { return false; } },
+        Err(_) => { return false; }
+    }
+    let climb: Result[Float, String] = gpws_time_to_impact(100.0, 1.0);
+    if climb.is_ok() { return false; }
+    return true;
+}

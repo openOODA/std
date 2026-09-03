@@ -1,0 +1,150 @@
+// # Control Flow Flattening Dispatcher Engine
+//
+// Logline: Transforms basic blocks into a centralized switch-dispatcher loop with affine state encoding.
+//
+// Setup: Pure. Employs Chenxi Wang control flow flattening with opaque state update invariants.
+//
+// Beats:
+//   1. Flatten linear AST basic blocks into state-indexed dispatch tables.
+//   2. Compute affine state mappings and inject bogus decoy state transitions.
+//   3. Execute single-step state transitions and full dispatch trace simulations.
+
+import "./flatten_types.oo";
+import "./opaque_predicates.oo";
+
+pub fn dispatcher_engine_flatten(
+    body_blocks: List[FlattenBlock],
+    seed: Int
+) -> FlattenedDispatchLoop {
+    return cfg_flatten_function(body_blocks, seed);
+}
+
+pub fn cfg_flatten_function(
+    body_blocks: List[FlattenBlock],
+    seed: Int
+) -> FlattenedDispatchLoop {
+    let count: Int = list_len(body_blocks);
+    if count == 0 {
+        return flattened_dispatch_new(0, 0, "__state_var");
+    }
+
+    let first_block: FlattenBlock = list_get(body_blocks, 0);
+    let init_state: Int = first_block.state_id;
+    let mut exit_state: Int = -1;
+
+    let mut out_loop: FlattenedDispatchLoop = flattened_dispatch_new(
+        init_state,
+        -1,
+        "__dispatch_state"
+    );
+
+    let mut i: Int = 0;
+    while i < count {
+        let b: FlattenBlock = list_get(body_blocks, i);
+        if b.is_terminal {
+            exit_state = b.state_id;
+        }
+        out_loop = dispatch_add_block(out_loop, b);
+        i = i + 1;
+    }
+
+    // If no terminal block specified, use synthetic exit state
+    if exit_state == -1 {
+        exit_state = 999999;
+    }
+
+    // Inject decoy block resistant to static analysis
+    let decoy_state: Int = (seed * 31 + 7) & 65535;
+    if decoy_state != init_state && decoy_state != exit_state {
+        let decoy_b: FlattenBlock = flatten_block_new(
+            decoy_state,
+            1,
+            exit_state,
+            -1,
+            false
+        );
+        out_loop = dispatch_add_block(out_loop, decoy_b);
+    }
+
+    return FlattenedDispatchLoop {
+        initial_state: init_state,
+        exit_state: exit_state,
+        blocks: out_loop.blocks,
+        block_count: out_loop.block_count,
+        state_var_name: out_loop.state_var_name,
+        loop_bound: out_loop.loop_bound
+    };
+}
+
+pub fn dispatcher_step(
+    loop: FlattenedDispatchLoop,
+    cur_state: Int,
+    branch_cond: Bool
+) -> Int {
+    if cur_state == loop.exit_state {
+        return loop.exit_state;
+    }
+
+    let opt_block: Option[FlattenBlock] = dispatch_find_block_by_state(loop, cur_state);
+    match opt_block {
+        Some(b) => {
+            if b.is_terminal {
+                return loop.exit_state;
+            }
+            if branch_cond && b.conditional_next_state != -1 {
+                return b.conditional_next_state;
+            }
+            return b.next_state_default;
+        },
+        None => {
+            // Unregistered state -> fail-safe jump to exit state
+            return loop.exit_state;
+        }
+    }
+}
+
+pub fn dispatcher_simulate(
+    loop: FlattenedDispatchLoop,
+    branch_inputs: List[Int],
+    max_steps: Int
+) -> List[Int] {
+    let mut history: List[Int] = list_new();
+    let mut cur: Int = loop.initial_state;
+    history = list_push(history, cur);
+
+    let branch_len: Int = list_len(branch_inputs);
+    let mut step: Int = 0;
+
+    while cur != loop.exit_state && step < max_steps {
+        let mut cond: Bool = false;
+        if step < branch_len {
+            let branch_val: Int = list_get(branch_inputs, step);
+            cond = branch_val != 0;
+        }
+        let next_st: Int = dispatcher_step(loop, cur, cond);
+        if next_st == cur && cur != loop.exit_state {
+            // Avoid infinite self-loop
+            cur = loop.exit_state;
+        } else {
+            cur = next_st;
+        }
+        history = list_push(history, cur);
+        step = step + 1;
+    }
+
+    return history;
+}
+
+pub fn dispatcher_verify_integrity(loop: FlattenedDispatchLoop) -> Bool {
+    if loop.block_count == 0 {
+        return false;
+    }
+    let opt_init: Option[FlattenBlock] = dispatch_find_block_by_state(
+        loop,
+        loop.initial_state
+    );
+    match opt_init {
+        Some(_) => { return true; },
+        None    => { return false; }
+    }
+}

@@ -1,0 +1,85 @@
+// # Market Maker PnL Attribution and Decomposition
+//
+// Logline: Decomposes high-frequency market making profit and loss into pure spread capture, inventory holding risk, adverse selection loss, and maker rebates.
+//
+// Setup: Pure quantitative performance attribution module breaking down trading returns into distinct microstructure components.
+//
+// Beats:
+//   1. Define PnlComponentReport and AttributionSession structures.
+//   2. Calculate realized half-spread capture from round-trip buy/sell fills.
+//   3. Compute adverse selection losses from post-trade price drift against inventory.
+
+type PnlComponentReport = struct {
+    total_pnl_usd: Float,
+    spread_capture_pnl: Float,
+    inventory_holding_pnl: Float,
+    adverse_selection_loss: Float,
+    maker_rebates_earned: Float,
+    taker_fees_paid: Float
+};
+
+type FillAttribution = struct {
+    fill_price: Float,
+    fill_size: Float,
+    is_buy: Bool,
+    prevailing_mid: Float,
+    mid_5s_after: Float,
+    maker_rebate_bps: Float
+};
+
+pub fn pnl_attribution_new() -> PnlComponentReport {
+    return PnlComponentReport {
+        total_pnl_usd: 0.0,
+        spread_capture_pnl: 0.0,
+        inventory_holding_pnl: 0.0,
+        adverse_selection_loss: 0.0,
+        maker_rebates_earned: 0.0,
+        taker_fees_paid: 0.0
+    };
+}
+
+pub fn pnl_attribute_fill(
+    report: PnlComponentReport,
+    fill: FillAttribution
+) -> PnlComponentReport {
+    let px: Float = fill.fill_price;
+    let sz: Float = fill.fill_size;
+    let mid_now: Float = fill.prevailing_mid;
+    let mid_future: Float = fill.mid_5s_after;
+    let is_buy: Bool = fill.is_buy;
+
+    // Spread capture = distance of fill price to mid
+    let mut spread_earned: Float = (px - mid_now) * sz;
+    if is_buy {
+        spread_earned = (mid_now - px) * sz;
+    }
+    let new_spread: Float = report.spread_capture_pnl + spread_earned;
+
+    // Adverse selection = price drift 5s after trade against our fill
+    let mut price_drift: Float = (mid_now - mid_future) * sz;
+    if is_buy {
+        price_drift = (mid_future - mid_now) * sz;
+    }
+    let mut new_adverse: Float = report.adverse_selection_loss;
+    let mut new_inventory: Float = report.inventory_holding_pnl;
+
+    if price_drift < 0.0 {
+        new_adverse = new_adverse + (0.0 - price_drift);
+    } else {
+        new_inventory = new_inventory + price_drift;
+    }
+
+    let rebate_usd: Float = (sz * px) * (fill.maker_rebate_bps / 10000.0);
+    let new_rebates: Float = report.maker_rebates_earned + rebate_usd;
+
+    let tot: Float = (new_spread + new_inventory + new_rebates) - new_adverse - report.taker_fees_paid;
+
+    return PnlComponentReport {
+        total_pnl_usd: tot,
+        spread_capture_pnl: new_spread,
+        inventory_holding_pnl: new_inventory,
+        adverse_selection_loss: new_adverse,
+        maker_rebates_earned: new_rebates,
+        taker_fees_paid: report.taker_fees_paid
+    };
+}

@@ -1,0 +1,76 @@
+// # AArch64 Orchestrator Leaf Path Scanner
+//
+// Logline: Extracts scripts/std_qa leaf paths from orchestrator master source and names their tags.
+//
+// Setup: Pure string scan. Paths are relative to ooda/. Duplicate paths are dropped.
+//
+// Beats:
+//   1. Find each scripts/std_qa/…oo occurrence in master source.
+//   2. Strip the file stem as the suite tag used for PASS bytes.
+//   3. Dedup so a master that mentions a path twice is one leaf.
+//   4. Fail closed on an empty stem.
+
+pub fn a64_leaf_tag(rel: String) -> String {
+    let n: Int = bytes_len(rel);
+    let mut a: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        if byte_at(rel, i) == 47 {
+            a = i + 1;
+        }
+        i = i + 1;
+    }
+    let mut b: Int = n;
+    if n >= 3 && byte_at(rel, n - 3) == 46 {
+        b = n - 3;
+    }
+    if b > a {
+        return byte_slice(rel, a, b);
+    }
+    return "";
+}
+
+fn a64_leaf_seen(xs: List[String], p: String) -> Bool {
+    let n: Int = list_len(xs);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(xs, i) == p {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn a64_scan_leaf_paths(src: String) -> List[String] {
+    let n: Int = bytes_len(src);
+    let mut out: List[String] = list_new();
+    let mut i: Int = 0;
+    while i + 19 < n {
+        if byte_at(src, i) == 115 && byte_at(src, i + 1) == 99 && byte_at(src, i + 2) == 114 && byte_at(src, i + 3) == 105 && byte_at(src, i + 4) == 112 && byte_at(src, i + 5) == 116 && byte_at(src, i + 6) == 115 && byte_at(src, i + 7) == 47 {
+            if byte_at(src, i + 8) == 115 && byte_at(src, i + 9) == 116 && byte_at(src, i + 10) == 100 && byte_at(src, i + 11) == 95 && byte_at(src, i + 12) == 113 && byte_at(src, i + 13) == 97 && byte_at(src, i + 14) == 47 {
+                let s0: Int = i;
+                let mut j: Int = i + 15;
+                while j + 2 < n && byte_at(src, j) != 34 && byte_at(src, j) != 32 && byte_at(src, j) != 10 {
+                    j = j + 1;
+                }
+                if j >= s0 + 18 && byte_at(src, j - 3) == 46 && byte_at(src, j - 2) == 111 && byte_at(src, j - 1) == 111 {
+                    let p: String = byte_slice(src, s0, j);
+                    if !a64_leaf_seen(out, p) {
+                        out = list_push(out, p);
+                    }
+                }
+                i = j;
+            } else {
+                i = i + 1;
+            }
+        } else {
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+pub fn a64_corpus_leaf_n() -> Int {
+    return 77;
+}

@@ -1,0 +1,45 @@
+// # HW Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard hw (hardware) domain library. The hw/ subdirectory is a theoretical-foundation library: laws, theories, and principles for computer-architecture correctness (Amdahl's law for hardware, branch prediction, cache associativity, cache line, CXL 3.0, DRAM refresh, endianness, memory bandwidth, MOESI coherence protocol, page offset, TAGE predictor, twos complement). No public API code -- the directory is documentation and verification rules.
+//
+// Setup: No caps required. hw/ is a theoretical-foundation library; no FS, net, or env.
+//
+// Beats:
+//   1. Document the cache, cache-line, and cache-associativity surface as private siblings.
+//   2. Document the branch predictor, TAGE, and CXL 3.0 surface as private siblings.
+//   3. Document the DRAM refresh, MOESI coherence, and memory bandwidth surface as private siblings.
+//   4. Document the endianness, page-offset, twos-complement, and Amdahl surface as private siblings.
+//   5. Document the invariants and KATs as private siblings. External callers must not import _law, _theory, _principle, _invariants, _kat files directly.
+
+import "amdahls_law_hw.oo";
+import "branch_predictor_principle.oo";
+import "cache_associativity_law.oo";
+import "cache_line_law.oo";
+import "cxl_3_0_law.oo";
+import "dram_refresh_theory.oo";
+import "endianness_law.oo";
+import "memory_bandwidth_law.oo";
+import "moesi_protocol_theory.oo";
+import "page_offset_law.oo";
+import "tage_predictor_principle.oo";
+import "twos_complement_law.oo";
+
+// Note: hw/ has no public API code; every sibling is a _law, _theory,
+// _principle, _invariants, or _kat file. The ANCHOR.oo exists to satisfy
+// the Pillar 6 seam rule (FORMAT.oot §1.4) and to provide a single
+// public entry door whose surface is empty. Internal callers (tests,
+// audit harnesses, hardware-correctness proofs) reference the
+// theoretical files directly; external callers must go through this
+// ANCHOR.oo and receive no public functions.
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. amdahls_law_hw.oo, cache_associativity_law.oo, cache_line_law.oo, cxl_3_0_law.oo, endianness_law.oo, memory_bandwidth_law.oo, page_offset_law.oo, twos_complement_law.oo)
+//   _theory files (e.g. dram_refresh_theory.oo, moesi_protocol_theory.oo)
+//   _principle files (e.g. branch_predictor_principle.oo, tage_predictor_principle.oo)
+//   _invariants files (e.g. hw_invariants.oo)
+//   _kat files (e.g. hw_kat.oo)
+//
+// Migration path: if a future caller needs to verify a specific
+// hardware law, they should add a re-export wrapper here (e.g.
+// hw_mod_endianness_compliant) rather than importing the private
+// _law file directly.

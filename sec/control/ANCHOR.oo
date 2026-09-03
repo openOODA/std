@@ -1,0 +1,21 @@
+// # Control Flatten Submodule Hub -- Zero-Drag
+//
+// Logline: Control-flow flattening and opaque predicate primitives used by the active binary defense pipeline. Re-exports a stable ctrl_mod_* surface for the most-used public API.
+//
+// Setup: Pure compute, no caps.
+//
+// Beats:
+//   1. Re-export the dispatcher and flatten-block surface.
+//   2. Re-export control-flow flattening (quadratic residue opaque predicates).
+//   3. Document the private siblings that external callers must NOT import directly: _engine, _types files.
+
+import "dispatcher_engine.oo";
+import "flatten_types.oo";
+import "opaque_predicates.oo";
+import "control_flow_flattening.oo";
+import "opaque_predicate_builder.oo";
+
+pub fn ctrl_mod_flatten_block_new(round: Int, id_a: Int, id_b: Int, target: Int, is_real: Bool) -> FlattenBlock { return flatten_block_new(round, id_a, id_b, target, is_real); }
+pub fn ctrl_mod_dispatcher_flatten(blocks: List[FlattenBlock], seed: Int) -> FlattenedDispatchLoop { return dispatcher_engine_flatten(blocks, seed); }
+pub fn ctrl_mod_dispatcher_verify(loop: FlattenedDispatchLoop) -> Bool { return dispatcher_verify_integrity(loop); }
+pub fn ctrl_mod_opaque_predicate_eval(a: Int, b: Int) -> Bool { return opaque_predicate_eval(a, b); }

@@ -1,0 +1,227 @@
+// # Level 3 Deterministic Matching Engine
+//
+// Logline: Crosses aggressive incoming orders against resting FIFO queues, executing trades and updating depth.
+//
+// Setup: Imports l3_types.oo, l3_memory_pool.oo, l3_fifo_queue.oo, and l3_priority_ladder.oo.
+//
+// Beats:
+//   1. Cross incoming aggressive orders against resting opposite-side priority ladders.
+//   2. Enforce strict price-time FIFO execution priority and compute exact fill allocations.
+//   3. Generate trade match events, handle partial fills, and recycle fully executed order slabs.
+
+import "./l3_types.oo";
+import "./l3_memory_pool.oo";
+import "./l3_fifo_queue.oo";
+import "./l3_priority_ladder.oo";
+
+type MatchExecutionResult = struct {
+    book: L3OrderBook,
+    incoming: L3Order,
+    events: List[L3MatchEvent]
+};
+
+pub fn l3_match_cross_buy(
+    book: L3OrderBook,
+    incoming_order: L3Order
+) -> MatchExecutionResult {
+    let mut b: L3OrderBook = book;
+    let mut inc: L3Order = incoming_order;
+    let mut events: List[L3MatchEvent] = list_new();
+    let n_asks: Int = list_len(b.ask_prices);
+    let mut level_idx: Int = 0;
+    let neg_one: Int = 0 - 1;
+
+    while level_idx < n_asks {
+        if inc.filled_shares >= inc.shares {
+            level_idx = n_asks;
+        } else {
+            let ask_px: Int = list_get(b.ask_prices, level_idx);
+            if inc.price > 0 && ask_px > inc.price {
+                level_idx = n_asks;
+            } else {
+                let mut match_cont: Bool = true;
+                while match_cont {
+                    let head_idx: Int = list_get(b.ask_heads, level_idx);
+                    if head_idx < 0 || inc.filled_shares >= inc.shares {
+                        match_cont = false;
+                    } else {
+                        let m_idx: Int = head_idx;
+                        let maker_id: Int = list_get(b.order_ids, m_idx);
+                        let maker_sh: Int = list_get(b.order_shares, m_idx);
+                        let maker_fl: Int = list_get(b.order_filled, m_idx);
+                        let maker_rem: Int = maker_sh - maker_fl;
+                        let taker_rem: Int = inc.shares - inc.filled_shares;
+                        let mut fill_qty: Int = maker_rem;
+                        if taker_rem < fill_qty {
+                            fill_qty = taker_rem;
+                        }
+
+                        if fill_qty > 0 {
+                            b.total_matches = b.total_matches + 1;
+                            let is_full_maker: Bool = (fill_qty == maker_rem);
+                            let is_full_taker: Bool = (inc.filled_shares + fill_qty == inc.shares);
+
+                            let evt: L3MatchEvent = l3_match_event_new(
+                                b.total_matches, inc.order_id, maker_id,
+                                maker_id, inc.order_id, ask_px, fill_qty,
+                                inc.timestamp_ns, is_full_maker, is_full_taker
+                            );
+                            events = list_push(events, evt);
+
+                            inc.filled_shares = inc.filled_shares + fill_qty;
+                            b.order_filled = list_set(b.order_filled, m_idx, maker_fl + fill_qty);
+                            let cur_sh: Int = list_get(b.ask_shares, level_idx);
+                            b.ask_shares = list_set(b.ask_shares, level_idx, cur_sh - fill_qty);
+
+                            if is_full_maker {
+                                b.order_states = list_set(b.order_states, m_idx, l3_state_filled());
+                                let p_idx: Int = list_get(b.order_prev, m_idx);
+                                let n_idx: Int = list_get(b.order_next, m_idx);
+                                if p_idx >= 0 {
+                                    b.order_next = list_set(b.order_next, p_idx, n_idx);
+                                } else {
+                                    b.ask_heads = list_set(b.ask_heads, level_idx, n_idx);
+                                }
+                                if n_idx >= 0 {
+                                    b.order_prev = list_set(b.order_prev, n_idx, p_idx);
+                                } else {
+                                    b.ask_tails = list_set(b.ask_tails, level_idx, p_idx);
+                                }
+                                b.ask_counts = list_set(b.ask_counts, level_idx, list_get(b.ask_counts, level_idx) - 1);
+                                b.order_prev = list_set(b.order_prev, m_idx, neg_one);
+                                b.order_next = list_set(b.order_next, m_idx, neg_one);
+
+                                b.free_slots = l3_pool_recycle(b.free_slots, m_idx);
+                                b.pool_allocated = b.pool_allocated - 1;
+                                b.pool_free = b.pool_free + 1;
+                                b.order_count = b.order_count - 1;
+                            } else {
+                                b.order_states = list_set(b.order_states, m_idx, l3_state_partially_filled());
+                            }
+                        } else {
+                            match_cont = false;
+                        }
+                    }
+                }
+                level_idx = level_idx + 1;
+            }
+        }
+    }
+
+    if inc.filled_shares >= inc.shares {
+        inc.state = l3_state_filled();
+    } else if inc.filled_shares > 0 {
+        inc.state = l3_state_partially_filled();
+    }
+
+    b = l3_ladder_update_bbo(b);
+    return MatchExecutionResult { book: b, incoming: inc, events: events };
+}
+
+pub fn l3_match_cross_sell(
+    book: L3OrderBook,
+    incoming_order: L3Order
+) -> MatchExecutionResult {
+    let mut b: L3OrderBook = book;
+    let mut inc: L3Order = incoming_order;
+    let mut events: List[L3MatchEvent] = list_new();
+    let n_bids: Int = list_len(b.bid_prices);
+    let mut level_idx: Int = 0;
+    let neg_one: Int = 0 - 1;
+
+    while level_idx < n_bids {
+        if inc.filled_shares >= inc.shares {
+            level_idx = n_bids;
+        } else {
+            let bid_px: Int = list_get(b.bid_prices, level_idx);
+            if inc.price > 0 && bid_px < inc.price {
+                level_idx = n_bids;
+            } else {
+                let mut match_cont: Bool = true;
+                while match_cont {
+                    let head_idx: Int = list_get(b.bid_heads, level_idx);
+                    if head_idx < 0 || inc.filled_shares >= inc.shares {
+                        match_cont = false;
+                    } else {
+                        let m_idx: Int = head_idx;
+                        let maker_id: Int = list_get(b.order_ids, m_idx);
+                        let maker_sh: Int = list_get(b.order_shares, m_idx);
+                        let maker_fl: Int = list_get(b.order_filled, m_idx);
+                        let maker_rem: Int = maker_sh - maker_fl;
+                        let taker_rem: Int = inc.shares - inc.filled_shares;
+                        let mut fill_qty: Int = maker_rem;
+                        if taker_rem < fill_qty {
+                            fill_qty = taker_rem;
+                        }
+
+                        if fill_qty > 0 {
+                            b.total_matches = b.total_matches + 1;
+                            let is_full_maker: Bool = (fill_qty == maker_rem);
+                            let is_full_taker: Bool = (inc.filled_shares + fill_qty == inc.shares);
+
+                            let evt: L3MatchEvent = l3_match_event_new(
+                                b.total_matches, maker_id, inc.order_id,
+                                maker_id, inc.order_id, bid_px, fill_qty,
+                                inc.timestamp_ns, is_full_maker, is_full_taker
+                            );
+                            events = list_push(events, evt);
+
+                            inc.filled_shares = inc.filled_shares + fill_qty;
+                            b.order_filled = list_set(b.order_filled, m_idx, maker_fl + fill_qty);
+                            let cur_sh: Int = list_get(b.bid_shares, level_idx);
+                            b.bid_shares = list_set(b.bid_shares, level_idx, cur_sh - fill_qty);
+
+                            if is_full_maker {
+                                b.order_states = list_set(b.order_states, m_idx, l3_state_filled());
+                                let p_idx: Int = list_get(b.order_prev, m_idx);
+                                let n_idx: Int = list_get(b.order_next, m_idx);
+                                if p_idx >= 0 {
+                                    b.order_next = list_set(b.order_next, p_idx, n_idx);
+                                } else {
+                                    b.bid_heads = list_set(b.bid_heads, level_idx, n_idx);
+                                }
+                                if n_idx >= 0 {
+                                    b.order_prev = list_set(b.order_prev, n_idx, p_idx);
+                                } else {
+                                    b.bid_tails = list_set(b.bid_tails, level_idx, p_idx);
+                                }
+                                b.bid_counts = list_set(b.bid_counts, level_idx, list_get(b.bid_counts, level_idx) - 1);
+                                b.order_prev = list_set(b.order_prev, m_idx, neg_one);
+                                b.order_next = list_set(b.order_next, m_idx, neg_one);
+
+                                b.free_slots = l3_pool_recycle(b.free_slots, m_idx);
+                                b.pool_allocated = b.pool_allocated - 1;
+                                b.pool_free = b.pool_free + 1;
+                                b.order_count = b.order_count - 1;
+                            } else {
+                                b.order_states = list_set(b.order_states, m_idx, l3_state_partially_filled());
+                            }
+                        } else {
+                            match_cont = false;
+                        }
+                    }
+                }
+                level_idx = level_idx + 1;
+            }
+        }
+    }
+
+    if inc.filled_shares >= inc.shares {
+        inc.state = l3_state_filled();
+    } else if inc.filled_shares > 0 {
+        inc.state = l3_state_partially_filled();
+    }
+
+    b = l3_ladder_update_bbo(b);
+    return MatchExecutionResult { book: b, incoming: inc, events: events };
+}
+
+pub fn l3_match_execute(
+    book: L3OrderBook,
+    incoming: L3Order
+) -> MatchExecutionResult {
+    if incoming.side == l3_side_buy() {
+        return l3_match_cross_buy(book, incoming);
+    }
+    return l3_match_cross_sell(book, incoming);
+}

@@ -1,0 +1,96 @@
+// # AArch64 Host Time FS Channel And Fetch
+//
+// Logline: Emits now_ms, sleep_ms, path_exists, oo_fs_is_dir, file_size, channel_*, fetch, and parse_int_digits.
+//
+// Setup: Linux AArch64 clock_gettime 113, newfstatat 79, AT_FDCWD -100. Channel is an Ok("ch:0") stub.
+//
+// Beats:
+//   1. now_ms is CLOCK_REALTIME seconds*1000 plus nanoseconds/1e6.
+//   2. path_exists/oo_fs_is_dir/file_size use fstatat; fetch is Err.
+//   3. channel_new returns Ok("ch:0"); send/recv are Ok/Err stubs.
+//   4. parse_int_digits unwraps parse_int to 0 on Err.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_host2.oo";
+
+fn a64rt_now(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "now_ms");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 16));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_add_imm(1, 31, 0));
+    x = a64x_emit(x, arm64_word_movz(8, 113, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_movz(1, 1000, 0));
+    x = a64x_emit(x, arm64_word_mul(0, 0, 1));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 8));
+    x = a64x_emit(x, arm64_word_movz(3, 16960, 0));
+    x = a64x_emit(x, arm64_word_movk(3, 15, 1));
+    x = a64x_emit(x, arm64_word_sdiv(2, 2, 3));
+    x = a64x_emit(x, arm64_word_add_reg(0, 0, 2));
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 16));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "sleep_ms");
+    x = a64rt_prol(r.x);
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_fstat(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "path_exists");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 128));
+    x = a64x_emit(x, arm64_word_mov_reg(1, 1));
+    x = a64x_emit(x, arm64_word_movz(0, 100, 0));
+    x = a64x_emit(x, arm64_word_neg(0, 0));
+    x = a64x_emit(x, arm64_word_add_imm(2, 31, 0));
+    x = a64x_emit(x, arm64_word_movz(3, 0, 0));
+    x = a64x_emit(x, arm64_word_movz(8, 79, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 2));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 128));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "oo_fs_is_dir");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 128));
+    x = a64x_emit(x, arm64_word_movz(0, 100, 0));
+    x = a64x_emit(x, arm64_word_neg(0, 0));
+    x = a64x_emit(x, arm64_word_add_imm(2, 31, 0));
+    x = a64x_emit(x, arm64_word_movz(3, 0, 0));
+    x = a64x_emit(x, arm64_word_movz(8, 79, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    let bbad: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 16));
+    x = a64x_emit(x, arm64_word_movz(1, 61440, 0));
+    x = a64x_emit(x, arm64_word_and_reg(0, 0, 1));
+    x = a64x_emit(x, arm64_word_movz(1, 16384, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 2));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    let jok: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let no: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    let endp: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bbad, arm64_word_b_cond(arm64_cond_ne(), no - bbad)));
+    x = a64x_set_words(x, a64_wset(x.p.words, jok, arm64_word_b(endp - jok)));
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 128));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_host(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_now(r0);
+    r = a64rt_fstat(r);
+    return a64rt_host2(r);
+}

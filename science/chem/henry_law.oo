@@ -1,0 +1,44 @@
+// # Henry gas solubility law
+//
+// Logline: Gas solubility is linear in partial pressure; P = k_H * C. Non-physical k_H or C return Err.
+//
+// Setup: Pure Float. k_H is caller-supplied so the law is unit-agnostic.
+//
+// Beats:
+//   1. Solubility C = P / k_H when P >= 0 and k_H > 0.
+//   2. Partial pressure P = k_H * C when C >= 0 and k_H > 0.
+//   3. Hostile P < 0, C < 0, or k_H <= 0 return Err. Zero C or P is Ok(0).
+
+fn hy_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn hy_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn henry_solubility(partial_pressure_pa: Float, k_h: Float) -> Result[Float, String] {
+    if partial_pressure_pa < 0.0 { return Err("ERR\thenry\tp"); }
+    if k_h <= 0.0 { return Err("ERR\thenry\tkh"); }
+    return Ok(partial_pressure_pa / k_h);
+}
+
+pub fn henry_partial_pressure(concentration: Float, k_h: Float) -> Result[Float, String] {
+    if concentration < 0.0 { return Err("ERR\thenry\tc"); }
+    if k_h <= 0.0 { return Err("ERR\thenry\tkh"); }
+    return Ok(k_h * concentration);
+}
+
+pub fn verify_henry_law() -> Bool {
+    let c_from_p: Float = hy_got(henry_solubility(10000.0, 2000.0));
+    if hy_eabs(c_from_p - 5.0) > 0.0000001 { return false; }
+    let p_from_c: Float = hy_got(henry_partial_pressure(5.0, 2000.0));
+    if hy_eabs(p_from_c - 10000.0) > 0.0000001 { return false; }
+    if hy_got(henry_partial_pressure(0.0, 2000.0)) != 0.0 { return false; }
+    if henry_solubility(0.0 - 1.0, 2000.0).is_ok() { return false; }
+    if henry_solubility(1000.0, 0.0).is_ok() { return false; }
+    if henry_partial_pressure(0.0 - 1.0, 2000.0).is_ok() { return false; }
+    if henry_partial_pressure(1.0, 0.0).is_ok() { return false; }
+    return true;
+}

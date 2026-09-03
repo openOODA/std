@@ -1,0 +1,80 @@
+// # WebAssembly Engine V2 Eval and Arg Helpers
+//
+// Logline: Binary-op evaluator and argument pop helpers used by the step function.
+//
+// Setup: Imports stack and opcodes. Used by wasm_engine_v2_step.
+//
+// Beats:
+//   1. wasm_engine_v2_eval_binop applies an i32 binary op.
+//   2. pop_args and pop_args_save pull call arguments.
+
+import "std/compile/wasm_interpreter/wasm_stack.oo";
+import "std/compile/wasm_interpreter/wasm_opcodes.oo";
+
+pub fn wasm_engine_v2_eval_binop(st: WasmStack, op: Int) -> Result[WasmStack, String] {
+    let r_b: Result[WasmPopResult, String] = wasm_stack_pop(st);
+    match r_b {
+        Ok(res_b)         => {
+            let b_val: Int = res_b.val;
+            let r_a: Result[WasmPopResult, String] = wasm_stack_pop(res_b.stack);
+            match r_a {
+                Ok(res_a) => {
+                    let a_val: Int = res_a.val;
+                    let mut res_val: Int = 0;
+                    if op == wasm_op_i32_add() { res_val = a_val + b_val; }
+                    else if op == wasm_op_i32_sub() { res_val = a_val - b_val; }
+                    else if op == wasm_op_i32_mul() { res_val = a_val * b_val; }
+                    else if op == wasm_op_i32_eq() { if a_val == b_val { res_val = 1; } else { res_val = 0; } }
+                    else if op == wasm_op_i32_ne() { if a_val != b_val { res_val = 1; } else { res_val = 0; } }
+                    else if op == wasm_op_i32_lt_s() { if a_val < b_val { res_val = 1; } else { res_val = 0; } }
+                    else if op == wasm_op_i32_gt_s() { if a_val > b_val { res_val = 1; } else { res_val = 0; } }
+                    else if op == wasm_op_i32_eqz() { if a_val == 0 { res_val = 1; } else { res_val = 0; } }
+                    else if op == wasm_op_i64_add() { res_val = a_val + b_val; }
+                    else if op == wasm_op_i32_div_s() { if b_val == 0 { return Err("ERR\twasm_trap_div_by_zero\tat_i32_div_s"); } if a_val == 0 - 2147483648 && b_val == 0 - 1 { return Err("ERR\twasm_trap_integer_overflow\tat_i32_div_s"); } res_val = a_val / b_val; }
+                    else if op == wasm_op_i32_div_u() { if b_val == 0 { return Err("ERR\twasm_trap_div_by_zero\tat_i32_div_u"); } res_val = a_val / b_val; }
+                    else if op == wasm_op_i32_rem_s() { if b_val == 0 { return Err("ERR\twasm_trap_div_by_zero\tat_i32_rem_s"); } res_val = a_val % b_val; }
+                    else { return Err("ERR\twasm_unknown_binary_op"); }
+                    return wasm_stack_push(res_a.stack, res_val);
+                }
+                Err(ea) => { return Err(ea); }
+            }
+        }
+        Err(eb) => { return Err(eb); }
+    }
+}
+
+pub fn wasm_engine_v2_pop_args(st: WasmStack, arity: Int) -> Result[WasmStack, String] {
+    let mut s: WasmStack = st;
+    let mut i: Int = 0;
+    let mut ok: Bool = true;
+    while i < arity {
+        let r: Result[WasmPopResult, String] = wasm_stack_pop(s);
+        match r { Ok(pr) => { s = pr.stack; } Err(_) => { ok = false; i = arity; } }
+        i = i + 1;
+    }
+    if !ok { return Err("ERR\twasm_trap_stack_underflow\tat_pop_args"); }
+    return Ok(s);
+}
+
+type WasmPopArgsResult = struct {
+    stack: WasmStack,
+    args: List[Int]
+};
+
+pub fn wasm_engine_v2_pop_args_save(st: WasmStack, arity: Int) -> Result[WasmPopArgsResult, String] {
+    if st.depth < arity { return Err("ERR\twasm_trap_stack_underflow\tat_pop_args_save"); }
+    let start_idx: Int = st.depth - arity;
+    let mut args: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < arity {
+        args = list_push(args, list_get(st.items, start_idx + i));
+        i = i + 1;
+    }
+    let mut new_items: List[Int] = list_new();
+    let mut j: Int = 0;
+    while j < start_idx { new_items = list_push(new_items, list_get(st.items, j)); j = j + 1; }
+    return Ok(WasmPopArgsResult {
+        stack: WasmStack { depth: start_idx, max_depth: st.max_depth, items: new_items },
+        args: args
+    });
+}

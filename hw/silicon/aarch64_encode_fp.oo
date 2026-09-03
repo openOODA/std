@@ -1,0 +1,65 @@
+// # AArch64 IEEE-754 Double Instruction Words
+//
+// Logline: Encodes FMOV, SCVTF, FADD/FSUB/FMUL/FDIV, FNEG, FSQRT, and FCMP on D registers.
+//
+// Setup: Double ftype. GPR holds IEEE bits; FMOV transfers to and from Dn.
+//
+// Beats:
+//   1. FMOV between Xd and Dn.
+//   2. SCVTF signed integer to double.
+//   3. Four binary double ALU ops plus FNEG and FSQRT.
+//   4. FCMP Dn, Dm writes NZCV for B.cond.
+
+pub fn arm64_word_fmov_d_x(dd: Int, xn: Int) -> Int {
+    return 2657550336 | ((xn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fmov_x_d(xd: Int, dn: Int) -> Int {
+    return 2658009088 | ((dn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_word_scvtf_d_x(dd: Int, xn: Int) -> Int {
+    return 2657222656 | ((xn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fcvtzs_x_d(xd: Int, dn: Int) -> Int {
+    return 2657878016 | ((dn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_word_fadd_d(dd: Int, dn: Int, dm: Int) -> Int {
+    return 509618176 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fsub_d(dd: Int, dn: Int, dm: Int) -> Int {
+    return 509622272 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fmul_d(dd: Int, dn: Int, dm: Int) -> Int {
+    return 509609984 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fdiv_d(dd: Int, dn: Int, dm: Int) -> Int {
+    return 509614080 | ((dm & 31) << 16) | ((dn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fneg_d(dd: Int, dn: Int) -> Int {
+    return 509689856 | ((dn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fsqrt_d(dd: Int, dn: Int) -> Int {
+    return 509722624 | ((dn & 31) << 5) | (dd & 31);
+}
+
+pub fn arm64_word_fcmp_d(dn: Int, dm: Int) -> Int {
+    return 509616128 | ((dm & 31) << 16) | ((dn & 31) << 5);
+}
+
+pub fn arm64_word_str_d(rt: Int, rn: Int, byte_off: Int) -> Int {
+    let imm12: Int = (byte_off / 8) & 4095;
+    return 4227858432 | (imm12 << 10) | ((rn & 31) << 5) | (rt & 31);
+}
+
+pub fn arm64_word_ldr_d(rt: Int, rn: Int, byte_off: Int) -> Int {
+    let imm12: Int = (byte_off / 8) & 4095;
+    return 4248829952 | (imm12 << 10) | ((rn & 31) << 5) | (rt & 31);
+}

@@ -1,0 +1,57 @@
+// # FHE Engine and Policy Management
+//
+// Logline: Manages execution engine lifecycle, security policies, and performance accounting for FHE.
+//
+// Setup: Imports companion modules for validated FHE operations.
+//
+// Beats:
+//   1. Import FHE operations and types.
+//   2. Initialize security policies and execution engine contexts.
+//   3. Compute engine workload telemetry and operation metrics.
+//
+// HOMOMORPHIC ARITHMETIC: Symbolic polynomial shims (fhe_add, fhe_sub,
+// fhe_multiply, fhe_negate, fhe_rotate, fhe_bootstrap, and their plain
+// variants) have been removed entirely. The c0_poly / c1_poly those
+// shims returned were string fragments, not RLWE ciphertexts, and
+// downstream callers must use a vetted lattice-crypto FFI for any
+// real homomorphic computation.
+
+import "./fhe_ops.oo";
+
+pub fn fhe_rescale(rescale_cipher_ref: &mut FheCiphertext) -> Result[Bool, String] {
+    if rescale_cipher_ref.is_valid == false {
+        return Err("INVALID_CIPHERTEXT: Cannot rescale invalid ciphertext");
+    }
+    let cur_rescale_scale: Int = rescale_cipher_ref.scale;
+    if cur_rescale_scale <= 1 {
+        return Ok(false);
+    }
+
+    rescale_cipher_ref.scale = cur_rescale_scale / 2;
+    rescale_cipher_ref.level = rescale_cipher_ref.level + 1;
+    return Ok(true);
+}
+
+pub fn fhe_mod_switch(mod_switch_cipher_ref: &mut FheCiphertext) -> Result[Bool, String] {
+    if mod_switch_cipher_ref.is_valid == false {
+        return Err("INVALID_CIPHERTEXT: Cannot modulus switch invalid ciphertext");
+    }
+
+    mod_switch_cipher_ref.level = mod_switch_cipher_ref.level + 1;
+    mod_switch_cipher_ref.noise_budget = mod_switch_cipher_ref.noise_budget - 3;
+    return Ok(true);
+}
+
+pub fn fhe_estimate_noise_budget(noise_sk: &FheSecretKey, noise_cipher: &FheCiphertext) -> Int {
+    if noise_sk.is_wiped == true {
+        return 0;
+    }
+    if noise_cipher.is_valid == false {
+        return 0;
+    }
+    return noise_cipher.noise_budget;
+}
+
+pub fn fhe_engine_probe() -> Int {
+    return 0;
+}

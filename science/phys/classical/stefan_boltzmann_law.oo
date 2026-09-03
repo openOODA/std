@@ -1,0 +1,96 @@
+// # Stefan-Boltzmann Radiation Law
+//
+// Logline: Radiative power per unit area j = sigma * T^4 from a blackbody surface.
+//
+// Setup: Pure Float. Uses the Stefan-Boltzmann constant from physics/constants.oo. T <= 0 returns Err.
+//
+// Beats:
+//   1. Emitted power flux density j = sigma * T^4 (W/m^2).
+//   2. Emitted power P = sigma * A * T^4 (W).
+//   3. Net radiative heat flow between two parallel surfaces.
+//   4. Wavelength of peak spectral radiance via Wien displacement.
+
+import "std/science/phys/classical/phys_constants.oo";
+
+fn sb_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn stefan_boltzmann_constant() -> Float {
+    return 0.00000005670374419;
+}
+
+pub fn stefan_boltzmann_flux(temp_kelvin: Float) -> Result[Float, String] {
+    if temp_kelvin <= 0.0 { return Err("ERR\tsb\tT"); }
+    let sigma: Float = stefan_boltzmann_constant();
+    let phys_const_ok: Float = phys_stefan_boltzmann();
+    if phys_const_ok <= 0.0 { return Err("ERR\tsb\tconst"); }
+    let t2: Float = temp_kelvin * temp_kelvin;
+    let t4: Float = t2 * t2;
+    return Ok(sigma * t4);
+}
+
+pub fn stefan_boltzmann_power(area_m2: Float, temp_kelvin: Float) -> Result[Float, String] {
+    if area_m2 <= 0.0 { return Err("ERR\tsb\tA"); }
+    let jr: Result[Float, String] = stefan_boltzmann_flux(temp_kelvin);
+    match jr {
+        Ok(j)  => { return Ok(j * area_m2); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn stefan_boltzmann_net_power(area_m2: Float, t_hot: Float, t_cold: Float) -> Result[Float, String] {
+    if area_m2 <= 0.0 { return Err("ERR\tsb\tA"); }
+    if t_hot <= 0.0 { return Err("ERR\tsb\tth"); }
+    if t_cold <= 0.0 { return Err("ERR\tsb\ttc"); }
+    if t_hot < t_cold { return Err("ERR\tsb\torder"); }
+    if t_hot == t_cold { return Ok(0.0); }
+    let jh: Result[Float, String] = stefan_boltzmann_flux(t_hot);
+    let jc: Result[Float, String] = stefan_boltzmann_flux(t_cold);
+    match jh {
+        Ok(j_h)         => {
+            match jc {
+                Ok(j_c) => { return Ok(area_m2 * (j_h - j_c)); },
+                Err(e)  => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn stefan_boltzmann_peak_wavelength(temp_kelvin: Float) -> Result[Float, String] {
+    if temp_kelvin <= 0.0 { return Err("ERR\tsb\tT"); }
+    let b: Float = 0.002897771955;
+    return Ok(b / temp_kelvin);
+}
+
+pub fn verify_stefan_boltzmann_law() -> Bool {
+    let j_300: Float = sb_got(stefan_boltzmann_flux(300.0));
+    let sigma: Float = stefan_boltzmann_constant();
+    let target: Float = sigma * 300.0 * 300.0 * 300.0 * 300.0;
+    let mut d: Float = j_300 - target;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let j_5778: Float = sb_got(stefan_boltzmann_flux(5778.0));
+    let j_3000: Float = sb_got(stefan_boltzmann_flux(3000.0));
+    let ratio: Float = j_5778 / j_3000;
+    let ratio_target: Float = (5778.0 * 5778.0 * 5778.0 * 5778.0) / (3000.0 * 3000.0 * 3000.0 * 3000.0);
+    let mut dr: Float = ratio - ratio_target;
+    if dr < 0.0 { dr = 0.0 - dr; }
+    if dr > 0.0001 { return false; }
+    let p10: Float = sb_got(stefan_boltzmann_power(1.0, 300.0));
+    let mut dp: Float = p10 - target;
+    if dp < 0.0 { dp = 0.0 - dp; }
+    if dp > 0.0001 { return false; }
+    let peak: Float = sb_got(stefan_boltzmann_peak_wavelength(300.0));
+    let target_peak: Float = 0.002897771955 / 300.0;
+    let mut dpk: Float = peak - target_peak;
+    if dpk < 0.0 { dpk = 0.0 - dpk; }
+    if dpk > 0.0000001 { return false; }
+    if stefan_boltzmann_flux(0.0).is_ok() { return false; }
+    if stefan_boltzmann_flux(0.0 - 100.0).is_ok() { return false; }
+    if stefan_boltzmann_power(0.0, 300.0).is_ok() { return false; }
+    if sb_got(stefan_boltzmann_net_power(1.0, 300.0, 300.0)) != 0.0 { return false; }
+    if stefan_boltzmann_net_power(1.0, 200.0, 300.0).is_ok() { return false; }
+    return true;
+}

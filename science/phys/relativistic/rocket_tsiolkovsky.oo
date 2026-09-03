@@ -1,0 +1,57 @@
+// # Tsiolkovsky Rocket Equation & Staging
+//
+// Logline: Calculates ideal rocket velocity increments, propellant mass fractions, and multi-stage mass ratios.
+//
+// Setup: Pure fundamental rocket propulsion physics based on the Tsiolkovsky ideal rocket equation.
+//
+// Beats:
+//   1. Merlin vacuum specific impulse (seconds) query.
+//   2. Calculate single-stage delta-v: Delta_v = Isp * g0 * ln(m0 / mf).
+//   3. Compute required wet mass from commanded delta-v and dry mass.
+//   4. Calculate multi-stage combined delta-v summation.
+
+pub fn tsiolkovsky_g0() -> Int {
+    return 9806;
+}
+
+pub fn isp_vacuum_merlin() -> Int {
+    return 348;
+}
+
+pub fn standard_gravity_g0() -> Float {
+    return 9.80665;
+}
+
+/// Computes ideal rocket delta-v in m/s: Delta_v = Isp * g0 * ln(m0 / mf).
+pub fn tsiolkovsky_delta_v(
+    isp_seconds: Float,
+    mass_initial_kg: Float,
+    mass_final_kg: Float
+) -> Float {
+    if mass_final_kg <= 0.0001 || mass_initial_kg < mass_final_kg { return 0.0; }
+    let mass_ratio: Float = mass_initial_kg / mass_final_kg;
+    let g0: Float = standard_gravity_g0();
+    return isp_seconds * g0 * ln(mass_ratio);
+}
+
+/// Computes required initial wet mass (kg) given dry mass and target delta-v: m0 = mf * exp(Delta_v / (Isp * g0)).
+pub fn tsiolkovsky_required_wet_mass(
+    delta_v_m_s: Float,
+    isp_seconds: Float,
+    mass_dry_kg: Float
+) -> Float {
+    let g0: Float = standard_gravity_g0();
+    let exponent: Float = delta_v_m_s / (isp_seconds * g0);
+    return mass_dry_kg * exp(exponent);
+}
+
+/// Computes propellant mass consumed during rocket burn: m_prop = m0 * (1 - exp(-Delta_v / (Isp * g0))).
+pub fn tsiolkovsky_propellant_mass(
+    delta_v_m_s: Float,
+    isp_seconds: Float,
+    mass_initial_kg: Float
+) -> Float {
+    let g0: Float = standard_gravity_g0();
+    let exponent: Float = (0.0 - delta_v_m_s) / (isp_seconds * g0);
+    return mass_initial_kg * (1.0 - exp(exponent));
+}

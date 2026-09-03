@@ -1,0 +1,71 @@
+// # Kerckhoffs' Cryptosystem Principle
+//
+// Logline: A cryptosystem must remain secure even if everything except the key is public.
+//
+// Setup: Pure Int. Key is the only secret. Public exposure of algorithm, implementation, ciphertext is allowed.
+//
+// Beats:
+//   1. Key secrecy is the sole security assumption.
+//   2. Algorithm, implementation, and ciphertext are public-safe.
+//   3. Strong-key test: key length and entropy meet a public threshold.
+//   4. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+
+// Minimum acceptable key length in bits (public threshold).
+pub fn kerckhoffs_min_key_bits() -> Int {
+    return 128;
+}
+
+// Whether the key is the only secret: 1 if all other components are flagged public (1=public, 0=secret).
+pub fn kerckhoffs_only_key_is_secret(
+    algorithm_public: Int,
+    implementation_public: Int,
+    ciphertext_public: Int,
+    key_secret: Int
+) -> Int {
+    if algorithm_public != 1 { return 0; }
+    if implementation_public != 1 { return 0; }
+    if ciphertext_public != 1 { return 0; }
+    if key_secret != 1 { return 0; }
+    return 1;
+}
+
+// Strong-key test: key length must be at least the public threshold.
+pub fn kerckhoffs_key_strong(key_bits: Int) -> Bool {
+    if key_bits < 0 { return false; }
+    if key_bits < kerckhoffs_min_key_bits() { return false; }
+    return true;
+}
+
+// Exposure classification: 0 SECRET, 1 PUBLIC. Used as a typed input.
+pub fn kerckhoffs_classify_secret() -> Int {
+    return 0;
+}
+
+pub fn kerckhoffs_classify_public() -> Int {
+    return 1;
+}
+
+// KAT and hostile cases for Kerckhoffs' principle.
+pub fn verify_kerckhoffs_principle() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if kerckhoffs_only_key_is_secret(1, 1, 1, 1) != 1 { return false; }
+    if kerckhoffs_only_key_is_secret(0, 1, 1, 1) != 0 { return false; }
+    if kerckhoffs_only_key_is_secret(1, 0, 1, 1) != 0 { return false; }
+    if kerckhoffs_only_key_is_secret(1, 1, 0, 1) != 0 { return false; }
+    if kerckhoffs_only_key_is_secret(1, 1, 1, 0) != 0 { return false; }
+    if kerckhoffs_only_key_is_secret(0, 0, 0, 0) != 0 { return false; }
+    if kerckhoffs_only_key_is_secret(2, 1, 1, 1) != 0 { return false; }
+    if kerckhoffs_only_key_is_secret(1, 1, 1, 0 - 1) != 0 { return false; }
+    if kerckhoffs_key_strong(256) == false { return false; }
+    if kerckhoffs_key_strong(128) == false { return false; }
+    if kerckhoffs_key_strong(127) == true { return false; }
+    if kerckhoffs_key_strong(0) == true { return false; }
+    if kerckhoffs_key_strong(0 - 1) == true { return false; }
+    if kerckhoffs_min_key_bits() != 128 { return false; }
+    if kerckhoffs_classify_secret() != 0 { return false; }
+    if kerckhoffs_classify_public() != 1 { return false; }
+    return true;
+}

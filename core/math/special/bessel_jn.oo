@@ -1,0 +1,77 @@
+// # Cylindrical Bessel Functions of the First Kind
+//
+// Logline: Evaluates J0, J1, and Jn from Chebyshev-economized polynomials on |x| <= 3.
+//
+// Setup: Pure math. Abramowitz and Stegun 9.4.1-9.4.6 are Chebyshev economized.
+//
+// Beats:
+//   1. Evaluate J0 by a degree-6 Chebyshev-economized even polynomial in (x/3)^2.
+//   2. Evaluate J1 by the matching odd polynomial times x.
+//   3. Recur upward to Jn for small integer n.
+//   4. Apply J_{-n}(x) = (-1)^n Jn(x) for negative order.
+
+import "std/core/math/constants.oo";
+
+fn bessel_cos(x: Float) -> Float {
+    let pi: Float = math_pi();
+    let two_pi: Float = math_two_pi();
+    let half: Float = math_half_pi();
+    let mut t: Float = x;
+    while t > pi { t = t - two_pi; }
+    while t < (0.0 - pi) { t = t + two_pi; }
+    let mut s: Float = 1.0;
+    if t < 0.0 { t = 0.0 - t; }
+    if t > half {
+        t = pi - t;
+        s = 0.0 - 1.0;
+    }
+    let t2: Float = t * t;
+    return s * (1.0 + t2 * ((0.0 - 0.5) + t2 * (1.0 / 24.0 + t2 * ((0.0 - 1.0 / 720.0) + t2 * (1.0 / 40320.0)))));
+}
+
+pub fn bessel_j0(x: Float) -> Float {
+    let mut ax: Float = x;
+    if ax < 0.0 { ax = 0.0 - ax; }
+    if ax <= 3.0 {
+        let y: Float = (x / 3.0) * (x / 3.0);
+        return 1.0 + y * ((0.0 - 2.2499997) + y * (1.2656208 + y * ((0.0 - 0.3163866) + y * (0.0444479 + y * ((0.0 - 0.0039444) + y * 0.0002100)))));
+    }
+    return (1.0 / sqrt(ax)) * 0.7978845608 * bessel_cos(ax - 0.7853981633974483);
+}
+
+pub fn bessel_j1(x: Float) -> Float {
+    let mut ax: Float = x;
+    if ax < 0.0 { ax = 0.0 - ax; }
+    if ax <= 3.0 {
+        let y: Float = (x / 3.0) * (x / 3.0);
+        let poly: Float = 0.5 + y * ((0.0 - 0.56249985) + y * (0.21093573 + y * ((0.0 - 0.03954289) + y * (0.00443319 + y * ((0.0 - 0.00031761) + y * 0.00001109)))));
+        return x * poly;
+    }
+    let mut res: Float = (1.0 / sqrt(ax)) * 0.7978845608 * bessel_cos(ax - 2.356194490192345);
+    if x < 0.0 { res = 0.0 - res; }
+    return res;
+}
+
+pub fn bessel_jn(n: Int, x: Float) -> Float {
+    let mut nn: Int = n;
+    let mut sign: Float = 1.0;
+    if nn < 0 {
+        nn = 0 - nn;
+        if nn - (nn / 2) * 2 == 1 { sign = 0.0 - 1.0; }
+    }
+    if nn == 0 { return sign * bessel_j0(x); }
+    if nn == 1 { return sign * bessel_j1(x); }
+    if x == 0.0 { return 0.0; }
+    let mut jprev: Float = bessel_j0(x);
+    let mut jcurr: Float = bessel_j1(x);
+    let mut m: Int = 1;
+    let mut mf: Float = 1.0;
+    while m < nn {
+        let jnext: Float = (2.0 * mf / x) * jcurr - jprev;
+        jprev = jcurr;
+        jcurr = jnext;
+        m = m + 1;
+        mf = mf + 1.0;
+    }
+    return sign * jcurr;
+}

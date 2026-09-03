@@ -1,0 +1,95 @@
+// # Fixed-Capacity Ring Buffer
+//
+// Logline: Circular FIFO ring buffer with fixed capacity that overwrites the oldest element on overflow and exposes head/tail indices and a size counter.
+//
+// Setup: The buffer is pre-allocated to capacity. head points to the slot the next push writes; tail points to the slot of the oldest element. size counts the live entries. On overflow, head wraps and tail advances to drop the oldest.
+//
+// Beats:
+//   1. Construct RingBuffer with specified maximum capacity (minimum 1).
+//   2. Push elements, overwriting oldest if already full.
+//   3. Peek oldest element without removing it.
+//   4. Pop oldest element and query capacity, size, emptiness, and fullness.
+//   5. Read element at logical index from oldest to newest.
+//   6. Reset the buffer to empty while preserving storage.
+
+import "std/core/primitives/list.oo";
+import "std/core/primitives/result.oo";
+
+type RingBuffer = struct {
+    data: List[Int],
+    capacity: Int,
+    head: Int,
+    tail: Int,
+    size: Int
+};
+
+fn rb_init(cap: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < cap {
+        out = list_push(out, 0);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn ring_buffer_new(capacity: Int) -> RingBuffer {
+    let mut cap: Int = capacity;
+    if cap < 1 { cap = 1; }
+    return RingBuffer { data: rb_init(cap), capacity: cap, head: 0, tail: 0, size: 0 };
+}
+
+pub fn ring_buffer_len(rb: RingBuffer) -> Int {
+    return rb.size;
+}
+
+pub fn ring_buffer_capacity(rb: RingBuffer) -> Int {
+    return rb.capacity;
+}
+
+pub fn ring_buffer_is_empty(rb: RingBuffer) -> Bool {
+    return rb.size == 0;
+}
+
+pub fn ring_buffer_is_full(rb: RingBuffer) -> Bool {
+    return rb.size == rb.capacity;
+}
+
+// Clear all elements, preserving capacity and storage.
+pub fn ring_buffer_clear(rb: RingBuffer) -> RingBuffer {
+    return RingBuffer { data: rb.data, capacity: rb.capacity, head: 0, tail: 0, size: 0 };
+}
+
+// Push a value. When full, the oldest element is silently overwritten and
+// the tail pointer advances to track the new oldest.
+pub fn ring_buffer_push(rb: RingBuffer, val: Int) -> RingBuffer {
+    let cap: Int = rb.capacity;
+    let new_data: List[Int] = list_set(rb.data, rb.head, val);
+    let next_head: Int = (rb.head + 1) % cap;
+    if rb.size < cap {
+        return RingBuffer { data: new_data, capacity: cap, head: next_head, tail: rb.tail, size: rb.size + 1 };
+    }
+    let next_tail: Int = (rb.tail + 1) % cap;
+    return RingBuffer { data: new_data, capacity: cap, head: next_head, tail: next_tail, size: cap };
+}
+
+// Pop the oldest element, returning the updated buffer and the value.
+pub fn ring_buffer_pop(rb: RingBuffer) -> RingBuffer {
+    if rb.size == 0 { return rb; }
+    let cap: Int = rb.capacity;
+    let next_tail: Int = (rb.tail + 1) % cap;
+    return RingBuffer { data: rb.data, capacity: cap, head: rb.head, tail: next_tail, size: rb.size - 1 };
+}
+
+pub fn ring_buffer_peek(rb: RingBuffer) -> Result[Int, String] {
+    if rb.size == 0 { return Err("ERR\tring_buffer_peek\tempty"); }
+    return Ok(list_get(rb.data, rb.tail));
+}
+
+pub fn ring_buffer_get(rb: RingBuffer, index: Int) -> Result[Int, String] {
+    let n: Int = rb.size;
+    if index < 0 || index >= n { return Err("ERR\tring_buffer_get\tout_of_bounds"); }
+    let cap: Int = rb.capacity;
+    let phys: Int = (rb.tail + index) % cap;
+    return Ok(list_get(rb.data, phys));
+}

@@ -1,0 +1,46 @@
+// # Integer trichotomy principle
+//
+// Logline: For Int a, b exactly one of a<b, a==b, a>b holds.
+//
+// Setup: Pure Int compares. Holds 1 iff the three relations partition.
+//
+// Beats:
+//   1. Count true relations; must be 1.
+//   2. Check pairs (1,2), (2,2), (3,1).
+//   3. verify_int_trichotomy_principle is true.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn math_int_trichotomy(a: Int, b: Int) -> DomainCert {
+    let mut n: Int = 0;
+    if a < b {
+        n = n + 1;
+    }
+    if a == b {
+        n = n + 1;
+    }
+    if a > b {
+        n = n + 1;
+    }
+    let mut h: Int = 0;
+    if n == 1 {
+        h = 1;
+    }
+    return domain_cert("math", "int_trichotomy", h);
+}
+
+pub fn verify_int_trichotomy_principle() -> Bool {
+    let a: DomainCert = math_int_trichotomy(1, 2);
+    let b: DomainCert = math_int_trichotomy(2, 2);
+    let c: DomainCert = math_int_trichotomy(3, 1);
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    if c.holds != 1 {
+        return false;
+    }
+    return true;
+}

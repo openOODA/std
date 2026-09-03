@@ -1,0 +1,58 @@
+// # Level 3 Priority Ladder
+//
+// Logline: Price-time priority selection for L3 maker orders.
+//
+// Setup: Pure FIFO price ladder. No direct List[L3Order] operations.
+//
+// Beats:
+//   1. Compare two L3Order makers for price-time priority.
+//   2. Search active orders for the best maker to take against using core accessors.
+//   3. For a buy taker, prefer lowest ask price then oldest timestamp.
+//   4. For a sell taker, prefer highest bid price then oldest timestamp.
+// residual: Full depth ladder indexing and pro-rata/time priority tiers are residual.
+
+import "./l3_order_book_core.oo";
+
+pub fn l3_maker_preferred(a: &L3Order, b: &L3Order, is_buy_taker: Bool) -> Bool {
+    if a.qty <= 0 { return false; }
+    if b.qty <= 0 { return true; }
+    if is_buy_taker {
+        if a.price_ticks != b.price_ticks { return a.price_ticks < b.price_ticks; }
+    } else {
+        if a.price_ticks != b.price_ticks { return a.price_ticks > b.price_ticks; }
+    }
+    return a.timestamp_ns < b.timestamp_ns;
+}
+
+pub fn l3_best_maker_index(
+    orders: List[L3Order],
+    is_buy_taker: Bool,
+    limit_price: Int
+) -> Int {
+    let mut best: Int = -1;
+    let mut i: Int = 0;
+    let n: Int = l3_book_order_count(orders);
+    while i < n {
+        let o: L3Order = l3_book_get_order(orders, i);
+        if o.qty <= 0 { i = i + 1; continue; }
+        if is_buy_taker {
+            if !o.is_buy && o.price_ticks <= limit_price {
+                if best < 0 { best = i; }
+                else {
+                    let b: L3Order = l3_book_get_order(orders, best);
+                    if l3_maker_preferred(&o, &b, is_buy_taker) { best = i; }
+                }
+            }
+        } else {
+            if o.is_buy && o.price_ticks >= limit_price {
+                if best < 0 { best = i; }
+                else {
+                    let b: L3Order = l3_book_get_order(orders, best);
+                    if l3_maker_preferred(&o, &b, is_buy_taker) { best = i; }
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return best;
+}

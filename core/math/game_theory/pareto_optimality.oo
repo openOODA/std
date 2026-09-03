@@ -1,0 +1,161 @@
+// # Multi-Objective Pareto Frontier and Dominance Filter
+//
+// Logline: Identify Pareto-optimal points in a multi-objective space using strict dominance and produce the Pareto frontier.
+//
+// Setup: Pure multi-objective optimization. Each point is a List[Float] of objective values; the function operates on lists of points.
+//
+// Beats:
+//   1. dominates(a, b) returns true when a strictly dominates b on all objectives.
+//   2. pareto_filter returns the indices of points that are not strictly dominated by any other point.
+//   3. frontier returns the points themselves in original order.
+//   4. pareto_count returns the size of the frontier; fails closed to 0 on empty input.
+//
+// residual: Only strict dominance is supported (weak dominance a >= b on all and a > b on some is not detected).
+
+pub fn point_equals(a: List[Float], b: List[Float]) -> Bool {
+    let n_a: Int = list_len(a);
+    let n_b: Int = list_len(b);
+    if n_a != n_b {
+        return false;
+    }
+    let mut i: Int = 0;
+    while i < n_a {
+        let av: Float = list_get(a, i);
+        let bv: Float = list_get(b, i);
+        let diff: Float = av - bv;
+        if diff < 0.0 {
+            let pos: Float = 0.0 - diff;
+            if pos > 0.0001 {
+                return false;
+            }
+        } else {
+            if diff > 0.0001 {
+                return false;
+            }
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// True if a strictly dominates b: a_i >= b_i for all i, and a_j > b_j for some j.
+pub fn dominates(a: List[Float], b: List[Float]) -> Bool {
+    let n_a: Int = list_len(a);
+    let n_b: Int = list_len(b);
+    if n_a != n_b {
+        return false;
+    }
+    let mut all_geq: Bool = true;
+    let mut any_gt: Bool = false;
+    let mut i: Int = 0;
+    while i < n_a {
+        let av: Float = list_get(a, i);
+        let bv: Float = list_get(b, i);
+        if av < bv {
+            let diff: Float = bv - av;
+            if diff > 0.0001 {
+                all_geq = false;
+            }
+        } else {
+            let diff: Float = av - bv;
+            if diff > 0.0001 {
+                any_gt = true;
+            }
+        }
+        i = i + 1;
+    }
+    if all_geq {
+        if any_gt {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Returns list of indices of points that are NOT strictly dominated by any other point.
+pub fn pareto_indices(points: List[Float]) -> List[Int] {
+    let n: Int = list_len(points);
+    if n == 0 {
+        return list_new();
+    }
+    let mut frontier: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let pi: List[Float] = list_get(points, i);
+        let mut dominated: Bool = false;
+        let mut j: Int = 0;
+        while j < n {
+            if j != i {
+                let pj: List[Float] = list_get(points, j);
+                if dominates(pj, pi) {
+                    dominated = true;
+                }
+            }
+            j = j + 1;
+        }
+        if dominated == false {
+            frontier = list_push(frontier, i);
+        }
+        i = i + 1;
+    }
+    return frontier;
+}
+
+// Number of Pareto-optimal points. Returns 0 on empty input.
+pub fn pareto_count(points: List[Float]) -> Int {
+    let n: Int = list_len(points);
+    if n == 0 {
+        return 0;
+    }
+    let idx: List[Int] = pareto_indices(points);
+    return list_len(idx);
+}
+
+// Check whether a specific point at given index is on the Pareto frontier.
+pub fn is_pareto_optimal(points: List[Float], idx: Int) -> Bool {
+    let n: Int = list_len(points);
+    if idx < 0 {
+        return false;
+    }
+    if idx >= n {
+        return false;
+    }
+    let pi: List[Float] = list_get(points, idx);
+    let mut j: Int = 0;
+    while j < n {
+        if j != idx {
+            let pj: List[Float] = list_get(points, j);
+            if dominates(pj, pi) {
+                return false;
+            }
+        }
+        j = j + 1;
+    }
+    return true;
+}
+
+// Hypervolume indicator in 2D given a reference point (lower is better for both).
+pub fn hypervolume_2d(points: List[Float], ref_x: Float, ref_y: Float) -> Float {
+    let n: Int = list_len(points);
+    if n == 0 {
+        return 0.0;
+    }
+    let mut hv: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p: List[Float] = list_get(points, i);
+        if list_len(p) >= 2 {
+            let x: Float = list_get(p, 0);
+            let y: Float = list_get(p, 1);
+            if x < ref_x {
+                if y < ref_y {
+                    let w: Float = ref_x - x;
+                    let h: Float = ref_y - y;
+                    hv = hv + w * h;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return hv;
+}

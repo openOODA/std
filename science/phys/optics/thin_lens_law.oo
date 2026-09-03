@@ -1,0 +1,86 @@
+// # Thin Lens Law
+//
+// Logline: Gaussian thin lens equation 1/f = 1/do + 1/di with magnification m = -di/do.
+//
+// Setup: Pure Float. do > f > 0 gives real inverted image. Hosts snell_law.oo stem.
+//
+// Beats:
+//   1. Image distance di = (f * do) / (do - f) (m).
+//   2. Object distance do = (f * di) / (di - f) (m).
+//   3. Focal length f = (do * di) / (do + di) (m).
+//   4. Linear magnification m = -di / do and absolute magnification |m|.
+
+import "std/science/phys/optics/snell_law.oo";
+
+fn tl_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Image distance di. do<=0, f<=0, or do==f (image at infinity) returns Err.
+pub fn thin_lens_image_distance(object_distance_m: Float, focal_length_m: Float) -> Result[Float, String] {
+    if object_distance_m <= 0.0 { return Err("ERR\ttl\tdo"); }
+    if focal_length_m <= 0.0 { return Err("ERR\ttl\tf"); }
+    if object_distance_m == focal_length_m { return Err("ERR\ttl\tinf"); }
+    let snell_r: Result[Float, String] = snell_critical_angle(1.0, 1.5);
+    if snell_r.is_ok() == false { return Err("ERR\ttl\tsnell"); }
+    return Ok((focal_length_m * object_distance_m) / (object_distance_m - focal_length_m));
+}
+
+pub fn thin_lens_object_distance(image_distance_m: Float, focal_length_m: Float) -> Result[Float, String] {
+    if image_distance_m <= 0.0 { return Err("ERR\ttl\tdi"); }
+    if focal_length_m <= 0.0 { return Err("ERR\ttl\tf"); }
+    if image_distance_m == focal_length_m { return Err("ERR\ttl\tinf"); }
+    return Ok((focal_length_m * image_distance_m) / (image_distance_m - focal_length_m));
+}
+
+pub fn thin_lens_focal_length(object_distance_m: Float, image_distance_m: Float) -> Result[Float, String] {
+    if object_distance_m <= 0.0 { return Err("ERR\ttl\tdo"); }
+    if image_distance_m <= 0.0 { return Err("ERR\ttl\tdi"); }
+    let sum: Float = object_distance_m + image_distance_m;
+    if sum <= 0.0 { return Err("ERR\ttl\tsum"); }
+    return Ok((object_distance_m * image_distance_m) / sum);
+}
+
+pub fn thin_lens_magnification(object_distance_m: Float, image_distance_m: Float) -> Result[Float, String] {
+    if object_distance_m <= 0.0 { return Err("ERR\ttl\tdo"); }
+    return Ok((0.0 - image_distance_m) / object_distance_m);
+}
+
+pub fn thin_lens_magnification_abs(object_distance_m: Float, image_distance_m: Float) -> Result[Float, String] {
+    let mr: Result[Float, String] = thin_lens_magnification(object_distance_m, image_distance_m);
+    match mr {
+        Ok(m)  => {
+            if m < 0.0 { return Ok(0.0 - m); }
+            return Ok(m);
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn verify_thin_lens_law() -> Bool {
+    let di: Float = tl_got(thin_lens_image_distance(0.3, 0.1));
+    let target: Float = (0.1 * 0.3) / (0.3 - 0.1);
+    let mut dd: Float = di - target;
+    if dd < 0.0 { dd = 0.0 - dd; }
+    if dd > 0.0001 { return false; }
+    let f_calc: Float = tl_got(thin_lens_focal_length(0.3, di));
+    let mut df: Float = f_calc - 0.1;
+    if df < 0.0 { df = 0.0 - df; }
+    if df > 0.0001 { return false; }
+    let m: Float = tl_got(thin_lens_magnification(0.3, di));
+    let m_target: Float = (0.0 - di) / 0.3;
+    let mut dm: Float = m - m_target;
+    if dm < 0.0 { dm = 0.0 - dm; }
+    if dm > 0.0001 { return false; }
+    let m_abs: Float = tl_got(thin_lens_magnification_abs(0.3, di));
+    if m_abs < 0.0 { return false; }
+    if tl_got(thin_lens_magnification(0.3, 0.0)) != 0.0 { return false; }
+    if thin_lens_image_distance(0.0, 0.1).is_ok() { return false; }
+    if thin_lens_image_distance(0.1, 0.0).is_ok() { return false; }
+    if thin_lens_image_distance(0.1, 0.1).is_ok() { return false; }
+    if thin_lens_image_distance(0.0 - 0.3, 0.1).is_ok() { return false; }
+    if thin_lens_focal_length(0.0, 0.3).is_ok() { return false; }
+    if thin_lens_magnification(0.0, 0.3).is_ok() { return false; }
+    if thin_lens_magnification_abs(0.0, 0.3).is_ok() { return false; }
+    return true;
+}

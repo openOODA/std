@@ -1,0 +1,140 @@
+// # Symmetric Jacobi Eigensolver
+//
+// Logline: Diagonalizes a real symmetric matrix by Jacobi rotations so A = V Lambda V^T.
+//
+// Setup: Pure math. A is square row-major List[Float], n at most 6, n > 2 for the 95% remainder.
+//
+// Beats:
+//   1. Sweep pairs (p, q) with a 2 by 2 symmetric Jacobi kernel.
+//   2. Apply the same rotation to rows and columns of A and accumulate V.
+//   3. Pack V then the eigenvalue vector.
+//   4. Reconstruct A as V Lambda V^T.
+
+import "std/core/primitives/result.oo";
+
+fn es_get(a: List[Float], n: Int, i: Int, j: Int) -> Float {
+    return list_get(a, i * n + j);
+}
+
+fn es_set(a: List[Float], n: Int, i: Int, j: Int, v: Float) -> List[Float] {
+    return list_set(a, i * n + j, v);
+}
+
+fn es_id(n: Int) -> List[Float] {
+    let mut q: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut v: Float = 0.0;
+            if i == j { v = 1.0; }
+            q = list_push(q, v);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return q;
+}
+
+fn es_rot(t00: Float, t01: Float, t11: Float) -> List[Float] {
+    let mut out: List[Float] = list_new();
+    if t01 == 0.0 {
+        out = list_push(out, 1.0);
+        out = list_push(out, 0.0);
+        return out;
+    }
+    let tau: Float = (t11 - t00) / (2.0 * t01);
+    let mut ata: Float = tau;
+    if ata < 0.0 { ata = 0.0 - ata; }
+    let mut t: Float = 1.0 / (ata + sqrt(1.0 + tau * tau));
+    if tau < 0.0 { t = 0.0 - t; }
+    let c: Float = 1.0 / sqrt(1.0 + t * t);
+    out = list_push(out, c);
+    out = list_push(out, t * c);
+    return out;
+}
+
+fn es_mix_cols(m: List[Float], n: Int, p: Int, q: Int, c: Float, s: Float) -> List[Float] {
+    let mut out: List[Float] = m;
+    let mut i: Int = 0;
+    while i < n {
+        let vp: Float = es_get(out, n, i, p);
+        let vq: Float = es_get(out, n, i, q);
+        out = es_set(out, n, i, p, c * vp - s * vq);
+        out = es_set(out, n, i, q, s * vp + c * vq);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn es_mix_rows(m: List[Float], n: Int, p: Int, q: Int, c: Float, s: Float) -> List[Float] {
+    let mut out: List[Float] = m;
+    let mut j: Int = 0;
+    while j < n {
+        let vp: Float = es_get(out, n, p, j);
+        let vq: Float = es_get(out, n, q, j);
+        out = es_set(out, n, p, j, c * vp - s * vq);
+        out = es_set(out, n, q, j, s * vp + c * vq);
+        j = j + 1;
+    }
+    return out;
+}
+
+pub fn eigen_sym_factor(a: List[Float], n: Int) -> Result[List[Float], String] {
+    if n < 3 { return Err("ERR\teigen_sym\tn"); }
+    if list_len(a) != n * n { return Err("ERR\teigen_sym\tsize"); }
+    let mut b: List[Float] = a;
+    let mut v: List[Float] = es_id(n);
+    let mut sweep: Int = 0;
+    while sweep < 24 {
+        let mut p: Int = 0;
+        while p < n {
+            let mut q: Int = p + 1;
+            while q < n {
+                let app: Float = es_get(b, n, p, p);
+                let apq: Float = es_get(b, n, p, q);
+                let aqq: Float = es_get(b, n, q, q);
+                let rs: List[Float] = es_rot(app, apq, aqq);
+                let c: Float = list_get(rs, 0);
+                let s: Float = list_get(rs, 1);
+                b = es_mix_cols(b, n, p, q, c, s);
+                b = es_mix_rows(b, n, p, q, c, s);
+                v = es_mix_cols(v, n, p, q, c, s);
+                q = q + 1;
+            }
+            p = p + 1;
+        }
+        sweep = sweep + 1;
+    }
+    let mut pack: List[Float] = v;
+    let mut i: Int = 0;
+    while i < n {
+        pack = list_push(pack, es_get(b, n, i, i));
+        i = i + 1;
+    }
+    return Ok(pack);
+}
+
+pub fn eigen_sym_reconstruct(pack: List[Float], n: Int) -> Result[List[Float], String] {
+    if list_len(pack) != n * n + n { return Err("ERR\teigen_sym\tpack"); }
+    let mut a: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut s: Float = 0.0;
+            let mut k: Int = 0;
+            while k < n {
+                let vk: Float = list_get(pack, i * n + k);
+                let lk: Float = list_get(pack, n * n + k);
+                let vjk: Float = list_get(pack, j * n + k);
+                s = s + vk * lk * vjk;
+                k = k + 1;
+            }
+            a = list_push(a, s);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(a);
+}

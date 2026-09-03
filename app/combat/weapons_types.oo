@@ -1,0 +1,104 @@
+// # Multi-Generation Weapon Systems and Tactical Combat Types
+//
+// Logline: Defines tactical weapon types, missile kinematics models, and sensor cross section structures.
+//
+// Setup: Pure aerodynamic and weapon data structures without ambient authority.
+//
+// Beats:
+//   1. Define gun specifications and internal ballistic parameters.
+//   2. Define missile kinematics properties and guidance limits.
+//   3. Define directed energy parameters and radar cross section structures.
+
+type GunSpec = struct {
+    caliber_mm: Float,
+    muzzle_velocity_mps: Float,
+    rate_of_fire_rpm: Float,
+    bullet_mass_kg: Float,
+    drag_coefficient: Float,
+    dispersion_mrad: Float
+};
+
+type MissileKinematics = struct {
+    gen: Int,
+    name: String,
+    mass_kg: Float,
+    max_thrust_n: Float,
+    burn_time_s: Float,
+    max_speed_mach: Float,
+    max_g_limit: Float,
+    max_range_m: Float,
+    min_range_m: Float,
+    seeker_cone_deg: Float,
+    is_active_radar: Bool,
+    is_rear_aspect_only: Bool,
+    nav_ratio: Float
+};
+
+type SensorCrossSection = struct {
+    gen: Int,
+    rcs_sqm: Float,
+    ir_signature_w_sr: Float,
+    radar_search_range_m: Float,
+    has_aesa_radar: Bool,
+    has_irst_sensor: Bool,
+    has_rwr_chaff_flare: Bool
+};
+
+type DewCiwsSystem = struct {
+    power_output_kw: Float,
+    max_bank_joules: Float,
+    current_bank_joules: Float,
+    recharge_rate_watts: Float,
+    thermal_kill_threshold_joules: Float,
+    max_effective_range_m: Float,
+    beam_extinction_per_km: Float
+};
+
+type EngagementResult = struct {
+    attacker_gen: Int,
+    defender_gen: Int,
+    detection_range_m: Float,
+    bvr_kill_probability: Float,
+    wvr_kill_probability: Float,
+    is_intercepted_by_dew: Bool,
+    is_pincer_trapped: Bool,
+    outcome_summary: String
+};
+
+pub fn gun_spec_new(
+    caliber_mm: Float,
+    muzzle_vel_mps: Float,
+    rate_rpm: Float,
+    bullet_mass_kg: Float,
+    cd: Float,
+    dispersion_mrad: Float
+) -> GunSpec {
+    return GunSpec {
+        caliber_mm: caliber_mm,
+        muzzle_velocity_mps: muzzle_vel_mps,
+        rate_of_fire_rpm: rate_rpm,
+        bullet_mass_kg: bullet_mass_kg,
+        drag_coefficient: cd,
+        dispersion_mrad: dispersion_mrad
+    };
+}
+
+pub fn sensor_cross_section_new(
+    gen: Int,
+    rcs_sqm: Float,
+    ir_sig: Float,
+    radar_range_m: Float,
+    has_aesa: Bool,
+    has_irst: Bool,
+    has_rwr: Bool
+) -> SensorCrossSection {
+    return SensorCrossSection {
+        gen: gen,
+        rcs_sqm: rcs_sqm,
+        ir_signature_w_sr: ir_sig,
+        radar_search_range_m: radar_range_m,
+        has_aesa_radar: has_aesa,
+        has_irst_sensor: has_irst,
+        has_rwr_chaff_flare: has_rwr
+    };
+}

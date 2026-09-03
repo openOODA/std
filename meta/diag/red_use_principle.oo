@@ -1,0 +1,143 @@
+// # RED/USE Observability Principle
+//
+// Logline: The RED method tracks Rate, Errors, and Duration per service; the USE method tracks Utilization, Saturation, and Errors per resource; diag_is_red_or_use is 1 for any of the six canonical metric names and 0 otherwise.
+//
+// Setup: Pure Int/String. Each metric name is matched by exact case-insensitive string equality against the canonical six names. Empty or unknown names fail closed to 0. Each method has exactly 3 metrics.
+//
+// Beats:
+//   1. red_metrics_count() returns 3 (Rate, Errors, Duration).
+//   2. use_metrics_count() returns 3 (Utilization, Saturation, Errors).
+//   3. is_red_metric(m) is 1 iff m equals "rate" / "errors" / "duration" (canonical).
+//   4. is_use_metric(m) is 1 iff m equals "utilization" / "saturation" / "errors".
+//   5. diag_is_red_or_use(m) is 1 iff is_red OR is_use.
+//   6. diag_red_use_principle certificate bundles a known-good triple.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/primitives/str.oo";
+import "std/core/primitives/list.oo";
+
+// Brendan Gregg, "Systems Performance", 1st ed., 2012, Prentice Hall, ISBN 978-0-13-339009-4.
+// RED method: chapter on USE (then RED for services). Reference: https://www.brendangregg.com/usemethod.html
+// The method defines exactly 3 metrics: Rate, Errors, Duration.
+pub fn red_metrics_count() -> Int { return 3; }
+
+// The USE method defines exactly 3 metrics: Utilization, Saturation, Errors.
+pub fn use_metrics_count() -> Int { return 3; }
+
+// Canonical RED metric names (lower-case).
+pub fn red_canonical_names() -> List[String] {
+    let mut xs: List[String] = list_new();
+    xs = list_push(xs, "rate");
+    xs = list_push(xs, "errors");
+    xs = list_push(xs, "duration");
+    return xs;
+}
+
+// Canonical USE metric names (lower-case).
+pub fn use_canonical_names() -> List[String] {
+    let mut xs: List[String] = list_new();
+    xs = list_push(xs, "utilization");
+    xs = list_push(xs, "saturation");
+    xs = list_push(xs, "errors");
+    return xs;
+}
+
+// 1 iff s is a member of xs (case-insensitive ASCII).
+fn list_has_ci(xs: List[String], s: String) -> Int {
+    let n: Int = list_len(xs);
+    let mut i: Int = 0;
+    while i < n {
+        let cur: String = list_get(xs, i);
+        let low: String = (cur).to_lowercase();
+        let slow: String = (s).to_lowercase();
+        if low == slow { return 1; }
+        i = i + 1;
+    }
+    return 0;
+}
+
+// 1 iff m is a canonical RED metric (case-insensitive).
+pub fn is_red_metric(m: String) -> Int {
+    if m.len() < 1 { return 0; }
+    return list_has_ci(red_canonical_names(), m);
+}
+
+// 1 iff m is a canonical USE metric (case-insensitive).
+pub fn is_use_metric(m: String) -> Int {
+    if m.len() < 1 { return 0; }
+    return list_has_ci(use_canonical_names(), m);
+}
+
+// 1 iff m is a canonical RED or USE metric.
+pub fn diag_is_red_or_use(m: String) -> Int {
+    if m.len() < 1 { return 0; }
+    if is_red_metric(m) == 1 { return 1; }
+    if is_use_metric(m) == 1 { return 1; }
+    return 0;
+}
+
+// DomainCert wrapper: 1 iff m is a known RED or USE metric.
+pub fn red_use_principle(m: String) -> DomainCert {
+    let h: Int = diag_is_red_or_use(m);
+    return domain_cert("diag", "red_use", h);
+}
+
+pub fn verify_red_use_principle() -> Bool {
+    // Golden: method sizes are 3 (Brendan Gregg, Systems Performance 2012).
+    if red_metrics_count() != 3 { return false; }
+    if use_metrics_count() != 3 { return false; }
+    // Golden: RED canonical set.
+    if is_red_metric("rate") != 1 { return false; }
+    if is_red_metric("errors") != 1 { return false; }
+    if is_red_metric("duration") != 1 { return false; }
+    // Golden: USE canonical set.
+    if is_use_metric("utilization") != 1 { return false; }
+    if is_use_metric("saturation") != 1 { return false; }
+    if is_use_metric("errors") != 1 { return false; }
+    // Golden: case-insensitive.
+    if is_red_metric("RATE") != 1 { return false; }
+    if is_red_metric("Errors") != 1 { return false; }
+    if is_use_metric("UTILIZATION") != 1 { return false; }
+    if is_use_metric("Saturation") != 1 { return false; }
+    // Golden: union.
+    if diag_is_red_or_use("rate") != 1 { return false; }
+    if diag_is_red_or_use("utilization") != 1 { return false; }
+    if diag_is_red_or_use("errors") != 1 { return false; }
+    if diag_is_red_or_use("Errors") != 1 { return false; }
+    // Hostile: unknown metric returns 0.
+    if diag_is_red_or_use("cpu") != 0 { return false; }
+    if diag_is_red_or_use("memory") != 0 { return false; }
+    if diag_is_red_or_use("latency_p99") != 0 { return false; }
+    if diag_is_red_or_use("throughput") != 0 { return false; }
+    if diag_is_red_or_use("queue_depth") != 0 { return false; }
+    if diag_is_red_or_use("garbage") != 0 { return false; }
+    if diag_is_red_or_use("") != 0 { return false; }
+    // Hostile: similar but wrong.
+    if is_red_metric("rate_per_sec") != 0 { return false; }
+    if is_red_metric("durations") != 0 { return false; }
+    if is_use_metric("used") != 0 { return false; }
+    if is_use_metric("utilizations") != 0 { return false; }
+    // Cross-check: list contents and lengths.
+    let rnames: List[String] = red_canonical_names();
+    if list_len(rnames) != 3 { return false; }
+    if list_get(rnames, 0) != "rate" { return false; }
+    if list_get(rnames, 1) != "errors" { return false; }
+    if list_get(rnames, 2) != "duration" { return false; }
+    let unames: List[String] = use_canonical_names();
+    if list_len(unames) != 3 { return false; }
+    if list_get(unames, 0) != "utilization" { return false; }
+    if list_get(unames, 1) != "saturation" { return false; }
+    if list_get(unames, 2) != "errors" { return false; }
+    // Coupled cert: golden name.
+    let c1: DomainCert = red_use_principle("rate");
+    if c1.holds != 1 { return false; }
+    if c1.domain != "diag" { return false; }
+    if c1.law_name != "red_use" { return false; }
+    let c2: DomainCert = red_use_principle("utilization");
+    if c2.holds != 1 { return false; }
+    let c3: DomainCert = red_use_principle("unknown");
+    if c3.holds != 0 { return false; }
+    let c4: DomainCert = red_use_principle("");
+    if c4.holds != 0 { return false; }
+    return true;
+}

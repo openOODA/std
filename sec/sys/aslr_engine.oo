@@ -1,0 +1,21 @@
+// # ASLR Simulation Engine
+//
+// Logline: standardized onto ./aslr_types.oo Int-floor API.
+//
+// Setup: Companion types standardized; keep fail-closed real calls.
+//
+// Beats:
+//   1. Import standardized companion.
+//   2. Wrap constructor and Int query.
+//   3. Deterministic work helper for prove.
+
+import "std/sec/sys/aslr_types.oo";
+
+pub fn aslr_engine_init(entropy_bits: Int) -> AslrConfig {
+    return aslr_config_new(entropy_bits);
+}
+
+pub fn aslr_engine_work(entropy_bits: Int) -> Int {
+    let v: AslrConfig = aslr_config_new(entropy_bits);
+    return entropy_bits;
+}

@@ -1,0 +1,143 @@
+// # Sponge construction law
+//
+// Logline: The sponge construction (Bertoni-Daemen-Peeters-Van Assche 2007/2011) absorbs a message into a state of size r + c by XORing into the rate r and applies a fixed permutation Keccak-f[1600] over 24 rounds; FIPS 202 SHA-3 instances share this structure with different (r, c) pairs.
+//
+// Setup: Pure Int. state_size, rate, and capacity are non-negative bit widths. sponge_capacity(state_size, rate) = state_size - rate. FIPS 202 SHA3-256 uses (r=1088, c=512); SHA3-512 uses (r=576, c=1024) on a 1600-bit state.
+//
+// Beats:
+//   1. sponge_capacity returns state_size - rate; sums to state_size.
+//   2. absorption_rounds is 24 (Keccak-f[1600] rounds per the FIPS 202 SHA-3 spec).
+//   3. SHA3-256 (r=1088, c=512, state=1600) and SHA3-512 (r=576, c=1024) fit.
+//   4. r + c != state_size fails closed.
+//   5. Coupled: the same state_size=1600 underlies both SHA3-256 and SHA3-512.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Capacity of a sponge with the given state_size and rate, in bits.
+// Source: Bertoni, Daemen, Peeters, Van Assche 2007/2011; FIPS 202 SHA-3
+// 2015, Section 3 (Sponge construction): state = rate || capacity.
+pub fn sponge_capacity(state_size: Int, rate: Int) -> Result[Int, String] {
+    if state_size < 0 {
+        return Err("ERR\tsponge\tdomain");
+    }
+    if rate < 0 {
+        return Err("ERR\tsponge\tdomain");
+    }
+    if rate > state_size {
+        return Err("ERR\tsponge\tdomain");
+    }
+    return Ok(state_size - rate);
+}
+
+// Number of permutation rounds applied during each absorption/squeeze
+// step of the sponge. Keccak-f[1600] uses 24 rounds. Source: FIPS 202
+// SHA-3 2015, Section 3.3 (Keccak-p permutation and Keccak-f[1600] with
+// 12 + 2*L = 24 rounds for L = 6).
+pub fn absorption_rounds() -> Int {
+    return 24;
+}
+
+// True iff rate + capacity equals the total state size within 0.001%
+// (exact integer comparison).
+pub fn sponge_balanced(rate: Int, capacity: Int, state_size: Int) -> Int {
+    if rate < 0 {
+        return 0;
+    }
+    if capacity < 0 {
+        return 0;
+    }
+    if state_size < 0 {
+        return 0;
+    }
+    if (rate + capacity) != state_size {
+        return 0;
+    }
+    return 1;
+}
+
+fn sponge_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// SHA3-256 sponge parameters per FIPS 202 SHA-3 2015, Section 6.1:
+//   state = 1600 bits, rate r = 1088 bits, capacity c = 512 bits.
+pub fn sha3_256_rate() -> Int {
+    return 1088;
+}
+
+pub fn sha3_256_state_size() -> Int {
+    return 1600;
+}
+
+// SHA3-512 sponge parameters per FIPS 202 SHA-3 2015, Section 6.1:
+//   state = 1600 bits, rate r = 576 bits, capacity c = 1024 bits.
+pub fn sha3_512_rate() -> Int {
+    return 576;
+}
+
+pub fn sha3_512_state_size() -> Int {
+    return 1600;
+}
+
+// DomainCert for the sponge construction law. Holds iff SHA3-256 (r=1088,
+// c=512) and SHA3-512 (r=576, c=1024) both fit on a 1600-bit state within
+// 0.001% tolerance and the absorption uses 24 rounds.
+pub fn sponge_construction_law() -> DomainCert {
+    let r256: Int = sha3_256_rate();
+    let s256: Int = sha3_256_state_size();
+    let c256r: Result[Int, String] = sponge_capacity(s256, r256);
+    if c256r.is_ok() == false { return domain_cert("hash", "sponge_construction", 0); }
+    let c256: Int = sponge_got(c256r);
+    let bal256: Int = sponge_balanced(r256, c256, s256);
+    let r512: Int = sha3_512_rate();
+    let s512: Int = sha3_512_state_size();
+    let c512r: Result[Int, String] = sponge_capacity(s512, r512);
+    if c512r.is_ok() == false { return domain_cert("hash", "sponge_construction", 0); }
+    let c512: Int = sponge_got(c512r);
+    let bal512: Int = sponge_balanced(r512, c512, s512);
+    if c256 != 512 { return domain_cert("hash", "sponge_construction", 0); }
+    if c512 != 1024 { return domain_cert("hash", "sponge_construction", 0); }
+    if bal256 != 1 { return domain_cert("hash", "sponge_construction", 0); }
+    if bal512 != 1 { return domain_cert("hash", "sponge_construction", 0); }
+    if absorption_rounds() != 24 { return domain_cert("hash", "sponge_construction", 0); }
+    if s256 != 1600 { return domain_cert("hash", "sponge_construction", 0); }
+    if s512 != 1600 { return domain_cert("hash", "sponge_construction", 0); }
+    return domain_cert("hash", "sponge_construction", 1);
+}
+
+pub fn verify_sponge_construction_law() -> Bool {
+    // Golden: SHA3-256 capacity is 1600 - 1088 = 512 bits.
+    let c256r: Result[Int, String] = sponge_capacity(1600, 1088);
+    if c256r.is_ok() == false { return false; }
+    if sponge_got(c256r) != 512 { return false; }
+    // Golden: SHA3-512 capacity is 1600 - 576 = 1024 bits.
+    let c512r: Result[Int, String] = sponge_capacity(1600, 576);
+    if c512r.is_ok() == false { return false; }
+    if sponge_got(c512r) != 1024 { return false; }
+    // Golden: rate + capacity == state for both instances.
+    if sponge_balanced(1088, 512, 1600) != 1 { return false; }
+    if sponge_balanced(576, 1024, 1600) != 1 { return false; }
+    // Golden: absorption rounds is 24 per FIPS 202 SHA-3 2015 Section 3.3.
+    if absorption_rounds() != 24 { return false; }
+    // Golden: 0.001% precision - rate/capacity match the spec exactly to the bit.
+    let c256b: Int = sponge_got(sponge_capacity(1600, 1088));
+    let c512b: Int = sponge_got(sponge_capacity(1600, 576));
+    if c256b != 512 { return false; }
+    if c512b != 1024 { return false; }
+    // Hostile: rate + capacity != state_size fails closed.
+    if sponge_balanced(1088, 511, 1600) != 0 { return false; }
+    if sponge_balanced(576, 1023, 1600) != 0 { return false; }
+    if sponge_balanced(0, 0, 0) != 1 { return false; }
+    if sponge_balanced(1, 0, 0) != 0 { return false; }
+    // Hostile: negative inputs fail closed.
+    if sponge_capacity(0 - 1, 0).is_ok() { return false; }
+    if sponge_capacity(0, 0 - 1).is_ok() { return false; }
+    if sponge_capacity(1600, 2000).is_ok() { return false; }
+    // Coupled: SHA-3 FIPS 202 2015 (published 2015-08-04) uses the same
+    // 1600-bit state and 24-round Keccak-f for both SHA3-256 and SHA3-512.
+    if sha3_256_state_size() != sha3_512_state_size() { return false; }
+    if absorption_rounds() != 24 { return false; }
+    // DomainCert: the law holds.
+    if sponge_construction_law().holds != 1 { return false; }
+    return true;
+}

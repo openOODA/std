@@ -1,0 +1,238 @@
+// # Level 3 Order Lifecycle Engine
+//
+// Logline: Comprehensive L3 order lifecycle operations: insertion, cross-matching dispatch, cancellation, and in-place size modifications.
+//
+// Setup: Imports l3_types.oo, l3_memory_pool.oo, l3_fifo_queue.oo, l3_priority_ladder.oo, and l3_matching_engine.oo.
+//
+// Beats:
+//   1. Create and initialize zero-churn L3OrderBook arenas with &AllocCap tokens.
+//   2. Insert orders, crossing resting contra queues and resting unmatched remainder shares.
+//   3. Cancel resting orders and modify order sizes preserving price-time FIFO priority.
+
+import "./l3_types.oo";
+import "./l3_memory_pool.oo";
+import "./l3_fifo_queue.oo";
+import "./l3_priority_ladder.oo";
+import "./l3_matching_engine.oo";
+
+type L3OrderRecord = struct {
+    order_id: Int,
+    side: String,
+    symbol: String,
+    shares: Int,
+    price_fixed: Int,
+    filled_shares: Int,
+    state: String,
+    entry_timestamp_ns: Int,
+    last_update_timestamp_ns: Int
+};
+
+type StateTransitionResult = struct {
+    valid: Bool,
+    previous_state: String,
+    new_state: String,
+    is_terminal: Bool
+};
+
+pub fn l3_order_record_new(
+    oid: Int, side: String, symbol: String, shares: Int, px: Int, ts: Int
+) -> L3OrderRecord {
+    return L3OrderRecord {
+        order_id: oid, side: side, symbol: symbol, shares: shares,
+        price_fixed: px, filled_shares: 0, state: "ACTIVE",
+        entry_timestamp_ns: ts, last_update_timestamp_ns: ts
+    };
+}
+
+pub fn transition_l3_order_fill(
+    order: &mut L3OrderRecord, exec_qty: Int, now_ts: Int
+) -> StateTransitionResult {
+    let prev: String = order.state;
+    order.filled_shares = order.filled_shares + exec_qty;
+    order.last_update_timestamp_ns = now_ts;
+    if order.filled_shares >= order.shares {
+        order.state = "FILLED";
+        return StateTransitionResult { valid: true, previous_state: prev, new_state: "FILLED", is_terminal: true };
+    }
+    order.state = "PARTIALLY_FILLED";
+    return StateTransitionResult { valid: true, previous_state: prev, new_state: "PARTIALLY_FILLED", is_terminal: false };
+}
+
+pub fn transition_l3_order_cancel(
+    order: &mut L3OrderRecord, cancel_qty: Int, now_ts: Int
+) -> StateTransitionResult {
+    let prev: String = order.state;
+    order.last_update_timestamp_ns = now_ts;
+    order.shares = order.shares - cancel_qty;
+    if order.shares <= order.filled_shares {
+        order.state = "CANCELED";
+        return StateTransitionResult { valid: true, previous_state: prev, new_state: "CANCELED", is_terminal: true };
+    }
+    return StateTransitionResult { valid: true, previous_state: prev, new_state: order.state, is_terminal: false };
+}
+
+type L3BookMutation = struct {
+    book: L3OrderBook,
+    result: L3AddResult,
+    matches: List[L3MatchEvent]
+};
+
+pub fn l3_book_new(alloc: &AllocCap, capacity: Int) -> L3OrderBook {
+    return L3OrderBook {
+        capacity: capacity, order_count: 0, best_bid_price: 0, best_bid_shares: 0,
+        best_ask_price: 0, best_ask_shares: 0, total_bid_shares: 0, total_ask_shares: 0,
+        total_matches: 0, pool_allocated: 0, pool_free: capacity,
+        order_ids: l3_pool_alloc_zeros(alloc, capacity),
+        order_sides: l3_pool_alloc_zeros(alloc, capacity),
+        order_prices: l3_pool_alloc_zeros(alloc, capacity),
+        order_shares: l3_pool_alloc_zeros(alloc, capacity),
+        order_filled: l3_pool_alloc_zeros(alloc, capacity),
+        order_timestamps: l3_pool_alloc_zeros(alloc, capacity),
+        order_states: l3_pool_alloc_zeros(alloc, capacity),
+        order_prev: l3_pool_alloc_neg_ones(alloc, capacity),
+        order_next: l3_pool_alloc_neg_ones(alloc, capacity),
+        bid_prices: list_new(), bid_shares: list_new(), bid_counts: list_new(),
+        bid_heads: list_new(), bid_tails: list_new(),
+        ask_prices: list_new(), ask_shares: list_new(), ask_counts: list_new(),
+        ask_heads: list_new(), ask_tails: list_new(),
+        free_slots: l3_pool_init(alloc, capacity)
+    };
+}
+
+pub fn l3_book_insert_with_events(alloc: &AllocCap, book: L3OrderBook, order: L3Order) -> L3BookMutation {
+    let mut b: L3OrderBook = book;
+    let match_res: MatchExecutionResult = l3_match_execute(b, order);
+    b = match_res.book;
+    let mut inc: L3Order = match_res.incoming;
+    let evts: List[L3MatchEvent] = match_res.events;
+    let rem: Int = inc.shares - inc.filled_shares;
+
+    if rem > 0 {
+        let n_free: Int = list_len(b.free_slots);
+        if n_free > 0 {
+            let slot_idx: Int = list_get(b.free_slots, n_free - 1);
+            b.free_slots = l3_pool_pop(b.free_slots);
+            b.pool_allocated = b.pool_allocated + 1;
+            b.pool_free = b.pool_free - 1;
+            b.order_count = b.order_count + 1;
+            b.order_ids = list_set(b.order_ids, slot_idx, inc.order_id);
+            b.order_sides = list_set(b.order_sides, slot_idx, inc.side);
+            b.order_prices = list_set(b.order_prices, slot_idx, inc.price);
+            b.order_shares = list_set(b.order_shares, slot_idx, inc.shares);
+            b.order_filled = list_set(b.order_filled, slot_idx, inc.filled_shares);
+            b.order_timestamps = list_set(b.order_timestamps, slot_idx, inc.timestamp_ns);
+            b.order_states = list_set(b.order_states, slot_idx, inc.state);
+
+            let is_buy: Bool = (inc.side == l3_side_buy());
+            if is_buy {
+                b = l3_ladder_ensure_bid_level(b, inc.price);
+                let l_idx: Int = l3_ladder_find_idx(b.bid_prices, inc.price);
+                b = l3_queue_push_tail(b, l_idx, slot_idx, true);
+            } else {
+                b = l3_ladder_ensure_ask_level(b, inc.price);
+                let l_idx: Int = l3_ladder_find_idx(b.ask_prices, inc.price);
+                b = l3_queue_push_tail(b, l_idx, slot_idx, false);
+            }
+            b = l3_ladder_update_bbo(b);
+        }
+    }
+    let res: L3AddResult = l3_add_result_new(inc.order_id, "ACCEPTED", true, inc.shares, inc.price);
+    return L3BookMutation { book: b, result: res, matches: evts };
+}
+
+pub fn l3_book_insert(alloc: &AllocCap, book: L3OrderBook, order: L3Order) -> L3OrderBook {
+    let mut_res: L3BookMutation = l3_book_insert_with_events(alloc, book, order);
+    return mut_res.book;
+}
+
+pub fn l3_book_insert_order(alloc: &AllocCap, book: L3OrderBook, order: L3Order) -> Result[L3BookMutation, String] {
+    if order.price <= 0 || order.shares <= 0 { return Err("InvalidOrderParameters"); }
+    if list_len(book.free_slots) <= 0 { return Err("MemoryPoolExhausted"); }
+    return Ok(l3_book_insert_with_events(alloc, book, order));
+}
+
+pub fn l3_book_lifecycle_add_order(alloc: &AllocCap, book: L3OrderBook, order: L3Order) -> Result[L3AddResult, String] {
+    let res: Result[L3BookMutation, String] = l3_book_insert_order(alloc, book, order);
+    match res {
+        Ok(mutation) => { return Ok(mutation.result); },
+        Err(e)       => { return Err(e); }
+    }
+}
+
+pub fn l3_book_find_order_slot(book: L3OrderBook, order_id: Int) -> Int {
+    let mut i: Int = 0;
+    let cap: Int = book.capacity;
+    while i < cap {
+        if list_get(book.order_ids, i) == order_id {
+            let st: Int = list_get(book.order_states, i);
+            if st == l3_state_active() || st == l3_state_partially_filled() { return i; }
+        }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+pub fn l3_book_remove_and_cancel(book: L3OrderBook, order_id: Int) -> Result[L3OrderBook, String] {
+    let slot: Int = l3_book_find_order_slot(book, order_id);
+    if slot < 0 { return Err("OrderNotFound"); }
+    let mut b: L3OrderBook = book;
+    let side: Int = list_get(b.order_sides, slot);
+    let px: Int = list_get(b.order_prices, slot);
+    let is_buy: Bool = (side == l3_side_buy());
+    let mut l_idx: Int = 0 - 1;
+    if is_buy { l_idx = l3_ladder_find_idx(b.bid_prices, px); } else { l_idx = l3_ladder_find_idx(b.ask_prices, px); }
+    b = l3_queue_remove_order(b, l_idx, slot, is_buy);
+    b.order_states = list_set(b.order_states, slot, l3_state_canceled());
+    b.free_slots = l3_pool_recycle(b.free_slots, slot);
+    b.pool_allocated = b.pool_allocated - 1;
+    b.pool_free = b.pool_free + 1;
+    b.order_count = b.order_count - 1;
+    b = l3_ladder_update_bbo(b);
+    return Ok(b);
+}
+
+pub fn l3_book_lifecycle_cancel_order(book: L3OrderBook, order_id: Int) -> Result[L3CancelResult, String] {
+    let res: Result[L3OrderBook, String] = l3_book_remove_and_cancel(book, order_id);
+    match res {
+        Ok(b)  => { return Ok(l3_cancel_result_new(order_id, 0, "CANCELED", true)); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+
+pub fn l3_book_modify_order(
+    alloc: &AllocCap, book: L3OrderBook, order_id: Int, new_shares: Int
+) -> Result[L3OrderBook, String] {
+    let slot: Int = l3_book_find_order_slot(book, order_id);
+    if slot < 0 { return Err("OrderNotFound"); }
+    let cur_sh: Int = list_get(book.order_shares, slot);
+    let cur_fl: Int = list_get(book.order_filled, slot);
+    if new_shares <= cur_fl { return Err("InvalidModificationShares"); }
+    let is_buy: Bool = (list_get(book.order_sides, slot) == l3_side_buy());
+    let px: Int = list_get(book.order_prices, slot);
+    let mut b: L3OrderBook = book;
+
+    if new_shares < cur_sh {
+        let delta: Int = cur_sh - new_shares;
+        let mut l_idx: Int = 0 - 1;
+        if is_buy { l_idx = l3_ladder_find_idx(b.bid_prices, px); } else { l_idx = l3_ladder_find_idx(b.ask_prices, px); }
+        b = l3_queue_reduce_shares(b, l_idx, slot, delta, is_buy);
+        b = l3_ladder_update_bbo(b);
+        return Ok(b);
+    } else {
+        let old_ord: L3Order = l3_order_new(
+            order_id, list_get(b.order_sides, slot), px, new_shares, list_get(b.order_timestamps, slot)
+        );
+        let cancel_res: Result[L3OrderBook, String] = l3_book_remove_and_cancel(b, order_id);
+        match cancel_res {
+            Ok(b_canceled) => {
+                let add_res: Result[L3BookMutation, String] = l3_book_insert_order(alloc, b_canceled, old_ord);
+                match add_res {
+                    Ok(m)  => { return Ok(m.book); },
+                    Err(e) => { return Err(e); }
+                }
+            },
+            Err(e) => { return Err(e); }
+        }
+    }
+}

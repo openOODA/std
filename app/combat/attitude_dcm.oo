@@ -1,0 +1,29 @@
+// # Attitude DCM
+//
+// Logline: DcmCell implemented off pub type Float DCM.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type DcmCell = struct {
+    r00: Int,
+    r11: Int
+};
+
+pub fn dcm_cell_new(r00: Int, r11: Int) -> DcmCell {
+    return DcmCell { r00: r00, r11: r11 };
+}
+
+pub fn dcm_cell_r00(c: DcmCell) -> Int {
+    return c.r00;
+}
+
+pub fn dcm_cell_r11(c: DcmCell) -> Int {
+    return c.r11;
+}

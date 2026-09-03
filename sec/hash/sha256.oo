@@ -1,0 +1,129 @@
+// # SHA-256 one-shot
+//
+// Logline: Hashes a byte string with one-shot FIPS 180-4 SHA-256 and returns the 256-bit state as 64 lowercase hex chars.
+//
+// Setup: Pure Int 32-bit. Imports sha256_core.oo and sha256_codec.oo.
+//
+// Beats:
+//   1. Pad to 64-byte blocks with 0x80 and 64-bit BE bit length.
+//   2. Schedule 64 words in a loop; run 64 rounds via a worker; add back to state.
+//   3. Emit the 8-word state as 64 lowercase hex chars.
+// RULES.oot 1.7: Under 256 lines.
+//
+// emit-llvm hangs on 64 unrolled lets (quadratic env/slit). Loop the schedule and rounds.
+
+import "./sha256_codec.oo";
+
+type S2W = struct {
+    a: Int,
+    b: Int,
+    c: Int,
+    d: Int,
+    e: Int,
+    f: Int,
+    g: Int,
+    h: Int
+};
+
+pub fn s2_rnd(w: S2W, k: Int, x: Int) -> S2W {
+    let t1: Int = s2_mask(w.h + s2_Sigma1(w.e) + s2_ch(w.e, w.f, w.g) + k + x);
+    let t2: Int = s2_mask(s2_Sigma0(w.a) + s2_maj(w.a, w.b, w.c));
+    return S2W {
+        a: s2_mask(t1 + t2),
+        b: w.a,
+        c: w.b,
+        d: w.c,
+        e: s2_mask(w.d + t1),
+        f: w.e,
+        g: w.f,
+        h: w.g
+    };
+}
+
+pub fn s2_compress(w: S2W, data: String, n: Int, total: Int, base: Int) -> S2W {
+    let mut ws: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        ws = list_push(ws, s2_load(data, n, total, base, i));
+        i = i + 1;
+    }
+    while i < 64 {
+        let s1: Int = s2_sigma1(list_get(ws, i - 2));
+        let s0: Int = s2_sigma0(list_get(ws, i - 15));
+        let nxt: Int = s2_mask(s1 + list_get(ws, i - 7) + s0 + list_get(ws, i - 16));
+        ws = list_push(ws, nxt);
+        i = i + 1;
+    }
+    let mut s: S2W = w;
+    i = 0;
+    while i < 64 {
+        s = s2_rnd(s, s2_k(i), list_get(ws, i));
+        i = i + 1;
+    }
+    return s;
+}
+
+pub fn s2_init() -> S2W {
+    return S2W {
+        a: 1779033703,
+        b: 3144134277,
+        c: 1013904242,
+        d: 2773480762,
+        e: 1359893119,
+        f: 2600822924,
+        g: 528734635,
+        h: 1541459225
+    };
+}
+
+pub fn s2_addst(x: S2W, y: S2W) -> S2W {
+    return S2W {
+        a: s2_mask(x.a + y.a),
+        b: s2_mask(x.b + y.b),
+        c: s2_mask(x.c + y.c),
+        d: s2_mask(x.d + y.d),
+        e: s2_mask(x.e + y.e),
+        f: s2_mask(x.f + y.f),
+        g: s2_mask(x.g + y.g),
+        h: s2_mask(x.h + y.h)
+    };
+}
+
+pub fn sha256_hex(data: String) -> String {
+    let n: Int = data.len();
+    let rem: Int = n % 64;
+    let mut blocks: Int = n / 64;
+    if rem <= 55 {
+        blocks = blocks + 1;
+    } else {
+        blocks = blocks + 2;
+    }
+    let total: Int = blocks * 64;
+    let mut h: S2W = s2_init();
+    let mut blk: Int = 0;
+    while blk < blocks {
+        let base: Int = blk * 64;
+        let mut s: S2W = s2_compress(h, data, n, total, base);
+        s = s2_addst(h, s);
+        h = s;
+        blk = blk + 1;
+    }
+    let mut out: String = "";
+    out = out + s2_hexw(h.a);
+    out = out + s2_hexw(h.b);
+    out = out + s2_hexw(h.c);
+    out = out + s2_hexw(h.d);
+    out = out + s2_hexw(h.e);
+    out = out + s2_hexw(h.f);
+    out = out + s2_hexw(h.g);
+    out = out + s2_hexw(h.h);
+    return out;
+}
+
+pub fn sha256(data: String) -> String {
+    return sha256_hex(data);
+}
+
+pub fn sha256_hash(data: String) -> String {
+    return sha256_hex(data);
+}

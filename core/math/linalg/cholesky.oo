@@ -1,0 +1,76 @@
+// # Cholesky Decomposition for SPD Matrices
+//
+// Logline: Factors A = L L^T for symmetric positive-definite matrices and fail-closes otherwise.
+//
+// Setup: Pure math. A is row-major List[Float], n by n. Only the lower triangle of L is filled.
+//
+// Beats:
+//   1. Run the Cholesky-Banachiewicz recurrence on each lower entry.
+//   2. Reject a non-positive pivot as not SPD.
+//   3. Reconstruct A as L L^T for residual checks.
+//   4. Return L as a dense n by n row-major list.
+
+import "std/core/primitives/result.oo";
+
+fn chol_get(a: List[Float], n: Int, i: Int, j: Int) -> Float {
+    return list_get(a, i * n + j);
+}
+
+fn chol_set(a: List[Float], n: Int, i: Int, j: Int, v: Float) -> List[Float] {
+    return list_set(a, i * n + j, v);
+}
+
+pub fn cholesky_factor(a: List[Float], n: Int) -> Result[List[Float], String] {
+    if n < 1 { return Err("ERR\tcholesky\tn"); }
+    if list_len(a) != n * n { return Err("ERR\tcholesky\tsize"); }
+    let mut l: List[Float] = list_new();
+    let mut t: Int = 0;
+    while t < n * n {
+        l = list_push(l, 0.0);
+        t = t + 1;
+    }
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j <= i {
+            let mut s: Float = chol_get(a, n, i, j);
+            let mut k: Int = 0;
+            while k < j {
+                s = s - chol_get(l, n, i, k) * chol_get(l, n, j, k);
+                k = k + 1;
+            }
+            if i == j {
+                if s <= 0.0 { return Err("ERR\tcholesky\tnot_spd"); }
+                l = chol_set(l, n, i, i, sqrt(s));
+            } else {
+                let ljj: Float = chol_get(l, n, j, j);
+                if ljj == 0.0 { return Err("ERR\tcholesky\tnot_spd"); }
+                l = chol_set(l, n, i, j, s / ljj);
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(l);
+}
+
+pub fn cholesky_reconstruct(l: List[Float], n: Int) -> Result[List[Float], String] {
+    if list_len(l) != n * n { return Err("ERR\tcholesky\tsize"); }
+    let mut a: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            let mut s: Float = 0.0;
+            let mut k: Int = 0;
+            while k < n {
+                s = s + chol_get(l, n, i, k) * chol_get(l, n, j, k);
+                k = k + 1;
+            }
+            a = list_push(a, s);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(a);
+}

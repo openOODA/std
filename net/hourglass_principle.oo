@@ -1,0 +1,92 @@
+// # Hourglass Network Waist Principle
+//
+// Logline: The internet's hourglass shape: many protocols above and below, one narrow IP waist in the middle.
+//
+// Setup: Pure Int. Layer codes 0..3 (link/network/transport/app). Protocol IDs are non-negative. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. Layer code normalization: link < network < transport < application.
+//   2. Waist membership: only the network layer is the IP waist.
+//   3. Hourglass witness: 1 if the lower and upper halves are reachable through the waist.
+//   4. Hosts net_invariants.oo stem for cross-law correlation.
+
+import "std/net/net_invariants.oo";
+
+// Layer codes.
+pub fn hg_layer_link() -> Int {
+    return 0;
+}
+
+pub fn hg_layer_network() -> Int {
+    return 1;
+}
+
+pub fn hg_layer_transport() -> Int {
+    return 2;
+}
+
+pub fn hg_layer_application() -> Int {
+    return 3;
+}
+
+// True if layer is a valid code in 0..3.
+pub fn hg_valid_layer(layer: Int) -> Bool {
+    if layer < 0 { return false; }
+    if layer > 3 { return false; }
+    return true;
+}
+
+// True if the layer is the narrow waist: network layer only.
+pub fn hg_is_waist(layer: Int) -> Bool {
+    if layer == hg_layer_network() { return true; }
+    return false;
+}
+
+// Hourglass witness: 1 only if (lower half in {link}) AND (waist in {network}) AND
+// (upper half in {transport, application}). Out-of-range returns 0.
+pub fn hg_hourglass(lower: Int, waist: Int, upper: Int) -> Int {
+    if hg_valid_layer(lower) == false { return 0; }
+    if hg_valid_layer(waist) == false { return 0; }
+    if hg_valid_layer(upper) == false { return 0; }
+    if lower != hg_layer_link() { return 0; }
+    if waist != hg_layer_network() { return 0; }
+    if upper != hg_layer_transport() {
+        if upper != hg_layer_application() { return 0; }
+    }
+    return 1;
+}
+
+// Layer ordering: 1 if a is below b (a < b in 0..3 layer order).
+pub fn hg_layer_below(a: Int, b: Int) -> Bool {
+    if hg_valid_layer(a) == false { return false; }
+    if hg_valid_layer(b) == false { return false; }
+    if a < b { return true; }
+    return false;
+}
+
+// KAT and hostile cases for the hourglass principle.
+pub fn verify_hourglass_principle() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    if hg_is_waist(1) == false { return false; }
+    if hg_is_waist(0) == true { return false; }
+    if hg_is_waist(2) == true { return false; }
+    if hg_is_waist(3) == true { return false; }
+    if hg_is_waist(0 - 1) == true { return false; }
+    if hg_is_waist(4) == true { return false; }
+    if hg_hourglass(0, 1, 2) != 1 { return false; }
+    if hg_hourglass(0, 1, 3) != 1 { return false; }
+    if hg_hourglass(0, 0, 2) != 0 { return false; }
+    if hg_hourglass(0, 2, 3) != 0 { return false; }
+    if hg_hourglass(1, 1, 2) != 0 { return false; }
+    if hg_hourglass(0, 1, 1) != 0 { return false; }
+    if hg_hourglass(0 - 1, 1, 2) != 0 { return false; }
+    if hg_hourglass(0, 1, 4) != 0 { return false; }
+    if hg_layer_below(0, 3) == false { return false; }
+    if hg_layer_below(2, 3) == false { return false; }
+    if hg_layer_below(3, 0) == true { return false; }
+    if hg_layer_below(2, 2) == true { return false; }
+    if hg_layer_below(0 - 1, 2) == true { return false; }
+    if hg_layer_below(0, 4) == true { return false; }
+    return true;
+}

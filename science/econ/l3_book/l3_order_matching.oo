@@ -1,0 +1,65 @@
+// # Level 3 Order Matching Engine
+//
+// Logline: Inserts an aggressive L3 order, matches against resting makers, and returns match events.
+//
+// Setup: Pure FIFO price-time matching. Requires &AllocCap token.
+//
+// Beats:
+//   1. Validate order quantity, price, and id.
+//   2. Find best maker using the priority ladder and core accessors.
+//   3. Generate L3MatchEvent for each partial or full fill.
+//   4. Add remaining shares to the book as a resting order.
+// residual: Spread, tick-size, and order lifecycle audit are residual.
+
+import "./l3_order_book_core.oo";
+import "./l3_priority_ladder.oo";
+
+fn l3_min_int(a: Int, b: Int) -> Int {
+    if a < b { return a; }
+    return b;
+}
+
+pub fn l3_insert_order(
+    alloc: &AllocCap,
+    book: &mut L3OrderBook,
+    order: &L3Order
+) -> Result[List[L3MatchEvent], String] {
+    if order.qty <= 0 || order.price_ticks <= 0 || order.order_id <= 0 {
+        return Err("ERR\tl3_insert_order\tinvalid_order");
+    }
+    let mut remaining: Int = order.qty;
+    let mut events: List[L3MatchEvent] = list_new();
+    let mut done: Int = 0;
+    while done == 0 && remaining > 0 {
+        let mi: Int = l3_best_maker_index(book.orders, order.is_buy, order.price_ticks);
+        if mi < 0 { done = 1; }
+        if done != 0 { continue; }
+        let mut maker: L3Order = l3_book_get_order(book.orders, mi);
+        let fill: Int = l3_min_int(remaining, maker.qty);
+        let is_full: Bool = fill == maker.qty;
+        let ev: L3MatchEvent = l3_match_event_new(maker.order_id, order.order_id, maker.price_ticks, fill, is_full);
+        events = list_push(events, ev);
+        remaining = remaining - fill;
+        maker.qty = maker.qty - fill;
+        book.total_volume = book.total_volume + fill;
+        if maker.qty == 0 {
+            if maker.is_buy {
+                book.bid_levels = book.bid_levels - 1;
+            } else {
+                book.ask_levels = book.ask_levels - 1;
+            }
+        }
+        book.orders = l3_book_set_order(book.orders, mi, maker);
+    }
+    if remaining > 0 {
+        let rest: L3Order = l3_order_new(order.order_id, order.price_ticks, remaining, order.is_buy, order.timestamp_ns);
+        book.orders = l3_book_push_order(book.orders, rest);
+        if order.is_buy {
+            book.bid_levels = book.bid_levels + 1;
+        } else {
+            book.ask_levels = book.ask_levels + 1;
+        }
+        book.total_volume = book.total_volume + remaining;
+    }
+    return Ok(events);
+}

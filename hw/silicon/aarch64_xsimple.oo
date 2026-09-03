@@ -1,0 +1,130 @@
+// # AArch64 Simple Statement Selection
+//
+// Logline: Lowers let, println, process_exit, and return without nested statement lists.
+//
+// Setup: Uses xarith for rvalues and xfn epilogue for return. println BL __puts.
+//
+// Beats:
+//   1. Parse let / let mut with optional types and store x0/x1 in a 16-byte slot.
+//   2. Lower println(expr) to evaluate then BL __puts.
+//   3. Lower process_exit(expr) to sys_exit 93 via SVC.
+//   4. Lower return expr to AAPCS64 epilogue.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+import "std/hw/silicon/aarch64_xfn.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xarith.oo";
+import "std/hw/silicon/aarch64_xfloat.oo";
+import "std/hw/silicon/aarch64_xmark.oo";
+import "std/hw/silicon/aarch64_xcond.oo";
+
+pub fn a64x_let(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "let"), x0);
+    x = a64x_skip(x);
+    if a64_starts(a64x_as_p(x), "mut") {
+        x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "mut"), x);
+    }
+    x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+    let nm: String = x.p.text;
+    x = a64x_skip(x);
+    let mut tyfp: Int = 0;
+    let mut tyn: String = "";
+    let mut islf: Int = 0;
+    if a64_peek(a64x_as_p(x)) == 58 {
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 58), x);
+        x = a64x_eat_type(x);
+        tyn = x.p.text;
+        islf = x.p.ival;
+        if x.p.text == "Float" { tyfp = 1; }
+        if x.p.text == "String" { tyfp = 2; }
+        if x.p.text == "Result" || x.p.text == "Option" { tyfp = 3; }
+    }
+    x = a64x_from_p(a64_eat(a64x_as_p(x), 61), x);
+    if a64_starts(a64x_as_p(x), "match") {
+        x = a64x_match_core(x);
+    } else {
+        x = a64x_expr(x);
+    }
+    if tyfp == 1 { x = a64x_with_fp(x, 1); }
+    if tyfp == 2 || x.st.fp == 2 { x = a64x_with_fp(x, 2); }
+    if tyfp == 3 { x = a64x_with_fp(x, 3); }
+    if tyn == "Int" || tyn == "Bool" { x = a64x_with_fp(x, 0); }
+    x = a64x_from_p(a64_eat(a64x_as_p(x), 59), x);
+    let hit: Int = (0 + a64_lookup_parse(x.p.names, x.p.offs, nm));
+    if hit >= 0 {
+        x = a64x_store_pair(x, hit);
+        if x.st.fp == 2 { x = a64x_mark_str(x, nm); }
+        if x.st.fp == 3 {
+            x = a64x_mark_res(x, nm);
+            let inn: String = a64x_last_inner(x);
+            if bytes_len(inn) > 0 { x = a64x_mark_ok(x, nm, inn); }
+            let err_ty: String = a64x_last_err(x);
+            if bytes_len(err_ty) > 0 { x = a64x_mark_err(x, nm, err_ty); }
+        }
+        if bytes_len(tyn) > 0 && tyn != "Float" && tyn != "String" && tyn != "Result" && tyn != "Option" && tyn != "Int" && tyn != "Bool" {
+            x = a64x_mark_ty(x, nm, tyn);
+        }
+        if tyn == "List" && islf == 1 { x = a64x_mark_str(x, "LF:" + nm); }
+        return x;
+    }
+    x = a64x_bind16(x, nm);
+    if x.st.fp == 2 { x = a64x_mark_str(x, nm); }
+    if x.st.fp == 3 {
+        x = a64x_mark_res(x, nm);
+        let inn2: String = a64x_last_inner(x);
+        if bytes_len(inn2) > 0 { x = a64x_mark_ok(x, nm, inn2); }
+        let err2: String = a64x_last_err(x);
+        if bytes_len(err2) > 0 { x = a64x_mark_err(x, nm, err2); }
+    }
+    if bytes_len(tyn) > 0 && tyn != "Float" && tyn != "String" && tyn != "Result" && tyn != "Option" && tyn != "Int" && tyn != "Bool" {
+        x = a64x_mark_ty(x, nm, tyn);
+    }
+    if tyn == "List" && islf == 1 { x = a64x_mark_str(x, "LF:" + nm); }
+    return a64x_store_pair(x, x.p.ival);
+}
+
+pub fn a64x_println(x0: A64X) -> A64X {
+    let mut y: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "println"), x0);
+    y = a64x_from_p(a64_eat(a64x_as_p(y), 40), y);
+    y = a64x_expr(y);
+    let is_str: Bool = a64x_is_str(y);
+    y = a64x_from_p(a64_eat(a64x_as_p(y), 41), y);
+    y = a64x_from_p(a64_eat(a64x_as_p(y), 59), y);
+    if is_str {
+        return a64x_bl(y, "__puts");
+    }
+    return a64x_bl(y, "__puts_int");
+}
+
+pub fn a64x_println_c(x0: A64X) -> A64X {
+    return a64x_println(x0);
+}
+
+pub fn a64x_pexit(x0: A64X) -> A64X {
+    let mut y: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "process_exit"), x0);
+    y = a64x_from_p(a64_eat(a64x_as_p(y), 40), y);
+    y = a64x_expr(y);
+    y = a64x_from_p(a64_eat(a64x_as_p(y), 41), y);
+    y = a64x_from_p(a64_eat(a64x_as_p(y), 59), y);
+    y = a64x_emit(y, arm64_word_movz(abi_sys_reg(), 93, 0));
+    return a64x_emit(y, arm64_word_svc(0));
+}
+
+pub fn a64x_return(x0: A64X) -> A64X {
+    let mut y: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "return"), x0);
+    y = a64x_skip(y);
+    if a64_peek(a64x_as_p(y)) != 59 {
+        if a64_starts(a64x_as_p(y), "match") {
+            y = a64x_match_core(y);
+        } else {
+            y = a64x_expr(y);
+        }
+    }
+    y = a64x_epilogue(y);
+    return a64x_from_p(a64_eat(a64x_as_p(y), 59), y);
+}

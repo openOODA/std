@@ -1,0 +1,247 @@
+// # ARM GICv3 (Generic Interrupt Controller v3) Driver
+//
+// Logline: Implements ARM GICv3 Distributor (GICD), Redistributor (GICR),
+// and EL1 CPU Interface (ICC) configuration, SPI affinity routing, SGI/PPI private
+// interrupts, power-wake management, priority masking, and IAR/EOI lifecycles.
+//
+// Setup: INTID 0..15 are SGIs, 16..31 are PPIs, 32..1019 are SPIs;
+// INTID 1023 is spurious; affinity routing requires ARE enabled.
+// Requires &SysCap for all ARM GIC hardware operations.
+//
+// Beats:
+//   1. GICD configuration.
+//   2. GICR Redistributor configuration.
+//   3. EL1 CPU interface (ICC).
+//   4. SPI affinity routing.
+//   5. SGI/PPI private interrupts.
+//   6. IAR/EOI lifecycles.
+
+type Gicv3Distributor = struct {
+    base_addr: Int,
+    enabled_grp0: Bool,
+    enabled_grp1: Bool,
+    are_enabled: Bool,
+    max_spis: Int
+};
+
+type Gicv3Redistributor = struct {
+    base_addr: Int,
+    pe_affinity: Int,
+    is_awake: Bool,
+    enabled_sgis: Int,
+    enabled_ppis: Int
+};
+
+type Gicv3CpuInterface = struct {
+    sre_enabled: Bool,
+    pmr: Int,
+    bpr: Int,
+    igrpen1: Bool,
+    active_intid: Int,
+    last_eoi_intid: Int
+};
+
+type Gicv3SpiRoute = struct {
+    intid: Int,
+    target_affinity: Int,
+    priority: Int,
+    is_enabled: Bool
+};
+
+type Gicv3Driver = struct {
+    distributor: Gicv3Distributor,
+    redistributor: Gicv3Redistributor,
+    cpu_if: Gicv3CpuInterface,
+    routes: List[Int],
+    is_initialized: Bool
+};
+
+pub fn gicv3_distributor_default_base() -> Int { return 134217728; }
+pub fn gicv3_redistributor_default_base() -> Int { return 134873088; }
+pub fn gicv3_spurious_intid() -> Int { return 1023; }
+
+pub fn gicv3_affinity_pack(aff3: Int, aff2: Int, aff1: Int, aff0: Int) -> Int {
+    let p3: Int = (aff3 & 255) << 48;
+    let p2: Int = (aff2 & 255) << 32;
+    let p1: Int = (aff1 & 255) << 16;
+    let p0: Int = aff0 & 255;
+    return p3 | p2 | p1 | p0;
+}
+pub fn gicv3_affinity_unpack_aff0(affinity: Int) -> Int { return affinity & 255; }
+pub fn gicv3_affinity_unpack_aff1(affinity: Int) -> Int { return (affinity >> 16) & 255; }
+pub fn gicv3_affinity_unpack_aff2(affinity: Int) -> Int { return (affinity >> 32) & 255; }
+pub fn gicv3_affinity_unpack_aff3(affinity: Int) -> Int { return (affinity >> 48) & 255; }
+
+pub fn gicv3_pack_route(route: Gicv3SpiRoute) -> Int {
+    let en_bit: Int = if route.is_enabled { 1 } else { 0 };
+    return ((route.intid & 1023) << 48) | ((route.target_affinity & 65535) << 16) | ((route.priority & 255) << 8) | en_bit;
+}
+
+pub fn gicv3_unpack_route(raw: Int) -> Gicv3SpiRoute {
+    return Gicv3SpiRoute {
+        intid: (raw >> 48) & 1023,
+        target_affinity: (raw >> 16) & 65535,
+        priority: (raw >> 8) & 255,
+        is_enabled: (raw & 1) != 0
+    };
+}
+
+pub fn gicv3_init(sys: &SysCap, gicd_base: Int, gicr_base: Int, pe_affinity: Int) -> Gicv3Driver {
+    let dist: Gicv3Distributor = Gicv3Distributor {
+        base_addr: gicd_base,
+        enabled_grp0: true,
+        enabled_grp1: true,
+        are_enabled: true,
+        max_spis: 988
+    };
+    let redist: Gicv3Redistributor = Gicv3Redistributor {
+        base_addr: gicr_base,
+        pe_affinity: pe_affinity,
+        is_awake: true,
+        enabled_sgis: 65535,
+        enabled_ppis: 65535
+    };
+    let cpu_if: Gicv3CpuInterface = Gicv3CpuInterface {
+        sre_enabled: true,
+        pmr: 255,
+        bpr: 0,
+        igrpen1: true,
+        active_intid: gicv3_spurious_intid(),
+        last_eoi_intid: 0
+    };
+    return Gicv3Driver {
+        distributor: dist,
+        redistributor: redist,
+        cpu_if: cpu_if,
+        routes: list_new(),
+        is_initialized: true
+    };
+}
+
+pub fn gicv3_distributor_enable(sys: &SysCap, dist: Gicv3Distributor, enable_grp0: Bool, enable_grp1: Bool, are: Bool) -> Gicv3Distributor {
+    return Gicv3Distributor {
+        base_addr: dist.base_addr,
+        enabled_grp0: enable_grp0,
+        enabled_grp1: enable_grp1,
+        are_enabled: are,
+        max_spis: dist.max_spis
+    };
+}
+pub fn gicv3_redistributor_wake(sys: &SysCap, redist: Gicv3Redistributor) -> Gicv3Redistributor {
+    return Gicv3Redistributor {
+        base_addr: redist.base_addr,
+        pe_affinity: redist.pe_affinity,
+        is_awake: true,
+        enabled_sgis: redist.enabled_sgis,
+        enabled_ppis: redist.enabled_ppis
+    };
+}
+pub fn gicv3_cpu_if_init(sys: &SysCap, pmr_val: Int) -> Gicv3CpuInterface {
+    return Gicv3CpuInterface {
+        sre_enabled: true,
+        pmr: pmr_val & 255,
+        bpr: 0,
+        igrpen1: true,
+        active_intid: gicv3_spurious_intid(),
+        last_eoi_intid: 0
+    };
+}
+
+pub fn gicv3_route_spi(sys: &SysCap, driver: Gicv3Driver, intid: Int, target_affinity: Int, priority: Int) -> Result[Gicv3Driver, String] {
+    if intid < 32 || intid > 1019 { return Err("E_GICV3_INVALID_SPI_INTID"); }
+    let route: Gicv3SpiRoute = Gicv3SpiRoute {
+        intid: intid,
+        target_affinity: target_affinity,
+        priority: priority & 255,
+        is_enabled: true
+    };
+    let packed: Int = gicv3_pack_route(route);
+    let mut new_routes: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(driver.routes);
+    let mut updated: Bool = false;
+    while i < n {
+        let cur_raw: Int = list_get(driver.routes, i);
+        let cur_route: Gicv3SpiRoute = gicv3_unpack_route(cur_raw);
+        if cur_route.intid == intid {
+            new_routes = list_push(new_routes, packed);
+            updated = true;
+        } else {
+            new_routes = list_push(new_routes, cur_raw);
+        }
+        i = i + 1;
+    }
+    if !updated { new_routes = list_push(new_routes, packed); }
+    return Ok(Gicv3Driver {
+        distributor: driver.distributor,
+        redistributor: driver.redistributor,
+        cpu_if: driver.cpu_if,
+        routes: new_routes,
+        is_initialized: true
+    });
+}
+
+pub fn gicv3_enable_private_interrupt(sys: &SysCap, driver: Gicv3Driver, intid: Int, enable: Bool) -> Result[Gicv3Driver, String] {
+    if intid < 0 || intid > 31 { return Err("E_GICV3_INVALID_PRIVATE_INTID"); }
+    let cur_redist: Gicv3Redistributor = driver.redistributor;
+    let mut updated_redist: Gicv3Redistributor = cur_redist;
+    if intid < 16 {
+        let bit: Int = 1 << intid;
+        let mut new_sgi: Int = cur_redist.enabled_sgis;
+        if enable { new_sgi = new_sgi | bit; } else { if (new_sgi & bit) != 0 { new_sgi = new_sgi - bit; } }
+        updated_redist = Gicv3Redistributor {
+            base_addr: cur_redist.base_addr,
+            pe_affinity: cur_redist.pe_affinity,
+            is_awake: cur_redist.is_awake,
+            enabled_sgis: new_sgi,
+            enabled_ppis: cur_redist.enabled_ppis
+        };
+    } else {
+        let bit: Int = 1 << (intid - 16);
+        let mut new_ppi: Int = cur_redist.enabled_ppis;
+        if enable { new_ppi = new_ppi | bit; } else { if (new_ppi & bit) != 0 { new_ppi = new_ppi - bit; } }
+        updated_redist = Gicv3Redistributor {
+            base_addr: cur_redist.base_addr,
+            pe_affinity: cur_redist.pe_affinity,
+            is_awake: cur_redist.is_awake,
+            enabled_sgis: cur_redist.enabled_sgis,
+            enabled_ppis: new_ppi
+        };
+    }
+    return Ok(Gicv3Driver {
+        distributor: driver.distributor,
+        redistributor: updated_redist,
+        cpu_if: driver.cpu_if,
+        routes: driver.routes,
+        is_initialized: true
+    });
+}
+
+pub fn gicv3_acknowledge_interrupt(sys: &SysCap, driver: Gicv3Driver, pending_intid: Int) -> Result[Gicv3Driver, String] {
+    if pending_intid < 0 || pending_intid > 1023 { return Err("E_GICV3_INVALID_INTID"); }
+    let cur_cpu: Gicv3CpuInterface = driver.cpu_if;
+    let updated_cpu: Gicv3CpuInterface = Gicv3CpuInterface {
+        sre_enabled: cur_cpu.sre_enabled,
+        pmr: cur_cpu.pmr, bpr: cur_cpu.bpr, igrpen1: cur_cpu.igrpen1, active_intid: pending_intid, last_eoi_intid: cur_cpu.last_eoi_intid };
+    return Ok(Gicv3Driver { distributor: driver.distributor, redistributor: driver.redistributor, cpu_if: updated_cpu, routes: driver.routes, is_initialized: true });
+}
+
+pub fn gicv3_end_of_interrupt(sys: &SysCap, driver: Gicv3Driver, intid: Int) -> Result[Gicv3Driver, String] {
+    let cur_cpu: Gicv3CpuInterface = driver.cpu_if;
+    if cur_cpu.active_intid != intid { return Err("E_GICV3_EOI_MISMATCH"); }
+    let updated_cpu: Gicv3CpuInterface = Gicv3CpuInterface {
+        sre_enabled: cur_cpu.sre_enabled,
+        pmr: cur_cpu.pmr,
+        bpr: cur_cpu.bpr,
+        igrpen1: cur_cpu.igrpen1,
+        active_intid: gicv3_spurious_intid(),
+        last_eoi_intid: intid
+    };
+    return Ok(Gicv3Driver {
+        distributor: driver.distributor,
+        redistributor: driver.redistributor,
+        cpu_if: updated_cpu,
+        routes: driver.routes,
+        is_initialized: true
+    });
+}

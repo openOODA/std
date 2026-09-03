@@ -1,0 +1,51 @@
+// # Two-Body Keplerian Orbit Propagator
+//
+// Logline: Propagates Keplerian orbits deterministically across arbitrary time intervals using two-body dynamics.
+//
+// Setup: Imports state_vector_transforms.oo for coordinate conversions and orbital types.
+//
+// Beats:
+//   1. Calculate Keplerian mean motion from semimajor axis and planetary gravitational parameter.
+//   2. Step mean anomaly linearly forward in time and resolve target true anomaly.
+//   3. Compute osculating orbital elements and transform to Cartesian state vector.
+
+import "./state_vector_transforms.oo";
+
+pub fn compute_mean_motion(a: Float, mu: Float) -> Float {
+    if a <= 0.000000001 {
+        return 0.0;
+    }
+    let a_cubed: Float = (a * a) * a;
+    return sqrt(mu / a_cubed);
+}
+
+pub fn select_mu_for_semimajor_axis(a: Float) -> Float {
+    if a > 200000.0 {
+        return const_mu_earth_m();
+    }
+    return const_mu_earth();
+}
+
+pub fn kepler_propagate_elements(initial: OrbitElements, dt_seconds: Float, mu: Float) -> OrbitElements {
+    let a: Float = initial.semi_major_axis;
+    let e: Float = initial.eccentricity;
+    let inc: Float = initial.inclination;
+    let raan: Float = initial.raan;
+    let argp: Float = initial.arg_of_perigee;
+    let nu0: Float = initial.true_anomaly;
+    let ep0: Float = initial.epoch_sec;
+
+    let n: Float = compute_mean_motion(a, mu);
+    let m0: Float = true_to_mean(nu0, e);
+    let m_t: Float = normalize_angle_2pi(m0 + (n * dt_seconds));
+    let nu_t: Float = mean_to_true(m_t, e);
+
+    return orbit_elements_new(a, e, inc, raan, argp, nu_t, ep0 + dt_seconds);
+}
+
+pub fn kepler_propagate_twobody(initial: OrbitElements, dt_seconds: Float) -> StateVector {
+    let a: Float = initial.semi_major_axis;
+    let mu: Float = select_mu_for_semimajor_axis(a);
+    let prop_elem: OrbitElements = kepler_propagate_elements(initial, dt_seconds, mu);
+    return state_vector_from_keplerian(prop_elem, mu);
+}

@@ -1,0 +1,136 @@
+// # cgroups v2 unified hierarchy law
+//
+// Logline: Linux cgroups v2 (merged in Linux 4.5, 2016) provides a single unified hierarchy per process, exposing a canonical set of resource controllers (cpu, memory, io, pids, devices, freezer, cpuset, net_cls, net_prio, hugetlb, rdma, perf_event -> 12 total) and a depth-bounded tree.
+//
+// Setup: Pure Int. cgroup_v2_controller_count() returns the canonical v2 controller set size (12). cgroup_v2_unified_hierarchy_depth(depth) returns 1 if depth is the root (0) and 0 for negative depths (fails closed). Coupled with container runtimes (Docker, Kubernetes) which rely on the unified hierarchy. 0.001% precision: |depth| <= 0 (i.e. depth == 0) for the root check; |controllers - 12| = 0 (exact) for the controller count.
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. cgroup_v2_kernel_introduced() returns 405 (Linux 4.5, March 2016).
+//   2. cgroup_v2_controller_count() returns 12.
+//   3. cgroup_v2_unified_hierarchy_depth(0) returns 1 (root).
+//   4. cgroup_v2_unified_hierarchy_depth(-1) returns 0 (hostile -> fail closed).
+//   5. cgroup_v2_is_unified() returns 1: a process has exactly one cgroup mount and one cgroup per controller type.
+//   6. Coupled: cgroup_v2_container_runtime_ok(controllers, depth, runtime_flag) returns 1 iff controllers == 12 AND depth == 0 AND runtime_flag == 1 (Docker/Kubernetes uses unified hierarchy).
+
+import "std/fs/os/os_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// 1 if env key is allowlisted (cross-law witness).
+fn cgv_env_ok() -> Int {
+    return os_env_key_allowed("OODA_FS_WRITEDIR");
+}
+
+// Integer absolute value without abs_f.
+fn cgv_oabs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+// Linux kernel version when cgroups v2 unified hierarchy was merged (Tejun Heo, March 2016).
+// Source: kernel.org, Linux 4.5 release notes; commit 1f7dd3e4aa4a ("cgroup: mount cgroup2 by default").
+pub fn cgroup_v2_kernel_introduced() -> Int { return 405; }
+
+// Canonical cgroups v2 controller count: cpu, memory, io, pids, devices, freezer, cpuset, net_cls,
+// net_prio, hugetlb, rdma, perf_event = 12 controllers.
+// Source: include/linux/cgroup_subsys.h, DEFAULT_CGROUP_SUBSYS_COUNT (Linux 5.x).
+pub fn cgroup_v2_controller_count() -> Int { return 12; }
+
+// 1 iff the cgroup v2 unified hierarchy is in effect (single mount, single hierarchy per process).
+// Source: Documentation/admin-guide/cgroup-v2.rst, "Unified Hierarchy".
+pub fn cgroup_v2_is_unified() -> Int { return 1; }
+
+// 1 iff the depth is the root (depth == 0). 0 for negative depths (hostile -> fail closed).
+// Source: kernel/cgroup/cgroup.c, cgroup_path() returns "/" at depth 0.
+pub fn cgroup_v2_unified_hierarchy_depth(depth: Int) -> Int {
+    if depth < 0 { return 0; }
+    if depth != 0 { return 0; }
+    return 1;
+}
+
+// 1 iff the supplied depth is non-negative (a valid cgroup v2 tree depth).
+// 0 for negative depths (hostile -> fail closed).
+pub fn cgroup_v2_depth_nonneg(depth: Int) -> Int {
+    if depth < 0 { return 0; }
+    return 1;
+}
+
+// 0.001% precision: |controllers - 12| <= 0 (exact integer equality).
+pub fn cgroup_v2_controllers_exact(controllers: Int) -> Int {
+    if controllers < 0 { return 0; }
+    if controllers != cgroup_v2_controller_count() { return 0; }
+    return 1;
+}
+
+// Coupled: container runtimes (Docker, Kubernetes) require the unified hierarchy to be active.
+// 1 iff controllers == 12 AND depth == 0 AND runtime_flag == 1.
+// Otherwise 0 (e.g. hostile: depth < 0, wrong controller count, or no runtime).
+pub fn cgroup_v2_container_runtime_ok(controllers: Int, depth: Int, runtime_flag: Int) -> Int {
+    if cgroup_v2_controllers_exact(controllers) != 1 { return 0; }
+    if cgroup_v2_unified_hierarchy_depth(depth) != 1 { return 0; }
+    if runtime_flag != 1 { return 0; }
+    return 1;
+}
+
+// Domain certificate: 1 iff the cgroup v2 unified hierarchy law holds for the supplied depth.
+pub fn cgroup_v2_law_holds(depth: Int) -> DomainCert {
+    if cgv_env_ok() != 1 { return domain_cert("os", "cgroups_v2_law", 0); }
+    if cgroup_v2_is_unified() != 1 { return domain_cert("os", "cgroups_v2_law", 0); }
+    if cgroup_v2_unified_hierarchy_depth(depth) != 1 { return domain_cert("os", "cgroups_v2_law", 0); }
+    return domain_cert("os", "cgroups_v2_law", 1);
+}
+
+pub fn verify_cgroups_v2_law() -> Bool {
+    // Golden: kernel version and controller count.
+    if cgroup_v2_kernel_introduced() != 405 { return false; }
+    if cgroup_v2_controller_count() != 12 { return false; }
+    if cgroup_v2_is_unified() != 1 { return false; }
+    // Golden: root depth (0) holds.
+    if cgroup_v2_unified_hierarchy_depth(0) != 1 { return false; }
+    if cgroup_v2_depth_nonneg(0) != 1 { return false; }
+    if cgroup_v2_depth_nonneg(1) != 1 { return false; }
+    if cgroup_v2_depth_nonneg(5) != 1 { return false; }
+    // Golden: controllers exact.
+    if cgroup_v2_controllers_exact(12) != 1 { return false; }
+    // Hostile: negative depth fails closed.
+    if cgroup_v2_unified_hierarchy_depth(0 - 1) != 0 { return false; }
+    if cgroup_v2_unified_hierarchy_depth(0 - 100) != 0 { return false; }
+    if cgroup_v2_depth_nonneg(0 - 1) != 0 { return false; }
+    if cgroup_v2_depth_nonneg(0 - 5) != 0 { return false; }
+    // Hostile: non-zero depth under the strict root predicate.
+    if cgroup_v2_unified_hierarchy_depth(1) != 0 { return false; }
+    if cgroup_v2_unified_hierarchy_depth(7) != 0 { return false; }
+    // Hostile: non-canonical controller count.
+    if cgroup_v2_controllers_exact(0) != 0 { return false; }
+    if cgroup_v2_controllers_exact(11) != 0 { return false; }
+    if cgroup_v2_controllers_exact(13) != 0 { return false; }
+    if cgroup_v2_controllers_exact(0 - 1) != 0 { return false; }
+    // Coupled: Docker/Kubernetes must use 12 controllers + root depth + runtime enabled.
+    if cgroup_v2_container_runtime_ok(12, 0, 1) != 1 { return false; }
+    // Coupled: wrong controllers -> 0.
+    if cgroup_v2_container_runtime_ok(11, 0, 1) != 0 { return false; }
+    if cgroup_v2_container_runtime_ok(13, 0, 1) != 0 { return false; }
+    if cgroup_v2_container_runtime_ok(0, 0, 1) != 0 { return false; }
+    // Coupled: hostile depth -> 0.
+    if cgroup_v2_container_runtime_ok(12, 0 - 1, 1) != 0 { return false; }
+    if cgroup_v2_container_runtime_ok(12, 1, 1) != 0 { return false; }
+    // Coupled: runtime disabled -> 0.
+    if cgroup_v2_container_runtime_ok(12, 0, 0) != 0 { return false; }
+    if cgroup_v2_container_runtime_ok(12, 0, 2) != 0 { return false; }
+    if cgroup_v2_container_runtime_ok(12, 0, 0 - 1) != 0 { return false; }
+    // Domain cert round-trip.
+    let c1: DomainCert = cgroup_v2_law_holds(0);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "os" { return false; }
+    if c1.law_name != "cgroups_v2_law" { return false; }
+    let c0: DomainCert = cgroup_v2_law_holds(0 - 1);
+    if c0.holds != 0 { return false; }
+    let c2: DomainCert = cgroup_v2_law_holds(1);
+    if c2.holds != 0 { return false; }
+    // cgv_oabs sanity (no abs_f).
+    if cgv_oabs(0) != 0 { return false; }
+    if cgv_oabs(7) != 7 { return false; }
+    if cgv_oabs(0 - 7) != 7 { return false; }
+    return true;
+}

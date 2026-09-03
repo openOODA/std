@@ -1,0 +1,86 @@
+// # Amdahl speedup bound (Int-only)
+//
+// Logline: Maximum parallel speedup for parallel_fraction (0 to 100, percent) on n_processors is 1000000 * n / ((100-p)*n + p); bounded above by 10000 / (100-p) as n -> infinity.
+//
+// Setup: Pure Int. parallel_fraction in [0, 100]. n_processors >= 1. Speedup is returned as a fixed-point integer scaled by 10000 (so 10000 = 1.0x, 13333 = 1.3333x). Out-of-range inputs return Err. p=0 is Ok(10000).
+//
+// Beats:
+//   1. amdahls_speedup returns 1000000 * n / ((100-p)*n + p) for the standard form.
+//   2. amdahls_max_speedup returns 10000 / (100-p) as n -> infinity (scaled by 100).
+//   3. Hostile parallel_fraction outside [0, 100] or n < 1 returns Err.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn amd_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn amdahls_speedup(parallel_fraction: Int, n_processors: Int) -> Result[Int, String] {
+    if parallel_fraction < 0 { return Err("ERR\tamdahl\tp"); }
+    if parallel_fraction > 100 { return Err("ERR\tamdahl\tp"); }
+    if n_processors < 1 { return Err("ERR\tamdahl\tn"); }
+    let serial_pct: Int = 100 - parallel_fraction;
+    let denom: Int = serial_pct * n_processors + parallel_fraction;
+    if denom <= 0 { return Err("ERR\tamdahl\tdenom"); }
+    return Ok(1000000 * n_processors / denom);
+}
+
+// As n -> infinity, parallel_part -> 0, so S -> 100 / (100 - p) at fixed-point scale.
+// p = 100 gives infinite S and is rejected (fail closed).
+pub fn amdahls_max_speedup(parallel_fraction: Int) -> Result[Int, String] {
+    if parallel_fraction < 0 { return Err("ERR\tamdahl\tp"); }
+    if parallel_fraction >= 100 { return Err("ERR\tamdahl\tp"); }
+    let serial_pct: Int = 100 - parallel_fraction;
+    if serial_pct <= 0 { return Err("ERR\tamdahl\tp"); }
+    return Ok(10000 / serial_pct);
+}
+
+pub fn verify_amdahls_law_principle() -> Bool {
+    // Golden: p=0 (no parallel) gives speedup 1.0 on any n -> Ok(10000), not dummy 0.
+    let s0: Result[Int, String] = amdahls_speedup(0, 8);
+    if s0.is_ok() == false { return false; }
+    if amd_got(s0) != 10000 { return false; }
+    // Golden: p=100 (fully parallel) gives speedup = n -> n*10000.
+    if amd_got(amdahls_speedup(100, 4)) != 40000 { return false; }
+    // Golden: p=50, n=2 -> S = 1000000*2 / (50*2 + 50) = 2000000/150 = 13333.
+    if amd_got(amdahls_speedup(50, 2)) != 13333 { return false; }
+    // Golden: p=50, n=4 -> S = 1000000*4 / (50*4 + 50) = 4000000/250 = 16000.
+    if amd_got(amdahls_speedup(50, 4)) != 16000 { return false; }
+    // Golden: p=90, n=1000 -> S = 1000000*1000 / (10*1000 + 90) = 1000000000/10090 = 99108.
+    let s_large_r: Result[Int, String] = amdahls_speedup(90, 1000);
+    if s_large_r.is_ok() == false { return false; }
+    let s_large: Int = amd_got(s_large_r);
+    if s_large < 99000 { return false; }
+    if s_large > 99200 { return false; }
+    // Golden: speedup is monotonically non-decreasing in n for fixed p.
+    let s_ar: Result[Int, String] = amdahls_speedup(75, 4);
+    if s_ar.is_ok() == false { return false; }
+    let s_br: Result[Int, String] = amdahls_speedup(75, 16);
+    if s_br.is_ok() == false { return false; }
+    if amd_got(s_br) < amd_got(s_ar) { return false; }
+    // Hostile: p < 0 fails closed.
+    if amdahls_speedup(0 - 1, 4).is_ok() { return false; }
+    // Hostile: p > 100 fails closed.
+    if amdahls_speedup(101, 4).is_ok() { return false; }
+    // Hostile: n = 0 fails closed.
+    if amdahls_speedup(50, 0).is_ok() { return false; }
+    // Hostile: n < 0 fails closed.
+    if amdahls_speedup(50, 0 - 1).is_ok() { return false; }
+    // Golden: max speedup at p=50 is 2.0 -> 200.
+    if amd_got(amdahls_max_speedup(50)) != 200 { return false; }
+    // Golden: max speedup at p=90 is 10.0 -> 1000.
+    if amd_got(amdahls_max_speedup(90)) != 1000 { return false; }
+    // Golden: max speedup at p=99 is 100.0 -> 10000.
+    if amd_got(amdahls_max_speedup(99)) != 10000 { return false; }
+    // Hostile: p = 100 fails closed (infinite S).
+    if amdahls_max_speedup(100).is_ok() { return false; }
+    // Hostile: p < 0 returns Err.
+    if amdahls_max_speedup(0 - 1).is_ok() { return false; }
+    // Hostile: p > 100 returns Err.
+    if amdahls_max_speedup(101).is_ok() { return false; }
+    let c1: DomainCert = domain_cert("principles", "amdahls_law", 1);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "principles" { return false; }
+    if c1.law_name != "amdahls_law" { return false; }
+    return true;
+}

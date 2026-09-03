@@ -1,0 +1,256 @@
+// # Deterministic Finite Automata Core
+//
+// Logline: Construct, mutate, simulate, combine, and minimize deterministic finite automata over a user-defined alphabet stored in a row-major transition table.
+//
+// Setup: Pure integer-indexed DFA model. State indices 0..n_states-1. Alphabet symbols are single characters stored in order; alphabet[i] is the symbol with index i. Transitions live in a flat List[Int] of size n_states * n_symbols; a value of -1 marks an undefined transition (sentinel).
+//
+// Beats:
+//   1. dfa_new allocates an empty DFA with all transitions set to -1 and start = 0.
+//   2. dfa_set_transition / dfa_set_accept / dfa_set_start mutate one cell each via struct copy.
+//   3. dfa_simulate runs the DFA on an input string; rejects on missing symbol or undefined transition.
+//   4. dfa_is_deterministic and dfa_is_total are equivalent predicates over the transition table.
+//   5. dfa_complement swaps accept and non-accept; dfa_intersect is the product construction.
+//   6. dfa_is_empty_language is true when BFS from start finds no accepting reachable state.
+//   7. dfa_minimized_states counts Myhill-Nerode equivalence classes via signature-based partition refinement on the reachable subgraph.
+//
+// residual: No epsilon transitions, no NFA, no DFA-to-regex, no Mealy/Moore machines; minimization runs only on the reachable subgraph.
+
+type DFA = struct {
+    states: List[Int],
+    n_states: Int,
+    n_symbols: Int,
+    alphabet: String,
+    trans: List[Int],
+    accept: List[Int],
+    start: Int
+};
+
+fn dfa_acc_has(d: DFA, s: Int) -> Bool {
+    let n: Int = list_len(d.accept);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(d.accept, i) == s { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn dfa_reachable(d: DFA) -> List[Int] {
+    let n: Int = d.n_states;
+    let nsym: Int = d.n_symbols;
+    let mut out: List[Int] = list_new();
+    if n <= 0 { return out; }
+    let start: Int = d.start;
+    if start < 0 { return out; }
+    if start >= n { return out; }
+    let mut q: List[Int] = list_new();
+    out = list_push(out, start);
+    q = list_push(q, start);
+    let mut qh: Int = 0;
+    while qh < list_len(q) {
+        let cur: Int = list_get(q, qh);
+        let mut j: Int = 0;
+        while j < nsym {
+            let t: Int = list_get(d.trans, (cur * nsym) + j);
+            if t >= 0 {
+                if t < n {
+                    let mut seen: Bool = false;
+                    let nv: Int = list_len(out);
+                    let mut k: Int = 0;
+                    while k < nv { if list_get(out, k) == t { seen = true; } k = k + 1; }
+                    if seen == false { out = list_push(out, t); q = list_push(q, t); }
+                }
+            }
+            j = j + 1;
+        }
+        qh = qh + 1;
+    }
+    return out;
+}
+
+pub fn dfa_new(n_states: Int, n_symbols: Int, alphabet: String) -> DFA {
+    let mut states: List[Int] = list_new();
+    let mut trans: List[Int] = list_new();
+    let total: Int = n_states * n_symbols;
+    let mut i: Int = 0;
+    while i < n_states { states = list_push(states, i); i = i + 1; }
+    i = 0;
+    while i < total { trans = list_push(trans, 0 - 1); i = i + 1; }
+    if n_states <= 0 { states = list_new(); trans = list_new(); }
+    return DFA { states: states, n_states: n_states, n_symbols: n_symbols, alphabet: alphabet, trans: trans, accept: list_new(), start: 0 };
+}
+
+pub fn dfa_set_transition(d: DFA, from_state: Int, sym_idx: Int, to_state: Int) -> DFA {
+    if from_state < 0 { return d; }
+    if from_state >= d.n_states { return d; }
+    if sym_idx < 0 { return d; }
+    if sym_idx >= d.n_symbols { return d; }
+    if to_state < 0 { return d; }
+    if to_state >= d.n_states { return d; }
+    return DFA { states: d.states, n_states: d.n_states, n_symbols: d.n_symbols, alphabet: d.alphabet, trans: list_set(d.trans, (from_state * d.n_symbols) + sym_idx, to_state), accept: d.accept, start: d.start };
+}
+
+pub fn dfa_set_accept(d: DFA, state: Int) -> DFA {
+    if state < 0 { return d; }
+    if state < 0 { return d; }
+    if state >= d.n_states { return d; }
+    if dfa_acc_has(d, state) { return d; }
+    return DFA { states: d.states, n_states: d.n_states, n_symbols: d.n_symbols, alphabet: d.alphabet, trans: d.trans, accept: list_push(d.accept, state), start: d.start };
+}
+pub fn dfa_set_start(d: DFA, state: Int) -> DFA {
+    if state < 0 { return d; }
+    if state >= d.n_states { return d; }
+    return DFA { states: d.states, n_states: d.n_states, n_symbols: d.n_symbols, alphabet: d.alphabet, trans: d.trans, accept: d.accept, start: state };
+}
+pub fn dfa_simulate(d: DFA, input: String) -> Bool {
+    let mut state: Int = d.start;
+    let len: Int = input.len();
+    let nsym: Int = d.n_symbols;
+    let mut i: Int = 0;
+    while i < len {
+        let mut s: Int = 0 - 1;
+        let mut j: Int = 0;
+        while j < nsym {
+            if char_at(d.alphabet, j) == char_at(input, i) { s = j; }
+            j = j + 1;
+        }
+        if s < 0 { return false; }
+        let next: Int = list_get(d.trans, (state * nsym) + s);
+        if next < 0 { return false; }
+        state = next;
+        i = i + 1;
+    }
+    return dfa_acc_has(d, state);
+}
+
+pub fn dfa_is_deterministic(d: DFA) -> Bool {
+    return dfa_is_total(d);
+}
+pub fn dfa_n_states(d: DFA) -> Int {
+    return d.n_states;
+}
+pub fn dfa_is_total(d: DFA) -> Bool {
+    let total: Int = d.n_states * d.n_symbols;
+    let mut i: Int = 0;
+    while i < total {
+        if list_get(d.trans, i) < 0 { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn dfa_complement(d: DFA) -> DFA {
+    let mut new_acc: List[Int] = list_new();
+    let mut s: Int = 0;
+    while s < d.n_states {
+        if dfa_acc_has(d, s) == false { new_acc = list_push(new_acc, s); }
+        s = s + 1;
+    }
+    return DFA { states: d.states, n_states: d.n_states, n_symbols: d.n_symbols, alphabet: d.alphabet, trans: d.trans, accept: new_acc, start: d.start };
+}
+
+pub fn dfa_intersect(d1: DFA, d2: DFA) -> DFA {
+    let n1: Int = d1.n_states;
+    let n2: Int = d2.n_states;
+    let nsym: Int = d1.n_symbols;
+    let new_n: Int = n1 * n2;
+    let mut new_states: List[Int] = list_new();
+    let mut new_trans: List[Int] = list_new();
+    let mut new_acc: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < new_n { new_states = list_push(new_states, i); i = i + 1; }
+    i = 0;
+    while i < new_n {
+        let s1: Int = i / n2;
+        let s2: Int = i - (s1 * n2);
+        let mut j: Int = 0;
+        while j < nsym {
+            let t1: Int = list_get(d1.trans, (s1 * nsym) + j);
+            let t2: Int = list_get(d2.trans, (s2 * nsym) + j);
+            let cell: Int = if t1 >= 0 { if t2 >= 0 { (t1 * n2) + t2 } else { 0 - 1 } } else { 0 - 1 };
+            new_trans = list_push(new_trans, cell);
+            j = j + 1;
+        }
+        if dfa_acc_has(d1, s1) { if dfa_acc_has(d2, s2) { new_acc = list_push(new_acc, i); } }
+        i = i + 1;
+    }
+    return DFA { states: new_states, n_states: new_n, n_symbols: nsym, alphabet: d1.alphabet, trans: new_trans, accept: new_acc, start: (d1.start * n2) + d2.start };
+}
+
+pub fn dfa_is_empty_language(d: DFA) -> Bool {
+    let reachable: List[Int] = dfa_reachable(d);
+    let nr: Int = list_len(reachable);
+    let mut i: Int = 0;
+    while i < nr {
+        if dfa_acc_has(d, list_get(reachable, i)) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn dfa_minimized_states(d: DFA) -> Int {
+    let n: Int = d.n_states;
+    if n <= 0 { return 0; }
+    let nsym: Int = d.n_symbols;
+    let reachable: List[Int] = dfa_reachable(d);
+    let nr: Int = list_len(reachable);
+    if nr <= 0 { return 0; }
+    let mut cls: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n { cls = list_push(cls, 0 - 1); i = i + 1; }
+    let mut i2: Int = 0;
+    while i2 < nr {
+        let s: Int = list_get(reachable, i2);
+        if dfa_acc_has(d, s) { cls = list_set(cls, s, 1); } else { cls = list_set(cls, s, 0); }
+        i2 = i2 + 1;
+    }
+    // Refinement: split any state whose transition-class signature differs from an earlier sibling in its current class.
+    let mut changed: Bool = true;
+    while changed {
+        changed = false;
+        let mut s_idx: Int = 0;
+        while s_idx < nr {
+            let s: Int = list_get(reachable, s_idx);
+            let s_cls: Int = list_get(cls, s);
+            let mut split: Bool = false;
+            let mut k_idx: Int = 0;
+            while k_idx < s_idx {
+                let other: Int = list_get(reachable, k_idx);
+                if list_get(cls, other) == s_cls {
+                    let mut same: Bool = true;
+                    let mut m: Int = 0;
+                    while m < nsym {
+                        let t1: Int = list_get(d.trans, (s * nsym) + m);
+                        let t2: Int = list_get(d.trans, (other * nsym) + m);
+                        let c1: Int = if t1 < 0 { 0 - 2 } else { let x: Int = list_get(cls, t1); if x < 0 { 0 - 2 } else { x } };
+                        let c2: Int = if t2 < 0 { 0 - 2 } else { let x: Int = list_get(cls, t2); if x < 0 { 0 - 2 } else { x } };
+                        if c1 != c2 { same = false; }
+                        m = m + 1;
+                    }
+                    if same == false { split = true; }
+                }
+                k_idx = k_idx + 1;
+            }
+            if split {
+                let mut max_cls: Int = 0;
+                let mut ci: Int = 0;
+                while ci < n { let cv: Int = list_get(cls, ci); if cv > max_cls { max_cls = cv; } ci = ci + 1; }
+                cls = list_set(cls, s, max_cls + 1);
+                changed = true;
+            }
+            s_idx = s_idx + 1;
+        }
+    }
+    let mut seen: List[Int] = list_new();
+    let mut ri: Int = 0;
+    while ri < nr {
+        let c: Int = list_get(cls, list_get(reachable, ri));
+        let mut already: Bool = false;
+        let ns_: Int = list_len(seen);
+        let mut sci: Int = 0;
+        while sci < ns_ { if list_get(seen, sci) == c { already = true; } sci = sci + 1; }
+        if already == false { seen = list_push(seen, c); }
+        ri = ri + 1;
+    }
+    return list_len(seen);
+}

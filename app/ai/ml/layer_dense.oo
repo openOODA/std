@@ -1,0 +1,157 @@
+// # AI/ML Dense Fully-Connected Layer
+//
+// Logline: Implements linear transformation layers with forward affine mapping, bias addition, and backward gradient computation.
+//
+// Setup: Imports tensor_types.oo and tensor_ops.oo for matrix operations.
+//
+// Beats:
+//   1. Construct DenseLayer structures with configurable in/out features and bias options.
+//   2. Compute forward linear mapping Y = XW + b for batch matrices.
+//   3. Compute backward parameter gradients (dW, db) and propagated input gradients (dX).
+
+import "tensor_types.oo";
+import "tensor_ops.oo";
+
+
+// -------------------------------------------------------------------
+// Dense Layer Data Structure
+// -------------------------------------------------------------------
+
+type DenseLayer = struct {
+    in_features: Int,
+    out_features: Int,
+    has_bias: Bool,
+    weights: Tensor2D,
+    bias: Tensor1D,
+    grad_weights: Tensor2D,
+    grad_bias: Tensor1D
+};
+
+pub fn dense_layer_new(in_f: Int, out_f: Int, use_bias: Bool) -> DenseLayer {
+    let total_w: Int = in_f * out_f;    let mut w_data: List[Float] = list_new();
+    let mut gw_data: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < total_w {
+        w_data = list_push(w_data, 0.0);
+        gw_data = list_push(gw_data, 0.0);
+        i = i + 1;
+    }
+
+    let mut b_data: List[Float] = list_new();
+    let mut gb_data: List[Float] = list_new();
+    let mut j: Int = 0;
+    while j < out_f {
+        b_data = list_push(b_data, 0.0);
+        gb_data = list_push(gb_data, 0.0);
+        j = j + 1;
+    }
+
+    return DenseLayer {
+        in_features: in_f,
+        out_features: out_f,
+        has_bias: use_bias,
+        weights: Tensor2D { data: w_data, rows: in_f, cols: out_f },
+        bias: Tensor1D { data: b_data, size: out_f },
+        grad_weights: Tensor2D { data: gw_data, rows: in_f, cols: out_f },
+        grad_bias: Tensor1D { data: gb_data, size: out_f }
+    };
+}
+
+// -------------------------------------------------------------------
+// Forward Pass: Y = X * W + b
+// -------------------------------------------------------------------
+
+pub fn dense_forward(layer: DenseLayer, input_x: Tensor2D) -> Tensor2D {
+    let y: Tensor2D = tensor_2d_matmul(input_x, layer.weights);
+    if layer.has_bias {
+        return tensor_2d_add_bias(y, layer.bias);
+    }
+    return y;
+}
+
+// -------------------------------------------------------------------
+// Backward Pass: dX = dY * W^T, dW = X^T * dY, db = sum(dY, axis=0)
+// -------------------------------------------------------------------
+
+pub fn dense_backward_input(layer: DenseLayer, grad_out: Tensor2D) -> Tensor2D {
+    let w_t: Tensor2D = tensor_2d_transpose(layer.weights);
+    return tensor_2d_matmul(grad_out, w_t);
+}
+
+pub fn dense_backward_weights(input_x: Tensor2D, grad_out: Tensor2D) -> Tensor2D {
+    let x_t: Tensor2D = tensor_2d_transpose(input_x);
+    return tensor_2d_matmul(x_t, grad_out);
+}
+
+pub fn dense_backward_bias(grad_out: Tensor2D) -> Tensor1D {
+    let grad_out_data_list: List[Float] = grad_out.data;
+    let r: Int = grad_out.rows;
+    let c: Int = grad_out.cols;
+    let mut out: List[Float] = list_new();
+    let mut j: Int = 0;
+    while j < c {
+        let mut acc: Float = 0.0;
+        let mut i: Int = 0;
+        while i < r {
+            let val: Float = list_get(grad_out_data_list, (i * c) + j);
+            acc = acc + val;
+            i = i + 1;
+        }
+        out = list_push(out, acc);
+        j = j + 1;
+    }
+    return Tensor1D { data: out, size: c };
+}
+
+pub fn dense_step(layer: DenseLayer, lr: Float) -> DenseLayer {
+    let w_tensor: Tensor2D = layer.weights;
+    let gw_tensor: Tensor2D = layer.grad_weights;
+    let w_tensor_data_list: List[Float] = w_tensor.data;
+    let gw_tensor_data_list: List[Float] = gw_tensor.data;
+    let total_w: Int = w_tensor.rows * w_tensor.cols;
+    let mut new_w: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < total_w {
+        let w: Float = list_get(w_tensor_data_list, i);
+        let gw: Float = list_get(gw_tensor_data_list, i);
+        new_w = list_push(new_w, w - (lr * gw));
+        i = i + 1;
+    }
+    let updated_w: Tensor2D = Tensor2D {
+        data: new_w,
+        rows: w_tensor.rows,
+        cols: w_tensor.cols
+    };
+
+    let mut updated_b: Tensor1D = layer.bias;
+    if layer.has_bias {
+        let b_tensor: Tensor1D = layer.bias;
+        let gb_tensor: Tensor1D = layer.grad_bias;
+        let b_tensor_data_list: List[Float] = b_tensor.data;
+        let gb_tensor_data_list: List[Float] = gb_tensor.data;
+        let n_b: Int = b_tensor.size;
+        let mut new_b: List[Float] = list_new();
+        let mut j: Int = 0;
+        while j < n_b {
+            let b: Float = list_get(b_tensor_data_list, j);
+            let gb: Float = list_get(gb_tensor_data_list, j);
+            new_b = list_push(new_b, b - (lr * gb));
+            j = j + 1;
+        }
+        updated_b = Tensor1D { data: new_b, size: n_b };
+    }
+
+    return DenseLayer {
+        in_features: layer.in_features,
+        out_features: layer.out_features,
+        has_bias: layer.has_bias,
+        weights: updated_w,
+        bias: updated_b,
+        grad_weights: layer.grad_weights,
+        grad_bias: layer.grad_bias
+    };
+}
+
+pub fn layer_dense_marker() -> Int {
+    return 1;
+}

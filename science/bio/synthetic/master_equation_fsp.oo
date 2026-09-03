@@ -1,0 +1,131 @@
+// # Chemical Master Equation Finite State Projection (FSP)
+//
+// Logline: Computes exact discrete probability distributions for low copy-number gene expression using state truncation.
+//
+// Setup: Direct numerical solution of the continuous-time Markovian Chemical Master Equation dP/dt = A * P over a bounded state space.
+//
+// Beats:
+//   1. Define FspStateSpace, FspParameters, and ProbabilityDistribution data structures.
+//   2. Construct tridiagonal infinitesimal transition generator matrix A for birth-death transcription.
+//   3. Advance probability vector via explicit Euler / matrix exponential stepping and assess total projection error.
+
+type FspParameters = struct {
+    max_copy_number: Int,
+    k_birth: Float,
+    d_death: Float,
+    time_step_dt: Float
+};
+
+type ProbabilityDistribution = struct {
+    probabilities: List[Float],
+    mean_copies: Float,
+    variance: Float,
+    fano_factor: Float,
+    total_retained_probability: Float
+};
+
+pub fn fsp_init_distribution(size: Int, initial_state: Int) -> List[Float] {
+    let mut dist: List[Float] = list_new();
+    let mut i: Int = 0;    while i < size {
+        let mut p_val: Float = 0.0;
+
+        if i == initial_state {
+
+            p_val = 1.0;
+
+        }        dist = list_push(dist, p_val);
+        i = i + 1;
+    }
+    return dist;
+}
+
+pub fn fsp_euler_step(
+    p_vec: List[Float],
+    params: FspParameters,
+) -> List[Float] {
+    let n: Int = params.max_copy_number;    let dt: Int = params.time_step_dt;    let k_b: Int = params.k_birth;    let d_d: Int = params.d_death;
+    let mut next_p: List[Float] = list_new();
+    let mut i: Int = 0;    while i < n {
+        let p_cur: Int = list_get(p_vec, i);        let mut p_prev: Float = 0.0;
+        if i > 0 {
+            p_prev = list_get(p_vec, i - 1);
+        }
+        let mut p_next: Float = 0.0;
+
+        if i + 1 < n {
+
+            p_next = list_get(p_vec, i + 1);
+
+        }
+
+        // dP_i/dt = k_b * P_{i-1} + (i+1)*d_d * P_{i+1} - (k_b + i*d_d) * P_i
+        let flux_in: Int = (k_b * p_prev) + (((i + master_equation_fsp_to_f(1))) * d_d * p_next);        let flux_out: Int = (k_b + master_equation_fsp_to_f((i) * d_d)) * p_cur;
+        let dp_dt: Int = flux_in - flux_out;        let p_new: Int = p_cur + (dp_dt * dt);        next_p = list_push(next_p, if p_new < 0.0 { 0.0 } else { p_new });
+
+        i = i + 1;
+    }
+    return next_p;
+}
+
+pub fn fsp_compute_moments(p_vec: List[Float]) -> ProbabilityDistribution {
+    let n: Int = list_len(p_vec);    let mut total_p: Float = 0.0;
+    let mut mean_val: Float = 0.0;
+    let mut mean_sq: Float = 0.0;
+
+    let mut i: Int = 0;    while i < n {
+        let p: Int = list_get(p_vec, i);        let ifl = master_equation_fsp_to_f(i);
+        total_p = total_p + p;
+        mean_val = mean_val + (ifl * p);
+        mean_sq = mean_sq + (ifl * ifl * p);
+        i = i + 1;
+    }
+
+    let variance_val: Float = mean_sq - (mean_val * mean_val);    let mut fano: Float = 1.0;
+
+    if mean_val > 0.0001 {
+
+        fano = variance_val / mean_val;
+
+    }
+
+    return ProbabilityDistribution {
+        probabilities: p_vec,
+        mean_copies: mean_val,
+        variance: variance_val,
+        fano_factor: fano,
+        total_retained_probability: total_p
+    };
+}
+
+
+fn master_equation_fsp_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

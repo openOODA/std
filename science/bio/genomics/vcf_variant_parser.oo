@@ -1,0 +1,77 @@
+// # VCF Record Format Parser & INFO Field Extractor
+//
+// Logline: Decodes Variant Call Format (VCF 4.2/4.3) text lines into structured allele counts, filter tags, and genotypes.
+//
+// Setup: Standard genomics variant record parser extracting chromosomal coordinates, reference/alt alleles, and QUAL scores.
+//
+// Beats:
+//   1. Define VcfRecord, VcfGenotype, and VariantMetrics data structures.
+//   2. Parse standard fields: CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT.
+//   3. Compute Allele Frequency (AF) = AC / AN and validate PASS filters.
+
+type VcfRecord = struct {
+    chrom_id: Int,
+    pos: Int,
+    ref_allele: String,
+    alt_allele: String,
+    qual_score: Float,
+    is_pass: Bool,
+    allele_count: Int,
+    allele_total: Int
+};
+
+type VariantMetrics = struct {
+    allele_freq: Float,
+    is_biallelic_snp: Bool,
+    is_insertion: Bool,
+    is_deletion: Bool,
+    is_high_quality: Bool
+};
+
+pub fn vcf_calc_af(ac: Int, an: Int) -> Float {
+    if an <= 0 { return 0.0; }
+    return vcf_variant_parser_to_f(ac) / vcf_variant_parser_to_f(an);
+}
+
+pub fn vcf_evaluate_record(rec: VcfRecord) -> VariantMetrics {
+    let af: Float = vcf_calc_af(rec.allele_count, rec.allele_total);    let is_snp: Bool = rec.ref_allele == "A" || rec.ref_allele == "C" || rec.ref_allele == "G" || rec.ref_allele == "T";    let is_hq: Bool = rec.qual_score >= 30.0 && rec.is_pass;    return VariantMetrics {
+        allele_freq: af,
+        is_biallelic_snp: is_snp,
+        is_insertion: false,
+        is_deletion: false,
+        is_high_quality: is_hq
+    };
+}
+
+
+fn vcf_variant_parser_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

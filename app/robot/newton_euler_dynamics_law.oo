@@ -1,0 +1,56 @@
+// # Newton-Euler rigid-body dynamics law
+//
+// Logline: Linear force F = m * a and rotational torque tau = I * alpha. Non-positive mass or inertia fail closed to Err.
+//
+// Setup: Pure Float. Mass, acceleration, inertia, and angular acceleration are caller-supplied; the law is unit-agnostic. Zero accel is Ok(0).
+//
+// Beats:
+//   1. F = m * a when m > 0.
+//   2. tau = I * alpha when I > 0.
+//   3. Hostile non-positive mass or inertia returns Err.
+
+fn ne_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn ne_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn newton_force(mass: Float, accel: Float) -> Result[Float, String] {
+    if mass <= 0.0 { return Err("ERR\tne\tmass"); }
+    return Ok(mass * accel);
+}
+
+pub fn euler_torque(inertia: Float, ang_accel: Float) -> Result[Float, String] {
+    if inertia <= 0.0 { return Err("ERR\tne\tinertia"); }
+    return Ok(inertia * ang_accel);
+}
+
+pub fn verify_newton_euler_dynamics_law() -> Bool {
+    let tol: Float = 0.0000001;
+
+    // F = m * a: 2.0 kg * 9.81 m/s^2 = 19.62 N.
+    if ne_abs(ne_got(newton_force(2.0, 9.81)) - 19.62) > tol { return false; }
+
+    // tau = I * alpha: 0.5 kg m^2 * 4.0 rad/s^2 = 2.0 N m.
+    if ne_abs(ne_got(euler_torque(0.5, 4.0)) - 2.0) > tol { return false; }
+
+    // Zero acceleration yields zero force.
+    if ne_got(newton_force(10.0, 0.0)) != 0.0 { return false; }
+
+    // Negative acceleration yields negative (deceleration) force; sign preserved.
+    if ne_abs(ne_got(newton_force(1500.0, 0.0 - 8.0)) - (0.0 - 12000.0)) > tol { return false; }
+
+    // Round-trip identity: doubling mass doubles force at fixed acceleration.
+    let f_lo: Float = ne_got(newton_force(1.0, 5.0));
+    let f_hi: Float = ne_got(newton_force(2.0, 5.0));
+    if ne_abs(f_hi - (2.0 * f_lo)) > tol { return false; }
+
+    if newton_force(0.0, 9.81).is_ok() { return false; }
+    if newton_force(0.0 - 1.0, 9.81).is_ok() { return false; }
+    if euler_torque(0.0, 4.0).is_ok() { return false; }
+    if euler_torque(0.0 - 0.5, 4.0).is_ok() { return false; }
+    return true;
+}

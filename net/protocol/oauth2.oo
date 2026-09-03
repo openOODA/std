@@ -1,0 +1,35 @@
+// # RFC 7636 OAuth2 PKCE Verifier & Challenge Flow (Fail-Closed)
+//
+// Logline: Fail-closed residual for RFC 7636 PKCE. The previous implementation used FNV-1a mod 1e9+7 as a stand-in for SHA-256, which is not SHA-256 and not interoperable with any RFC 7636 server. A server using it would accept any verifier that hashes through the same broken function while rejecting valid PKCE challenges from real clients.
+//
+// Setup: This module refuses to issue or verify PKCE challenges until a real SHA-256 + Base64URL pipeline is available in the IR. Callers must integrate a vetted crypto library.
+//
+// Beats:
+//   1. pkce_hash_s256: refuses (empty string).
+//   2. oauth2_generate_challenge: refuses (empty string).
+//   3. oauth2_verify_challenge: refuses (Err).
+
+type PkceChallenge = struct {
+    verifier: String,
+    challenge: String,
+    method: String
+};
+
+/// Compute SHA-256 code challenge. Fail-closed: returns "" until a real
+/// SHA-256 + Base64URL pipeline lands. The previous "FNV-1a mod 1e9+7"
+/// was not SHA-256 and not RFC 7636 interoperable.
+pub fn pkce_hash_s256(verifier: String) -> String {
+    return "";
+}
+
+/// Generate code challenge from code verifier. Fail-closed alias.
+pub fn oauth2_generate_challenge(verifier: String) -> String {
+    return "";
+}
+
+/// Verify PKCE challenge against supplied verifier. Fail-closed: refuses
+/// unconditionally because the expected challenge cannot be honestly
+/// computed without a real SHA-256 + Base64URL chain.
+pub fn oauth2_verify_challenge(verifier: String, challenge: String) -> Result[Bool, String] {
+    return Err("ERR\tpkce_verify: PKCE S256 unavailable; SHA-256 + Base64URL not in IR");
+}

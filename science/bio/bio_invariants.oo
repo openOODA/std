@@ -1,0 +1,34 @@
+// # Biology codon-string product invariants
+//
+// Logline: A codon string is non-empty and a multiple of three bases.
+//
+// Setup: Pure String length checks. DomainCert is local because std/core/domain_cert.oo is absent.
+//
+// Beats:
+//   1. bio_codon_ok("") returns 0.
+//   2. Length not a multiple of 3 returns 0.
+//   3. bio_codon_ok("ATG") returns 1.
+
+import "std/core/primitives/domain_cert.oo";
+// Empty sequence is not a valid codon string; length must be a multiple of 3.
+pub fn bio_codon_ok(seq: String) -> Int {
+    if seq == "" {
+        return 0;
+    }
+    let n: Int = seq.len();
+    if n <= 0 {
+        return 0;
+    }
+    if (n % 3) != 0 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn bio_codon_cert(seq: String) -> DomainCert {
+    return DomainCert {
+        domain: "bio",
+        law_name: "codon_triple",
+        holds: bio_codon_ok(seq)
+    };
+}

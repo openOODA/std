@@ -1,0 +1,153 @@
+// # Semaphore starvation principle
+//
+// Logline: A FIFO semaphore guarantees that every waiting thread is served in arrival order (no starvation); a non-FIFO semaphore can starve a thread indefinitely when one hot thread keeps re-acquiring.
+//
+// Setup: Pure Int arithmetic on a FairnessScore record derived from per-thread wait counts. No FS, net, env, or thread.
+//
+// Beats:
+//   1. sem_fairness_score returns 1 when all threads are served within one order of arrival.
+//   2. sem_fairness_score returns 0 when a thread is served 0 times while others are served.
+//   3. A perfectly balanced schedule is fair (1).
+//   4. A schedule that starves one thread is unfair (0).
+
+import "std/core/primitives/domain_cert.oo";
+
+type FairnessScore = struct {
+    score: Int,
+    min_served: Int,
+    max_served: Int,
+    total_served: Int
+};
+
+pub fn fairness_score_new() -> FairnessScore {
+    return FairnessScore {
+        score: 1,
+        min_served: 0,
+        max_served: 0,
+        total_served: 0
+    };
+}
+
+fn fs_min(a: Int, b: Int) -> Int {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+fn fs_max(a: Int, b: Int) -> Int {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+pub fn sem_fairness_score(wait_counts: List[Int]) -> FairnessScore {
+    let n: Int = list_len(wait_counts);
+    if n == 0 {
+        return FairnessScore {
+            score: 1,
+            min_served: 0,
+            max_served: 0,
+            total_served: 0
+        };
+    }
+    let mut mn: Int = list_get(wait_counts, 0);
+    let mut mx: Int = list_get(wait_counts, 0);
+    let mut tot: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(wait_counts, i);
+        mn = fs_min(mn, v);
+        mx = fs_max(mx, v);
+        tot = tot + v;
+        i = i + 1;
+    }
+    let mut s: Int = 1;
+    if mn == 0 {
+        if mx > 0 {
+            s = 0;
+        }
+    }
+    return FairnessScore {
+        score: s,
+        min_served: mn,
+        max_served: mx,
+        total_served: tot
+    };
+}
+
+pub fn sem_fairness_holds(fs: FairnessScore) -> DomainCert {
+    if fs.score == 1 {
+        return domain_cert("sync", "sem_fairness", 1);
+    }
+    return domain_cert("sync", "sem_fairness", 0);
+}
+
+pub fn sem_balanced_is_fair_holds() -> DomainCert {
+    let ws: List[Int] = list_new();
+    let w1: List[Int] = list_push(ws, 5);
+    let w2: List[Int] = list_push(w1, 5);
+    let w3: List[Int] = list_push(w2, 5);
+    return sem_fairness_holds(sem_fairness_score(w3));
+}
+
+pub fn sem_starved_is_unfair_holds() -> DomainCert {
+    let ws: List[Int] = list_new();
+    let w1: List[Int] = list_push(ws, 0);
+    let w2: List[Int] = list_push(w1, 9);
+    let w3: List[Int] = list_push(w2, 9);
+    return sem_fairness_holds(sem_fairness_score(w3));
+}
+
+pub fn verify_semaphore_starvation_principle() -> Bool {
+    // Golden: FIFO schedule serves every thread within one order of arrival.
+    let ws: List[Int] = list_new();
+    let w1: List[Int] = list_push(ws, 3);
+    let w2: List[Int] = list_push(w1, 3);
+    let w3: List[Int] = list_push(w2, 4);
+    let w4: List[Int] = list_push(w3, 3);
+    let fair: FairnessScore = sem_fairness_score(w4);
+    if fair.score != 1 {
+        return false;
+    }
+    if fair.min_served != 3 {
+        return false;
+    }
+    if fair.max_served != 4 {
+        return false;
+    }
+    if fair.total_served != 13 {
+        return false;
+    }
+    // Hostile: one thread served 0 times while others are served -> unfair.
+    let xs: List[Int] = list_new();
+    let x1: List[Int] = list_push(xs, 0);
+    let x2: List[Int] = list_push(x1, 8);
+    let x3: List[Int] = list_push(x2, 8);
+    let unfair: FairnessScore = sem_fairness_score(x3);
+    if unfair.score != 0 {
+        return false;
+    }
+    if unfair.min_served != 0 {
+        return false;
+    }
+    if unfair.max_served != 8 {
+        return false;
+    }
+    // Edge: empty input is fair (vacuous truth).
+    let es: List[Int] = list_new();
+    let empty: FairnessScore = sem_fairness_score(es);
+    if empty.score != 1 {
+        return false;
+    }
+    // Edge: all zeros is fair (nobody waited).
+    let zs: List[Int] = list_new();
+    let z1: List[Int] = list_push(zs, 0);
+    let z2: List[Int] = list_push(z1, 0);
+    let zeros: FairnessScore = sem_fairness_score(z2);
+    if zeros.score != 1 {
+        return false;
+    }
+    return true;
+}

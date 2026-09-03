@@ -1,0 +1,76 @@
+// # De Bruijn Graph Genome Assembler
+//
+// Logline: Constructs k-mer node networks, tracks in/out-degree branchings, and simplifies linear contig paths.
+//
+// Setup: De novo sequence assembly graph builder transforming reads into Eulerian paths of overlapping (k-1)-mers.
+//
+// Beats:
+//   1. Define DeBruijnNode, DeBruijnEdge, and ContigAssemblyResult data structures.
+//   2. Evaluate node connectivity: unitigs (in=1, out=1), bifurcations, and dead-end tips.
+//   3. Compute compacted contig length, coverage depth, and sequence integrity.
+
+fn debruijn_graph_assembly_to_f(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 10000 { f = f + 10000.0; count = count - 10000; }
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
+type DeBruijnNode = struct {
+    kmer_id: Int,
+    in_degree: Int,
+    out_degree: Int,
+    coverage_count: Int
+};
+
+type DeBruijnEdge = struct {
+    from_id: Int,
+    to_id: Int,
+    transition_char: String,
+    read_support: Int
+};
+
+type ContigAssemblyResult = struct {
+    node_count: Int,
+    contig_length_bp: Int,
+    mean_coverage: Float,
+    is_circular: Bool,
+    is_linear_unitig: Bool
+};
+
+pub fn debruijn_is_linear(node: DeBruijnNode) -> Bool {
+    return node.in_degree == 1 && node.out_degree == 1;
+}
+
+pub fn debruijn_is_tip(node: DeBruijnNode, min_cov: Int) -> Bool {
+    return (node.in_degree == 0 || node.out_degree == 0) && node.coverage_count < min_cov;
+}
+
+pub fn debruijn_assemble_unitig(
+    k_size: Int,
+    nodes_in_path: Int,
+    total_coverage: Int,
+) -> ContigAssemblyResult {
+    if nodes_in_path <= 0 {
+        return ContigAssemblyResult {
+            node_count: 0,
+            contig_length_bp: 0,
+            mean_coverage: 0.0,
+            is_circular: false,
+            is_linear_unitig: false
+        };
+    }
+    let contig_len: Int = (k_size - 1) + nodes_in_path;    let mean_cov: Float = debruijn_graph_assembly_to_f(total_coverage) / debruijn_graph_assembly_to_f(nodes_in_path);    return ContigAssemblyResult {
+        node_count: nodes_in_path,
+        contig_length_bp: contig_len,
+        mean_coverage: mean_cov,
+        is_circular: false,
+        is_linear_unitig: true
+    };
+}

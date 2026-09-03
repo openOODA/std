@@ -1,0 +1,123 @@
+// # Haldane kinetic-thermodynamic relationship principle
+//
+// Logline: For a reversible Michaelis-Menten reaction, K_eq = k_cat / K_m at low substrate; the enzyme catalyses both forward and reverse directions. Illegal domain returns Err.
+//
+// Setup: Pure Float. k_cat (1/s), K_m (M). The principle is unit-agnostic.
+//
+// Beats:
+//   1. Compute K_eq = k_cat / K_m (Haldane ratio).
+//   2. Classify kinetic vs thermodynamic control: K_eq >> 1 means thermodynamic dominance.
+//   3. Compute reverse k_cat given K_eq and forward k_cat.
+//   4. Domain certificate via domain_cert("bio", "haldane", holds).
+//   5. Hostile k_cat <= 0 or K_m <= 0 return Err.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn babs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn haldane_inputs_valid(k_cat: Float, k_m: Float) -> Int {
+    if k_cat <= 0.0 { return 0; }
+    if k_m <= 0.0 { return 0; }
+    return 1;
+}
+
+pub fn haldane_equilibrium_ratio(k_cat: Float, k_m: Float) -> Result[Float, String] {
+    if haldane_inputs_valid(k_cat, k_m) != 1 {
+        return Err("ERR\thd\tdomain");
+    }
+    return Ok(k_cat / k_m);
+}
+
+pub fn haldane_reverse_k_cat(k_cat_fwd: Float, k_m: Float, k_eq: Float) -> Result[Float, String] {
+    if haldane_inputs_valid(k_cat_fwd, k_m) != 1 {
+        return Err("ERR\thd\tdomain");
+    }
+    if k_eq <= 0.0 {
+        return Err("ERR\thd\tdomain");
+    }
+    return Ok(k_cat_fwd / k_eq);
+}
+
+pub fn haldane_classify_control(k_eq: Float, tol: Float) -> Int {
+    if k_eq <= 0.0 { return 0; }
+    if tol <= 0.0 { return 0; }
+    let mut diff: Float = k_eq - 1.0;
+    if diff < 0.0 { diff = 0.0 - diff; }
+    if diff <= tol { return 2; }
+    if k_eq > 1.0 { return 1; }
+    return 3;
+}
+
+fn hd_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn haldane_cert(k_cat: Float, k_m: Float) -> DomainCert {
+    let k_eq: Float = hd_got(haldane_equilibrium_ratio(k_cat, k_m));
+    let mut h: Int = 0;
+    if haldane_inputs_valid(k_cat, k_m) == 1 {
+        let want: Float = k_cat / k_m;
+        if babs(k_eq - want) <= 0.0000001 {
+            h = 1;
+        }
+    }
+    return domain_cert("bio", "haldane", h);
+}
+
+pub fn verify_haldane_principle() -> Bool {
+    let k_eq: Float = hd_got(haldane_equilibrium_ratio(10.0, 2.0));
+    if babs(k_eq - 5.0) > 0.0000001 {
+        return false;
+    }
+    let cert_g: DomainCert = haldane_cert(10.0, 2.0);
+    if cert_g.holds != 1 {
+        return false;
+    }
+
+    let k_eq2: Float = hd_got(haldane_equilibrium_ratio(50.0, 5.0));
+    if babs(k_eq2 - 10.0) > 0.0000001 {
+        return false;
+    }
+
+    let k_rev: Float = hd_got(haldane_reverse_k_cat(10.0, 2.0, 5.0));
+    if babs(k_rev - 2.0) > 0.0000001 {
+        return false;
+    }
+
+    if haldane_classify_control(5.0, 0.01) != 1 {
+        return false;
+    }
+    if haldane_classify_control(0.5, 0.01) != 3 {
+        return false;
+    }
+    if haldane_classify_control(1.0, 0.01) != 2 {
+        return false;
+    }
+    if haldane_classify_control(1.005, 0.01) != 2 {
+        return false;
+    }
+
+    if haldane_equilibrium_ratio(0.0, 2.0).is_ok() { return false; }
+    if haldane_equilibrium_ratio(0.0 - 1.0, 2.0).is_ok() { return false; }
+    if haldane_equilibrium_ratio(10.0, 0.0).is_ok() { return false; }
+    if haldane_equilibrium_ratio(10.0, 0.0 - 1.0).is_ok() { return false; }
+    if haldane_reverse_k_cat(0.0, 2.0, 5.0).is_ok() { return false; }
+    if haldane_reverse_k_cat(10.0, 0.0, 5.0).is_ok() { return false; }
+    if haldane_reverse_k_cat(10.0, 2.0, 0.0).is_ok() { return false; }
+    if haldane_reverse_k_cat(10.0, 2.0, 0.0 - 1.0).is_ok() { return false; }
+    if haldane_classify_control(0.0, 0.01) != 0 {
+        return false;
+    }
+    if haldane_classify_control(0.0 - 1.0, 0.01) != 0 {
+        return false;
+    }
+    if haldane_classify_control(1.0, 0.0) != 0 {
+        return false;
+    }
+    return true;
+}

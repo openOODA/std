@@ -1,0 +1,54 @@
+// # Actor state isolation law
+//
+// Logline: Only the owner actor id may read or write an actor's private state.
+//
+// Setup: Pure Int. Models (owner_id, requester_id) tuples; no shared mutable state.
+//
+// Beats:
+//   1. actor_can_read(own, own) and actor_can_write(own, own) hold.
+//   2. actor_can_read(own, other) and actor_can_write(own, other) fail closed when own != other.
+//   3. Negative or zero requester ids are not the owner and fail closed.
+
+pub fn actor_can_read(owner_id: Int, requester_id: Int) -> Int {
+    if owner_id == requester_id {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn actor_can_write(owner_id: Int, requester_id: Int) -> Int {
+    if owner_id == requester_id {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_actor_isolation_law() -> Bool {
+    // golden: same id can read and write its own state.
+    if actor_can_read(7, 7) != 1 {
+        return false;
+    }
+    if actor_can_write(7, 7) != 1 {
+        return false;
+    }
+    if actor_can_read(1, 1) != 1 {
+        return false;
+    }
+    if actor_can_write(1, 1) != 1 {
+        return false;
+    }
+    // hostile: a different id must NOT be able to read or write.
+    if actor_can_read(7, 8) != 0 {
+        return false;
+    }
+    if actor_can_write(7, 0) != 0 {
+        return false;
+    }
+    if actor_can_read(7, -1) != 0 {
+        return false;
+    }
+    if actor_can_write(7, -100) != 0 {
+        return false;
+    }
+    return true;
+}

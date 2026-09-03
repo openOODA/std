@@ -1,0 +1,177 @@
+// # Orbital Dynamics Data Types and Vector Mathematics
+//
+// Logline: Defines vector structures, orbital elements, and 3D spatial vector mathematics for astrodynamics.
+//
+// Setup: Pure .oo standard library module operating with standard SI and kilometer orbital units.
+//
+// Beats:
+//   1. Define Vec3, StateVector, OrbitElements, and KeplerianElements data structures.
+//   2. Provide 3D vector arithmetic, dot products, cross products, and normalization functions.
+//   3. Export planetary gravitational constants and Earth geopotential harmonic parameters.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_aero_orbital_types() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type StateVector = struct {
+    position: Vec3,
+    velocity: Vec3,
+    epoch_sec: Float
+};
+
+type OrbitElements = struct {
+    semi_major_axis: Float,
+    eccentricity: Float,
+    inclination: Float,
+    raan: Float,
+    arg_of_perigee: Float,
+    true_anomaly: Float,
+    epoch_sec: Float
+};
+
+type KeplerianElements = struct {
+    semi_major_axis: Float,
+    eccentricity: Float,
+    inclination: Float,
+    raan: Float,
+    arg_of_perigee: Float,
+    true_anomaly: Float
+};
+
+pub fn const_pi() -> Float {
+    return circ_pi_std_phys_aero_orbital_types();
+}
+
+pub fn const_two_pi() -> Float {
+    return 6.283185307179586;
+}
+
+pub fn const_deg_to_rad() -> Float {
+    return 0.017453292519943295;
+}
+
+pub fn const_rad_to_deg() -> Float {
+    return 57.29577951308232;
+}
+
+pub fn const_mu_earth() -> Float {
+    return 398600.4418;
+}
+
+pub fn const_mu_earth_m() -> Float {
+    return 398600441800000.0;
+}
+
+pub fn const_r_earth() -> Float {
+    return 6378.137;
+}
+
+pub fn const_r_earth_m() -> Float {
+    return 6378137.0;
+}
+
+pub fn const_j2_earth() -> Float {
+    return 0.00108263;
+}
+
+pub fn const_j3_earth() -> Float {
+    return -0.00000253215;
+}
+
+pub fn const_j4_earth() -> Float {
+    return -0.00000161098;
+}
+
+pub fn vec3_new(x: Float, y: Float, z: Float) -> Vec3 {
+    return Vec3 { x: x, y: y, z: z };
+}
+
+pub fn vec3_zero() -> Vec3 {
+    return Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+}
+
+pub fn vec3_add(a: Vec3, b: Vec3) -> Vec3 {
+    let rx: Float = a.x + b.x;
+    let ry: Float = a.y + b.y;
+    let rz: Float = a.z + b.z;
+    return Vec3 { x: rx, y: ry, z: rz };
+}
+
+pub fn vec3_sub(a: Vec3, b: Vec3) -> Vec3 {
+    let rx: Float = a.x - b.x;
+    let ry: Float = a.y - b.y;
+    let rz: Float = a.z - b.z;
+    return Vec3 { x: rx, y: ry, z: rz };
+}
+
+pub fn vec3_scale(v: Vec3, s: Float) -> Vec3 {
+    let rx: Float = v.x * s;
+    let ry: Float = v.y * s;
+    let rz: Float = v.z * s;
+    return Vec3 { x: rx, y: ry, z: rz };
+}
+
+pub fn vec3_dot(a: Vec3, b: Vec3) -> Float {
+    let term_x: Float = a.x * b.x;
+    let term_y: Float = a.y * b.y;
+    let term_z: Float = a.z * b.z;
+    return (term_x + term_y) + term_z;
+}
+
+pub fn vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
+    let cx: Float = (a.y * b.z) - (a.z * b.y);
+    let cy: Float = (a.z * b.x) - (a.x * b.z);
+    let cz: Float = (a.x * b.y) - (a.y * b.x);
+    return Vec3 { x: cx, y: cy, z: cz };
+}
+
+pub fn vec3_length_sq(v: Vec3) -> Float {
+    let vx: Float = v.x;
+    let vy: Float = v.y;
+    let vz: Float = v.z;
+    return ((vx * vx) + (vy * vy)) + (vz * vz);
+}
+
+pub fn vec3_length(v: Vec3) -> Float {
+    return sqrt(vec3_length_sq(v));
+}
+
+pub fn vec3_normalize(v: Vec3) -> Vec3 {
+    let len: Float = vec3_length(v);
+    if len <= 0.000000000001 {
+        return vec3_zero();
+    }
+    let inv: Float = 1.0 / len;
+    return vec3_scale(v, inv);
+}
+
+pub fn state_vector_new(pos: Vec3, vel: Vec3, epoch: Float) -> StateVector {
+    return StateVector { position: pos, velocity: vel, epoch_sec: epoch };
+}
+
+pub fn orbit_elements_new(a: Float, e: Float, inc: Float, raan: Float, argp: Float, nu: Float, epoch: Float) -> OrbitElements {
+    return OrbitElements {
+        semi_major_axis: a,
+        eccentricity: e,
+        inclination: inc,
+        raan: raan,
+        arg_of_perigee: argp,
+        true_anomaly: nu,
+        epoch_sec: epoch
+    };
+}
+
+pub fn keplerian_elements_new(a: Float, e: Float, inc: Float, raan: Float, argp: Float, nu: Float) -> KeplerianElements {
+    return KeplerianElements {
+        semi_major_axis: a,
+        eccentricity: e,
+        inclination: inc,
+        raan: raan,
+        arg_of_perigee: argp,
+        true_anomaly: nu
+    };
+}

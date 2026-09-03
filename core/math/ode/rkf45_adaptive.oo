@@ -1,0 +1,95 @@
+// # Adaptive Runge-Kutta-Fehlberg 4(5) Integrator
+//
+// Logline: Integrates the harmonic oscillator with embedded RKF45 error control and dynamic step scaling.
+//
+// Setup: Pure math. In-module y' = v, v' = -omega^2 y. No function pointers.
+//
+// Beats:
+//   1. Evaluate the six Fehlberg stages on the oscillator.
+//   2. Form 4th and 5th order updates and the local error.
+//   3. Accept or reject the step from the error versus atol.
+//   4. Scale h by 0.9 (atol/err)^0.25 and integrate to t1.
+
+import "std/core/primitives/result.oo";
+
+fn rkf_pack(y: Float, v: Float, t: Float, h: Float, err: Float, acc: Float) -> List[Float] {
+    let mut o: List[Float] = list_new();
+    o = list_push(o, y);
+    o = list_push(o, v);
+    o = list_push(o, t);
+    o = list_push(o, h);
+    o = list_push(o, err);
+    o = list_push(o, acc);
+    return o;
+}
+
+pub fn rkf45_harmonic_step(t: Float, y: Float, v: Float, h: Float, omega: Float, atol: Float) -> List[Float] {
+    let w2: Float = omega * omega;
+    let k1y: Float = v;
+    let k1v: Float = (0.0 - w2) * y;
+    let k2y: Float = v + h * 0.25 * k1v;
+    let k2v: Float = (0.0 - w2) * (y + h * 0.25 * k1y);
+    let k3y: Float = v + h * ((3.0 / 32.0) * k1v + (9.0 / 32.0) * k2v);
+    let k3v: Float = (0.0 - w2) * (y + h * ((3.0 / 32.0) * k1y + (9.0 / 32.0) * k2y));
+    let k4y: Float = v + h * ((1932.0 / 2197.0) * k1v - (7200.0 / 2197.0) * k2v + (7296.0 / 2197.0) * k3v);
+    let k4v: Float = (0.0 - w2) * (y + h * ((1932.0 / 2197.0) * k1y - (7200.0 / 2197.0) * k2y + (7296.0 / 2197.0) * k3y));
+    let k5y: Float = v + h * ((439.0 / 216.0) * k1v - 8.0 * k2v + (3680.0 / 513.0) * k3v - (845.0 / 4104.0) * k4v);
+    let k5v: Float = (0.0 - w2) * (y + h * ((439.0 / 216.0) * k1y - 8.0 * k2y + (3680.0 / 513.0) * k3y - (845.0 / 4104.0) * k4y));
+    let k6y: Float = v + h * ((0.0 - 8.0 / 27.0) * k1v + 2.0 * k2v - (3544.0 / 2565.0) * k3v + (1859.0 / 4104.0) * k4v - (11.0 / 40.0) * k5v);
+    let k6v: Float = (0.0 - w2) * (y + h * ((0.0 - 8.0 / 27.0) * k1y + 2.0 * k2y - (3544.0 / 2565.0) * k3y + (1859.0 / 4104.0) * k4y - (11.0 / 40.0) * k5y));
+    let y4: Float = y + h * ((25.0 / 216.0) * k1y + (1408.0 / 2565.0) * k3y + (2197.0 / 4104.0) * k4y - 0.2 * k5y);
+    let v4: Float = v + h * ((25.0 / 216.0) * k1v + (1408.0 / 2565.0) * k3v + (2197.0 / 4104.0) * k4v - 0.2 * k5v);
+    let y5: Float = y + h * ((16.0 / 135.0) * k1y + (6656.0 / 12825.0) * k3y + (28561.0 / 56430.0) * k4y - 0.18 * k5y + (2.0 / 55.0) * k6y);
+    let v5: Float = v + h * ((16.0 / 135.0) * k1v + (6656.0 / 12825.0) * k3v + (28561.0 / 56430.0) * k4v - 0.18 * k5v + (2.0 / 55.0) * k6v);
+    let ey: Float = y5 - y4;
+    let ev: Float = v5 - v4;
+    let err: Float = sqrt(ey * ey + ev * ev);
+    let mut euse: Float = err;
+    if euse < 0.000000000000001 { euse = 0.000000000000001; }
+    let mut hnext: Float = h * 0.9 * pow(atol / euse, 0.25);
+    if hnext < 0.000000000001 { hnext = 0.000000000001; }
+    if hnext > 1.0 { hnext = 1.0; }
+    if err <= atol {
+        return rkf_pack(y5, v5, t + h, hnext, err, 1.0);
+    }
+    return rkf_pack(y, v, t, hnext, err, 0.0);
+}
+
+pub fn rkf45_harmonic_integrate(y0: Float, v0: Float, t0: Float, t1: Float, h0: Float, omega: Float, atol: Float, max_steps: Int) -> Result[List[Float], String] {
+    if max_steps < 1 { return Err("ERR\trkf45\tsteps"); }
+    if h0 <= 0.0 { return Err("ERR\trkf45\th"); }
+    if atol <= 0.0 { return Err("ERR\trkf45\tatol"); }
+    let mut y: Float = y0;
+    let mut v: Float = v0;
+    let mut t: Float = t0;
+    let mut h: Float = h0;
+    let mut n: Int = 0;
+    while n < max_steps {
+        if t >= t1 { break; }
+        let mut htry: Float = h;
+        if t + htry > t1 { htry = t1 - t; }
+        let st: List[Float] = rkf45_harmonic_step(t, y, v, htry, omega, atol);
+        let acc: Float = list_get(st, 5);
+        h = list_get(st, 3);
+        if acc > 0.5 {
+            y = list_get(st, 0);
+            v = list_get(st, 1);
+            t = list_get(st, 2);
+        }
+        n = n + 1;
+    }
+    if t + 0.0000001 < t1 { return Err("ERR\trkf45\max_steps"); }
+    let mut out: List[Float] = list_new();
+    out = list_push(out, y);
+    out = list_push(out, v);
+    out = list_push(out, t);
+    out = list_push(out, h);
+    let mut nf: Float = 0.0;
+    let mut i2: Int = 0;
+    while i2 < n {
+        nf = nf + 1.0;
+        i2 = i2 + 1;
+    }
+    out = list_push(out, nf);
+    return Ok(out);
+}

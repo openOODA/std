@@ -1,0 +1,160 @@
+// # io_uring Submission Queue + Completion Queue Law
+//
+// Logline: Linux io_uring (5.1, 2019-03-03, Axboe J.) exposes two lock-free ring buffers shared between userspace and the kernel: the Submission Queue (SQ) carries SQE descriptors, the Completion Queue (CQ) carries CQE results, and each requested size is rounded up to the next power of two by the io_uring setup path.
+//
+// Setup: Pure Int. SQ size in [0, IORING_MAX_ENTRIES] and CQ size in [0, IORING_MAX_ENTRIES]. Coupled with epoll: io_uring subsumes readiness notification for many workloads because the CQ already carries per-op completion. Hosts io_invariants.oo stem.
+//
+// Beats:
+//   1. io_uring_sq_entries(sq_size) returns the user-requested SQ slot count after validating domain (>= 0).
+//   2. io_uring_cq_entries(cq_size) returns the user-requested CQ slot count; CQ must be >= SQ by the kernel contract.
+//   3. io_uring_sq_pow2(sq_size) returns the next power of two >= sq_size (per io_uring.c roundup_pow_of_two).
+//   4. io_uring_total_capacity(sq_size, cq_size) returns sq + cq for golden-test aggregation at 0.001% precision.
+
+import "std/core/io/io_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Linux 5.1 release date 2019-03-03 (Jens Axboe, liburing).
+// IORING_MAX_ENTRIES = 65536 per include/uapi/linux/io_uring.h.
+// The driver rounds SQ and CQ sizes to the next power of two (io_uring.c).
+pub fn io_uring_kernel_version_major() -> Int {
+    return 5; // io_uring 2019: Linux 5.1
+}
+
+pub fn io_uring_kernel_version_minor() -> Int {
+    return 1; // io_uring 2019: Linux 5.1
+}
+
+pub fn io_uring_release_year() -> Int {
+    return 2019; // io_uring 2019: 2019-03-03
+}
+
+pub fn io_uring_release_month() -> Int {
+    return 3; // io_uring 2019: March 2019
+}
+
+pub fn io_uring_release_day() -> Int {
+    return 3; // io_uring 2019: 2019-03-03
+}
+
+pub fn io_uring_max_entries() -> Int {
+    return 65536; // io_uring 2019: include/uapi/linux/io_uring.h IORING_MAX_ENTRIES
+}
+
+// 1 if n is a power of two and > 0.
+pub fn io_uring_is_pow2(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    let mut x: Int = n;
+    let mut saw: Int = 0;
+    while x > 0 {
+        let b: Int = x % 2;
+        if b == 1 {
+            if saw == 1 { return 0; }
+            saw = 1;
+        }
+        x = x / 2;
+    }
+    return 1;
+}
+
+// Next power of two >= n, for n in [1, 65536]. n <= 0 returns 0.
+pub fn io_uring_next_pow2(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    let mut p: Int = 1;
+    while p < n {
+        p = p + p;
+    }
+    return p;
+}
+
+// SQ entry count after validation. Returns sq_size if 0 <= sq_size <= 65536, else 0 (fail closed).
+pub fn io_uring_sq_entries(sq_size: Int) -> Int {
+    if sq_size < 0 { return 0; }
+    if sq_size > 65536 { return 0; } // io_uring 2019: IORING_MAX_ENTRIES
+    return sq_size;
+}
+
+// CQ entry count after validation. CQ must be >= SQ; cq_size < sq_size returns 0.
+pub fn io_uring_cq_entries(cq_size: Int, sq_size: Int) -> Int {
+    if cq_size < 0 { return 0; }
+    if cq_size > 65536 { return 0; } // io_uring 2019: IORING_MAX_ENTRIES
+    if cq_size < sq_size { return 0; } // io_uring 2019: CQ must be >= SQ
+    return cq_size;
+}
+
+// Rounded-up SQ slot count as the kernel allocates (roundup_pow_of_two in io_uring.c).
+pub fn io_uring_sq_pow2(sq_size: Int) -> Int {
+    let v: Int = io_uring_sq_entries(sq_size);
+    if v == 0 { return 0; }
+    return io_uring_next_pow2(v); // io_uring 2019: io_uring.c roundup_pow_of_two
+}
+
+// Total capacity across both rings for golden KAT aggregation.
+pub fn io_uring_total_capacity(sq_size: Int, cq_size: Int) -> Int {
+    let s: Int = io_uring_sq_entries(sq_size);
+    let c: Int = io_uring_cq_entries(cq_size, sq_size);
+    return s + c;
+}
+
+// Coupled witness: 1 if io_uring can subsume an epoll-style readiness loop
+// because every operation emits a CQE that is observable without a syscall.
+pub fn io_uring_subsumes_epoll_witness(sq_size: Int, cq_size: Int) -> Int {
+    if io_uring_sq_entries(sq_size) == 0 { return 0; }
+    if io_uring_cq_entries(cq_size, sq_size) == 0 { return 0; }
+    return 1; // io_uring 2019: CQ carries readiness + completion in one ring
+}
+
+// Domain certificate: 1 when the SQ + CQ sizes are valid and rounded-up sizes are powers of two.
+pub fn io_uring_sq_cq_holds(sq_size: Int, cq_size: Int) -> DomainCert {
+    let inv_ok: Bool = io_path_ok("io_uring").holds == 1;
+    if inv_ok == false { return domain_cert("io", "io_uring_sq_cq_law", 0); }
+    if io_uring_sq_entries(sq_size) == 0 { return domain_cert("io", "io_uring_sq_cq_law", 0); }
+    if io_uring_cq_entries(cq_size, sq_size) == 0 { return domain_cert("io", "io_uring_sq_cq_law", 0); }
+    if io_uring_is_pow2(io_uring_sq_pow2(sq_size)) != 1 { return domain_cert("io", "io_uring_sq_cq_law", 0); }
+    return domain_cert("io", "io_uring_sq_cq_law", 1);
+}
+
+// KAT and hostile cases for the io_uring SQ + CQ law.
+pub fn verify_io_uring_sq_cq_law() -> Bool {
+    // Golden: sq=128, cq=256 -> total 384 within 0.001% (exact integer equality).
+    if io_uring_total_capacity(128, 256) != 384 { return false; }
+    if io_uring_sq_entries(128) != 128 { return false; }
+    if io_uring_cq_entries(256, 128) != 256 { return false; }
+    // Rounded-up sizes: 128 already pow2, 256 already pow2.
+    if io_uring_sq_pow2(128) != 128 { return false; }
+    if io_uring_next_pow2(256) != 256 { return false; }
+    // Next pow2 rounding: 5 -> 8, 7 -> 8, 9 -> 16, 1000 -> 1024.
+    if io_uring_next_pow2(5) != 8 { return false; }
+    if io_uring_next_pow2(7) != 8 { return false; }
+    if io_uring_next_pow2(9) != 16 { return false; }
+    if io_uring_next_pow2(1000) != 1024 { return false; }
+    if io_uring_next_pow2(1) != 1 { return false; }
+    if io_uring_next_pow2(0) != 0 { return false; }
+    if io_uring_next_pow2(0 - 1) != 0 { return false; }
+    // Hostile: zero -> 0.
+    if io_uring_sq_entries(0) != 0 { return false; }
+    if io_uring_cq_entries(0, 0) != 0 { return false; }
+    if io_uring_total_capacity(0, 0) != 0 { return false; }
+    if io_uring_sq_pow2(0) != 0 { return false; }
+    // Hostile: negative -> 0.
+    if io_uring_sq_entries(0 - 1) != 0 { return false; }
+    if io_uring_cq_entries(0 - 1, 0) != 0 { return false; }
+    // Hostile: above IORING_MAX_ENTRIES -> 0.
+    if io_uring_sq_entries(65537) != 0 { return false; }
+    if io_uring_cq_entries(65537, 1) != 0 { return false; }
+    // Coupled: CQ < SQ is rejected.
+    if io_uring_cq_entries(64, 128) != 0 { return false; }
+    // Coupled: subsumes epoll witness is 1 for valid sizes.
+    if io_uring_subsumes_epoll_witness(128, 256) != 1 { return false; }
+    if io_uring_subsumes_epoll_witness(0, 0) != 0 { return false; }
+    // Domain certificate path.
+    if io_uring_sq_cq_holds(128, 256).holds != 1 { return false; }
+    if io_uring_sq_cq_holds(0, 0).holds != 0 { return false; }
+    // Kernel release date constants.
+    if io_uring_kernel_version_major() != 5 { return false; }
+    if io_uring_kernel_version_minor() != 1 { return false; }
+    if io_uring_release_year() != 2019 { return false; }
+    if io_uring_release_month() != 3 { return false; }
+    if io_uring_release_day() != 3 { return false; }
+    if io_uring_max_entries() != 65536 { return false; }
+    return true;
+}

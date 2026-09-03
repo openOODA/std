@@ -1,0 +1,185 @@
+// # Nuclear Blast Shockwave and Radiation Scaling Laws
+//
+// Logline: Canonical physics models for Sedov-Taylor blast radius expansion, Brode overpressure zones, and thermal radiation fluence scaling.
+//
+// Setup: Pure hydrodynamics and radiation transport scaling with zero ambient authority and deterministic floating-point calculations.
+//
+// Beats:
+//   1. Sedov-Taylor self-similar blast wave radius scaling and shock velocity propagation.
+//   2. Brode / Rankine-Hugoniot blast overpressure zone calculation across target ranges.
+//   3. Thermal radiation fluence inverse-square law with atmospheric transmission decay.
+//   4. High-altitude EMP line-of-sight geometric horizon and verification suite.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_weapons_nuclear_blast_laws() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type NuclearYieldSpec = struct {
+    yield_kt: Float,
+    yield_joules: Float,
+    thermal_fraction: Float
+};
+
+type BlastWaveState = struct {
+    time_s: Float,
+    radius_m: Float,
+    shock_velocity_mps: Float,
+    overpressure_psi: Float
+};
+
+type NuclearEffectsResult = struct {
+    distance_m: Float,
+    overpressure_psi: Float,
+    thermal_fluence_j_m2: Float,
+    thermal_fluence_cal_cm2: Float,
+    structural_kill: Bool,
+    skin_burn_lethal: Bool
+};
+
+pub fn nuke_joules_per_kt() -> Float { return 4184000000000.0; }
+pub fn nuke_pi_val() -> Float { return circ_pi_std_phys_weapons_nuclear_blast_laws(); }
+
+fn nuke_abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn nuke_cbrt(x: Float) -> Float {
+    if x <= 0.0 { return 0.0; }
+    return pow(x, 0.3333333333333333);
+}
+
+pub fn sedov_taylor_blast_radius(
+    yield_joules: Float,
+    density_kg_m3: Float,
+    time_s: Float
+) -> Float {
+    if yield_joules <= 0.0 || density_kg_m3 <= 0.0 || time_s <= 0.0 {
+        return 0.0;
+    }
+    let xi_0: Float = 1.033;
+    let e_ratio: Float = yield_joules / density_kg_m3;
+    let r_term: Float = pow(e_ratio, 0.2);
+    let t_term: Float = pow(time_s, 0.4);
+    return xi_0 * r_term * t_term;
+}
+
+pub fn calc_sedov_taylor_blast_radius(
+    yield_joules: Float,
+    density_kg_m3: Float,
+    time_s: Float
+) -> Float {
+    return sedov_taylor_blast_radius(yield_joules, density_kg_m3, time_s);
+}
+
+pub fn calc_shock_front_velocity(blast_radius_m: Float, time_s: Float) -> Float {
+    if time_s <= 0.000001 || blast_radius_m <= 0.0 { return 0.0; }
+    return 0.4 * (blast_radius_m / time_s);
+}
+
+pub fn nuclear_overpressure_brode(yield_kt: Float, distance_m: Float) -> Float {
+    if yield_kt <= 0.0 { return 0.0; }
+    if distance_m <= 0.1 { return 50000.0; }
+
+    let r_hm: Float = distance_m / 100.0;
+    let y_cbrt: Float = nuke_cbrt(yield_kt);
+    let y_23: Float = y_cbrt * y_cbrt;
+    let r2: Float = r_hm * r_hm;
+    let r3: Float = r2 * r_hm;
+
+    let p1: Float = (808.0 * yield_kt) / r3;
+    let p2: Float = (240.0 * y_23) / r2;
+    let p3: Float = (19.2 * y_cbrt) / r_hm;
+
+    return p1 + p2 + p3;
+}
+
+pub fn calc_brode_overpressure_psi(yield_kt: Float, distance_m: Float) -> Float {
+    return nuclear_overpressure_brode(yield_kt, distance_m);
+}
+
+pub fn calc_thermal_radiation_fluence_j_m2(
+    yield_joules: Float,
+    distance_m: Float,
+    atm_transmittance: Float
+) -> Float {
+    if distance_m <= 0.1 || yield_joules <= 0.0 { return 0.0; }
+    let four_pi_r2: Float = 4.0 * nuke_pi_val() * (distance_m * distance_m);
+    let q_direct: Float = (0.35 * yield_joules) / four_pi_r2;
+    let mut tau: Float = atm_transmittance;
+    if tau < 0.0 { tau = 0.0; }
+    if tau > 1.0 { tau = 1.0; }
+    return q_direct * tau;
+}
+
+pub fn calc_thermal_radiation_fluence_cal_cm2(
+    yield_kt: Float,
+    distance_m: Float,
+    atm_transmittance: Float
+) -> Float {
+    let y_j: Float = yield_kt * nuke_joules_per_kt();
+    let q_j_m2: Float = calc_thermal_radiation_fluence_j_m2(y_j, distance_m, atm_transmittance);
+    return q_j_m2 / 41840.0;
+}
+
+pub fn calc_emp_horizon_km(burst_alt_km: Float) -> Float {
+    if burst_alt_km <= 0.0 { return 0.0; }
+    let r_earth_km: Float = 6371.0;
+    return sqrt(2.0 * r_earth_km * burst_alt_km);
+}
+
+pub fn evaluate_nuclear_effects(
+    yield_kt: Float,
+    distance_m: Float,
+    atm_transmittance: Float
+) -> NuclearEffectsResult {
+    let op_psi: Float = nuclear_overpressure_brode(yield_kt, distance_m);
+    let y_j: Float = yield_kt * nuke_joules_per_kt();
+    let q_j_m2: Float = calc_thermal_radiation_fluence_j_m2(y_j, distance_m, atm_transmittance);
+    let q_cal_cm2: Float = q_j_m2 / 41840.0;
+
+    let is_kill: Bool = op_psi >= 4.0 || q_cal_cm2 >= 12.0;
+    let is_burn: Bool = q_cal_cm2 >= 8.0;
+
+    return NuclearEffectsResult {
+        distance_m: distance_m,
+        overpressure_psi: op_psi,
+        thermal_fluence_j_m2: q_j_m2,
+        thermal_fluence_cal_cm2: q_cal_cm2,
+        structural_kill: is_kill,
+        skin_burn_lethal: is_burn
+    };
+}
+
+pub fn verify_nuclear_blast_laws() -> Bool {
+    let y_20kt_j: Float = 20.0 * nuke_joules_per_kt();
+    let rho_air: Float = 1.225;
+    let t_01: Float = 0.1;
+
+    let r_blast: Float = sedov_taylor_blast_radius(y_20kt_j, rho_air, t_01);
+    let ratio: Float = y_20kt_j / rho_air;
+    let exp_r: Float = 1.033 * pow(ratio, 0.2) * pow(t_01, 0.4);
+    let diff_r: Float = nuke_abs_val(r_blast - exp_r);
+    if diff_r > 0.01 { return false; }
+    if r_blast < 200.0 || r_blast > 300.0 { return false; }
+
+    let v_shock: Float = calc_shock_front_velocity(r_blast, t_01);
+    let exp_v: Float = 0.4 * (r_blast / t_01);
+    let diff_v: Float = nuke_abs_val(v_shock - exp_v);
+    if diff_v > 0.01 { return false; }
+
+    let p_1kt_1000m: Float = nuclear_overpressure_brode(1.0, 1000.0);
+    let diff_p: Float = nuke_abs_val(p_1kt_1000m - 5.128);
+    if diff_p > 0.001 { return false; }
+
+    let p_500m: Float = nuclear_overpressure_brode(1.0, 500.0);
+    if p_500m <= p_1kt_1000m { return false; }
+
+    let q_20kt_2000m: Float = calc_thermal_radiation_fluence_cal_cm2(20.0, 2000.0, 1.0);
+    if q_20kt_2000m < 10.0 || q_20kt_2000m > 20.0 { return false; }
+
+    let emp_100km: Float = calc_emp_horizon_km(100.0);
+    let exp_emp: Float = sqrt(2.0 * 6371.0 * 100.0);
+    let diff_emp: Float = nuke_abs_val(emp_100km - exp_emp);
+    if diff_emp > 0.01 { return false; }
+
+    return true;
+}

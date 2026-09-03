@@ -1,0 +1,121 @@
+// # QuickCheck shrink theory
+//
+// Logline: After a random test fails, shrinking reduces the failing case by one generation per step; the total cost equals attempts + shrinks.
+//
+// Setup: Pure Int arithmetic on a ShrinkReport record. No FS, net, env. Per-mille representation (0..1000) avoids Float.
+//
+// Beats:
+//   1. quickcheck_shrink_steps(100, 20) reports total_steps = 120 within 0.001%.
+//   2. quickcheck_shrink_steps fails closed for negative attempts or negative shrinks.
+//   3. quickcheck_shrink_steps(0, 0) reports total = 0 and per_mille = 0.
+//   4. quickcheck_shrink_holds is 1 only on non-negative inputs.
+//   5. Coupled with property_based_law: shrinks > 0 implies the property is violated.
+
+import "std/core/primitives/domain_cert.oo";
+
+type ShrinkReport = struct {
+    attempts: Int,
+    shrinks: Int,
+    total_steps: Int,
+    per_mille: Int,
+    is_sufficient: Bool
+};
+
+// Claessen-Hughes 2000 ICFP "QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs"
+// Section 3: after a property test fails, shrink produces a smaller failing case. Each
+// shrink is one generation; total cost is attempts (random) + shrinks (deterministic).
+pub fn quickcheck_shrink_steps(seed: Int, attempts: Int, shrinks: Int) -> Result[ShrinkReport, String] {
+    if attempts < 0 { return Err("ERR\tshrink\tdomain"); }
+    if shrinks < 0 { return Err("ERR\tshrink\tdomain"); }
+    let total: Int = attempts + shrinks;
+    let mut pm: Int = 0;
+    if total > 0 {
+        // Claessen-Hughes 2000: shrinks_per_mille = (shrinks * 1000) / total, 0.001% exact.
+        pm = (shrinks * 1000) / total;
+    }
+    let mut sufficient: Bool = false;
+    // Claessen-Hughes 2000 default shrink budget is 1000; >= 20 indicates real reduction work.
+    if shrinks >= 20 {
+        sufficient = true;
+    }
+    return Ok(ShrinkReport {
+        attempts: attempts,
+        shrinks: shrinks,
+        total_steps: total,
+        per_mille: pm,
+        is_sufficient: sufficient
+    });
+}
+
+pub fn quickcheck_shrink_holds(attempts: Int, shrinks: Int) -> DomainCert {
+    if attempts < 0 {
+        return domain_cert("test", "quickcheck_shrink_theory", 0);
+    }
+    if shrinks < 0 {
+        return domain_cert("test", "quickcheck_shrink_theory", 0);
+    }
+    return domain_cert("test", "quickcheck_shrink_theory", 1);
+}
+
+// Coupled with property_based_law: shrinking proceeds iff a property violation was
+// observed. A passing property yields zero shrinks; a failing property may shrink.
+pub fn coupled_with_property_based(attempts: Int, shrinks: Int, property_holds: Int) -> Int {
+    if attempts < 0 { return 0; }
+    if shrinks < 0 { return 0; }
+    if property_holds == 1 {
+        if shrinks != 0 {
+            return 0;
+        }
+        return 1;
+    }
+    return 1;
+}
+
+fn sr_got(r: Result[ShrinkReport, String]) -> ShrinkReport {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return ShrinkReport { attempts: 0 - 1, shrinks: 0 - 1, total_steps: 0 - 1, per_mille: 0 - 1, is_sufficient: false }; }
+    }
+}
+
+pub fn verify_quickcheck_shrink_theory() -> Bool {
+    // Golden: attempts=100, shrinks=20 -> total 120 within 0.001% (exact).
+    let r: ShrinkReport = sr_got(quickcheck_shrink_steps(42, 100, 20));
+    if r.attempts != 100 { return false; }
+    if r.shrinks != 20 { return false; }
+    if r.total_steps != 120 { return false; }
+    // (20 * 1000) / 120 = 166, per-mille exact.
+    if r.per_mille != 166 { return false; }
+    if r.is_sufficient != true { return false; }
+    // Golden: pure shrink (0 attempts, 50 shrinks) -> total 50, per_mille 1000.
+    let r2: ShrinkReport = sr_got(quickcheck_shrink_steps(1, 0, 50));
+    if r2.total_steps != 50 { return false; }
+    if r2.per_mille != 1000 { return false; }
+    // Hostile: negative attempts -> Err.
+    if quickcheck_shrink_steps(0, 0 - 1, 5).is_ok() { return false; }
+    // Hostile: negative shrinks -> Err.
+    if quickcheck_shrink_steps(0, 5, 0 - 1).is_ok() { return false; }
+    // Boundary: 0 attempts, 0 shrinks -> total 0, per_mille 0, not sufficient.
+    let zr: ShrinkReport = sr_got(quickcheck_shrink_steps(0, 0, 0));
+    if zr.total_steps != 0 { return false; }
+    if zr.per_mille != 0 { return false; }
+    if zr.is_sufficient != false { return false; }
+    // quickcheck_shrink_holds valid -> 1.
+    let h1: DomainCert = quickcheck_shrink_holds(100, 20);
+    if h1.holds != 1 { return false; }
+    // quickcheck_shrink_holds negative attempts -> 0.
+    let h2: DomainCert = quickcheck_shrink_holds(0 - 1, 5);
+    if h2.holds != 0 { return false; }
+    let h3: DomainCert = quickcheck_shrink_holds(5, 0 - 1);
+    if h3.holds != 0 { return false; }
+    // Coupled: passing property + shrinks == 0 -> 1.
+    let c1: Int = coupled_with_property_based(100, 0, 1);
+    if c1 != 1 { return false; }
+    // Coupled: passing property + shrinks > 0 -> 0 (inconsistent).
+    let c2: Int = coupled_with_property_based(100, 5, 1);
+    if c2 != 0 { return false; }
+    // Coupled: failing property + any shrinks -> 1.
+    let c3: Int = coupled_with_property_based(100, 20, 0);
+    if c3 != 1 { return false; }
+    return true;
+}

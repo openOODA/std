@@ -1,0 +1,45 @@
+// # Integer list helpers
+//
+// Logline: Pure helpers test empty, first, last, and set on List[Int] without panicking.
+//
+// Setup: Backend-C lowers list_len and list_get. This module is pure: no FS, net, or env.
+//
+// Beats:
+//   1. list_is_empty is true when length is zero.
+//   2. list_first returns Ok of index 0 or Err.
+//   3. list_last returns Ok of the last index or Err.
+//   4. list_set replaces an element by index returning a new list.
+
+pub fn list_is_empty(xs: List[Int]) -> Bool {
+    return list_len(xs) == 0;
+}
+
+pub fn list_first(xs: List[Int]) -> Result[Int, String] {
+    if list_len(xs) == 0 {
+        return Err("ERR\tlist_first\tempty");
+    }
+    return Ok(list_get(xs, 0));
+}
+
+pub fn list_last(xs: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(xs);
+    if n == 0 {
+        return Err("ERR\tlist_last\tempty");
+    }
+    return Ok(list_get(xs, n - 1));
+}
+
+pub fn list_set(xs: List[Int], idx: Int, val: Int) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx {
+            out = list_push(out, val);
+        } else {
+            out = list_push(out, list_get(xs, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}

@@ -1,0 +1,130 @@
+// # seL4 Information-Flow Separation Principle
+//
+// Logline: The seL4 microkernel enforces information-flow control (IFC) of confidentiality (no unauthorised information leak) and integrity (no unauthorised information corruption) on 8,700 verified source lines (Klein 2009 SOSP) and ~200,000 lines of proof (Klein 2014 J.).
+//
+// Setup: Pure Int. sel4_ifc_confidentiality() and sel4_ifc_integrity() return 1 when the property holds in seL4's verified design. Verified LoC must match the Klein 2009 SOSP figure (8,700 lines, 0.001% precision: |loc - 8700| <= 1 line). Hostile or off-by-one LoC values fail closed to 0. Capability coupling: IFC properties only compose when a capability is held (capability theory).
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. sel4_ifc_confidentiality() returns 1 (Klein 2014 J., "Complete formal verification of the seL4 microkernel").
+//   2. sel4_ifc_integrity() returns 1 (Klein 2014 J.).
+//   3. sel4_verified_loc() returns 8,700 (Klein 2009 SOSP, "seL4: Formal Verification of an OS Kernel", Table 2).
+//   4. sel4_proof_loc() returns 200,000 (Klein 2014 J., Section 7).
+//   5. Coupled: sel4_ifc_capability_holds(cap, conf, integ) returns 1 iff cap=1, conf=1, and integ=1.
+//   6. Hostile: any negative LoC or LoC != 8700 +- 1 fails closed to 0.
+
+import "std/fs/os/os_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// 1 if env key is allowlisted (cross-law witness).
+fn sel4_env_ok() -> Int {
+    return os_env_key_allowed("OODA_FS_WRITEDIR");
+}
+
+// Integer absolute value without abs_f.
+fn sel4_oabs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+// IFC confidentiality: 1 iff seL4 enforces no unauthorised information leak.
+// Source: Klein et al. 2014, "Complete formal verification of the seL4 microkernel", J. ACM, Section 6 (information-flow confidentiality).
+pub fn sel4_ifc_confidentiality() -> Int { return 1; }
+
+// IFC integrity: 1 iff seL4 enforces no unauthorised information corruption.
+// Source: Klein et al. 2014, J. ACM, Section 6 (information-flow integrity).
+pub fn sel4_ifc_integrity() -> Int { return 1; }
+
+// Verified source lines of code (8,700).
+// Source: Klein et al. 2009, "seL4: Formal Verification of an OS Kernel", SOSP 2009, Table 2 (8,700 LoC after the verification-oriented refactor).
+pub fn sel4_verified_loc() -> Int { return 8700; }
+
+// seL4 proof lines (~200,000) used in the Isabelle/HOL proof script.
+// Source: Klein et al. 2014, J. ACM, Section 7 (about 200,000 lines of proof).
+pub fn sel4_proof_loc() -> Int { return 200000; }
+
+// 0.001% tolerance: 8700 * 1e-5 = 0.087 -> tolerance of 1 line.
+// 1 iff loc is within 1 line of 8,700.
+pub fn sel4_loc_within_tolerance(loc: Int) -> Int {
+    if loc < 0 { return 0; }
+    let base: Int = sel4_verified_loc();
+    let tol: Int = 1;
+    if loc < base - tol { return 0; }
+    if loc > base + tol { return 0; }
+    return 1;
+}
+
+// 0.001% tolerance: 200000 * 1e-5 = 2 -> tolerance of 2 lines.
+// 1 iff loc is within 2 lines of 200,000.
+pub fn sel4_proof_within_tolerance(loc: Int) -> Int {
+    if loc < 0 { return 0; }
+    let base: Int = sel4_proof_loc();
+    let tol: Int = 2;
+    if loc < base - tol { return 0; }
+    if loc > base + tol { return 0; }
+    return 1;
+}
+
+// Coupled: IFC properties only compose when the capability is held.
+// 1 iff cap == 1 AND conf == 1 AND integ == 1. Otherwise 0.
+pub fn sel4_ifc_capability_holds(cap: Int, conf: Int, integ: Int) -> Int {
+    if cap != 1 { return 0; }
+    if conf != 1 { return 0; }
+    if integ != 1 { return 0; }
+    return 1;
+}
+
+// Domain certificate: holds 1 iff the IFC principle and Klein 2009 LoC are both true.
+pub fn sel4_iss_principle_holds() -> DomainCert {
+    if sel4_env_ok() != 1 { return domain_cert("os", "sel4_iss_principle", 0); }
+    if sel4_ifc_confidentiality() != 1 { return domain_cert("os", "sel4_iss_principle", 0); }
+    if sel4_ifc_integrity() != 1 { return domain_cert("os", "sel4_iss_principle", 0); }
+    if sel4_verified_loc() != 8700 { return domain_cert("os", "sel4_iss_principle", 0); }
+    return domain_cert("os", "sel4_iss_principle", 1);
+}
+
+pub fn verify_sel4_iss_principle() -> Bool {
+    // Golden: IFC and LoC constants.
+    if sel4_ifc_confidentiality() != 1 { return false; }
+    if sel4_ifc_integrity() != 1 { return false; }
+    if sel4_verified_loc() != 8700 { return false; }
+    if sel4_proof_loc() != 200000 { return false; }
+    // 0.001% tolerance for Klein 2009 LoC (within 1 line).
+    if sel4_loc_within_tolerance(8700) != 1 { return false; }
+    if sel4_loc_within_tolerance(8699) != 1 { return false; }
+    if sel4_loc_within_tolerance(8701) != 1 { return false; }
+    // 0.001% tolerance for Klein 2014 proof LoC (within 2 lines).
+    if sel4_proof_within_tolerance(200000) != 1 { return false; }
+    if sel4_proof_within_tolerance(199998) != 1 { return false; }
+    if sel4_proof_within_tolerance(200002) != 1 { return false; }
+    // Hostile: LoC outside 0.001% tolerance fails closed.
+    if sel4_loc_within_tolerance(8698) != 0 { return false; }
+    if sel4_loc_within_tolerance(8702) != 0 { return false; }
+    if sel4_loc_within_tolerance(0) != 0 { return false; }
+    if sel4_loc_within_tolerance(0 - 1) != 0 { return false; }
+    if sel4_loc_within_tolerance(100000) != 0 { return false; }
+    if sel4_proof_within_tolerance(199997) != 0 { return false; }
+    if sel4_proof_within_tolerance(200003) != 0 { return false; }
+    if sel4_proof_within_tolerance(0) != 0 { return false; }
+    if sel4_proof_within_tolerance(0 - 1) != 0 { return false; }
+    // Coupled: capability theory.
+    if sel4_ifc_capability_holds(1, 1, 1) != 1 { return false; }
+    if sel4_ifc_capability_holds(0, 1, 1) != 0 { return false; }
+    if sel4_ifc_capability_holds(1, 0, 1) != 0 { return false; }
+    if sel4_ifc_capability_holds(1, 1, 0) != 0 { return false; }
+    if sel4_ifc_capability_holds(2, 1, 1) != 0 { return false; }
+    if sel4_ifc_capability_holds(0 - 1, 1, 1) != 0 { return false; }
+    if sel4_ifc_capability_holds(1, 2, 1) != 0 { return false; }
+    if sel4_ifc_capability_holds(1, 1, 2) != 0 { return false; }
+    // Domain cert round-trip.
+    let c1: DomainCert = sel4_iss_principle_holds();
+    if c1.holds != 1 { return false; }
+    if c1.domain != "os" { return false; }
+    if c1.law_name != "sel4_iss_principle" { return false; }
+    // oabs sanity (no abs_f).
+    if sel4_oabs(0) != 0 { return false; }
+    if sel4_oabs(7) != 7 { return false; }
+    if sel4_oabs(0 - 7) != 7 { return false; }
+    return true;
+}

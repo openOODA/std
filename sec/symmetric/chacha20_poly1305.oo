@@ -1,0 +1,159 @@
+// # ChaCha20-Poly1305 AEAD (RFC 8439)
+//
+// Logline: Pure .oo 20-round ChaCha20 stream cipher combined with Poly1305 one-shot MAC: chacha20_keygen, chacha20_xor, poly1305_mac, chacha20_poly1305_seal, and chacha20_poly1305_open — all in pure .oo with zero runtime C crypto calls.
+//
+// Setup: Imports chacha20_core.oo and poly1305_core.oo. The chacha20 part is a fresh 20-round block function. The poly1305 part uses 26-bit limbs to avoid 64-bit overflow. Inputs are byte strings; outputs are List[Int] 0..255.
+//
+// Beats:
+//   1. chacha20_keygen(key, nonce, counter) returns 64 keystream bytes.
+//   2. chacha20_xor(key, nonce, counter, plain) streams XOR with the keystream.
+//   3. poly1305_mac is re-exported from poly1305_core.oo via the import.
+//   4. chacha20_poly1305_seal: counter-0 keystream encrypts plaintext, counter-1 keystream supplies the Poly1305 one-time key; tag covers AAD || pad || CT || pad || lens.
+//   5. chacha20_poly1305_open: re-derive the tag and compare constant-time-style; return empty list on tag mismatch.
+
+import "./chacha20_core.oo";
+import "./poly1305_core.oo";
+
+pub fn chacha20_keygen(key: String, nonce: String, counter: Int) -> List[Int] {
+    return cc_block(key, nonce, counter);
+}
+
+pub fn chacha20_xor(key: String, nonce: String, counter: Int, plain: List[Int]) -> List[Int] {
+    let n: Int = list_len(plain);
+    let mut out: List[Int] = list_new();
+    let mut blk: Int = 0;
+    while blk * 64 < n {
+        let ks: List[Int] = cc_block(key, nonce, counter + blk);
+        let mut i: Int = 0;
+        while i < 64 {
+            let idx: Int = blk * 64 + i;
+            if idx < n {
+                let pb: Int = list_get(plain, idx) & 255;
+                let kb: Int = list_get(ks, i) & 255;
+                out = list_push(out, (pb ^ kb) & 255);
+            }
+            i = i + 1;
+        }
+        blk = blk + 1;
+    }
+    return out;
+}
+
+pub fn p3_pad16(n: Int) -> Int {
+    let mut r: Int = n % 16;
+    if r != 0 {
+        r = 16 - r;
+    }
+    return r;
+}
+
+pub fn p3_push_zeros(out: List[Int], n: Int) -> List[Int] {
+    let mut r: List[Int] = out;
+    let mut i: Int = 0;
+    while i < n {
+        r = list_push(r, 0);
+        i = i + 1;
+    }
+    return r;
+}
+
+pub fn p3_push_bytes(out: List[Int], src: List[Int]) -> List[Int] {
+    let mut r: List[Int] = out;
+    let n: Int = list_len(src);
+    let mut i: Int = 0;
+    while i < n {
+        r = list_push(r, list_get(src, i) & 255);
+        i = i + 1;
+    }
+    return r;
+}
+
+pub fn p3_push_le64(out: List[Int], n: Int) -> List[Int] {
+    let v: Int = n & 4294967295;
+    let mut r: List[Int] = out;
+    r = list_push(r, v & 255);
+    r = list_push(r, (v >> 8) & 255);
+    r = list_push(r, (v >> 16) & 255);
+    r = list_push(r, (v >> 24) & 255);
+    r = list_push(r, 0);
+    r = list_push(r, 0);
+    r = list_push(r, 0);
+    r = list_push(r, 0);
+    return r;
+}
+
+pub fn p3_const_eq(a: List[Int], b: List[Int]) -> Int {
+    let n: Int = list_len(a);
+    let mut r: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let av: Int = list_get(a, i) & 255;
+        let bv: Int = list_get(b, i) & 255;
+        r = r | (av ^ bv);
+        i = i + 1;
+    }
+    return r;
+}
+
+pub fn chacha20_poly1305_seal(key: String, nonce: String, plain: List[Int], aad: List[Int]) -> List[Int] {
+    let cipher: List[Int] = chacha20_xor(key, nonce, 1, plain);
+    let otk_block: List[Int] = cc_block(key, nonce, 0);
+    let mut otk: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 32 {
+        otk = list_push(otk, list_get(otk_block, i) & 255);
+        i = i + 1;
+    }
+    let mut mac_in: List[Int] = p3_push_bytes(list_new(), aad);
+    mac_in = p3_push_zeros(mac_in, p3_pad16(list_len(aad)));
+    mac_in = p3_push_bytes(mac_in, cipher);
+    mac_in = p3_push_zeros(mac_in, p3_pad16(list_len(cipher)));
+    mac_in = p3_push_le64(mac_in, list_len(aad));
+    mac_in = p3_push_le64(mac_in, list_len(cipher));
+    let tag: List[Int] = poly1305_mac(otk, mac_in);
+    let mut out: List[Int] = cipher;
+    let mut j: Int = 0;
+    while j < 16 {
+        out = list_push(out, list_get(tag, j) & 255);
+        j = j + 1;
+    }
+    return out;
+}
+
+pub fn chacha20_poly1305_open(key: String, nonce: String, cipher_and_tag: List[Int], aad: List[Int]) -> List[Int] {
+    let total: Int = list_len(cipher_and_tag);
+    if total < 16 {
+        return list_new();
+    }
+    let ct_len: Int = total - 16;
+    let mut cipher: List[Int] = list_new();
+    let mut tag: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < ct_len {
+        cipher = list_push(cipher, list_get(cipher_and_tag, i) & 255);
+        i = i + 1;
+    }
+    while i < total {
+        tag = list_push(tag, list_get(cipher_and_tag, i) & 255);
+        i = i + 1;
+    }
+    let otk_block: List[Int] = cc_block(key, nonce, 0);
+    let mut otk: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < 32 {
+        otk = list_push(otk, list_get(otk_block, k) & 255);
+        k = k + 1;
+    }
+    let mut mac_in: List[Int] = p3_push_bytes(list_new(), aad);
+    mac_in = p3_push_zeros(mac_in, p3_pad16(list_len(aad)));
+    mac_in = p3_push_bytes(mac_in, cipher);
+    mac_in = p3_push_zeros(mac_in, p3_pad16(list_len(cipher)));
+    mac_in = p3_push_le64(mac_in, list_len(aad));
+    mac_in = p3_push_le64(mac_in, list_len(cipher));
+    let want: List[Int] = poly1305_mac(otk, mac_in);
+    let diff: Int = p3_const_eq(want, tag);
+    if diff != 0 {
+        return list_new();
+    }
+    return chacha20_xor(key, nonce, 1, cipher);
+}

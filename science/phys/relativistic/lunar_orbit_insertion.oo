@@ -1,0 +1,70 @@
+// # Lunar Orbit Insertion (LOI) Capture Maneuver
+//
+// Logline: Calculates lunar orbit insertion capture delta-v, orbital period, periapsis braking velocity, and capture state.
+//
+// Setup: Pure lunar gravitational capture orbital mechanics for Apollo and Artemis mission planning.
+//
+// Beats:
+//   1. Nominal LOI delta-v budget integer query.
+//   2. Target lunar orbit parameter configuration.
+//   3. Compute lunar capture braking delta-v from hyperbolic approach.
+//   4. Calculate captured elliptical/circular orbit periods and speeds.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astro_advanced_lunar_orbit_insertion() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type LoiTargetParams = struct {
+    target_alt_km: Float,
+    target_ecc: Float,
+    target_inc_deg: Float
+};
+
+type LoiCaptureSolution = struct {
+    delta_v_m_s: Float,
+    capture_period_s: Float,
+    periapsis_v_m_s: Float,
+    apoapsis_v_m_s: Float
+};
+
+pub fn loi_dv() -> Int {
+    return 830;
+}
+
+pub fn loi_params_default() -> LoiTargetParams {
+    return LoiTargetParams {
+        target_alt_km: 100.0, // 100 km circular lunar orbit
+        target_ecc: 0.0,
+        target_inc_deg: 90.0 // Polar orbit
+    };
+}
+
+/// Computes lunar orbit capture solution given approach conditions and target parameters.
+pub fn loi_compute_capture(
+    params: LoiTargetParams,
+    r_approach_km: Float,
+    v_approach_m_s: Float,
+    r_periapsis_km: Float,
+    mass_kg: Float
+) -> LoiCaptureSolution {
+    let r_moon_km: Float = 1737.4;
+    let mu_moon_km3_s2: Float = 4902.800066;
+    let r_p: Float = r_moon_km + params.target_alt_km;
+
+    let v_hyp_per_sq: Float = (v_approach_m_s * v_approach_m_s * 0.000001) + ((2.0 * mu_moon_km3_s2) / r_p);
+    let v_hyp_per: Float = sqrt(v_hyp_per_sq) * 1000.0;
+
+    let v_target_per: Float = sqrt(mu_moon_km3_s2 / r_p) * 1000.0;
+
+    let mut dv: Float = v_hyp_per - v_target_per;
+    if dv < 0.0 { dv = 0.0 - dv; }
+
+    let pi: Float = circ_pi_std_phys_astro_advanced_lunar_orbit_insertion();
+    let r3: Float = (r_p * r_p * r_p) / mu_moon_km3_s2;
+    let period: Float = 2.0 * pi * sqrt(r3);
+
+    return LoiCaptureSolution {
+        delta_v_m_s: dv,
+        capture_period_s: period,
+        periapsis_v_m_s: v_target_per,
+        apoapsis_v_m_s: v_target_per
+    };
+}

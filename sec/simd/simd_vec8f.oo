@@ -1,0 +1,248 @@
+// # 8-Wide Single-Precision SIMD Float Vector Module
+//
+// Logline: 256-bit 8-lane single-precision floating-point SIMD vector operations, arithmetic, horizontal reductions, and dot products.
+//
+// Setup: Pure math module. Emulates 8-wide float vector processing (AVX/AVX2) for 256-bit SIMD computation.
+//
+// Beats:
+//   1. Construct 8-lane float vector structures, splats, and zero initializers.
+//   2. Element-wise vector addition, subtraction, multiplication, division, and scaling.
+//   3. Fused multiply-add (FMA), min, max, and element indexing.
+//   4. Horizontal addition reduction and Euclidean dot product.
+
+type f32x8 = struct {
+    v0: Float,
+    v1: Float,
+    v2: Float,
+    v3: Float,
+    v4: Float,
+    v5: Float,
+    v6: Float,
+    v7: Float
+};
+
+type Vec8f = struct {
+    v0: Float,
+    v1: Float,
+    v2: Float,
+    v3: Float,
+    v4: Float,
+    v5: Float,
+    v6: Float,
+    v7: Float
+};
+
+pub fn f32x8_new(
+    v0: Float, v1: Float, v2: Float, v3: Float,
+    v4: Float, v5: Float, v6: Float, v7: Float
+) -> f32x8 {
+    return f32x8 {
+        v0: v0, v1: v1, v2: v2, v3: v3,
+        v4: v4, v5: v5, v6: v6, v7: v7
+    };
+}
+
+pub fn f32x8_splat(v: Float) -> f32x8 {
+    return f32x8 {
+        v0: v, v1: v, v2: v, v3: v,
+        v4: v, v5: v, v6: v, v7: v
+    };
+}
+
+pub fn f32x8_zero() -> f32x8 {
+    return f32x8_splat(0.0);
+}
+
+pub fn f32x8_get_lane(v: f32x8, lane: Int) -> Float {
+    if lane == 0 { return v.v0; }
+    if lane == 1 { return v.v1; }
+    if lane == 2 { return v.v2; }
+    if lane == 3 { return v.v3; }
+    if lane == 4 { return v.v4; }
+    if lane == 5 { return v.v5; }
+    if lane == 6 { return v.v6; }
+    if lane == 7 { return v.v7; }
+    return 0.0;
+}
+
+pub fn f32x8_insert_lane(v: f32x8, lane: Int, val: Float) -> f32x8 {
+    if lane == 0 { return f32x8_new(val, v.v1, v.v2, v.v3, v.v4, v.v5, v.v6, v.v7); }
+    if lane == 1 { return f32x8_new(v.v0, val, v.v2, v.v3, v.v4, v.v5, v.v6, v.v7); }
+    if lane == 2 { return f32x8_new(v.v0, v.v1, val, v.v3, v.v4, v.v5, v.v6, v.v7); }
+    if lane == 3 { return f32x8_new(v.v0, v.v1, v.v2, val, v.v4, v.v5, v.v6, v.v7); }
+    if lane == 4 { return f32x8_new(v.v0, v.v1, v.v2, v.v3, val, v.v5, v.v6, v.v7); }
+    if lane == 5 { return f32x8_new(v.v0, v.v1, v.v2, v.v3, v.v4, val, v.v6, v.v7); }
+    if lane == 6 { return f32x8_new(v.v0, v.v1, v.v2, v.v3, v.v4, v.v5, val, v.v7); }
+    if lane == 7 { return f32x8_new(v.v0, v.v1, v.v2, v.v3, v.v4, v.v5, v.v6, val); }
+    return v;
+}
+
+pub fn f32x8_add(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: a.v0 + b.v0, v1: a.v1 + b.v1, v2: a.v2 + b.v2, v3: a.v3 + b.v3,
+        v4: a.v4 + b.v4, v5: a.v5 + b.v5, v6: a.v6 + b.v6, v7: a.v7 + b.v7
+    };
+}
+
+pub fn f32x8_sub(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: a.v0 - b.v0, v1: a.v1 - b.v1, v2: a.v2 - b.v2, v3: a.v3 - b.v3,
+        v4: a.v4 - b.v4, v5: a.v5 - b.v5, v6: a.v6 - b.v6, v7: a.v7 - b.v7
+    };
+}
+
+pub fn f32x8_mul(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: a.v0 * b.v0, v1: a.v1 * b.v1, v2: a.v2 * b.v2, v3: a.v3 * b.v3,
+        v4: a.v4 * b.v4, v5: a.v5 * b.v5, v6: a.v6 * b.v6, v7: a.v7 * b.v7
+    };
+}
+
+pub fn f32x8_div(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: a.v0 / b.v0, v1: a.v1 / b.v1, v2: a.v2 / b.v2, v3: a.v3 / b.v3,
+        v4: a.v4 / b.v4, v5: a.v5 / b.v5, v6: a.v6 / b.v6, v7: a.v7 / b.v7
+    };
+}
+
+pub fn f32x8_min(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: if a.v0 < b.v0 { a.v0 } else { b.v0 },
+        v1: if a.v1 < b.v1 { a.v1 } else { b.v1 },
+        v2: if a.v2 < b.v2 { a.v2 } else { b.v2 },
+        v3: if a.v3 < b.v3 { a.v3 } else { b.v3 },
+        v4: if a.v4 < b.v4 { a.v4 } else { b.v4 },
+        v5: if a.v5 < b.v5 { a.v5 } else { b.v5 },
+        v6: if a.v6 < b.v6 { a.v6 } else { b.v6 },
+        v7: if a.v7 < b.v7 { a.v7 } else { b.v7 }
+    };
+}
+
+pub fn f32x8_max(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: if a.v0 > b.v0 { a.v0 } else { b.v0 },
+        v1: if a.v1 > b.v1 { a.v1 } else { b.v1 },
+        v2: if a.v2 > b.v2 { a.v2 } else { b.v2 },
+        v3: if a.v3 > b.v3 { a.v3 } else { b.v3 },
+        v4: if a.v4 > b.v4 { a.v4 } else { b.v4 },
+        v5: if a.v5 > b.v5 { a.v5 } else { b.v5 },
+        v6: if a.v6 > b.v6 { a.v6 } else { b.v6 },
+        v7: if a.v7 > b.v7 { a.v7 } else { b.v7 }
+    };
+}
+
+pub fn f32x8_scale(v: f32x8, s: Float) -> f32x8 {
+    return f32x8 {
+        v0: v.v0 * s, v1: v.v1 * s, v2: v.v2 * s, v3: v.v3 * s,
+        v4: v.v4 * s, v5: v.v5 * s, v6: v.v6 * s, v7: v.v7 * s
+    };
+}
+
+pub fn f32x8_fma(a: f32x8, b: f32x8, c: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: a.v0 * b.v0 + c.v0, v1: a.v1 * b.v1 + c.v1,
+        v2: a.v2 * b.v2 + c.v2, v3: a.v3 * b.v3 + c.v3,
+        v4: a.v4 * b.v4 + c.v4, v5: a.v5 * b.v5 + c.v5,
+        v6: a.v6 * b.v6 + c.v6, v7: a.v7 * b.v7 + c.v7
+    };
+}
+
+pub fn f32x8_reduce_sum(v: f32x8) -> Float {
+    return v.v0 + v.v1 + v.v2 + v.v3 + v.v4 + v.v5 + v.v6 + v.v7;
+}
+
+pub fn f32x8_reduce_min(v: f32x8) -> Float {
+    let mut m: Float = v.v0;
+    if v.v1 < m { m = v.v1; }
+    if v.v2 < m { m = v.v2; }
+    if v.v3 < m { m = v.v3; }
+    if v.v4 < m { m = v.v4; }
+    if v.v5 < m { m = v.v5; }
+    if v.v6 < m { m = v.v6; }
+    if v.v7 < m { m = v.v7; }
+    return m;
+}
+
+pub fn f32x8_reduce_max(v: f32x8) -> Float {
+    let mut m: Float = v.v0;
+    if v.v1 > m { m = v.v1; }
+    if v.v2 > m { m = v.v2; }
+    if v.v3 > m { m = v.v3; }
+    if v.v4 > m { m = v.v4; }
+    if v.v5 > m { m = v.v5; }
+    if v.v6 > m { m = v.v6; }
+    if v.v7 > m { m = v.v7; }
+    return m;
+}
+
+pub fn f32x8_dot(a: f32x8, b: f32x8) -> Float {
+    return f32x8_reduce_sum(f32x8_mul(a, b));
+}
+
+pub fn f32x8_sqrt(v: f32x8) -> f32x8 {
+    return f32x8 {
+        v0: sqrt(v.v0), v1: sqrt(v.v1), v2: sqrt(v.v2), v3: sqrt(v.v3),
+        v4: sqrt(v.v4), v5: sqrt(v.v5), v6: sqrt(v.v6), v7: sqrt(v.v7)
+    };
+}
+
+pub fn f32x8_to_list(v: f32x8) -> List[Float] {
+    let mut l: List[Float] = list_new();
+    l = list_push(l, v.v0); l = list_push(l, v.v1); l = list_push(l, v.v2); l = list_push(l, v.v3);
+    l = list_push(l, v.v4); l = list_push(l, v.v5); l = list_push(l, v.v6); l = list_push(l, v.v7);
+    return l;
+}
+
+pub fn vec8f_new(v0: Float, v1: Float, v2: Float, v3: Float, v4: Float, v5: Float, v6: Float, v7: Float) -> Vec8f {
+    return Vec8f { v0: v0, v1: v1, v2: v2, v3: v3, v4: v4, v5: v5, v6: v6, v7: v7 };
+}
+
+pub fn vec8f_splat(v: Float) -> Vec8f {
+    return Vec8f { v0: v, v1: v, v2: v, v3: v, v4: v, v5: v, v6: v, v7: v };
+}
+
+pub fn vec8f_zero() -> Vec8f { return vec8f_splat(0.0); }
+
+pub fn vec8f_add(a: Vec8f, b: Vec8f) -> Vec8f {
+    return Vec8f { v0: a.v0 + b.v0, v1: a.v1 + b.v1, v2: a.v2 + b.v2, v3: a.v3 + b.v3, v4: a.v4 + b.v4, v5: a.v5 + b.v5, v6: a.v6 + b.v6, v7: a.v7 + b.v7 };
+}
+
+pub fn vec8f_sub(a: Vec8f, b: Vec8f) -> Vec8f {
+    return Vec8f { v0: a.v0 - b.v0, v1: a.v1 - b.v1, v2: a.v2 - b.v2, v3: a.v3 - b.v3, v4: a.v4 - b.v4, v5: a.v5 - b.v5, v6: a.v6 - b.v6, v7: a.v7 - b.v7 };
+}
+
+pub fn vec8f_mul(a: Vec8f, b: Vec8f) -> Vec8f {
+    return Vec8f { v0: a.v0 * b.v0, v1: a.v1 * b.v1, v2: a.v2 * b.v2, v3: a.v3 * b.v3, v4: a.v4 * b.v4, v5: a.v5 * b.v5, v6: a.v6 * b.v6, v7: a.v7 * b.v7 };
+}
+
+pub fn vec8f_scale(v: Vec8f, s: Float) -> Vec8f {
+    return Vec8f { v0: v.v0 * s, v1: v.v1 * s, v2: v.v2 * s, v3: v.v3 * s, v4: v.v4 * s, v5: v.v5 * s, v6: v.v6 * s, v7: v.v7 * s };
+}
+
+pub fn vec8f_fma(a: Vec8f, b: Vec8f, c: Vec8f) -> Vec8f {
+    return Vec8f { v0: a.v0 * b.v0 + c.v0, v1: a.v1 * b.v1 + c.v1, v2: a.v2 * b.v2 + c.v2, v3: a.v3 * b.v3 + c.v3, v4: a.v4 * b.v4 + c.v4, v5: a.v5 * b.v5 + c.v5, v6: a.v6 * b.v6 + c.v6, v7: a.v7 * b.v7 + c.v7 };
+}
+
+pub fn vec8f_hadd(v: Vec8f) -> Float { return v.v0 + v.v1 + v.v2 + v.v3 + v.v4 + v.v5 + v.v6 + v.v7; }
+
+pub fn vec8f_dot(a: Vec8f, b: Vec8f) -> Float { return vec8f_hadd(vec8f_mul(a, b)); }
+
+pub fn vec8f_norm(v: Vec8f) -> Float { return sqrt(vec8f_dot(v, v)); }
+
+pub fn vec8f_normalize(v: Vec8f) -> Vec8f {
+    let len: Float = vec8f_norm(v);
+    if len == 0.0 { return vec8f_zero(); }
+    return vec8f_scale(v, 1.0 / len);
+}
+
+pub fn vec8f_get(v: Vec8f, idx: Int) -> Float {
+    if idx == 0 { return v.v0; } if idx == 1 { return v.v1; } if idx == 2 { return v.v2; } if idx == 3 { return v.v3; }
+    if idx == 4 { return v.v4; } if idx == 5 { return v.v5; } if idx == 6 { return v.v6; } return v.v7;
+}
+
+pub fn vec8f_to_list(v: Vec8f) -> List[Float] {
+    let mut l: List[Float] = list_new();
+    l = list_push(l, v.v0); l = list_push(l, v.v1); l = list_push(l, v.v2); l = list_push(l, v.v3);
+    l = list_push(l, v.v4); l = list_push(l, v.v5); l = list_push(l, v.v6); l = list_push(l, v.v7);
+    return l;
+}

@@ -1,0 +1,97 @@
+// # CRISPR Cas13 RNA-Targeting Ribonuclease Engine
+//
+// Logline: Designs RNA-targeting crRNAs for Cas13a/Cas13d (CasRx) with Protospacer Flanking Site (PFS) checks and collateral cleavage modeling.
+//
+// Setup: Type VI CRISPR ribonuclease targeting single-stranded RNA transcripts without modifying genomic DNA.
+//
+// Beats:
+//   1. Define Cas13CrRnaDesign and Cas13KnockdownEstimate structures.
+//   2. Check 3' Protospacer Flanking Site (PFS non-G) for Cas13a and flexible targeting for Cas13d.
+//   3. Predict transcript knockdown potency based on target accessibility and spacer length.
+
+type Cas13CrRnaDesign = struct {
+    target_rna_seq: String,
+    crrna_spacer: String,
+    pfs_base: String,
+    is_pfs_compatible: Bool,
+    spacer_length: Int,
+    gc_percent: Float
+};
+
+type Cas13KnockdownEstimate = struct {
+    predicted_knockdown_pct: Float,
+    collateral_risk_index: Float,
+    target_accessibility_score: Float
+};
+
+pub fn cas13_calc_gc(seq: String) -> Float {
+    let n: Int = chars_len(seq);    if n == 0 { return 0.0; }
+    let mut gc: Int = 0;    let mut i: Int = 0;    while i < n {
+        let c: String = char_at(seq, i);        if c == "G" || c == "g" || c == "C" || c == "c" {
+            gc = gc + 1;
+        }
+        i = i + 1;
+    }
+    return crispr_cas13_rna_targeting_to_f((gc) / crispr_cas13_rna_targeting_to_f(n)) * 100.0;
+}
+
+pub fn cas13_is_valid_pfs(variant: String, pfs_base: String) -> Bool {
+    if variant == "Cas13d" || variant == "cas13d" || variant == "CasRx" {
+        return true;
+    }
+    return pfs_base != "G" && pfs_base != "g";
+}
+
+pub fn cas13_estimate_efficiency(gc: Float, accessibility: Float, pfs_ok: Bool) -> Cas13KnockdownEstimate {
+    if !pfs_ok {
+        return Cas13KnockdownEstimate {
+            predicted_knockdown_pct: 10.0,
+            collateral_risk_index: 0.05,
+            target_accessibility_score: accessibility
+        };
+    }
+    let mut kd: Float = accessibility * 70.0;    if gc >= 40.0 && gc <= 60.0 {
+        kd = kd + 25.0;
+    } else {
+        kd = kd + 10.0;
+    }
+    if kd > 98.0 { kd = 98.0; }
+    let collateral: Float = (kd / 100.0) * 0.35;    return Cas13KnockdownEstimate {
+        predicted_knockdown_pct: kd,
+        collateral_risk_index: collateral,
+        target_accessibility_score: accessibility
+    };
+}
+
+
+fn crispr_cas13_rna_targeting_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

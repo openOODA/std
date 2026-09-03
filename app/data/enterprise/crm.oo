@@ -1,0 +1,124 @@
+// # Customer Relationship Management Engine
+//
+// Logline: Initializes the CrmEngine, configures strict mode, and exposes pipeline value, weighted pipeline, win rate, and export helpers.
+//
+// Setup: Imports crm_types.oo for CrmEngine and record types and crm_deal.oo for deal helpers. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. crm_engine_init, crm_set_strict_mode.
+//   2. crm_calculate_pipeline_value, crm_calculate_weighted_pipeline.
+//   3. crm_get_win_rate, crm_export_data with capability token.
+//   4. Residual process_exit stubs for raw-pointer batch import and dynamic rule evaluation.
+
+import "./crm_types.oo";
+import "./crm_deal.oo";
+
+type Contact = struct {
+    id: Int, name: String, email: String, phone: String, company_id: Int,
+    status: Int, score: Int, is_active: Bool
+};
+
+type Deal = struct {
+    id: Int, customer_id: Int, title: String, amount: Int, stage: Int,
+    probability: Int, is_closed: Bool, is_won: Bool
+};
+
+type Interaction = struct {
+    id: Int, customer_id: Int, deal_id: Int, interaction_type: Int,
+    summary: String, timestamp: Int
+};
+
+type Campaign = struct {
+    id: Int, name: String, budget: Int, spent: Int, leads_generated: Int,
+    conversions: Int, is_active: Bool
+};
+
+type CrmEngine = struct {
+    customers: List[Contact], deals: List[Deal], interactions: List[Interaction], campaigns: List[Campaign],
+    strict_mode: Bool, total_deals_won: Int, total_deals_lost: Int
+};
+
+pub fn crm_engine_init() -> CrmEngine {
+    let custs: List[Contact] = list_new();
+    let dls: List[Deal] = list_new();
+    let inters: List[Interaction] = list_new();
+    let camps: List[Campaign] = list_new();
+    return CrmEngine {
+        customers: custs, deals: dls, interactions: inters, campaigns: camps,
+        strict_mode: true, total_deals_won: 0, total_deals_lost: 0
+    };
+}
+
+pub fn crm_set_strict_mode(engine: &mut CrmEngine, strict: Bool) {
+    let mut engine: CrmEngine = engine;
+    engine.strict_mode = strict;
+}
+
+pub fn crm_calculate_pipeline_value(engine: &CrmEngine) -> Int {
+    let dls = engine.deals;
+    let n = list_len(dls);
+    let mut i = 0;
+    let mut total = 0;
+    while i < n {
+        let d = list_get(dls, i);
+        let d_closed: Bool = d.is_closed;
+        let d_amt: Int = d.amount;
+        if d_closed == false  { total = total + d_amt; }
+        i = i + 1;
+    }
+    return total;
+}
+
+pub fn crm_calculate_weighted_pipeline(engine: &CrmEngine) -> Int {
+    let dls = engine.deals;
+    let n = list_len(dls);
+    let mut i = 0;
+    let mut total = 0;
+    while i < n {
+        let d = list_get(dls, i);
+        let d_closed: Bool = d.is_closed;
+        if d_closed == false  { total = total + crm_internal_weighted_value(&d); }
+        i = i + 1;
+    }
+    return total;
+}
+
+pub fn crm_internal_weighted_value(deal: &Deal) -> Int {
+    let closed: Bool = deal.is_closed;
+    let won: Bool = deal.is_won;
+    let amt: Int = deal.amount;
+    let prob: Int = deal.probability;
+    if closed == true {
+        if won == true  { return amt; }
+        return 0;
+    }
+    return (amt * prob) / 100;
+}
+
+pub fn crm_get_win_rate(engine: &CrmEngine) -> Int {
+    let won = engine.total_deals_won;
+    let lost = engine.total_deals_lost;
+    let total = won + lost;
+    if total == 0  { return 0; }
+    return (won * 100) / total;
+}
+
+pub fn crm_export_data(sys: &SysCap, engine: &CrmEngine) -> Result[Bool, String] {
+    let num_custs = list_len(engine.customers);
+    let num_deals = list_len(engine.deals);
+    let is_strict: Bool = engine.strict_mode;
+    if is_strict {
+        if num_custs == 0  { return Err("CRM_EXPORT_FAILED: No customer data to export"); }
+    }
+    return Ok(true);
+}
+
+pub fn crm_batch_import_raw_pointers(ptr: Int, count: Int) -> Int {
+    process_exit(1);
+    return 0;
+}
+
+pub fn crm_eval_dynamic_segmentation_rules(rule_ptr: Int) -> Bool {
+    process_exit(1);
+    return false;
+}

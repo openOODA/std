@@ -1,0 +1,105 @@
+// # ISO 26262 Automotive Functional Safety Types & Constants
+//
+// Logline: Defines AsilLevel, SafetyGoal, SafetyRequirement, SafetyFmea, SafetyProcess, and SafetyEngine types, plus the standard ASIL/severity/controllability/exposure/FTT constants and AsilLevel constructors for QM through D.
+//
+// Setup: Imports iso26262_types.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. AsilLevel / SafetyGoal / SafetyRequirement / SafetyFmea / SafetyProcess / SafetyEngine record types.
+//   2. ASIL constants asil_qm..asil_d, severity S0..S3, controllability C0..C3, exposure E0..E4.
+//   3. FTT constants iso26262_ftt_zero..iso26262_ftt_triple.
+//   4. AsilLevel constructors asil_level_qm..asil_level_d.
+
+type AsilLevel = struct {
+    asil_id: String, level: Int, severity: Int, controllability: Int,
+    exposure: Int, full_name: String
+};
+
+type SafetyGoal = struct {
+    goal_id: String, asil: Int, description: String, safe_state: String,
+    ftt: Int, diagnostic_coverage: Int, accepted: Bool
+};
+
+type SafetyRequirement = struct {
+    req_id: String, parent_goal_id: String, asil_inherited: Int,
+    description: String, test_method: Int, residual_risk: Int, implemented: Bool
+};
+
+type SafetyFmea = struct {
+    fmea_id: String, element_id: String, failure_mode: String, effect: String,
+    severity: Int, occurrence: Int, detection: Int, rpn: Int, action: String
+};
+
+type SafetyProcess = struct {
+    process_id: String, element_id: String, current_phase: Int,
+    last_review_ts: Int, review_notes: String, is_valid: Bool
+};
+
+type SafetyEngine = struct {
+    engine_id: String, goals: List[SafetyGoal], requirements: List[SafetyRequirement],
+    fmeas: List[SafetyFmea], processes: List[SafetyProcess],
+    total_goals: Int, accepted_goals: Int, is_halted: Bool
+};
+
+// ASIL Level Constants (ISO 26262-3:2018 Table 4)
+pub fn asil_qm() -> Int { return 0; }
+pub fn asil_a() -> Int { return 1; }
+pub fn asil_b() -> Int { return 2; }
+pub fn asil_c() -> Int { return 3; }
+pub fn asil_d() -> Int { return 4; }
+
+// Severity Constants
+pub fn iso26262_severity_s0() -> Int { return 0; }
+pub fn iso26262_severity_s1() -> Int { return 1; }
+pub fn iso26262_severity_s2() -> Int { return 2; }
+pub fn iso26262_severity_s3() -> Int { return 3; }
+
+// Controllability Constants
+pub fn iso26262_controllability_c0() -> Int { return 0; }
+pub fn iso26262_controllability_c1() -> Int { return 1; }
+pub fn iso26262_controllability_c2() -> Int { return 2; }
+pub fn iso26262_controllability_c3() -> Int { return 3; }
+
+// Exposure Constants
+pub fn iso26262_exposure_e0() -> Int { return 0; }
+pub fn iso26262_exposure_e1() -> Int { return 1; }
+pub fn iso26262_exposure_e2() -> Int { return 2; }
+pub fn iso26262_exposure_e3() -> Int { return 3; }
+pub fn iso26262_exposure_e4() -> Int { return 4; }
+
+// Fault Tolerant Time Interval
+pub fn iso26262_ftt_zero() -> Int { return 0; }
+pub fn iso26262_ftt_single() -> Int { return 1; }
+pub fn iso26262_ftt_double() -> Int { return 2; }
+pub fn iso26262_ftt_triple() -> Int { return 3; }
+
+// AsilLevel Constructors
+pub fn asil_level_d() -> AsilLevel {
+    return AsilLevel {
+        asil_id: "ASIL_D", level: 4, severity: 3, controllability: 3, exposure: 4, full_name: "D"
+    };
+}
+
+pub fn asil_level_c() -> AsilLevel {
+    return AsilLevel {
+        asil_id: "ASIL_C", level: 3, severity: 3, controllability: 2, exposure: 4, full_name: "C"
+    };
+}
+
+pub fn asil_level_b() -> AsilLevel {
+    return AsilLevel {
+        asil_id: "ASIL_B", level: 2, severity: 2, controllability: 2, exposure: 3, full_name: "B"
+    };
+}
+
+pub fn asil_level_a() -> AsilLevel {
+    return AsilLevel {
+        asil_id: "ASIL_A", level: 1, severity: 1, controllability: 1, exposure: 3, full_name: "A"
+    };
+}
+
+pub fn asil_level_qm() -> AsilLevel {
+    return AsilLevel {
+        asil_id: "ASIL_QM", level: 0, severity: 0, controllability: 0, exposure: 0, full_name: "QM"
+    };
+}

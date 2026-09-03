@@ -1,0 +1,73 @@
+// # AArch64 Matrix Suite Path Table
+//
+// Logline: Names the 23 QA suite paths the AArch64 validate harness compiles.
+//
+// Setup: Indices 0..22. Paths are relative to ooda/. Pure data, no I/O.
+//
+// Beats:
+//   1. Map 0..19 to std_qa_slice1.oo through std_qa_slice20.oo.
+//   2. Map 20..22 to crypto_secrets, math_extended, and formal_proofs.
+//   3. Return empty string outside that range so callers fail closed.
+//   4. Keep a matching short tag for the printed pass table.
+
+pub fn aarch64_matrix_count() -> Int {
+    return 23;
+}
+
+pub fn aarch64_matrix_tag(i: Int) -> String {
+    if i == 0 { return "std_qa_slice1"; }
+    if i == 1 { return "std_qa_slice2"; }
+    if i == 2 { return "std_qa_slice3"; }
+    if i == 3 { return "std_qa_slice4"; }
+    if i == 4 { return "std_qa_slice5"; }
+    if i == 5 { return "std_qa_slice6"; }
+    if i == 6 { return "std_qa_slice7"; }
+    if i == 7 { return "std_qa_slice8"; }
+    if i == 8 { return "std_qa_slice9"; }
+    if i == 9 { return "std_qa_slice10"; }
+    if i == 10 { return "std_qa_slice11"; }
+    if i == 11 { return "std_qa_slice12"; }
+    if i == 12 { return "std_qa_slice13"; }
+    if i == 13 { return "std_qa_slice14"; }
+    if i == 14 { return "std_qa_slice15"; }
+    if i == 15 { return "std_qa_slice16"; }
+    if i == 16 { return "std_qa_slice17"; }
+    if i == 17 { return "std_qa_slice18"; }
+    if i == 18 { return "std_qa_slice19"; }
+    if i == 19 { return "std_qa_slice20"; }
+    if i == 20 { return "std_qa_crypto_secrets"; }
+    if i == 21 { return "std_qa_math_extended"; }
+    if i == 22 { return "std_qa_formal_proofs"; }
+    return "";
+}
+
+pub fn aarch64_matrix_path(i: Int) -> String {
+    let tag: String = aarch64_matrix_tag(i);
+    if bytes_len(tag) == 0 {
+        return "";
+    }
+    return "scripts/std_qa/" + tag + ".oo";
+}
+
+pub fn aarch64_matrix_qemu_req(i: Int) -> Bool {
+    if i == 0 {
+        return true;
+    }
+    if i == 5 {
+        return true;
+    }
+    if i >= 20 && i <= 22 {
+        return true;
+    }
+    return false;
+}
+
+pub fn aarch64_matrix_is_orch(i: Int) -> Bool {
+    if i < 1 || i > 19 {
+        return false;
+    }
+    if i == 5 {
+        return false;
+    }
+    return true;
+}

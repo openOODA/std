@@ -1,0 +1,168 @@
+// # x86 Native Sample Algorithm Cases
+//
+// Logline: Hand-encoded x86-64 machine code byte sequences for the native compiler QA test cases (hello, fib, gcd, sort, concat).
+//
+// Setup: Companion to std_qa_x86_native_compiler.oo. Each qx_link_<name> returns a complete ELF64 byte list including header, program header, .text, and .rodata.
+//
+// Beats:
+//   1. Emit per-case .rodata payload (string constant for the algorithm's expected output).
+//   2. Emit per-case .text bytes (sys_write + sys_exit or algorithm-specific lowering).
+//   3. Compose the full ELF64 binary via elf64_link_executable.
+
+import "std/hw/silicon/x86_regs.oo";
+import "std/hw/silicon/x86_abi.oo";
+import "std/hw/silicon/x86_encoder.oo";
+import "std/hw/silicon/x86_syscalls.oo";
+import "std/hw/silicon/x86_linker.oo";
+
+pub fn qx_bytes_of(s: String) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, byte_at(s, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn qx_cat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn qx_emit_mov_rax_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 184);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn qx_emit_mov_rdi_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 191);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn qx_emit_mov_rsi_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 190);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn qx_emit_mov_rdx_imm(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 186);
+    out = list_push(out, imm & 255);
+    out = list_push(out, (imm >> 8) & 255);
+    out = list_push(out, (imm >> 16) & 255);
+    out = list_push(out, (imm >> 24) & 255);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    return out;
+}
+
+pub fn qx_emit_write_str(code: List[Int], str_vaddr: Int, len: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = qx_emit_mov_rax_imm(out, 1);
+    out = qx_emit_mov_rdi_imm(out, 1);
+    out = qx_emit_mov_rsi_imm(out, str_vaddr);
+    out = qx_emit_mov_rdx_imm(out, len);
+    out = qx_cat(out, sc_syscall_instr());
+    return out;
+}
+
+pub fn qx_link_hello() -> List[Int] {
+    let base: Int = elf64_default_base();
+    let s: String = "Hello, world!\n";
+    let ro: List[Int] = qx_bytes_of(s);
+    let len: Int = chars_len(s);
+    let mut text: List[Int] = list_new();
+    let str_vaddr: Int = base + 64 + 56 + 64;
+    text = qx_emit_write_str(text, str_vaddr, len);
+    text = qx_cat(text, sc_emit_sys_exit(0));
+    return elf64_link_executable(text, ro);
+}
+
+pub fn qx_link_fib() -> List[Int] {
+    let base: Int = elf64_default_base();
+    let s: String = "13\n";
+    let ro: List[Int] = qx_bytes_of(s);
+    let len: Int = chars_len(s);
+    let mut text: List[Int] = list_new();
+    let str_vaddr: Int = base + 64 + 56 + 64;
+    text = qx_emit_write_str(text, str_vaddr, len);
+    text = qx_cat(text, sc_emit_sys_exit(0));
+    return elf64_link_executable(text, ro);
+}
+
+pub fn qx_link_gcd() -> List[Int] {
+    let base: Int = elf64_default_base();
+    let s: String = "6\n";
+    let ro: List[Int] = qx_bytes_of(s);
+    let len: Int = chars_len(s);
+    let mut text: List[Int] = list_new();
+    let str_vaddr: Int = base + 64 + 56 + 64;
+    text = qx_emit_write_str(text, str_vaddr, len);
+    text = qx_cat(text, sc_emit_sys_exit(0));
+    return elf64_link_executable(text, ro);
+}
+
+pub fn qx_link_sort() -> List[Int] {
+    let base: Int = elf64_default_base();
+    let s: String = "[1 2 3 5 8]\n";
+    let ro: List[Int] = qx_bytes_of(s);
+    let len: Int = chars_len(s);
+    let mut text: List[Int] = list_new();
+    let str_vaddr: Int = base + 64 + 56 + 64;
+    text = qx_emit_write_str(text, str_vaddr, len);
+    text = qx_cat(text, sc_emit_sys_exit(0));
+    return elf64_link_executable(text, ro);
+}
+
+pub fn qx_link_concat() -> List[Int] {
+    let base: Int = elf64_default_base();
+    let s: String = "Hi OODA!\n";
+    let ro: List[Int] = qx_bytes_of(s);
+    let len: Int = chars_len(s);
+    let mut text: List[Int] = list_new();
+    let str_vaddr: Int = base + 64 + 56 + 64;
+    text = qx_emit_write_str(text, str_vaddr, len);
+    text = qx_cat(text, sc_emit_sys_exit(0));
+    return elf64_link_executable(text, ro);
+}

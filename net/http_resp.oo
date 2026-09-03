@@ -1,0 +1,154 @@
+// # HTTP/1.1 Response Parser
+//
+// Logline: Pure HTTP/1.1 response helpers: status-text lookup, case-insensitive header lookup, and a status wrapper for parsing.
+//
+// Setup: Pure module. Status line and headers ride List[String] parallel arrays. Body is everything after the first \r\n\r\n separator; empty body is allowed. The full Result[HttpResponse, String] parse is in std/net/http_resp_parse.oo; this file exposes the Result[Int, String] status wrapper plus the supporting helpers.
+//
+// Beats:
+//   1. Define HttpResponse struct with version, status, reason, headers, values, and body.
+//   2. Provide status-text lookup and case-insensitive header lookup against an HttpResponse.
+//   3. Status wrapper http_resp_parse_status re-runs the validation pipeline and returns Result[Int, String].
+
+type HttpResponse = struct {
+    version: String,
+    status: Int,
+    reason: String,
+    headers: List[String],
+    values: List[String],
+    body: String
+};
+
+fn http_resp_list_set_str(l: List[String], idx: Int, v: String) -> List[String] {
+    let n: Int = list_len(l);
+    let mut out: List[String] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx {
+            out = list_push(out, v);
+        } else {
+            out = list_push(out, list_get(l, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn http_resp_to_lower_byte(b: Int) -> String {
+    let abc: String = "abcdefghijklmnopqrstuvwxyz";
+    if b < 65 { return ""; }
+    if b > 90 { return ""; }
+    return char_at(abc, b - 65);
+}
+
+fn http_resp_lower(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        let b: Int = byte_at(s, i);
+        let lc: String = http_resp_to_lower_byte(b);
+        if chars_len(lc) > 0 {
+            out = out + lc;
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn http_resp_name_eq(a: String, b: String) -> Bool {
+    return http_resp_lower(a) == http_resp_lower(b);
+}
+
+fn http_resp_parse_digits(s: String) -> Int {
+    let n: Int = chars_len(s);
+    if n == 0 { return 0 - 1; }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b < 48 { return 0 - 1; }
+        if b > 57 { return 0 - 1; }
+        acc = acc * 10 + (b - 48);
+        i = i + 1;
+    }
+    return acc;
+}
+
+pub fn http_resp_status_text(status: Int) -> String {
+    if status == 100 { return "Continue"; }
+    if status == 101 { return "Switching Protocols"; }
+    if status == 200 { return "OK"; }
+    if status == 201 { return "Created"; }
+    if status == 202 { return "Accepted"; }
+    if status == 204 { return "No Content"; }
+    if status == 301 { return "Moved Permanently"; }
+    if status == 302 { return "Found"; }
+    if status == 304 { return "Not Modified"; }
+    if status == 307 { return "Temporary Redirect"; }
+    if status == 308 { return "Permanent Redirect"; }
+    if status == 400 { return "Bad Request"; }
+    if status == 401 { return "Unauthorized"; }
+    if status == 403 { return "Forbidden"; }
+    if status == 404 { return "Not Found"; }
+    if status == 405 { return "Method Not Allowed"; }
+    if status == 408 { return "Request Timeout"; }
+    if status == 409 { return "Conflict"; }
+    if status == 410 { return "Gone"; }
+    if status == 411 { return "Length Required"; }
+    if status == 413 { return "Payload Too Large"; }
+    if status == 414 { return "URI Too Long"; }
+    if status == 415 { return "Unsupported Media Type"; }
+    if status == 418 { return "I'm a teapot"; }
+    if status == 422 { return "Unprocessable Entity"; }
+    if status == 429 { return "Too Many Requests"; }
+    if status == 500 { return "Internal Server Error"; }
+    if status == 501 { return "Not Implemented"; }
+    if status == 502 { return "Bad Gateway"; }
+    if status == 503 { return "Service Unavailable"; }
+    if status == 504 { return "Gateway Timeout"; }
+    if status == 505 { return "HTTP Version Not Supported"; }
+    return "Unknown";
+}
+
+pub fn http_resp_parse_status(s: String) -> Result[Int, String] {
+    if chars_len(s) == 0 {
+        return Err("ERR\thttp_resp_parse\tempty");
+    }
+    let crlf_nl: Int = str_index_of(s, "\r\n");
+    if crlf_nl <= 0 {
+        return Err("ERR\thttp_resp_parse\tno_crlf");
+    }
+    let status_line: String = str_slice(s, 0, crlf_nl);
+    let sp1: Int = str_index_of(status_line, " ");
+    if sp1 <= 0 {
+        return Err("ERR\thttp_resp_parse\tno_space_after_version");
+    }
+    let after_v: String = str_slice(status_line, sp1 + 1, chars_len(status_line));
+    let sp2: Int = str_index_of(after_v, " ");
+    let code_str: String = if sp2 < 0 { after_v } else { str_slice(after_v, 0, sp2) };
+    let status: Int = http_resp_parse_digits(code_str);
+    if status < 0 {
+        return Err("ERR\thttp_resp_parse\tbad_code");
+    }
+    return Ok(status);
+}
+
+pub fn http_resp_get_header(resp: HttpResponse, name: String) -> Result[String, String] {
+    let hs: List[String] = resp.headers;
+    let vs: List[String] = resp.values;
+    let n: Int = list_len(hs);
+    let mut i: Int = 0;
+    while i < n {
+        if http_resp_name_eq(list_get(hs, i), name) {
+            if i < list_len(vs) {
+                return Ok(list_get(vs, i));
+            }
+            return Ok("");
+        }
+        i = i + 1;
+    }
+    return Err("http_resp: header not found");
+}

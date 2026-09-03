@@ -1,0 +1,155 @@
+// # Robust tube MPC law
+//
+// Logline: For linear time-invariant dynamics x_{k+1} = A x_k + B u_k + w_k with ||w||_inf <= d and spectral radius rho = |a| < 1, the tube width after N steps is W_N = d * (1 - rho^N) / (1 - rho). arXiv references: Mayne et al. 2011 Automatica 47, 262 (doi:10.1016/j.automatica.2011.01.086), Langson et al. 2004 CDC. Coupled with H-infinity: the worst-case ||T_zw||_inf is bounded by gamma.
+//
+// Setup: Pure Float. Spectral radius rho = |a| must be in [0, 1). Bound d must be non-negative. Horizon N must be positive. Hostile inputs fail closed to a zero width.
+//
+// Beats:
+//   1. tube_mpc_width returns d * (1 - rho^N) / (1 - rho).
+//   2. tube_mpc_width_step returns d (single step N=1 special case).
+//   3. tube_mpc_hinf_bound returns 1 iff the closed-loop gain gamma is finite and d * gamma < tol (worst-case deviation).
+//   4. mpc_tube_law_cert boxes the law into DomainCert.holds.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn tube_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn tmw_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Tube width for scalar linear time-invariant dynamics. The state evolves as
+// x_{k+1} = a x_k + w_k with |w_k| <= d and |a| = rho < 1. The deviation
+// from the nominal trajectory after N steps is bounded by
+//   W_N = d * (1 - rho^N) / (1 - rho)
+// (geometric series, Mayne et al. 2011 eq. 6). For N=1, W_1 = d.
+// d=0 or n=0 is Ok(0.0). rho>=1, d<0, or n<0 is Err.
+pub fn tube_mpc_width(a: Float, d: Float, n: Float) -> Result[Float, String] {
+    if d < 0.0 { return Err("ERR\ttmw\tdomain"); }
+    if n < 0.0 { return Err("ERR\ttmw\tdomain"); }
+    let rho: Float = tube_abs(a);
+    if rho >= 1.0 { return Err("ERR\ttmw\tdomain"); }
+    if n == 0.0 { return Ok(0.0); }
+    if rho == 0.0 { return Ok(d * n); }
+    let one_minus_rho: Float = 1.0 - rho;
+    let mut rho_n: Float = 1.0;
+    let mut k: Float = 0.0;
+    while k < n {
+        rho_n = rho_n * rho;
+        k = k + 1.0;
+    }
+    let one_minus_rho_n: Float = 1.0 - rho_n;
+    return Ok(d * one_minus_rho_n / one_minus_rho);
+}
+
+// Single-step tube width: W_1 = d. d=0 is Ok(0.0). d<0 is Err.
+pub fn tube_mpc_width_step(d: Float) -> Result[Float, String] {
+    if d < 0.0 { return Err("ERR\ttmw\tdomain"); }
+    return Ok(d);
+}
+
+// Steady-state tube width: W_infty = d / (1 - rho) for rho < 1.
+// d=0 is Ok(0.0). d<0 or rho>=1 is Err.
+pub fn tube_mpc_width_infinity(a: Float, d: Float) -> Result[Float, String] {
+    if d < 0.0 { return Err("ERR\ttmw\tdomain"); }
+    let rho: Float = tube_abs(a);
+    if rho >= 1.0 { return Err("ERR\ttmw\tdomain"); }
+    return Ok(d / (1.0 - rho));
+}
+
+// H-infinity robustness check (coupled): the closed-loop gain from
+// disturbance w to controlled output z is bounded by gamma > 0. The
+// worst-case deviation is d * gamma. We declare the system robust to
+// bounded disturbance d iff d * gamma < tol.
+pub fn tube_mpc_hinf_bound(d: Float, gamma: Float, tol: Float) -> Int {
+    if d < 0.0 { return 0; }
+    if gamma <= 0.0 { return 0; }
+    if tol <= 0.0 { return 0; }
+    let dev: Float = d * gamma;
+    if dev > tol { return 0; }
+    return 1;
+}
+
+// DomainCert: holds 1 only when the tube width is positive (i.e., the law
+// is well-defined for the supplied parameters) and the H-infinity bound
+// is satisfied within tolerance.
+pub fn mpc_tube_law_cert(a: Float, d: Float, n: Float, gamma: Float, tol: Float) -> DomainCert {
+    let wr: Result[Float, String] = tube_mpc_width(a, d, n);
+    if wr.is_ok() == false { return domain_cert("robot", "mpc_tube_law", 0); }
+    let w: Float = tmw_got(wr);
+    if w <= 0.0 { return domain_cert("robot", "mpc_tube_law", 0); }
+    let ok: Int = tube_mpc_hinf_bound(d, gamma, tol);
+    if ok != 1 { return domain_cert("robot", "mpc_tube_law", 0); }
+    return domain_cert("robot", "mpc_tube_law", 1);
+}
+
+pub fn verify_mpc_tube_law() -> Bool {
+    let tol: Float = 0.0000001;
+
+    // Golden: a = 0.5, d = 0.1, N = 3.
+    // rho = 0.5, rho^3 = 0.125, W_3 = 0.1 * 0.875 / 0.5 = 0.175.
+    let w3: Float = tmw_got(tube_mpc_width(0.5, 0.1, 3.0));
+    if tube_abs(w3 - 0.175) > tol { return false; }
+
+    // Single-step width: W_1 = d.
+    let w1: Float = tmw_got(tube_mpc_width(0.5, 0.1, 1.0));
+    if tube_abs(w1 - 0.1) > tol { return false; }
+    if tube_abs(tmw_got(tube_mpc_width_step(0.1)) - 0.1) > tol { return false; }
+
+    // Golden 2: a = 0.9, d = 0.05, N = 5.
+    // rho^5 = 0.59049, W_5 = 0.05 * 0.40951 / 0.1 = 0.204755.
+    let w5: Float = tmw_got(tube_mpc_width(0.9, 0.05, 5.0));
+    if tube_abs(w5 - 0.204755) > tol { return false; }
+
+    // Steady-state width: W_infty(0.5, 0.1) = 0.1 / 0.5 = 0.2.
+    let w_inf: Float = tmw_got(tube_mpc_width_infinity(0.5, 0.1));
+    if tube_abs(w_inf - 0.2) > tol { return false; }
+    // W_infty(0.9, 0.05) = 0.05 / 0.1 = 0.5.
+    let w_inf2: Float = tmw_got(tube_mpc_width_infinity(0.9, 0.05));
+    if tube_abs(w_inf2 - 0.5) > tol { return false; }
+
+    // Negative a: rho = 0.5, W_3 = 0.175 (same as a=0.5 because rho).
+    let w3n: Float = tmw_got(tube_mpc_width(0.0 - 0.5, 0.1, 3.0));
+    if tube_abs(w3n - 0.175) > tol { return false; }
+
+    // Zero a (a = 0): rho = 0, W_N = d * N.
+    let w0: Float = tmw_got(tube_mpc_width(0.0, 0.1, 3.0));
+    if tube_abs(w0 - 0.3) > tol { return false; }
+
+    // Coupled (H-infinity): gamma = 0.5, d = 0.1, tol = 1.0. d*gamma = 0.05 < 1 -> robust.
+    if tube_mpc_hinf_bound(0.1, 0.5, 1.0) != 1 { return false; }
+    // d*gamma = 1.2 > 1 -> not robust.
+    if tube_mpc_hinf_bound(0.6, 2.0, 1.0) != 0 { return false; }
+
+    // DomainCert: well-defined tube + H-infinity robustness holds 1.
+    let c1: DomainCert = mpc_tube_law_cert(0.5, 0.1, 3.0, 0.5, 1.0);
+    if cert_holds(c1) != 1 { return false; }
+    // DomainCert: not robust -> holds 0.
+    let c2: DomainCert = mpc_tube_law_cert(0.5, 0.1, 3.0, 5.0, 0.1);
+    if cert_holds(c2) != 0 { return false; }
+
+    // Hostile: unstable a (rho >= 1) is Err (0.0 is in-band zero disturbance).
+    if tube_mpc_width(1.0, 0.1, 3.0).is_ok() { return false; }
+    if tube_mpc_width(1.5, 0.1, 3.0).is_ok() { return false; }
+    if tube_mpc_width_infinity(1.0, 0.1).is_ok() { return false; }
+    // d=0 and n=0 are Ok(0.0). Negative d or n is Err.
+    let zd: Result[Float, String] = tube_mpc_width(0.5, 0.0, 3.0);
+    if zd.is_ok() == false { return false; }
+    if tmw_got(zd) != 0.0 { return false; }
+    let zn: Result[Float, String] = tube_mpc_width(0.5, 0.1, 0.0);
+    if zn.is_ok() == false { return false; }
+    if tmw_got(zn) != 0.0 { return false; }
+    if tube_mpc_width(0.5, 0.0 - 0.1, 3.0).is_ok() { return false; }
+    if tube_mpc_width(0.5, 0.1, 0.0 - 1.0).is_ok() { return false; }
+    if tube_mpc_width_step(0.0 - 0.1).is_ok() { return false; }
+    if tube_mpc_width_infinity(0.5, 0.0 - 0.1).is_ok() { return false; }
+    // Hostile: H-infinity on non-positive gamma or non-positive tol returns 0.
+    if tube_mpc_hinf_bound(0.1, 0.0, 1.0) != 0 { return false; }
+    if tube_mpc_hinf_bound(0.1, 0.0 - 0.5, 1.0) != 0 { return false; }
+    if tube_mpc_hinf_bound(0.1, 0.5, 0.0) != 0 { return false; }
+
+    return true;
+}

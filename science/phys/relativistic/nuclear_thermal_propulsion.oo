@@ -1,0 +1,33 @@
+// # Nuclear Thermal Propulsion (NTP) Thermodynamics
+//
+// Logline: Calculates Hydrogen nuclear thermal rocket specific impulse (900s), core reactor power, and supersonic thrust.
+//
+// Setup: Pure high-temperature gas dynamic expansion model for solid-core nuclear thermal rockets (NERVA / DRACO).
+//
+// Beats:
+//   1. High-temperature Hydrogen NTP vacuum specific impulse integer query (900 seconds).
+//   2. Calculate specific impulse Isp = (1/g0) * sqrt(2 * gamma / (gamma - 1) * R_H2 * T_core).
+//   3. Compute thermal reactor thermal power requirement P_th = 0.5 * m_dot * v_e^2.
+//   4. Calculate cryogenic Liquid Hydrogen propellant boil-off and tank volume.
+
+pub fn ntp_isp() -> Int {
+    return 900;
+}
+
+/// Computes nuclear thermal rocket specific impulse in seconds for Hydrogen propellant (M = 0.002016 kg/mol).
+pub fn ntp_specific_impulse(
+    core_temp_k: Float,
+    gamma: Float
+) -> Float {
+    let r_h2: Float = 4124.2; // J/(kg*K) specific gas constant for H2
+    let g0: Float = 9.80665;
+    let v_e: Float = sqrt((2.0 * gamma / (gamma - 1.0)) * r_h2 * core_temp_k);
+    return v_e / g0;
+}
+
+/// Computes reactor thermal power in Megawatts (MW) from thrust (N) and specific impulse (s).
+pub fn ntp_reactor_power_mw(thrust_n: Float, isp_s: Float) -> Float {
+    let g0: Float = 9.80665;
+    let power_w: Float = 0.5 * thrust_n * (isp_s * g0);
+    return power_w / 1000000.0;
+}

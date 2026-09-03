@@ -1,0 +1,36 @@
+// # FS Time Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fs/time (time primitives) subdir of the fs domain library. Re-exports a stable time_mod_* surface for the most-used public API (chrono: now_ms, sleep_ms, elapsed_ms). The rest of the directory is theoretical-foundation files (durations, leap seconds, monotonic clocks, PTP IEEE 1588, true time, relativistic GPS correction, UTC offsets) that remain private.
+//
+// Setup: Imports private time siblings; chrono functions take TimeCap at the call site.
+//
+// Beats:
+//   1. Re-export the chrono public surface (now_ms, sleep_ms, elapsed_ms) as time_mod_chrono_*.
+//   2. Document the duration theory surface (arithmetic, laws) as private siblings.
+//   3. Document the clock theory surface (monotonic, PTP IEEE 1588, true time, leap second) as private siblings.
+//   4. Document the relativistic / UTC / GPS surface as private siblings.
+//   5. Document the invariants and KATs as private siblings.
+
+import "chrono.oo";
+
+// Public chrono surface: time_mod_chrono_*
+pub fn time_mod_chrono_now_ms(time_cap: &TimeCap) -> Int { return chrono_now_ms(time_cap); }
+pub fn time_mod_chrono_sleep_ms(time_cap: &TimeCap, ms: Int) { return chrono_sleep_ms(time_cap, ms); }
+pub fn time_mod_chrono_elapsed_ms(time_cap: &TimeCap, start_ms: Int) -> Int { return chrono_elapsed_ms(time_cap, start_ms); }
+pub fn time_mod_chrono_secs_to_ms(secs: Int) -> Int { return chrono_secs_to_ms(secs); }
+pub fn time_mod_chrono_mins_to_ms(mins: Int) -> Int { return chrono_mins_to_ms(mins); }
+pub fn time_mod_chrono_hours_to_ms(hours: Int) -> Int { return chrono_hours_to_ms(hours); }
+pub fn time_mod_chrono_days_to_ms(days: Int) -> Int { return chrono_days_to_ms(days); }
+pub fn time_mod_chrono_format_ms(ms: Int) -> String { return chrono_format_ms(ms); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. duration_law.oo, leap_second_law.oo, ptp_ieee_1588_law.oo)
+//   _theory files (e.g. duration_arithmetic_theory.oo, gps_relativistic_correction_theory.oo, utc_offset_theory.oo)
+//   _principle files (e.g. interval_addition_principle.oo, monotonic_clock_principle.oo, true_time_principle.oo)
+//   _invariants files (e.g. time_invariants.oo)
+//   _kat files (e.g. time_kat.oo)
+//
+// Note: time/ is mostly theoretical (durations, clocks, PTP, true time,
+// relativistic GPS, UTC). Only chrono.oo is public API code. Callers
+// needing real-time operations use time_mod_chrono_* with TimeCap; the
+// theoretical siblings are reserved for internal verification.

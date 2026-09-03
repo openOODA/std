@@ -1,0 +1,210 @@
+// # JSON grammar law
+//
+// Logline: A JSON text is built from exactly six structural characters ({, }, [, ], :, ,) plus strings, numbers, and three literal keywords (true, false, null); nesting depth must stay bounded.
+//
+// Setup: Pure byte scan. ASCII '{'=123, '}'=125, '['=91, ']'=93, ':'=58, ','=44. 'n','u','l','t','r','e','f','a','s' are the keyword bytes. Whitespace is 9, 10, 13, 32.
+//
+// Beats:
+//   1. json_structural_ok is 1 only when every { is matched by } and every [ is matched by ], in LIFO order.
+//   2. json_grammar_ok is 1 when structure is balanced and the depth cap is not exceeded.
+//   3. Empty input, unbalanced braces, or too-deep nesting fail closed to 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn json_is_ws(b: Int) -> Int {
+    if b == 32 { return 1; }
+    if b == 9 { return 1; }
+    if b == 10 { return 1; }
+    if b == 13 { return 1; }
+    return 0;
+}
+
+pub fn json_is_digit(b: Int) -> Int {
+    if b >= 48 { if b <= 57 { return 1; } }
+    return 0;
+}
+
+// 1 if b is one of the six structural JSON bytes.
+pub fn json_is_struct(b: Int) -> Int {
+    if b == 123 { return 1; }
+    if b == 125 { return 1; }
+    if b == 91 { return 1; }
+    if b == 93 { return 1; }
+    if b == 58 { return 1; }
+    if b == 44 { return 1; }
+    return 0;
+}
+
+// 1 if b is a JSON opener ({ or [).
+pub fn json_is_open(b: Int) -> Int {
+    if b == 123 { return 1; }
+    if b == 91 { return 1; }
+    return 0;
+}
+
+// 1 if b is the matching closer of an open.
+pub fn json_is_close(b: Int) -> Int {
+    if b == 125 { return 1; }
+    if b == 93 { return 1; }
+    return 0;
+}
+
+// 1 if open byte matches close byte; 0=curly pair, 1=square pair, else 0.
+pub fn json_match_kind(o: Int, c: Int) -> Int {
+    if o == 123 { if c == 125 { return 1; } }
+    if o == 91 { if c == 93 { return 1; } }
+    return 0;
+}
+
+// Walk the string, validating that braces and brackets balance in LIFO order.
+// Tracks max depth; out-of-range max_depth (<1) fails closed.
+pub fn json_structural_ok(raw: String, max_depth: Int) -> Int {
+    if max_depth < 1 { return 0; }
+    let n: Int = raw.len();
+    if n <= 0 { return 0; }
+    let mut d0: Int = 0; let mut d1: Int = 0; let mut d2: Int = 0; let mut d3: Int = 0;
+    let mut d4: Int = 0; let mut d5: Int = 0; let mut d6: Int = 0; let mut d7: Int = 0;
+    let mut d8: Int = 0; let mut d9: Int = 0; let mut d10: Int = 0; let mut d11: Int = 0;
+    let mut d12: Int = 0; let mut d13: Int = 0; let mut d14: Int = 0; let mut d15: Int = 0;
+    let mut depth: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(raw, i);
+        if json_is_ws(b) == 1 {
+            i = i + 1;
+        } else if b == 34 {
+            i = i + 1;
+            while i < n {
+                let c: Int = byte_at(raw, i);
+                if c == 92 { i = i + 2; }
+                else if c == 34 { i = i + 1; break; }
+                else { i = i + 1; }
+            }
+        } else if json_is_open(b) == 1 {
+            depth = depth + 1;
+            if depth > max_depth { return 0; }
+            if depth == 1 { d0 = b; } else if depth == 2 { d1 = b; }
+            else if depth == 3 { d2 = b; } else if depth == 4 { d3 = b; }
+            else if depth == 5 { d4 = b; } else if depth == 6 { d5 = b; }
+            else if depth == 7 { d6 = b; } else if depth == 8 { d7 = b; }
+            else if depth == 9 { d8 = b; } else if depth == 10 { d9 = b; }
+            else if depth == 11 { d10 = b; } else if depth == 12 { d11 = b; }
+            else if depth == 13 { d12 = b; } else if depth == 14 { d13 = b; }
+            else if depth == 15 { d14 = b; } else { d15 = b; }
+            i = i + 1;
+        } else if json_is_close(b) == 1 {
+            if depth == 0 { return 0; }
+            let top: Int = if depth == 1 { d0 } else if depth == 2 { d1 } else if depth == 3 { d2 }
+                else if depth == 4 { d3 } else if depth == 5 { d4 } else if depth == 6 { d5 }
+                else if depth == 7 { d6 } else if depth == 8 { d7 } else if depth == 9 { d8 }
+                else if depth == 10 { d9 } else if depth == 11 { d10 } else if depth == 12 { d11 }
+                else if depth == 13 { d12 } else if depth == 14 { d13 } else if depth == 15 { d14 }
+                else { d15 };
+            if json_match_kind(top, b) != 1 { return 0; }
+            if depth == 1 { d0 = 0; } else if depth == 2 { d1 = 0; } else if depth == 3 { d2 = 0; }
+            else if depth == 4 { d3 = 0; } else if depth == 5 { d4 = 0; } else if depth == 6 { d5 = 0; }
+            else if depth == 7 { d6 = 0; } else if depth == 8 { d7 = 0; } else if depth == 9 { d8 = 0; }
+            else if depth == 10 { d9 = 0; } else if depth == 11 { d10 = 0; } else if depth == 12 { d11 = 0; }
+            else if depth == 13 { d12 = 0; } else if depth == 14 { d13 = 0; } else { d15 = 0; }
+            depth = depth - 1;
+            i = i + 1;
+        } else if b == 58 || b == 44 {
+            i = i + 1;
+        } else if json_is_digit(b) == 1 || b == 45 {
+            i = i + 1;
+            while i < n {
+                let c: Int = byte_at(raw, i);
+                if json_is_digit(c) == 0 { if c != 46 { if c != 101 { if c != 69 { break; } } } }
+                i = i + 1;
+            }
+        } else if b == 116 {
+            if i + 4 > n { return 0; }
+            if byte_at(raw, i + 1) != 114 { return 0; }
+            if byte_at(raw, i + 2) != 117 { return 0; }
+            if byte_at(raw, i + 3) != 101 { return 0; }
+            i = i + 4;
+        } else if b == 102 {
+            if i + 5 > n { return 0; }
+            if byte_at(raw, i + 1) != 97 { return 0; }
+            if byte_at(raw, i + 2) != 108 { return 0; }
+            if byte_at(raw, i + 3) != 115 { return 0; }
+            if byte_at(raw, i + 4) != 101 { return 0; }
+            i = i + 5;
+        } else if b == 110 {
+            if i + 4 > n { return 0; }
+            if byte_at(raw, i + 1) != 117 { return 0; }
+            if byte_at(raw, i + 2) != 108 { return 0; }
+            if byte_at(raw, i + 3) != 108 { return 0; }
+            i = i + 4;
+        } else {
+            return 0;
+        }
+    }
+    if depth != 0 { return 0; }
+    return 1;
+}
+
+pub fn json_grammar_ok(raw: String) -> Int {
+    return json_structural_ok(raw, 32);
+}
+
+// 1 if nesting depth is within max_depth while walking raw.
+pub fn json_depth_in_bounds(raw: String, max_depth: Int) -> Int {
+    let n: Int = raw.len();
+    if n <= 0 { return 0; }
+    let mut depth: Int = 0;
+    let mut max_seen: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(raw, i);
+        if b == 123 || b == 91 {
+            depth = depth + 1;
+            if depth > max_seen { max_seen = depth; }
+        } else if b == 125 || b == 93 {
+            depth = depth - 1;
+        }
+        i = i + 1;
+    }
+    if max_seen > max_depth { return 0; }
+    if depth != 0 { return 0; }
+    if max_seen == 0 { return 0; }
+    return 1;
+}
+
+pub fn json_grammar_holds(raw: String) -> DomainCert {
+    let h: Int = json_grammar_ok(raw);
+    return domain_cert("markup", "json_grammar", h);
+}
+
+pub fn verify_json_grammar_law() -> Bool {
+    if json_grammar_ok("{\"k\":1}") != 1 { return false; }
+    if json_grammar_ok("{\"a\":[1,2,3]}") != 1 { return false; }
+    if json_grammar_ok("") != 0 { return false; }
+    if json_grammar_ok("{") != 0 { return false; }
+    if json_grammar_ok("}") != 0 { return false; }
+    if json_grammar_ok("{\"a\":[1,2,}") != 0 { return false; }
+    if json_grammar_ok("[") != 0 { return false; }
+    if json_grammar_ok("{\"k\":1} extra") != 0 { return false; }
+    if json_grammar_ok("null") != 1 { return false; }
+    if json_grammar_ok("true") != 1 { return false; }
+    if json_grammar_ok("false") != 1 { return false; }
+    if json_grammar_ok("42") != 1 { return false; }
+    if json_grammar_ok("-3.14") != 1 { return false; }
+    if json_grammar_ok("\"hi\"") != 1 { return false; }
+    if json_grammar_ok("  { \"k\" : 1 }  ") != 1 { return false; }
+    if json_structural_ok("{{}}", 1) != 0 { return false; }
+    if json_structural_ok("{{}}", 2) != 1 { return false; }
+    if json_depth_in_bounds("[1,[2,[3]]]", 3) != 1 { return false; }
+    if json_depth_in_bounds("[1,[2,[3]]]", 2) != 0 { return false; }
+    if json_is_struct(123) != 1 { return false; }
+    if json_is_struct(44) != 1 { return false; }
+    if json_is_struct(65) != 0 { return false; }
+    if json_is_open(123) != 1 { return false; }
+    if json_is_open(93) != 0 { return false; }
+    let c1: DomainCert = json_grammar_holds("{\"k\":1}");
+    if c1.holds != 1 { return false; }
+    if c1.domain != "markup" { return false; }
+    let c2: DomainCert = json_grammar_holds("{");
+    if c2.holds != 0 { return false; }
+    return true;
+}

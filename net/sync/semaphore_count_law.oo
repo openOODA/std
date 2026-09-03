@@ -1,0 +1,112 @@
+// # Semaphore count non-negative law
+//
+// Logline: A counting semaphore permit count is always non-negative; acquire when permits > 0 decrements, acquire when permits == 0 fails closed, release increments but never exceeds max.
+//
+// Setup: Pure Int arithmetic on a CountingSemaphore record. No FS, net, env, or thread.
+//
+// Beats:
+//   1. New semaphore with permits in [0, max] and max positive.
+//   2. Acquire decrements when permits > 0; otherwise fails closed.
+//   3. Release increments but stays at or below max.
+//   4. The count never goes negative.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub type CountingSemaphore = struct {
+    permits: Int,
+    max_permits: Int
+};
+
+fn csn_got(r: Result[CountingSemaphore, String]) -> CountingSemaphore {
+    match r { Ok(v) => { return v; }, Err(_) => { return CountingSemaphore { permits: 0 - 1, max_permits: 0 }; } }
+}
+
+// Build a new semaphore. permits=0 is Ok(empty). permits<0 or max<1 is Err.
+pub fn counting_sem_new(permits: Int, max_permits: Int) -> Result[CountingSemaphore, String] {
+    if max_permits < 1 { return Err("ERR\tcsn\tdomain"); }
+    if permits < 0 { return Err("ERR\tcsn\tdomain"); }
+    let mut p: Int = permits;
+    if p > max_permits { p = max_permits; }
+    return Ok(CountingSemaphore { permits: p, max_permits: max_permits });
+}
+
+// Try to acquire 1 permit. Returns the new state, or permits -1 on failure.
+pub fn counting_sem_acquire(sem: CountingSemaphore) -> CountingSemaphore {
+    let p: Int = sem.permits;
+    if p <= 0 {
+        return CountingSemaphore {
+            permits: 0 - 1,
+            max_permits: sem.max_permits
+        };
+    }
+    return CountingSemaphore {
+        permits: p - 1,
+        max_permits: sem.max_permits
+    };
+}
+
+// Release 1 permit. Returns the new state, or permits -1 on overflow.
+pub fn counting_sem_release(sem: CountingSemaphore) -> CountingSemaphore {
+    let p: Int = sem.permits;
+    let m: Int = sem.max_permits;
+    if p < 0 {
+        return CountingSemaphore {
+            permits: 0 - 1,
+            max_permits: m
+        };
+    }
+    if p >= m {
+        return CountingSemaphore {
+            permits: 0 - 1,
+            max_permits: m
+        };
+    }
+    return CountingSemaphore {
+        permits: p + 1,
+        max_permits: m
+    };
+}
+
+pub fn verify_semaphore_count_law() -> Bool {
+    // Golden: 2 of 3 permits available; two acquires bring count to 1; one more acquire brings it to 0.
+    let s0: CountingSemaphore = csn_got(counting_sem_new(3, 5));
+    if s0.permits != 3 {
+        return false;
+    }
+    let s1: CountingSemaphore = counting_sem_acquire(s0);
+    if s1.permits != 2 {
+        return false;
+    }
+    let s2: CountingSemaphore = counting_sem_acquire(s1);
+    if s2.permits != 1 {
+        return false;
+    }
+    let s3: CountingSemaphore = counting_sem_acquire(s2);
+    if s3.permits != 0 {
+        return false;
+    }
+    // Hostile: acquire when zero fails closed.
+    let s4: CountingSemaphore = counting_sem_acquire(s3);
+    if s4.permits != 0 - 1 {
+        return false;
+    }
+    // Golden: release below max succeeds.
+    let s5: CountingSemaphore = counting_sem_release(s3);
+    if s5.permits != 1 {
+        return false;
+    }
+    // Hostile: release at max fails closed.
+    let s6: CountingSemaphore = csn_got(counting_sem_new(5, 5));
+    let s7: CountingSemaphore = counting_sem_release(s6);
+    if s7.permits != 0 - 1 {
+        return false;
+    }
+    if s3.permits < 0 {
+        return false;
+    }
+    if counting_sem_new(0 - 1, 5).is_ok() { return false; }
+    if counting_sem_new(1, 0).is_ok() { return false; }
+    let zsem: CountingSemaphore = csn_got(counting_sem_new(0, 5));
+    if zsem.permits != 0 { return false; }
+    return true;
+}

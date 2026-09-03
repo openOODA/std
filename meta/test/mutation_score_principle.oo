@@ -1,0 +1,169 @@
+// # Mutation score principle
+//
+// Logline: A test suite's mutation score equals killed mutants divided by total mutants; full kills paired with full coverage certify the suite as strong.
+//
+// Setup: Pure Int arithmetic on a MutationScore record. No FS, net, env. Per-mille representation (0..1000) avoids Float.
+//
+// Beats:
+//   1. mutation_score_new(8, 10) reports per_mille = 800 (0.8).
+//   2. mutation_score_holds fails closed when total <= 0.
+//   3. mutation_score_holds fails closed when killed < 0 or killed > total.
+//   4. coupled_with_coverage returns 1 only when both killed == total and lines fully covered.
+//   5. Partial kills indicate weak tests; coupled_with_coverage returns 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub type MutationScore = struct {
+    killed: Int,
+    total: Int,
+    per_mille: Int,
+    is_full_kill: Bool
+};
+
+fn msn_got(r: Result[MutationScore, String]) -> MutationScore {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return MutationScore { killed: 0 - 1, total: 0, per_mille: 0 - 1, is_full_kill: false }; }
+    }
+}
+
+// killed=0, total>0 is Ok(per_mille=0). total<=0 or killed OOR is Err.
+pub fn mutation_score_new(killed: Int, total: Int) -> Result[MutationScore, String] {
+    if total <= 0 { return Err("ERR\tmsn\tdomain"); }
+    if killed < 0 { return Err("ERR\tmsn\tdomain"); }
+    if killed > total { return Err("ERR\tmsn\tdomain"); }
+    let pm: Int = (killed * 1000) / total;
+    let mut full: Bool = false;
+    if killed == total { full = true; }
+    return Ok(MutationScore { killed: killed, total: total, per_mille: pm, is_full_kill: full });
+}
+
+pub fn mutation_score_holds(killed: Int, total: Int) -> DomainCert {
+    if total <= 0 {
+        return domain_cert("test", "mutation_score_principle", 0);
+    }
+    if killed < 0 {
+        return domain_cert("test", "mutation_score_principle", 0);
+    }
+    if killed > total {
+        return domain_cert("test", "mutation_score_principle", 0);
+    }
+    return domain_cert("test", "mutation_score_principle", 1);
+}
+
+pub fn mutation_score_in_unit(per_mille: Int) -> Int {
+    if per_mille < 0 {
+        return 0;
+    }
+    if per_mille > 1000 {
+        return 0;
+    }
+    return 1;
+}
+
+// Coupled: a test suite that kills 100% of mutants and covers 100% of lines is
+// considered strong. Partial coverage or partial kills indicate weak tests.
+pub fn coupled_with_coverage(killed: Int, total: Int, line_covered: Int, line_total: Int) -> Int {
+    if total <= 0 {
+        return 0;
+    }
+    if line_total <= 0 {
+        return 0;
+    }
+    if killed < total {
+        return 0;
+    }
+    if line_covered < line_total {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn verify_mutation_score_principle() -> Bool {
+    // Golden: killed=8, total=10 -> 0.8 (per_mille = 800).
+    let s: MutationScore = msn_got(mutation_score_new(8, 10));
+    if s.killed != 8 {
+        return false;
+    }
+    if s.total != 10 {
+        return false;
+    }
+    if s.per_mille != 800 {
+        return false;
+    }
+    if s.is_full_kill != false {
+        return false;
+    }
+    // Golden: 10/10 -> per_mille = 1000, full_kill = true.
+    let full: MutationScore = msn_got(mutation_score_new(10, 10));
+    if full.per_mille != 1000 {
+        return false;
+    }
+    if full.is_full_kill != true {
+        return false;
+    }
+    // Golden: 0/10 -> per_mille = 0, full_kill = false.
+    let zero: MutationScore = msn_got(mutation_score_new(0, 10));
+    if zero.per_mille != 0 {
+        return false;
+    }
+    if zero.is_full_kill != false {
+        return false;
+    }
+    if mutation_score_new(0, 0).is_ok() { return false; }
+    if mutation_score_new(0 - 1, 10).is_ok() { return false; }
+    if mutation_score_new(11, 10).is_ok() { return false; }
+    let h0: DomainCert = mutation_score_holds(0, 0);
+    if h0.holds != 0 {
+        return false;
+    }
+    let h1: DomainCert = mutation_score_holds(5, 0);
+    if h1.holds != 0 {
+        return false;
+    }
+    let h2: DomainCert = mutation_score_holds(0, 0 - 1);
+    if h2.holds != 0 {
+        return false;
+    }
+    // Hostile: killed < 0 fails closed.
+    let h3: DomainCert = mutation_score_holds(0 - 1, 10);
+    if h3.holds != 0 {
+        return false;
+    }
+    // Hostile: killed > total fails closed.
+    let h4: DomainCert = mutation_score_holds(11, 10);
+    if h4.holds != 0 {
+        return false;
+    }
+    // Per-mille sits in [0, 1] for valid inputs.
+    if mutation_score_in_unit(s.per_mille) != 1 {
+        return false;
+    }
+    if mutation_score_in_unit(0 - 1) != 0 {
+        return false;
+    }
+    if mutation_score_in_unit(1001) != 0 {
+        return false;
+    }
+    // Coupled: full kill + full coverage -> strong (1).
+    let strong: Int = coupled_with_coverage(10, 10, 100, 100);
+    if strong != 1 {
+        return false;
+    }
+    // Coupled: partial kill -> weak (0).
+    let weak_kill: Int = coupled_with_coverage(8, 10, 100, 100);
+    if weak_kill != 0 {
+        return false;
+    }
+    // Coupled: full kill but partial coverage -> weak (0).
+    let weak_cov: Int = coupled_with_coverage(10, 10, 99, 100);
+    if weak_cov != 0 {
+        return false;
+    }
+    // Coupled: total=0 -> 0.
+    let zero_total: Int = coupled_with_coverage(0, 0, 0, 0);
+    if zero_total != 0 {
+        return false;
+    }
+    return true;
+}

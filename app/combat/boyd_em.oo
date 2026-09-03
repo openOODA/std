@@ -1,0 +1,242 @@
+// # Col. John Boyd Flight Energy-Maneuverability & 256-bit SIMD Vector Engine
+//
+// Logline: Calculate Col. John Boyd's aerodynamic Specific Excess Power, polars, turn rates, and energy heights with 8-lane SIMD vectorization.
+//
+// Setup: Pure aerodynamic computation with zero ambient authority importing std/simd/simd_vec8f.oo and std/simd/fma_law.oo.
+//
+// Beats:
+//   1. Calculate specific excess power and dynamic pressure.
+//   2. Compute lift, induced drag, and transonic wave drag coefficients.
+//   3. Compute sustained G turn rates, turn radii, and specific energy heights.
+//   4. Vectorize drag polars, Specific Excess Power (Ps), and energy height using f32x8_fma.
+
+import "std/core/math/constants.oo";
+import "std/sec/simd/simd_vec8f.oo";
+import "std/sec/simd/fma_law.oo";
+
+fn circ_pi_std_phys_aero_boyd_em() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+type BoydEmState = struct {
+    specific_energy_ft: Float,
+    ps_fps: Float,
+    dynamic_pressure_psf: Float,
+    cl: Float,
+    cd: Float,
+    drag_lbf: Float,
+    turn_rate_deg: Float,
+    turn_radius_ft: Float
+};
+
+type BoydEmState8 = struct {
+    specific_energy_ft: f32x8,
+    ps_fps: f32x8,
+    dynamic_pressure_psf: f32x8,
+    cl: f32x8,
+    cd: f32x8,
+    drag_lbf: f32x8,
+    turn_rate_deg: f32x8,
+    turn_radius_ft: f32x8
+};
+
+pub fn boyd_gravity_fps2() -> Float { return 32.174; }
+pub fn boyd_pi() -> Float { return circ_pi_std_phys_aero_boyd_em(); }
+pub fn boyd_rad_to_deg() -> Float { return 57.29577951308232; }
+
+pub fn calculate_ps(thrust_lbf: Float, drag_lbf: Float, weight_lbs: Float, true_airspeed_fps: Float) -> Float {
+    if weight_lbs <= 0.0 { return 0.0; }
+    let excess_thrust: Float = thrust_lbf - drag_lbf;
+    return ((true_airspeed_fps * excess_thrust) / weight_lbs) * 850.0;
+}
+
+pub fn calculate_ps_standard(thrust_lbf: Float, drag_lbf: Float, weight_lbs: Float, true_airspeed_fps: Float) -> Float {
+    if weight_lbs <= 0.0 { return 0.0; }
+    return (true_airspeed_fps * (thrust_lbf - drag_lbf)) / weight_lbs;
+}
+
+pub fn calculate_dynamic_pressure(density_slug_ft3: Float, velocity_fps: Float) -> Float {
+    if density_slug_ft3 <= 0.0 || velocity_fps <= 0.0 { return 0.0; }
+    return 0.5 * density_slug_ft3 * (velocity_fps * velocity_fps);
+}
+
+pub fn calculate_lift_coefficient(weight_lbs: Float, load_factor_g: Float, dynamic_pressure_psf: Float, wing_area_sqft: Float) -> Float {
+    let q_s: Float = dynamic_pressure_psf * wing_area_sqft;
+    if q_s <= 0.000001 { return 0.0; }
+    let cl_val: Float = (weight_lbs * load_factor_g) / q_s;
+    if cl_val > 2.5 { return 2.5; }
+    return cl_val;
+}
+
+pub fn calculate_induced_drag(cl: Float, aspect_ratio: Float, oswald_efficiency: Float) -> Float {
+    let denom: Float = boyd_pi() * aspect_ratio * oswald_efficiency;
+    if denom <= 0.000001 { return 0.0; }
+    return (cl * cl) / denom;
+}
+
+pub fn calculate_wave_drag(mach: Float, m_crit: Float, wave_drag_factor: Float) -> Float {
+    if mach <= m_crit { return 0.0; }
+    let delta_m: Float = mach - m_crit;
+    if mach <= 1.20 { return wave_drag_factor * (delta_m * delta_m * delta_m); }
+    let peak_delta: Float = 1.20 - m_crit;
+    let peak_drag: Float = wave_drag_factor * (peak_delta * peak_delta * peak_delta);
+    let mach_sq_term: Float = (mach * mach) - 1.0;
+    let safe_sq: Float = if mach_sq_term > 0.01 { mach_sq_term } else { 0.01 };
+    return peak_drag * (0.6633 / sqrt(safe_sq));
+}
+
+pub fn calculate_total_drag_coefficient(cd0: Float, cdi: Float, cdwave: Float) -> Float { return cd0 + cdi + cdwave; }
+pub fn calculate_total_drag_force(dynamic_pressure_psf: Float, wing_area_sqft: Float, cd: Float) -> Float { return dynamic_pressure_psf * wing_area_sqft * cd; }
+
+pub fn calculate_turn_rate_rad(velocity_fps: Float, load_factor_g: Float) -> Float {
+    if velocity_fps <= 0.000001 || load_factor_g <= 1.0 { return 0.0; }
+    let g_term: Float = sqrt((load_factor_g * load_factor_g) - 1.0);
+    return (boyd_gravity_fps2() * g_term) / velocity_fps;
+}
+
+pub fn calculate_turn_rate_deg(velocity_fps: Float, load_factor_g: Float) -> Float { return calculate_turn_rate_rad(velocity_fps, load_factor_g) * boyd_rad_to_deg(); }
+
+pub fn calculate_turn_radius_ft(velocity_fps: Float, load_factor_g: Float) -> Float {
+    if load_factor_g <= 1.0001 || velocity_fps <= 0.000001 { return 0.0; }
+    let denom: Float = boyd_gravity_fps2() * sqrt((load_factor_g * load_factor_g) - 1.0);
+    if denom <= 0.000001 { return 0.0; }
+    return (velocity_fps * velocity_fps) / denom;
+}
+
+pub fn calculate_max_sustained_g(thrust_lbf: Float, cd0: Float, aspect_ratio: Float, oswald_efficiency: Float, dynamic_pressure_psf: Float, wing_area_sqft: Float, weight_lbs: Float) -> Float {
+    let q_s: Float = dynamic_pressure_psf * wing_area_sqft;
+    let excess_thrust: Float = thrust_lbf - (q_s * cd0);
+    if excess_thrust <= 0.0 || weight_lbs <= 0.0 { return 1.0; }
+    let aero_k: Float = boyd_pi() * aspect_ratio * oswald_efficiency;
+    let n_sq: Float = (excess_thrust * q_s * aero_k) / (weight_lbs * weight_lbs);
+    if n_sq <= 1.0 { return 1.0; }
+    return sqrt(n_sq);
+}
+
+pub fn calculate_specific_energy(altitude_ft: Float, velocity_fps: Float) -> Float { return altitude_ft + ((velocity_fps * velocity_fps) / (2.0 * boyd_gravity_fps2())); }
+pub fn calculate_energy_rate_tradeoff(ps_fps: Float, velocity_fps: Float, dh_dt_fps: Float) -> Float {
+    if velocity_fps <= 0.000001 { return 0.0; }
+    return (boyd_gravity_fps2() * (ps_fps - dh_dt_fps)) / velocity_fps;
+}
+pub fn calculate_climb_rate_tradeoff(ps_fps: Float, velocity_fps: Float, dv_dt_fps2: Float) -> Float { return ps_fps - ((velocity_fps * dv_dt_fps2) / boyd_gravity_fps2()); }
+
+pub fn evaluate_boyd_em_state(altitude_ft: Float, velocity_fps: Float, mach: Float, density_slug_ft3: Float, thrust_lbf: Float, weight_lbs: Float, wing_area_sqft: Float, aspect_ratio: Float, oswald_e: Float, cd0: Float, m_crit: Float, wave_k: Float, load_factor_g: Float) -> BoydEmState {
+    let q_psf: Float = calculate_dynamic_pressure(density_slug_ft3, velocity_fps);
+    let cl_val: Float = calculate_lift_coefficient(weight_lbs, load_factor_g, q_psf, wing_area_sqft);
+    let cdi_val: Float = calculate_induced_drag(cl_val, aspect_ratio, oswald_e);
+    let cdw_val: Float = calculate_wave_drag(mach, m_crit, wave_k);
+    let cd_tot: Float = calculate_total_drag_coefficient(cd0, cdi_val, cdw_val);
+    let drag_tot: Float = calculate_total_drag_force(q_psf, wing_area_sqft, cd_tot);
+    let ps_val: Float = calculate_ps(thrust_lbf, drag_tot, weight_lbs, velocity_fps);
+    let energy_ft: Float = calculate_specific_energy(altitude_ft, velocity_fps);
+    let tr_deg: Float = calculate_turn_rate_deg(velocity_fps, load_factor_g);
+    let rad_ft: Float = calculate_turn_radius_ft(velocity_fps, load_factor_g);
+    return BoydEmState {
+        specific_energy_ft: energy_ft, ps_fps: ps_val, dynamic_pressure_psf: q_psf,
+        cl: cl_val, cd: cd_tot, drag_lbf: drag_tot,
+        turn_rate_deg: tr_deg, turn_radius_ft: rad_ft
+    };
+}
+
+// 256-bit SIMD Vectorized Aerodynamics & Boyd E-M Functions (f32x8)
+
+pub fn calculate_dynamic_pressure_f32x8(density_8: f32x8, velocity_8: f32x8) -> f32x8 {
+    let v_sq: f32x8 = f32x8_mul(velocity_8, velocity_8);
+    let half_rho: f32x8 = f32x8_scale(density_8, 0.5);
+    return f32x8_mul(half_rho, v_sq);
+}
+
+pub fn calculate_lift_coefficient_f32x8(w: f32x8, g: f32x8, q: f32x8, s: f32x8) -> f32x8 {
+    return f32x8_new(
+        calculate_lift_coefficient(w.v0, g.v0, q.v0, s.v0), calculate_lift_coefficient(w.v1, g.v1, q.v1, s.v1),
+        calculate_lift_coefficient(w.v2, g.v2, q.v2, s.v2), calculate_lift_coefficient(w.v3, g.v3, q.v3, s.v3),
+        calculate_lift_coefficient(w.v4, g.v4, q.v4, s.v4), calculate_lift_coefficient(w.v5, g.v5, q.v5, s.v5),
+        calculate_lift_coefficient(w.v6, g.v6, q.v6, s.v6), calculate_lift_coefficient(w.v7, g.v7, q.v7, s.v7)
+    );
+}
+
+pub fn calculate_induced_drag_f32x8(cl: f32x8, ar: f32x8, e: f32x8) -> f32x8 {
+    return f32x8_new(
+        calculate_induced_drag(cl.v0, ar.v0, e.v0), calculate_induced_drag(cl.v1, ar.v1, e.v1),
+        calculate_induced_drag(cl.v2, ar.v2, e.v2), calculate_induced_drag(cl.v3, ar.v3, e.v3),
+        calculate_induced_drag(cl.v4, ar.v4, e.v4), calculate_induced_drag(cl.v5, ar.v5, e.v5),
+        calculate_induced_drag(cl.v6, ar.v6, e.v6), calculate_induced_drag(cl.v7, ar.v7, e.v7)
+    );
+}
+
+pub fn calculate_wave_drag_f32x8(mach: f32x8, mcrit: f32x8, k: f32x8) -> f32x8 {
+    return f32x8_new(
+        calculate_wave_drag(mach.v0, mcrit.v0, k.v0), calculate_wave_drag(mach.v1, mcrit.v1, k.v1),
+        calculate_wave_drag(mach.v2, mcrit.v2, k.v2), calculate_wave_drag(mach.v3, mcrit.v3, k.v3),
+        calculate_wave_drag(mach.v4, mcrit.v4, k.v4), calculate_wave_drag(mach.v5, mcrit.v5, k.v5),
+        calculate_wave_drag(mach.v6, mcrit.v6, k.v6), calculate_wave_drag(mach.v7, mcrit.v7, k.v7)
+    );
+}
+
+pub fn calculate_total_drag_coefficient_f32x8(cd0_8: f32x8, cdi_8: f32x8, cdw_8: f32x8) -> f32x8 { return f32x8_add(f32x8_add(cd0_8, cdi_8), cdw_8); }
+pub fn calculate_total_drag_force_f32x8(q_8: f32x8, wing_area_8: f32x8, cd_8: f32x8) -> f32x8 {
+    let q_s: f32x8 = f32x8_mul(q_8, wing_area_8);
+    return f32x8_mul(q_s, cd_8);
+}
+
+pub fn calculate_ps_f32x8(thrust_8: f32x8, drag_8: f32x8, weight_8: f32x8, velocity_8: f32x8) -> f32x8 {
+    let excess_thrust: f32x8 = f32x8_sub(thrust_8, drag_8);
+    let power: f32x8 = f32x8_mul(velocity_8, excess_thrust);
+    let base_ps: f32x8 = f32x8_div(power, weight_8);
+    return f32x8_scale(base_ps, 850.0);
+}
+
+pub fn calculate_ps_standard_f32x8(thrust_8: f32x8, drag_8: f32x8, weight_8: f32x8, velocity_8: f32x8) -> f32x8 {
+    let excess_thrust: f32x8 = f32x8_sub(thrust_8, drag_8);
+    let power: f32x8 = f32x8_mul(velocity_8, excess_thrust);
+    return f32x8_div(power, weight_8);
+}
+
+pub fn calculate_specific_energy_f32x8(alt_8: f32x8, velocity_8: f32x8) -> f32x8 {
+    let v_sq: f32x8 = f32x8_mul(velocity_8, velocity_8);
+    let inv_2g: Float = 1.0 / (2.0 * 32.174);
+    return f32x8_fma(v_sq, f32x8_splat(inv_2g), alt_8);
+}
+
+pub fn calculate_turn_rate_deg_f32x8(vel: f32x8, load: f32x8) -> f32x8 {
+    return f32x8_new(
+        calculate_turn_rate_deg(vel.v0, load.v0), calculate_turn_rate_deg(vel.v1, load.v1),
+        calculate_turn_rate_deg(vel.v2, load.v2), calculate_turn_rate_deg(vel.v3, load.v3),
+        calculate_turn_rate_deg(vel.v4, load.v4), calculate_turn_rate_deg(vel.v5, load.v5),
+        calculate_turn_rate_deg(vel.v6, load.v6), calculate_turn_rate_deg(vel.v7, load.v7)
+    );
+}
+
+pub fn calculate_turn_radius_ft_f32x8(vel: f32x8, load: f32x8) -> f32x8 {
+    return f32x8_new(
+        calculate_turn_radius_ft(vel.v0, load.v0), calculate_turn_radius_ft(vel.v1, load.v1),
+        calculate_turn_radius_ft(vel.v2, load.v2), calculate_turn_radius_ft(vel.v3, load.v3),
+        calculate_turn_radius_ft(vel.v4, load.v4), calculate_turn_radius_ft(vel.v5, load.v5),
+        calculate_turn_radius_ft(vel.v6, load.v6), calculate_turn_radius_ft(vel.v7, load.v7)
+    );
+}
+
+pub fn evaluate_boyd_em_state_f32x8(altitude_ft_8: f32x8, velocity_fps_8: f32x8, mach_8: f32x8, density_8: f32x8, thrust_8: f32x8, weight_8: f32x8, wing_area_8: f32x8, aspect_ratio_8: f32x8, oswald_e_8: f32x8, cd0_8: f32x8, m_crit_8: f32x8, wave_k_8: f32x8, load_factor_8: f32x8) -> BoydEmState8 {
+    let q_8: f32x8 = calculate_dynamic_pressure_f32x8(density_8, velocity_fps_8);
+    let cl_8: f32x8 = calculate_lift_coefficient_f32x8(weight_8, load_factor_8, q_8, wing_area_8);
+    let cdi_8: f32x8 = calculate_induced_drag_f32x8(cl_8, aspect_ratio_8, oswald_e_8);
+    let cdw_8: f32x8 = calculate_wave_drag_f32x8(mach_8, m_crit_8, wave_k_8);
+    let cd_tot_8: f32x8 = calculate_total_drag_coefficient_f32x8(cd0_8, cdi_8, cdw_8);
+    let drag_tot_8: f32x8 = calculate_total_drag_force_f32x8(q_8, wing_area_8, cd_tot_8);
+    let ps_8: f32x8 = calculate_ps_f32x8(thrust_8, drag_tot_8, weight_8, velocity_fps_8);
+    let energy_8: f32x8 = calculate_specific_energy_f32x8(altitude_ft_8, velocity_fps_8);
+    let tr_8: f32x8 = calculate_turn_rate_deg_f32x8(velocity_fps_8, load_factor_8);
+    let rad_8: f32x8 = calculate_turn_radius_ft_f32x8(velocity_fps_8, load_factor_8);
+    return BoydEmState8 {
+        specific_energy_ft: energy_8, ps_fps: ps_8, dynamic_pressure_psf: q_8,
+        cl: cl_8, cd: cd_tot_8, drag_lbf: drag_tot_8,
+        turn_rate_deg: tr_8, turn_radius_ft: rad_8
+    };
+}
+
+pub fn verify_boyd_ps() -> Bool {
+    let got: Float = calculate_ps(20000.0, 5000.0, 20000.0, 800.0);
+    if got < 509999.0 || got > 510001.0 { return false; }
+    if calculate_ps(1000.0, 100.0, 0.0, 400.0) != 0.0 { return false; }
+    let stdp: Float = calculate_ps_standard(20000.0, 5000.0, 20000.0, 800.0);
+    if stdp < 599.999 || stdp > 600.001 { return false; }
+    return true;
+}

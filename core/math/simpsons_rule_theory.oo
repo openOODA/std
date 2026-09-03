@@ -1,0 +1,125 @@
+// # Simpson's 1/3 rule theory
+//
+// Logline: Composite Simpson's 1/3 integration over N+1 points. N must
+//   be even and N+1 >= 3, else fails closed.
+//
+// Setup: Pure Float. Coupled to trapezoid via linear-f agreement.
+//
+// Beats:
+//   1. simpson_integrate applies (h/3) * (f0 + 4*sum_odd + 2*sum_even + fn).
+//   2. N odd or f_vals length < 3 returns Err.
+//   3. Coupled simpson_compose_with_trapezoid confirms linear agreement.
+
+import "std/core/math/integration_quad.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn simpson_integrate(f_vals: List[Float], h: Float) -> Result[Float, String] {
+    let n: Int = list_len(f_vals);
+    if n < 3 { return Err("ERR\tsimpson\tn"); }
+    if (n - 1) % 2 == 1 { return Err("ERR\tsimpson\todd"); }
+    let f0: Float = list_get(f_vals, 0);
+    let fn_val: Float = list_get(f_vals, n - 1);
+    let mut sum_odd: Float = 0.0;
+    let mut sum_even: Float = 0.0;
+    let mut i: Int = 1;
+    while i < n - 1 {
+        let v: Float = list_get(f_vals, i);
+        if i % 2 == 1 { sum_odd = sum_odd + v; }
+        else { sum_even = sum_even + v; }
+        i = i + 1;
+    }
+    return Ok((h / 3.0) * (f0 + 4.0 * sum_odd + 2.0 * sum_even + fn_val));
+}
+
+pub fn simpson_compose_with_trapezoid(f_vals: List[Float], h: Float, tol: Float) -> Bool {
+    let n: Int = list_len(f_vals);
+    if n < 3 { return false; }
+    if (n - 1) % 2 == 1 { return false; }
+    let sr: Result[Float, String] = simpson_integrate(f_vals, h);
+    let mut simp: Float = 0.0;
+    let mut bad: Bool = false;
+    match sr {
+        Ok(v)  => { simp = v; },
+        Err(_) => { bad = true; }
+    }
+    if bad { return false; }
+    let tr: Result[Float, String] = integrate_trapezoidal(f_vals, h);
+    match tr {
+        Ok(trap) => {
+            if pabs(simp - trap) > tol { return false; }
+            return true;
+        },
+        Err(_)   => { return false; }
+    }
+}
+
+pub fn math_simpsons_x2_golden() -> DomainCert {
+    let mut fv: List[Float] = list_new();
+    let h: Float = 0.25;
+    fv = list_push(fv, 0.0);
+    fv = list_push(fv, 0.0625);
+    fv = list_push(fv, 0.25);
+    fv = list_push(fv, 0.5625);
+    fv = list_push(fv, 1.0);
+    let sr: Result[Float, String] = simpson_integrate(fv, h);
+    let mut h_h: Int = 0;
+    match sr {
+        Ok(s)  => { if pabs(s - (1.0 / 3.0)) <= 0.000000001 { h_h = 1; } },
+        Err(_) => { h_h = 0; }
+    }
+    return domain_cert("math", "simpsons_x2_golden", h_h);
+}
+
+pub fn math_simpsons_odd_n_fails_closed() -> DomainCert {
+    let mut fv: List[Float] = list_new();
+    fv = list_push(fv, 0.0);
+    fv = list_push(fv, 0.5);
+    fv = list_push(fv, 1.0);
+    fv = list_push(fv, 1.5);
+    let sr: Result[Float, String] = simpson_integrate(fv, 0.5);
+    let mut h_h: Int = 0;
+    if sr.is_err() { h_h = 1; }
+    return domain_cert("math", "simpsons_odd_n_closed", h_h);
+}
+
+pub fn math_simpsons_too_short_fails_closed() -> DomainCert {
+    let mut fv: List[Float] = list_new();
+    fv = list_push(fv, 0.0);
+    fv = list_push(fv, 1.0);
+    let sr: Result[Float, String] = simpson_integrate(fv, 1.0);
+    let mut h_h: Int = 0;
+    if sr.is_err() { h_h = 1; }
+    return domain_cert("math", "simpsons_too_short_closed", h_h);
+}
+
+pub fn math_simpsons_coupled_linear_agree() -> DomainCert {
+    let mut fv: List[Float] = list_new();
+    let h: Float = 0.5;
+    let mut k: Int = 0;
+    while k < 5 {
+        let xf: Float = 1.0 * (k);
+        fv = list_push(fv, 2.0 * xf + 1.0);
+        k = k + 1;
+    }
+    let ok: Bool = simpson_compose_with_trapezoid(fv, h, 0.000000001);
+    let mut h_h: Int = 0;
+    if ok == true { h_h = 1; }
+    return domain_cert("math", "simpsons_coupled_linear_agree", h_h);
+}
+
+pub fn verify_simpsons_rule_theory() -> Bool {
+    let a: DomainCert = math_simpsons_x2_golden();
+    let b: DomainCert = math_simpsons_odd_n_fails_closed();
+    let c: DomainCert = math_simpsons_too_short_fails_closed();
+    let d: DomainCert = math_simpsons_coupled_linear_agree();
+    if a.holds != 1 { return false; }
+    if b.holds != 1 { return false; }
+    if c.holds != 1 { return false; }
+    if d.holds != 1 { return false; }
+    return true;
+}

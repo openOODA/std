@@ -1,0 +1,219 @@
+// # AArch64 Constrained Source Scanner
+//
+// Logline: Scans a constrained .oo main body and holds instruction words, names, and stack offsets.
+//
+// Setup: ASCII source. Used by aarch64_lower.oo. Frame locals begin at [x29, #16].
+//
+// Beats:
+//   1. Skip whitespace and line comments.
+//   2. Take identifiers, decimal numbers, single-byte eats, and keywords.
+//   3. Look up local slots and append 32-bit instruction words.
+//   4. Patch a prior instruction word by index.
+
+type A64P = struct {
+    src: String,
+    i: Int,
+    words: List[Int],
+    names: List[String],
+    offs: List[Int],
+    next_off: Int,
+    ival: Int,
+    text: String
+};
+
+pub fn a64_new(src: String) -> A64P {
+    let empty_i: List[Int] = list_new();
+    let empty_s: List[String] = list_new();
+    let out: A64P = A64P {
+        src: src,
+        i: 0,
+        words: empty_i,
+        names: empty_s,
+        offs: empty_i,
+        next_off: 16,
+        ival: 0,
+        text: ""
+    };
+    return out;
+}
+
+pub fn a64p(p: A64P, i: Int, words: List[Int], names: List[String], offs: List[Int], next_off: Int, ival: Int, text: String) -> A64P {
+    let mut q: A64P = p;
+    q.i = i;
+    q.words = words;
+    q.names = names;
+    q.offs = offs;
+    q.next_off = next_off;
+    q.ival = ival;
+    q.text = text;
+    return q;
+}
+
+pub fn a64_at(p: A64P, i: Int) -> A64P {
+    return a64p(p, i, p.words, p.names, p.offs, p.next_off, p.ival, p.text);
+}
+
+pub fn a64_fail(p: A64P, msg: String) -> A64P {
+    return a64p(p, p.i, p.words, p.names, p.offs, p.next_off, p.ival, msg);
+}
+
+pub fn a64_is_alpha(b: Int) -> Bool {
+    if b >= 65 && b <= 90 { return true; }
+    if b >= 97 && b <= 122 { return true; }
+    if b == 95 { return true; }
+    return false;
+}
+
+pub fn a64_is_digit(b: Int) -> Bool {
+    return b >= 48 && b <= 57;
+}
+
+pub fn a64_peek(p: A64P) -> Int {
+    let src: String = p.src;
+    let i: Int = p.i;
+    if i >= bytes_len(src) {
+        return -1;
+    }
+    return byte_at(src, i);
+}
+
+pub fn a64_skip(p: A64P) -> A64P {
+    let src: String = p.src;
+    let n: Int = bytes_len(src);
+    let mut i: Int = p.i;
+    while i < n {
+        let b: Int = byte_at(src, i);
+        if b == 32 || b == 9 || b == 10 || b == 13 {
+            i = i + 1;
+        } else {
+            if b == 47 && (i + 1) < n && byte_at(src, i + 1) == 47 {
+                i = i + 2;
+                while i < n && byte_at(src, i) != 10 {
+                    i = i + 1;
+                }
+            } else {
+                return a64_at(p, i);
+            }
+        }
+    }
+    return a64_at(p, i);
+}
+
+pub fn a64_starts(p0: A64P, kw: String) -> Bool {
+    let p: A64P = a64_skip(p0);
+    let nkw: Int = bytes_len(kw);
+    let src: String = p.src;
+    let i: Int = p.i;
+    if i + nkw > bytes_len(src) {
+        return false;
+    }
+    let mut k: Int = 0;
+    while k < nkw {
+        if byte_at(src, i + k) != byte_at(kw, k) {
+            return false;
+        }
+        k = k + 1;
+    }
+    let nxt: Int = i + nkw;
+    if nxt < bytes_len(src) {
+        let b: Int = byte_at(src, nxt);
+        if a64_is_alpha(b) || a64_is_digit(b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn a64_eat_kw(p0: A64P, kw: String) -> A64P {
+    let p: A64P = a64_skip(p0);
+    if !a64_starts(p, kw) {
+        return a64_fail(p, "ERR\ta64_eat_kw");
+    }
+    return a64_at(p, p.i + bytes_len(kw));
+}
+
+pub fn a64_eat(p0: A64P, ch: Int) -> A64P {
+    let p: A64P = a64_skip(p0);
+    if a64_peek(p) != ch {
+        let got_ch: Int = 0 + a64_peek(p);
+        return a64_fail(p, "ERR\ta64_eat\twant " + ch.to_string() + " got " + got_ch.to_string());
+    }
+    return a64_at(p, p.i + 1);
+}
+
+pub fn a64_ident(p0: A64P) -> A64P {
+    let p: A64P = a64_skip(p0);
+    let src: String = p.src;
+    let n: Int = bytes_len(src);
+    let mut i: Int = p.i;
+    if i >= n || !a64_is_alpha(byte_at(src, i)) {
+        return a64_fail(p, "ERR\ta64_ident");
+    }
+    let s0: Int = i;
+    i = i + 1;
+    while i < n {
+        let b: Int = byte_at(src, i);
+        if a64_is_alpha(b) || a64_is_digit(b) {
+            i = i + 1;
+        } else {
+            break;
+        }
+    }
+    let text: String = byte_slice(src, s0, i);
+    return a64p(p, i, p.words, p.names, p.offs, p.next_off, p.ival, text);
+}
+
+pub fn a64_num(p0: A64P) -> A64P {
+    let p: A64P = a64_skip(p0);
+    let src: String = p.src;
+    let n: Int = bytes_len(src);
+    let mut i: Int = p.i;
+    let mut v: Int = 0;
+    let mut any: Bool = false;
+    while i < n && a64_is_digit(byte_at(src, i)) {
+        any = true;
+        v = v * 10 + (byte_at(src, i) - 48);
+        i = i + 1;
+    }
+    if !any {
+        return a64_fail(p, "ERR\ta64_num");
+    }
+    return a64p(p, i, p.words, p.names, p.offs, p.next_off, v, p.text);
+}
+
+pub fn a64_emit(p: A64P, w: Int) -> A64P {
+    return a64p(p, p.i, list_push(p.words, w), p.names, p.offs, p.next_off, p.ival, p.text);
+}
+
+pub fn a64_lookup_parse(names: List[String], offs: List[Int], name: String) -> Int {
+    let n: Int = list_len(names);
+    let mut i: Int = n - 1;
+    while i >= 0 {
+        if list_get(names, i) == name {
+            return list_get(offs, i);
+        }
+        i = i - 1;
+    }
+    return -1;
+}
+
+pub fn a64_wset(ws: List[Int], idx: Int, w: Int) -> List[Int] {
+    let n: Int = list_len(ws);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx {
+            out = list_push(out, w);
+        } else {
+            out = list_push(out, list_get(ws, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn a64_bind(p: A64P, name: String) -> A64P {
+    let off: Int = p.next_off;
+    let names: List[String] = p.names;
+    return a64p(p, p.i, p.words, list_push(names, name), list_push(p.offs, off), off + 8, off, name);
+}

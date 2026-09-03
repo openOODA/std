@@ -1,0 +1,230 @@
+// # Tendermint BFT Consensus State Machine Engine
+//
+// Logline: Implements the 5-phase Tendermint BFT consensus engine (NewRound, Propose, Prevote, Precommit, Commit), Polka certificates, lock-round safety rules, deterministic block commits, and stake-weighted proposer selection under &SysCap.
+//
+// Setup: 2/3+ voting power quorum required for Polka and Precommit; Lock-round safety prevents Byzantine equivocations and dual-block commits; Deterministic proposer selection via priority rotation.
+//
+// Beats:
+//   1. Standard operating routine for this driver.
+//   2. Errata/edge case handling.
+// capability: &SysCap required for all state machine transitions and ledger commits.
+//
+// verification: Verified by qa/tests_sovereign/tier1_features/test_t1_f13_bft_consensus.oo.
+
+import "std/sec/hash/sha256.oo";
+
+type TendermintValidator = struct {
+    address: String,
+    voting_power: Int,
+    priority: Int,
+    is_active: Bool
+};
+
+type TendermintValidatorSet = struct {
+    total_power: Int,
+    validator_count: Int,
+    threshold_2_3: Int
+};
+
+type ConsensusEvent = struct {
+    event_type: Int,
+    height: Int,
+    round: Int,
+    block_hash: String,
+    valid_round: Int,
+    voter_address: String,
+    voting_power: Int
+};
+
+type TendermintState = struct {
+    height: Int,
+    round: Int,
+    step: Int,
+    locked_round: Int,
+    locked_block_hash: String,
+    valid_round: Int,
+    valid_block_hash: String,
+    proposal_block_hash: String,
+    prevote_power: Int,
+    prevote_block_hash: String,
+    precommit_power: Int,
+    precommit_block_hash: String,
+    is_committed: Bool,
+    committed_height: Int,
+    committed_block_hash: String,
+    committed_state_root: String
+};
+
+type StepResult = struct {
+    state: TendermintState,
+    action: String,
+    is_success: Bool
+};
+
+type SlashingEvidence = struct {
+    offender: String,
+    height: Int,
+    round: Int,
+    is_equivocation: Bool,
+    slashed_amount: Int
+};
+
+pub fn tm_step_new_round() -> Int { return 0; }
+pub fn tm_step_propose() -> Int { return 1; }
+pub fn tm_step_prevote() -> Int { return 2; }
+pub fn tm_step_precommit() -> Int { return 3; }
+pub fn tm_step_commit() -> Int { return 4; }
+
+pub fn tendermint_validator_new(addr: String, power: Int) -> TendermintValidator {
+    return TendermintValidator { address: addr, voting_power: power, priority: 0, is_active: true };
+}
+
+pub fn tendermint_vset_new(cap: &SysCap, total_power: Int, count: Int) -> TendermintValidatorSet {
+    let thresh: Int = (2 * total_power / 3) + 1;
+    return TendermintValidatorSet { total_power: total_power, validator_count: count, threshold_2_3: thresh };
+}
+
+pub fn tendermint_engine_init(cap: &SysCap, height: Int, round: Int) -> TendermintState {
+    return TendermintState {
+        height: height, round: round, step: 0,
+        locked_round: -1, locked_block_hash: "",
+        valid_round: -1, valid_block_hash: "",
+        proposal_block_hash: "", prevote_power: 0,
+        prevote_block_hash: "", precommit_power: 0,
+        precommit_block_hash: "", is_committed: false,
+        committed_height: 0, committed_block_hash: "",
+        committed_state_root: ""
+    };
+}
+
+pub fn tendermint_proposer_select(cap: &SysCap, p1: Int, p2: Int, p3: Int, p4: Int, total_w: Int) -> Int {
+    let mut max_p: Int = p1;
+    let mut winner: Int = 1;
+    if p2 > max_p { max_p = p2; winner = 2; }
+    if p3 > max_p { max_p = p3; winner = 3; }
+    if p4 > max_p { max_p = p4; winner = 4; }
+    return winner;
+}
+
+pub fn tendermint_proposer_update_priority(p: Int, w: Int, total_w: Int, is_chosen: Bool) -> Int {
+    if is_chosen { return p + w - total_w; }
+    return p + w;
+}
+
+pub fn tendermint_handle_proposal(cap: &SysCap, state: TendermintState, prop_block: String, prop_valid_round: Int) -> TendermintState {
+    let mut state: TendermintState = state;
+    let is_locked: Bool = state.locked_round >= 0;
+    let lock_satisfied: Bool = (!is_locked) || (prop_valid_round >= state.locked_round) || (prop_block == state.locked_block_hash);
+    if lock_satisfied {
+        state.proposal_block_hash = prop_block;
+        state.step = 2; // Advance to Prevote
+    } else {
+        state.proposal_block_hash = "nil";
+        state.step = 2; // Prevote nil due to lock violation
+    }
+    return state;
+}
+
+pub fn tendermint_add_prevote(cap: &SysCap, state: TendermintState, vset: TendermintValidatorSet, block_hash: String, power: Int) -> TendermintState {
+    let mut state: TendermintState = state;
+    if state.prevote_block_hash == "" || state.prevote_block_hash == block_hash {
+        state.prevote_block_hash = block_hash;
+        state.prevote_power = state.prevote_power + power;
+    }
+    if state.prevote_power >= vset.threshold_2_3 {
+        // Polka Certificate Formed
+        if block_hash != "nil" && block_hash != "" {
+            state.locked_round = state.round;
+            state.locked_block_hash = block_hash;
+            state.valid_round = state.round;
+            state.valid_block_hash = block_hash;
+        }
+        state.step = 3; // Advance to Precommit
+    }
+    return state;
+}
+
+pub fn tendermint_add_precommit(cap: &SysCap, state: TendermintState, vset: TendermintValidatorSet, block_hash: String, power: Int) -> TendermintState {
+    let mut state: TendermintState = state;
+    if state.precommit_block_hash == "" || state.precommit_block_hash == block_hash {
+        state.precommit_block_hash = block_hash;
+        state.precommit_power = state.precommit_power + power;
+    }
+    if state.precommit_power >= vset.threshold_2_3 {
+        if block_hash != "nil" && block_hash != "" {
+            state.step = 4; // Advance to Commit
+            state.is_committed = true;
+            state.committed_height = state.height;
+            state.committed_block_hash = block_hash;
+            let root_in: String = block_hash + ":" + (state).height.to_string();
+            state.committed_state_root = sha256(root_in);
+        }
+    }
+    return state;
+}
+
+pub fn tendermint_advance_height(cap: &SysCap, state: TendermintState) -> TendermintState {
+    return TendermintState {
+        height: state.height + 1, round: 0, step: 0,
+        locked_round: -1, locked_block_hash: "",
+        valid_round: -1, valid_block_hash: "",
+        proposal_block_hash: "", prevote_power: 0,
+        prevote_block_hash: "", precommit_power: 0,
+        precommit_block_hash: "", is_committed: false,
+        committed_height: state.committed_height,
+        committed_block_hash: state.committed_block_hash,
+        committed_state_root: state.committed_state_root
+    };
+}
+
+pub fn tendermint_advance_round(cap: &SysCap, state: TendermintState) -> TendermintState {
+    return TendermintState {
+        height: state.height, round: state.round + 1, step: 0,
+        locked_round: state.locked_round,
+        locked_block_hash: state.locked_block_hash,
+        valid_round: state.valid_round,
+        valid_block_hash: state.valid_block_hash,
+        proposal_block_hash: "", prevote_power: 0,
+        prevote_block_hash: "", precommit_power: 0,
+        precommit_block_hash: "", is_committed: false,
+        committed_height: state.committed_height,
+        committed_block_hash: state.committed_block_hash,
+        committed_state_root: state.committed_state_root
+    };
+}
+
+pub fn tendermint_detect_equivocation(cap: &SysCap, v_addr: String, h: Int, r: Int, hash_a: String, hash_b: String, stake: Int) -> SlashingEvidence {
+    let is_conflict: Bool = (h > 0) && (r >= 0) && (hash_a != hash_b) && (hash_a != "") && (hash_b != "");
+    let mut slashed: Int = 0;
+    if is_conflict {
+        slashed = stake; // 100% slash for Byzantine equivocation
+    }
+    return SlashingEvidence {
+        offender: v_addr, height: h, round: r,
+        is_equivocation: is_conflict, slashed_amount: slashed
+    };
+}
+
+pub fn tendermint_step(cap: &SysCap, state: TendermintState, vset: TendermintValidatorSet, ev: ConsensusEvent) -> StepResult {
+    let etype: Int = ev.event_type;
+    if etype == 1 {
+        let st: TendermintState = tendermint_handle_proposal(cap, state, ev.block_hash, ev.valid_round);
+        return StepResult { state: st, action: "PROPOSAL_PROCESSED", is_success: true };
+    }
+    if etype == 2 {
+        let st: TendermintState = tendermint_add_prevote(cap, state, vset, ev.block_hash, ev.voting_power);
+        return StepResult { state: st, action: "PREVOTE_RECORDED", is_success: true };
+    }
+    if etype == 3 {
+        let st: TendermintState = tendermint_add_precommit(cap, state, vset, ev.block_hash, ev.voting_power);
+        return StepResult { state: st, action: "PRECOMMIT_RECORDED", is_success: true };
+    }
+    if etype == 4 {
+        if state.is_committed {
+            let st: TendermintState = tendermint_advance_height(cap, state);
+            return StepResult { state: st, action: "HEIGHT_ADVANCED", is_success: true };
+        }
+        return StepResult { state: state, action: "NOT_COMMITTED", is_success: false };
+    }
+    return StepResult { state: state, action: "NOOP", is_success: false };
+}

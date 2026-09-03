@@ -1,0 +1,153 @@
+// # FIPS 203 ML-KEM Rejection & Centered Binomial Sampling
+//
+// Logline: Implements SampleNTT rejection sampling from SHAKE128 streams and SamplePolyCBD_eta noise generation.
+//
+// Setup: FIPS 203 Algorithms 6, 7, and 8 for uniform matrix sampling and binomial error distributions.
+//
+// Beats:
+//   1. SampleNTT rejection sampler consuming 3-byte pairs mod 3329.
+//   2. SamplePolyCBD_2 for noise vector sampling (eta=2).
+//   3. SamplePolyCBD_3 for parameter sets with eta=3.
+//   4. Squeeze uniform matrix A_hat in R_q^{k x k}.
+
+import "./ml_kem_poly.oo";
+import "./ml_kem_polyvec.oo";
+import "./ml_kem_symmetric.oo";
+
+pub fn ml_kem_sample_ntt(rho: List[Int], i: Int, j: Int) -> MlKemPoly {
+    let mut coeffs: List[Int] = list_new();
+    let mut count: Int = 0;
+    let mut out_len: Int = 504;
+    let mut stream: List[Int] = ml_kem_xof(rho, i, j, out_len);
+    let mut pos: Int = 0;
+
+    while count < 256 {
+        if (pos + 3) > out_len {
+            out_len = out_len + 168;
+            stream = ml_kem_xof(rho, i, j, out_len);
+        }
+        let b0: Int = list_get(stream, pos);
+        let b1: Int = list_get(stream, pos + 1);
+        let b2: Int = list_get(stream, pos + 2);
+        pos = pos + 3;
+
+        let d1: Int = b0 + 256 * (b1 & 15);
+        let d2: Int = (b1 >> 4) + 16 * b2;
+
+        if d1 < 3329 {
+            if count < 256 {
+                coeffs = list_push(coeffs, d1);
+                count = count + 1;
+            }
+        }
+        if d2 < 3329 {
+            if count < 256 {
+                coeffs = list_push(coeffs, d2);
+                count = count + 1;
+            }
+        }
+    }
+
+    return MlKemPoly {
+        coeffs: coeffs,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_sample_matrix_a(rho: List[Int], k: Int) -> List[Int] {
+    let mut mat_coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut j: Int = 0;
+        while j < k {
+            let p: MlKemPoly = ml_kem_sample_ntt(rho, i, j);
+            let mut idx: Int = 0;
+            while idx < 256 {
+                mat_coeffs = list_push(mat_coeffs, list_get(p.coeffs, idx));
+                idx = idx + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return mat_coeffs;
+}
+
+pub fn ml_kem_sample_matrix_at(rho: List[Int], k: Int) -> List[Int] {
+    let mut mat_coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut j: Int = 0;
+        while j < k {
+            let p: MlKemPoly = ml_kem_sample_ntt(rho, j, i);
+            let mut idx: Int = 0;
+            while idx < 256 {
+                mat_coeffs = list_push(mat_coeffs, list_get(p.coeffs, idx));
+                idx = idx + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return mat_coeffs;
+}
+
+pub fn ml_kem_sample_poly_cbd2(prf_bytes: List[Int]) -> MlKemPoly {
+    let mut coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let byte_idx: Int = i / 2;
+        let raw_byte: Int = list_get(prf_bytes, byte_idx);
+        let nibble: Int = if (i & 1) == 0 { raw_byte & 15 } else { (raw_byte >> 4) & 15 };
+
+        let b0: Int = nibble & 1;
+        let b1: Int = (nibble >> 1) & 1;
+        let b2: Int = (nibble >> 2) & 1;
+        let b3: Int = (nibble >> 3) & 1;
+
+        let a_val: Int = b0 + b1;
+        let b_val: Int = b2 + b3;
+        let diff: Int = ml_kem_poly_mod(a_val - b_val);
+        coeffs = list_push(coeffs, diff);
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: coeffs,
+        degree: 256,
+        modulus: 3329
+    };
+}
+
+pub fn ml_kem_sample_poly_cbd3(prf_bytes: List[Int]) -> MlKemPoly {
+    let mut coeffs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let bit_offset: Int = 6 * i;
+        let b_idx: Int = bit_offset / 8;
+        let bit_in_byte: Int = bit_offset % 8;
+
+        let b0_raw: Int = list_get(prf_bytes, b_idx);
+        let b1_raw: Int = list_get(prf_bytes, b_idx + 1);
+        let b2_raw: Int = list_get(prf_bytes, b_idx + 2);
+        let combined: Int = (b0_raw | (b1_raw << 8) | (b2_raw << 16)) >> bit_in_byte;
+
+        let b0: Int = combined & 1;
+        let b1: Int = (combined >> 1) & 1;
+        let b2: Int = (combined >> 2) & 1;
+        let b3: Int = (combined >> 3) & 1;
+        let b4: Int = (combined >> 4) & 1;
+        let b5: Int = (combined >> 5) & 1;
+
+        let a_val: Int = b0 + b1 + b2;
+        let b_val: Int = b3 + b4 + b5;
+        let diff: Int = ml_kem_poly_mod(a_val - b_val);
+        coeffs = list_push(coeffs, diff);
+        i = i + 1;
+    }
+    return MlKemPoly {
+        coeffs: coeffs,
+        degree: 256,
+        modulus: 3329
+    };
+}

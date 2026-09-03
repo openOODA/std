@@ -1,0 +1,167 @@
+// # RISC-V V Extension 1.0 (RVV 1.0) vector length agnostic law
+//
+// Logline: RISC-V V Extension 1.0 (ratified 2021-12-03) defines VLA vectors by two orthogonal encodings: SEW (Selected Element Width) in {8,16,32,64} and LMUL (Vector Length Multiplier) in {1,2,4,8}; the cartesian product is 16 valid (SEW, LMUL) combinations.
+//
+// Setup: Pure Int arithmetic on the SEW and LMUL configuration space. Hostile (out-of-domain) values fail closed to holds=0. std/core/domain_cert.oo boxes the holds bit.
+//
+// Beats:
+//   1. riscv_v_sew_count returns 4 (SEW options: 8, 16, 32, 64).
+//   2. riscv_v_lmul_count returns 4 (LMUL options: 1, 2, 4, 8).
+//   3. riscv_v_sew_ok(8|16|32|64) holds 1; riscv_v_lmul_ok(1|2|4|8) holds 1.
+//   4. riscv_v_combinations_ok: 4 SEW * 4 LMUL = 16 valid combinations within 0.001% (exact integer).
+//   5. Hostile: riscv_v_sew_ok(0) = 0; riscv_v_lmul_ok(0) = 0; riscv_v_sew_ok(-1) = 0.
+//   6. Coupled VLA: riscv_v_vla_holds boxes the certificate; both RVV and ARM SVE are VLA ISAs.
+
+import "std/core/primitives/domain_cert.oo";
+
+// RISC-V V Extension 1.0, ratified 2021-12-03 (riscv.org/specifications/): SEW = 4 options.
+pub fn riscv_v_sew_count() -> Int {
+    return 4;
+}
+
+// RISC-V V Extension 1.0: LMUL = 4 options.
+pub fn riscv_v_lmul_count() -> Int {
+    return 4;
+}
+
+// RISC-V V Extension 1.0 SEW (bits per element) options: 8, 16, 32, 64.
+pub fn riscv_v_sew_ok(sew: Int) -> Int {
+    if sew == 8 { return 1; }
+    if sew == 16 { return 1; }
+    if sew == 32 { return 1; }
+    if sew == 64 { return 1; }
+    return 0;
+}
+
+// RISC-V V Extension 1.0 LMUL (register group multiplier) options: 1, 2, 4, 8.
+pub fn riscv_v_lmul_ok(lmul: Int) -> Int {
+    if lmul == 1 { return 1; }
+    if lmul == 2 { return 1; }
+    if lmul == 4 { return 1; }
+    if lmul == 8 { return 1; }
+    return 0;
+}
+
+// RISC-V V Extension 1.0: total valid (SEW, LMUL) combinations = SEW_count * LMUL_count = 16.
+pub fn riscv_v_combination_count() -> Int {
+    let s: Int = riscv_v_sew_count();
+    let l: Int = riscv_v_lmul_count();
+    return s * l;
+}
+
+// 1 iff (sew, lmul) is a valid RISC-V V (SEW, LMUL) pair. 0 on hostile (sew<=0, lmul<=0, non-canonical).
+pub fn riscv_v_combination_ok(sew: Int, lmul: Int) -> Int {
+    if riscv_v_sew_ok(sew) != 1 { return 0; }
+    if riscv_v_lmul_ok(lmul) != 1 { return 0; }
+    return 1;
+}
+
+// Count valid combinations by brute force over the cartesian product (16 max).
+pub fn riscv_v_count_valid_combinations() -> Int {
+    let mut count: Int = 0;
+    let mut s: Int = 0;
+    while s < 128 {
+        let mut l: Int = 0;
+        while l < 16 {
+            if riscv_v_combination_ok(s, l) == 1 {
+                count = count + 1;
+            }
+            l = l + 1;
+        }
+        s = s + 1;
+    }
+    return count;
+}
+
+// RISC-V V Extension 1.0: Vector Length Agnostic (VLA) - one of two post-2010 VLA ISAs.
+pub fn riscv_v_is_vla() -> Int {
+    return 1;
+}
+
+// ARM SVE: also a post-2010 VLA ISA. Cited here to make the cross-coupling explicit.
+pub fn arm_sve_is_vla() -> Int {
+    return 1;
+}
+
+// 1 iff both RVV and SVE are VLA (couples the two post-2010 VLA ISAs).
+pub fn vla_coupled_holds() -> Int {
+    if riscv_v_is_vla() != 1 { return 0; }
+    if arm_sve_is_vla() != 1 { return 0; }
+    return 1;
+}
+
+// DomainCert box: riscv_v_sew_ok for arbitrary sew.
+pub fn riscv_v_sew_holds(sew: Int) -> DomainCert {
+    return domain_cert("simd", "riscv_v_sew", riscv_v_sew_ok(sew));
+}
+
+// DomainCert box: riscv_v_lmul_ok for arbitrary lmul.
+pub fn riscv_v_lmul_holds(lmul: Int) -> DomainCert {
+    return domain_cert("simd", "riscv_v_lmul", riscv_v_lmul_ok(lmul));
+}
+
+// DomainCert box: VLA cross-coupling (RVV + SVE).
+pub fn riscv_v_vla_coupled_holds() -> DomainCert {
+    return domain_cert("simd", "riscv_v_vla_coupled", vla_coupled_holds());
+}
+
+pub fn verify_risc_v_v_extension_law() -> Bool {
+    // Closed (counts): SEW count = 4, LMUL count = 4 (RISC-V V 1.0).
+    if riscv_v_sew_count() != 4 { return false; }
+    if riscv_v_lmul_count() != 4 { return false; }
+    if riscv_v_combination_count() != 16 { return false; }
+    // Golden (SEW options): all four hold 1.
+    if riscv_v_sew_ok(8) != 1 { return false; }
+    if riscv_v_sew_ok(16) != 1 { return false; }
+    if riscv_v_sew_ok(32) != 1 { return false; }
+    if riscv_v_sew_ok(64) != 1 { return false; }
+    // Golden (LMUL options): all four hold 1.
+    if riscv_v_lmul_ok(1) != 1 { return false; }
+    if riscv_v_lmul_ok(2) != 1 { return false; }
+    if riscv_v_lmul_ok(4) != 1 { return false; }
+    if riscv_v_lmul_ok(8) != 1 { return false; }
+    // Golden (combinations): 16 distinct valid (SEW, LMUL) pairs.
+    if riscv_v_count_valid_combinations() != 16 { return false; }
+    if riscv_v_combination_ok(8, 1) != 1 { return false; }
+    if riscv_v_combination_ok(16, 2) != 1 { return false; }
+    if riscv_v_combination_ok(32, 4) != 1 { return false; }
+    if riscv_v_combination_ok(64, 8) != 1 { return false; }
+    // Golden (mixed pairs): every (SEW, LMUL) pair is independently valid.
+    if riscv_v_combination_ok(8, 8) != 1 { return false; }
+    if riscv_v_combination_ok(64, 1) != 1 { return false; }
+    // Hostile: SEW=0 fails closed to 0 (RISC-V V 1.0: SEW is unsigned, no zero).
+    if riscv_v_sew_ok(0) != 0 { return false; }
+    if riscv_v_sew_ok(0 - 1) != 0 { return false; }
+    if riscv_v_sew_ok(4) != 0 { return false; }
+    if riscv_v_sew_ok(128) != 0 { return false; }
+    if riscv_v_sew_ok(7) != 0 { return false; }
+    if riscv_v_sew_ok(15) != 0 { return false; }
+    // Hostile: LMUL=0 fails closed to 0 (RISC-V V 1.0: LMUL is unsigned, no zero).
+    if riscv_v_lmul_ok(0) != 0 { return false; }
+    if riscv_v_lmul_ok(0 - 1) != 0 { return false; }
+    if riscv_v_lmul_ok(3) != 0 { return false; }
+    if riscv_v_lmul_ok(16) != 0 { return false; }
+    if riscv_v_lmul_ok(9) != 0 { return false; }
+    // Hostile: combination with invalid SEW or LMUL fails closed.
+    if riscv_v_combination_ok(0, 1) != 0 { return false; }
+    if riscv_v_combination_ok(8, 0) != 0 { return false; }
+    if riscv_v_combination_ok(0, 0) != 0 { return false; }
+    if riscv_v_combination_ok(4, 4) != 0 { return false; }
+    // Coupled: RVV is VLA (Vector Length Agnostic).
+    if riscv_v_is_vla() != 1 { return false; }
+    if arm_sve_is_vla() != 1 { return false; }
+    if vla_coupled_holds() != 1 { return false; }
+    // DomainCert boxes the holds bit.
+    let c1: DomainCert = riscv_v_sew_holds(32);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "simd" { return false; }
+    let c2: DomainCert = riscv_v_sew_holds(0);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = riscv_v_lmul_holds(4);
+    if c3.holds != 1 { return false; }
+    let c4: DomainCert = riscv_v_lmul_holds(0);
+    if c4.holds != 0 { return false; }
+    let c5: DomainCert = riscv_v_vla_coupled_holds();
+    if c5.holds != 1 { return false; }
+    return true;
+}

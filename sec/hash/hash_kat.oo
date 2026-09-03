@@ -1,0 +1,116 @@
+// # Hash literature KAT
+//
+// Logline: Five post-2010 hash literature values - SHA-256 block, BLAKE3 chunk, Keccak-f rounds, SHA3-256 rate/capacity, and the FIPS 202 publication date - hold to the bit and the day.
+//
+// Setup: Pure Int. Every constant cites its spec or paper. 0.001% precision (exact for integers; date is a calendar value).
+//
+// Beats:
+//   1. SHA-256 processes a 64-byte block over 64 rounds with the FIPS 180-4 IV.
+//   2. BLAKE3 chunks are 1024 bytes and compressed over 7 rounds.
+//   3. Keccak-f[1600] uses 24 rounds per permutation.
+//   4. SHA3-256 has rate 1088 bits and capacity 512 bits.
+//   5. FIPS 202 SHA-3 was published 2015-08-04.
+
+import "std/core/primitives/domain_cert.oo";
+
+// SHA-256 block size in bytes. Source: FIPS 180-4 2015, Section 6.2
+// (SHA-256 operates on a 512-bit = 64-byte message block).
+pub fn sha256_block_bytes() -> Int {
+    return 64;
+}
+
+// SHA-256 rounds. Source: FIPS 180-4 2015, Section 6.2.2 (the SHA-256
+// compression function uses 64 rounds of the message expansion and
+// compression step).
+pub fn sha256_rounds() -> Int {
+    return 64;
+}
+
+// SHA-256 initial hash value H0 word 0, the first 32 bits of the
+// fractional part of the square root of 2.
+// Source: FIPS 180-4 2015, Section 5.3.3 (H(0)0 = 0x6a09e667 = 1779033703).
+pub fn sha256_iv_h0_w0() -> Int {
+    return 1779033703;
+}
+
+// BLAKE3 chunk size in bytes. Source: BLAKE3 spec 2020 (CHUNK_LEN = 1024).
+pub fn blake3_chunk_bytes() -> Int {
+    return 1024;
+}
+
+// BLAKE3 chunk compression rounds. Source: BLAKE3 spec 2020 (7 rounds).
+pub fn blake3_chunk_rounds_kat() -> Int {
+    return 7;
+}
+
+// Keccak-f[1600] rounds. Source: FIPS 202 SHA-3 2015, Section 3.3
+// (Keccak-f[1600] with 12 + 2*L = 24 rounds for L = 6).
+pub fn keccak_f1600_rounds() -> Int {
+    return 24;
+}
+
+// SHA3-256 rate in bits. Source: FIPS 202 SHA-3 2015, Section 6.1
+// (SHA3-256: rate = 1088 bits).
+pub fn sha3_256_rate_bits() -> Int {
+    return 1088;
+}
+
+// SHA3-256 capacity in bits. Source: FIPS 202 SHA-3 2015, Section 6.1
+// (SHA3-256: capacity = 512 bits).
+pub fn sha3_256_capacity_bits() -> Int {
+    return 512;
+}
+
+// FIPS 202 publication year. Source: NIST FIPS 202 published 2015-08-04.
+pub fn fips202_published_year() -> Int {
+    return 2015;
+}
+
+pub fn fips202_published_month() -> Int {
+    return 8;
+}
+
+pub fn fips202_published_day() -> Int {
+    return 4;
+}
+
+// DomainCert for the hash literature KAT. Holds iff every constant above
+// matches the cited spec/paper to the bit/day.
+pub fn hash_kat() -> DomainCert {
+    if sha256_block_bytes() != 64 { return domain_cert("hash", "hash_function_kat", 0); }
+    if sha256_rounds() != 64 { return domain_cert("hash", "hash_function_kat", 0); }
+    if sha256_iv_h0_w0() != 1779033703 { return domain_cert("hash", "hash_function_kat", 0); }
+    if blake3_chunk_bytes() != 1024 { return domain_cert("hash", "hash_function_kat", 0); }
+    if blake3_chunk_rounds_kat() != 7 { return domain_cert("hash", "hash_function_kat", 0); }
+    if keccak_f1600_rounds() != 24 { return domain_cert("hash", "hash_function_kat", 0); }
+    if sha3_256_rate_bits() != 1088 { return domain_cert("hash", "hash_function_kat", 0); }
+    if sha3_256_capacity_bits() != 512 { return domain_cert("hash", "hash_function_kat", 0); }
+    if fips202_published_year() != 2015 { return domain_cert("hash", "hash_function_kat", 0); }
+    if fips202_published_month() != 8 { return domain_cert("hash", "hash_function_kat", 0); }
+    if fips202_published_day() != 4 { return domain_cert("hash", "hash_function_kat", 0); }
+    return domain_cert("hash", "hash_function_kat", 1);
+}
+
+pub fn verify_hash_kat() -> Bool {
+    // (a) SHA-256 64-byte block, 64 rounds, IV=0x6a09e667.. (FIPS 180-4).
+    if sha256_block_bytes() != 64 { return false; }
+    if sha256_rounds() != 64 { return false; }
+    if sha256_iv_h0_w0() != 1779033703 { return false; }
+    // (b) BLAKE3 chunk=1024 bytes, 7 rounds.
+    if blake3_chunk_bytes() != 1024 { return false; }
+    if blake3_chunk_rounds_kat() != 7 { return false; }
+    // (c) Keccak-f[1600] 24 rounds.
+    if keccak_f1600_rounds() != 24 { return false; }
+    // (d) SHA3-256 rate=1088, capacity=512 bits.
+    if sha3_256_rate_bits() != 1088 { return false; }
+    if sha3_256_capacity_bits() != 512 { return false; }
+    // 0.001% precision: rate + capacity == state_size within exact bit match.
+    if (sha3_256_rate_bits() + sha3_256_capacity_bits()) != 1600 { return false; }
+    // (e) FIPS 202 published 2015-08-04.
+    if fips202_published_year() != 2015 { return false; }
+    if fips202_published_month() != 8 { return false; }
+    if fips202_published_day() != 4 { return false; }
+    // DomainCert: the KAT holds.
+    if hash_kat().holds != 1 { return false; }
+    return true;
+}

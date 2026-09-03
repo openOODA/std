@@ -1,0 +1,107 @@
+// # Linear, Area, and Volumetric Thermal Expansion
+//
+// Logline: Calculates linear, surface, and volumetric thermal expansions, isotropic dilatation, and constrained thermal stresses.
+//
+// Setup: Pure floating-point thermal mechanical equations based on coefficient of linear thermal expansion alpha and temperature delta.
+//
+// Beats:
+//   1. Linear dimensional change Delta L = alpha * L0 * Delta T and thermal strain.
+//   2. Surface area expansion Delta A = 2 * alpha * A0 * Delta T.
+//   3. Volumetric expansion Delta V = 3 * alpha * V0 * Delta T.
+//   4. 1D uniaxial constrained thermal stress sigma_th = -E * alpha * Delta T and 3D hydrostatic thermal pressure.
+
+type ThermalExpansionState = struct {
+    linear_coeff_alpha: Float,
+    delta_temp_k: Float,
+    linear_strain: Float,
+    area_strain: Float,
+    volume_strain: Float,
+    constrained_stress_1d: Float,
+    constrained_pressure_3d: Float
+};
+
+// Calculate linear elongation / contraction: Delta L = alpha * L0 * Delta T (meters).
+pub fn thermal_linear_change(initial_length_m: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    if initial_length_m <= 0.0 { return 0.0; }
+    return alpha_linear * initial_length_m * delta_t_k;
+}
+
+// Calculate final linear dimension: L = L0 + Delta L (meters).
+pub fn thermal_linear_final(initial_length_m: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    let dl: Float = thermal_linear_change(initial_length_m, alpha_linear, delta_t_k);
+    let l_final: Float = initial_length_m + dl;
+    if l_final < 0.0 { return 0.0; }
+    return l_final;
+}
+
+// Calculate surface area change: Delta A = 2 * alpha * A0 * Delta T (m^2).
+pub fn thermal_area_change(initial_area_m2: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    if initial_area_m2 <= 0.0 { return 0.0; }
+    let alpha_area: Float = 2.0 * alpha_linear;
+    return alpha_area * initial_area_m2 * delta_t_k;
+}
+
+// Calculate final surface area: A = A0 + Delta A (m^2).
+pub fn thermal_area_final(initial_area_m2: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    let da: Float = thermal_area_change(initial_area_m2, alpha_linear, delta_t_k);
+    let a_final: Float = initial_area_m2 + da;
+    if a_final < 0.0 { return 0.0; }
+    return a_final;
+}
+
+// Calculate volumetric change: Delta V = 3 * alpha * V0 * Delta T (m^3).
+pub fn thermal_volume_change(initial_vol_m3: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    if initial_vol_m3 <= 0.0 { return 0.0; }
+    let alpha_vol: Float = 3.0 * alpha_linear;
+    return alpha_vol * initial_vol_m3 * delta_t_k;
+}
+
+// Calculate final volume: V = V0 + Delta V (m^3).
+pub fn thermal_volume_final(initial_vol_m3: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    let dv: Float = thermal_volume_change(initial_vol_m3, alpha_linear, delta_t_k);
+    let v_final: Float = initial_vol_m3 + dv;
+    if v_final < 0.0 { return 0.0; }
+    return v_final;
+}
+
+// 1D constrained uniaxial thermal stress: sigma = -E * alpha * Delta T (Pascals).
+pub fn thermal_constrained_stress(youngs_modulus_pa: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    if youngs_modulus_pa <= 0.0 { return 0.0; }
+    return (0.0 - youngs_modulus_pa) * alpha_linear * delta_t_k;
+}
+
+// 3D fully constrained hydrostatic thermal pressure: P = 3 * K * alpha * Delta T (Pascals).
+pub fn thermal_constrained_pressure(bulk_modulus_pa: Float, alpha_linear: Float, delta_t_k: Float) -> Float {
+    if bulk_modulus_pa <= 0.0 { return 0.0; }
+    return 3.0 * bulk_modulus_pa * alpha_linear * delta_t_k;
+}
+
+// Comprehensive evaluation of isotropic thermal expansion state.
+pub fn thermal_expansion_eval(
+    alpha_linear: Float,
+    delta_t_k: Float,
+    youngs_modulus_pa: Float,
+    poissons_ratio_nu: Float
+) -> ThermalExpansionState {
+    let eps_lin: Float = alpha_linear * delta_t_k;
+    let eps_area: Float = 2.0 * eps_lin;
+    let eps_vol: Float = 3.0 * eps_lin;
+
+    let sig_1d: Float = thermal_constrained_stress(youngs_modulus_pa, alpha_linear, delta_t_k);
+
+    let mut k: Float = 0.0;
+    if youngs_modulus_pa > 0.0 && poissons_ratio_nu > -0.9999 && poissons_ratio_nu < 0.4999 {
+        k = youngs_modulus_pa / (3.0 * (1.0 - (2.0 * poissons_ratio_nu)));
+    }
+    let p_3d: Float = thermal_constrained_pressure(k, alpha_linear, delta_t_k);
+
+    return ThermalExpansionState {
+        linear_coeff_alpha: alpha_linear,
+        delta_temp_k: delta_t_k,
+        linear_strain: eps_lin,
+        area_strain: eps_area,
+        volume_strain: eps_vol,
+        constrained_stress_1d: sig_1d,
+        constrained_pressure_3d: p_3d
+    };
+}

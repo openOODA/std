@@ -1,0 +1,145 @@
+// # CFS (Completely Fair Scheduler) red-black tree theory
+//
+// Logline: CFS picks the runnable task with the smallest vruntime next; load balancing equalises the per-CPU load toward total_load / n_cpus so no CPU idles while another is oversubscribed.
+//
+// Setup: Pure Int. vruntime[i] are non-negative ticks, n_cpus >= 1, total_load >= 0. Out-of-range inputs fail closed. Hosts os_invariants.oo stem.
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. Closed (single tick): cfs_pick_next returns the index of the smallest vruntime; ties broken by smallest index.
+//   2. Coupled: cfs_avg_load(total_load, n_cpus) returns total_load / n_cpus (integer floor).
+//   3. Coupled: cfs_should_steal(local, remote) returns 1 when remote load exceeds avg by more than the threshold (starvation-resistance: oldest task eventually gets CPU).
+//   4. Hostile: empty task list returns 0; n_cpus < 1 or total_load < 0 fails closed.
+
+import "std/fs/os/os_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// 1 if env key is allowlisted; 0 otherwise. Inherited from os_invariants.
+fn cfs_env_ok() -> Int {
+    return os_env_key_allowed("OODA_FS_WRITEDIR");
+}
+
+// Integer absolute value without abs_f.
+fn cfs_abs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+fn cfs_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Closed: index of the smallest vruntime. Index 0 is a legal pick. Empty or negative vruntime is Err.
+pub fn cfs_pick_next(vruntime: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(vruntime);
+    if n < 1 { return Err("ERR\tcfs\tdomain"); }
+    let mut best: Int = 0;
+    let mut best_v: Int = list_get(vruntime, 0);
+    if best_v < 0 { return Err("ERR\tcfs\tdomain"); }
+    let mut i: Int = 1;
+    while i < n {
+        let v: Int = list_get(vruntime, i);
+        if v < 0 { return Err("ERR\tcfs\tdomain"); }
+        if v < best_v {
+            best_v = v;
+            best = i;
+        }
+        i = i + 1;
+    }
+    return Ok(best);
+}
+
+// Coupled: floor(total_load / n_cpus). Idle load 0 is Ok(0). n_cpus < 1 or total_load < 0 is Err.
+pub fn cfs_avg_load(total_load: Int, n_cpus: Int) -> Result[Int, String] {
+    if total_load < 0 { return Err("ERR\tcfs\tdomain"); }
+    if n_cpus < 1 { return Err("ERR\tcfs\tdomain"); }
+    return Ok(total_load / n_cpus);
+}
+
+// Coupled (load balancing / starvation): 1 when remote - local > avg (the remote CPU should donate
+// a task). local, remote, avg must all be >= 0; otherwise fails closed to 0.
+pub fn cfs_should_steal(local: Int, remote: Int, avg: Int) -> Int {
+    if local < 0 { return 0; }
+    if remote < 0 { return 0; }
+    if avg < 0 { return 0; }
+    let gap: Int = remote - local;
+    if gap > avg { return 1; }
+    return 0;
+}
+
+// Domain certificate: holds 1 if the CFS invariants hold for the supplied vruntime vector and load.
+pub fn cfs_theory_holds(vruntime: List[Int], total_load: Int, n_cpus: Int) -> DomainCert {
+    let env_ok: Int = cfs_env_ok();
+    if env_ok != 1 { return domain_cert("os", "scheduler_cfs_theory", 0); }
+    let n: Int = list_len(vruntime);
+    if n < 1 { return domain_cert("os", "scheduler_cfs_theory", 0); }
+    if cfs_avg_load(total_load, n_cpus).is_ok() == false { return domain_cert("os", "scheduler_cfs_theory", 0); }
+    return domain_cert("os", "scheduler_cfs_theory", 1);
+}
+
+pub fn verify_scheduler_cfs_theory() -> Bool {
+    // Golden: 3 tasks with vruntime [10, 5, 8] -> task 2 (index 1, vruntime=5) is picked.
+    let mut t1: List[Int] = list_new();
+    t1 = list_push(t1, 10);
+    t1 = list_push(t1, 5);
+    t1 = list_push(t1, 8);
+    if cfs_got(cfs_pick_next(t1)) != 1 { return false; }
+    // Golden: 4 tasks [7, 3, 9, 3] -> tie at index 1 and 3 (vruntime 3), smallest index wins.
+    let mut t2: List[Int] = list_new();
+    t2 = list_push(t2, 7);
+    t2 = list_push(t2, 3);
+    t2 = list_push(t2, 9);
+    t2 = list_push(t2, 3);
+    if cfs_got(cfs_pick_next(t2)) != 1 { return false; }
+    // Golden: single task [42] -> 0.
+    let mut t3: List[Int] = list_new();
+    t3 = list_push(t3, 42);
+    let zidx: Result[Int, String] = cfs_pick_next(t3);
+    if zidx.is_ok() == false { return false; }
+    if cfs_got(zidx) != 0 { return false; }
+    // Golden: single tick = smallest vruntime wins.
+    let mut t4: List[Int] = list_new();
+    t4 = list_push(t4, 0);
+    t4 = list_push(t4, 1);
+    t4 = list_push(t4, 2);
+    if cfs_got(cfs_pick_next(t4)) != 0 { return false; }
+    if cfs_got(cfs_avg_load(4, 2)) != 2 { return false; }
+    if cfs_got(cfs_avg_load(10, 4)) != 2 { return false; }
+    let zload: Result[Int, String] = cfs_avg_load(0, 8);
+    if zload.is_ok() == false { return false; }
+    if cfs_got(zload) != 0 { return false; }
+    // Coupled: starvation-resistance: oldest task (highest local) eventually leaves.
+    // remote=10, local=2, avg=3 -> 10-2=8 > 3, steal.
+    if cfs_should_steal(2, 10, 3) != 1 { return false; }
+    // Coupled: no steal when gap <= avg.
+    if cfs_should_steal(5, 7, 3) != 0 { return false; }
+    // Coupled: equal load -> no steal.
+    if cfs_should_steal(4, 4, 2) != 0 { return false; }
+    // Hostile: empty task list returns 0.
+    let mut empty: List[Int] = list_new();
+    if cfs_pick_next(empty).is_ok() { return false; }
+    let mut neg: List[Int] = list_new();
+    neg = list_push(neg, 5);
+    neg = list_push(neg, 0 - 1);
+    if cfs_pick_next(neg).is_ok() { return false; }
+    if cfs_avg_load(10, 0).is_ok() { return false; }
+    if cfs_avg_load(10, 0 - 1).is_ok() { return false; }
+    if cfs_avg_load(0 - 1, 2).is_ok() { return false; }
+    // Hostile: negative steal inputs fail closed to 0.
+    if cfs_should_steal(0 - 1, 5, 2) != 0 { return false; }
+    if cfs_should_steal(5, 0 - 1, 2) != 0 { return false; }
+    if cfs_should_steal(5, 5, 0 - 1) != 0 { return false; }
+    // Domain certificate round-trip.
+    let c1: DomainCert = cfs_theory_holds(t1, 4, 2);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "os" { return false; }
+    if c1.law_name != "scheduler_cfs_theory" { return false; }
+    let c0: DomainCert = cfs_theory_holds(empty, 0, 2);
+    if c0.holds != 0 { return false; }
+    // cfs_abs sanity (no abs_f).
+    if cfs_abs(0) != 0 { return false; }
+    if cfs_abs(7) != 7 { return false; }
+    if cfs_abs(0 - 7) != 7 { return false; }
+    return true;
+}

@@ -1,0 +1,86 @@
+// # Keplerian Elements to State Vector
+//
+// Logline: Converts classical Keplerian orbital elements into an ECI Cartesian state vector with fail-closed conic validation.
+//
+// Setup: Pure astrodynamics. No capability tokens. Rotation follows the 3-1-3 Euler sequence from perifocal to ECI.
+//
+// Beats:
+//   1. Define OrbitElements and StateVector types.
+//   2. Validate conic domain and semi-major axis.
+//   3. Compute position and velocity in the perifocal frame.
+//   4. Apply RAAN, inclination, and argument of periapsis rotations.
+// residual: Inverse mapping (state vector to orbital elements) is residual.
+
+pub type OrbitElements = struct {
+    semi_major_axis_km: Float,
+    eccentricity: Float,
+    inclination_rad: Float,
+    raan_rad: Float,
+    arg_periapsis_rad: Float,
+    true_anomaly_rad: Float
+};
+
+pub type StateVector = struct {
+    pos_x: Float,
+    pos_y: Float,
+    pos_z: Float,
+    vel_x: Float,
+    vel_y: Float,
+    vel_z: Float
+};
+
+pub fn elements_to_state_vector(elem: &OrbitElements, mu: Float) -> Result[StateVector, String] {
+    if mu <= 0.0 {
+        return Err("ERR\telements_to_state_vector\tinvalid_mu");
+    }
+    if elem.semi_major_axis_km <= 0.0 {
+        return Err("ERR\telements_to_state_vector\tinvalid_semi_major_axis");
+    }
+    if elem.eccentricity < 0.0 || elem.eccentricity >= 1.0 {
+        return Err("ERR\telements_to_state_vector\tinvalid_eccentricity");
+    }
+    let e: Float = elem.eccentricity;
+    let a: Float = elem.semi_major_axis_km;
+    let nu: Float = elem.true_anomaly_rad;
+    let p: Float = a * (1.0 - (e * e));
+    let r: Float = p / (1.0 + (e * cos(nu)));
+    let v_factor: Float = sqrt(mu / p);
+    let r_x_pqw: Float = r * cos(nu);
+    let r_y_pqw: Float = r * sin(nu);
+    let v_x_pqw: Float = 0.0 - (v_factor * sin(nu));
+    let v_y_pqw: Float = v_factor * (e + cos(nu));
+
+    let c_o: Float = cos(elem.arg_periapsis_rad);
+    let s_o: Float = sin(elem.arg_periapsis_rad);
+    let x1_r: Float = (r_x_pqw * c_o) - (r_y_pqw * s_o);
+    let y1_r: Float = (r_x_pqw * s_o) + (r_y_pqw * c_o);
+    let x1_v: Float = (v_x_pqw * c_o) - (v_y_pqw * s_o);
+    let y1_v: Float = (v_x_pqw * s_o) + (v_y_pqw * c_o);
+
+    let c_i: Float = cos(elem.inclination_rad);
+    let s_i: Float = sin(elem.inclination_rad);
+    let x2_r: Float = x1_r;
+    let y2_r: Float = y1_r * c_i;
+    let z2_r: Float = y1_r * s_i;
+    let x2_v: Float = x1_v;
+    let y2_v: Float = y1_v * c_i;
+    let z2_v: Float = y1_v * s_i;
+
+    let c_W: Float = cos(elem.raan_rad);
+    let s_W: Float = sin(elem.raan_rad);
+    let pos_x: Float = (x2_r * c_W) - (y2_r * s_W);
+    let pos_y: Float = (x2_r * s_W) + (y2_r * c_W);
+    let pos_z: Float = z2_r;
+    let vel_x: Float = (x2_v * c_W) - (y2_v * s_W);
+    let vel_y: Float = (x2_v * s_W) + (y2_v * c_W);
+    let vel_z: Float = z2_v;
+
+    return Ok(StateVector {
+        pos_x: pos_x,
+        pos_y: pos_y,
+        pos_z: pos_z,
+        vel_x: vel_x,
+        vel_y: vel_y,
+        vel_z: vel_z
+    });
+}

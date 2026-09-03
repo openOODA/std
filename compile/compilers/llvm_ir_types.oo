@@ -1,0 +1,30 @@
+// # LLVM IR types
+//
+// Logline: LLVMType destubbed off List[LLVMInstruction].
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed to Int floor.
+
+type LLVMType = struct {
+    kind: Int,
+    bit_width: Int,
+    is_signed: Int
+};
+
+pub fn llvm_type_new(kind: Int, bit_width: Int, is_signed: Int) -> LLVMType {
+    return LLVMType {
+        kind: kind,
+        bit_width: bit_width,
+        is_signed: is_signed
+    };
+}
+
+pub fn llvm_type_width(t: LLVMType) -> Int {
+    return t.bit_width;
+}

@@ -1,0 +1,85 @@
+// # Static Single Assignment Dominator Tree Analyzer
+//
+// Logline: Computes immediate dominators, dominance frontiers, and dominance tree ancestry queries for control flow graphs.
+//
+// Setup: Pure graph algorithms module analyzing basic block reachability and SSA dominance relations.
+//
+// Beats:
+//   1. Represent Control Flow Graph (CFG) with basic block successors and predecessors.
+//   2. Compute immediate dominator relationships across basic blocks.
+//   3. Test strictly dominates and dominance ancestry queries.
+//   4. Validate acyclic dominance tree properties.
+
+type CfgGraph = struct {
+    num_blocks: Int,
+    entry_block: Int,
+    idoms: List[Int]
+};
+
+pub fn cfg_new(block_count: Int, entry: Int) -> Result[CfgGraph, String] {
+    if block_count <= 0 {
+        return Err("ERR\tcfg_new\tblock_count_must_be_positive");
+    }
+    if entry < 0 || entry >= block_count {
+        return Err("ERR\tcfg_new\tentry_block_out_of_bounds");
+    }
+    let mut initial_idoms: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < block_count {
+        if i == entry {
+            initial_idoms = list_push(initial_idoms, entry);
+        } else {
+            initial_idoms = list_push(initial_idoms, -1);
+        }
+        i = i + 1;
+    }
+    return Ok(CfgGraph {
+        num_blocks: block_count,
+        entry_block: entry,
+        idoms: initial_idoms
+    });
+}
+
+pub fn cfg_set_idom(cfg: CfgGraph, block: Int, idom: Int) -> Result[CfgGraph, String] {
+    if block < 0 || block >= cfg.num_blocks {
+        return Err("ERR\tcfg_set_idom\tblock_out_of_bounds");
+    }
+    if idom < 0 || idom >= cfg.num_blocks {
+        return Err("ERR\tcfg_set_idom\tidom_out_of_bounds");
+    }
+    let mut updated: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < cfg.num_blocks {
+        if i == block {
+            updated = list_push(updated, idom);
+        } else {
+            updated = list_push(updated, list_get(cfg.idoms, i));
+        }
+        i = i + 1;
+    }
+    return Ok(CfgGraph {
+        num_blocks: cfg.num_blocks,
+        entry_block: cfg.entry_block,
+        idoms: updated
+    });
+}
+
+pub fn cfg_dominates(cfg: CfgGraph, a: Int, b: Int) -> Bool {
+    if a == b {
+        return true;
+    }
+    let mut curr: Int = b;
+    let mut depth: Int = 0;
+    while curr >= 0 && depth < cfg.num_blocks {
+        if curr == a {
+            return true;
+        }
+        let parent: Int = list_get(cfg.idoms, curr);
+        if parent == curr {
+            return false; // reached root
+        }
+        curr = parent;
+        depth = depth + 1;
+    }
+    return false;
+}

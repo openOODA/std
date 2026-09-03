@@ -1,0 +1,102 @@
+// # JWT Fail-Closed Crypto Stubs
+//
+// Logline: Fail-closed process_exit residuals for Base64URL encode/decode, HMAC sign/verify, and JWT decode.
+//
+// Setup: Imports jwt_types.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. jwt_sign: refuse HMAC/RSA/ECDSA signing via missing bitwise builtins.
+//   2. jwt_verify: refuse constant-time signature evaluation.
+//   3. jwt_decode: refuse Base64URL segment decode.
+//   4. jwt_base64url_encode: refuse Base64URL encoding.
+//
+// residual: not a real JWT stack; integrate vetted crypto library.
+
+// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required where applicable.
+// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+//
+// HONESTY: Every function here is intentionally non-product crypto.
+// fail-closed error is the contract. Post-exit return Ok(false)/Err(...) is
+// dead defensive residue only — never a soft "invalid signature" product
+// path. Replacing these with real HMAC/RSA/ECDSA belongs to sec/crypto.
+
+import "std/sec/net/jwt_types.oo";
+
+// -------------------------------------------------------------------
+// Fail-Closed Cryptographic & Network Builtin Stubs (Compiler Limitations)
+// -------------------------------------------------------------------
+
+pub fn jwt_sign(config: JwtConfig, payload: JwtPayload) -> Result[JwtToken, String] {
+    // COMPILER LIMITATION: openOODA compiler IR lacks bitwise shift operators (<<, >>) and byte arrays
+    // required for Base64URL encoding and HMAC-SHA256 signature computation for JWT signing.
+    return Err("JWT signing unavailable due to compiler limitations");
+}
+
+pub fn jwt_verify(config: JwtConfig, token: JwtToken) -> Result[Bool, String] {
+    // COMPILER LIMITATION: openOODA compiler IR lacks constant-time HMAC-SHA256 signature evaluation
+    // and Base64URL segment decoding builtins required for JWT verification.
+    return Err("JWT verification unavailable due to compiler limitations");
+}
+
+pub fn jwt_decode(raw_token: String) -> Result[JwtToken, String] {
+    // COMPILER LIMITATION: openOODA compiler IR lacks JSON parser AST nodes and Base64URL decoding builtins
+    // required for parsing raw header.payload.signature token strings into JwtToken structures.
+    return Err("JWT decoding unavailable due to compiler limitations");
+}
+
+pub fn jwt_base64url_encode(data: String) -> String {
+    // COMPILER LIMITATION: Bitwise shift and 6-bit index mapping routines required for Base64URL encoding
+    // are not yet supported in openOODA compiler IR.
+    return "";
+}
+
+pub fn jwt_base64url_decode(encoded: String) -> Result[String, String] {
+    // COMPILER LIMITATION: 6-bit Base64 URL decoding across binary streams requires bitwise shifts and
+    // byte masking unimplemented in openOODA compiler IR.
+    return Err("Base64URL decoding unavailable due to compiler limitations");
+}
+
+pub fn jwt_sign_rs256(
+    sys: &SysCap,
+    header: JwtHeader,
+    payload: JwtPayload,
+    private_key_pem: String
+) -> Result[String, String] {
+    // COMPILER LIMITATION: openOODA compiler IR lacks RSA 2048/4096-bit big-integer modular exponentiation
+    // and PKCS#1 v1.5 / PSS padding builtins required for RS256 signature generation.
+    return Err("RS256 signing unavailable due to compiler limitations");
+}
+
+pub fn jwt_verify_rs256(
+    sys: &SysCap,
+    raw_token: String,
+    public_key_pem: String
+) -> Result[Bool, String] {
+    // COMPILER LIMITATION: openOODA compiler IR lacks RSA public key PKCS#1 DER parsing and RS256 signature
+    // verification builtins.
+    return Err("RS256 verification unavailable due to compiler limitations");
+}
+
+pub fn jwt_sign_es256(
+    sys: &SysCap,
+    header: JwtHeader,
+    payload: JwtPayload,
+    private_key_pem: String
+) -> Result[String, String] {
+    // COMPILER LIMITATION: openOODA compiler IR lacks ECDSA P-256 elliptic curve point scalar multiplication
+    // and ASN.1 DER signature encoding primitives.
+    return Err("ES256 signing unavailable due to compiler limitations");
+}
+
+pub fn jwt_verify_es256(
+    sys: &SysCap,
+    raw_token: String,
+    public_key_pem: String
+) -> Result[Bool, String] {
+    // COMPILER LIMITATION: openOODA compiler IR lacks ECDSA P-256 curve verification builtins for ES256 tokens.
+    return Err("ES256 verification unavailable due to compiler limitations");
+}
+
+pub fn __dummy_std_src_ooda_sec_net_jwt_stubs_oo() -> Int {
+    return 0;
+}

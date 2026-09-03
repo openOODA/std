@@ -1,0 +1,165 @@
+// # FIPS 204 ML-DSA Parameters and Core Types
+//
+// Logline: Defines ML-DSA parameter sets, digital signature structures, and key pair containers for NIST FIPS 204.
+//
+// Setup: Pure algebraic parameter module supporting ML-DSA-44, ML-DSA-65, and ML-DSA-87 (NIST Level 5).
+//
+// Beats:
+//   1. Declare parameter struct for lattice dimensions, modulus q=8380417, and bounding constants.
+//   2. Declare public key, private key, signature, and verification outcome structures.
+//   3. Implement parameter preset factories for category 2, 3, and 5 parameter sets.
+//   4. Implement canonical constructor helpers.
+
+type MlDsaParams = struct {
+    k_dim: Int,
+    l_dim: Int,
+    q_mod: Int,
+    d_dropped: Int,
+    eta_bound: Int,
+    gamma1: Int,
+    gamma2: Int,
+    tau_nonzero: Int,
+    beta_bound: Int,
+    omega_hints: Int,
+    pk_size: Int,
+    sk_size: Int,
+    sig_size: Int
+};
+
+type MlDsaPublicKey = struct {
+    k_dim: Int,
+    l_dim: Int,
+    seed_rho: List[Int],
+    t1_coeffs: List[Int],
+    raw_bytes: List[Int],
+    is_valid: Bool
+};
+
+type MlDsaPrivateKey = struct {
+    k_dim: Int,
+    l_dim: Int,
+    seed_rho: List[Int],
+    seed_k: List[Int],
+    tr: List[Int],
+    s1_coeffs: List[Int],
+    s2_coeffs: List[Int],
+    t0_coeffs: List[Int],
+    raw_bytes: List[Int]
+};
+
+type MlDsaSignature = struct {
+    c_tilde: List[Int],
+    z_coeffs: List[Int],
+    hint_bits: List[Int],
+    raw_bytes: List[Int],
+    length_bytes: Int
+};
+
+type MlDsaKeyPair = struct {
+    pk: MlDsaPublicKey,
+    sk: MlDsaPrivateKey,
+    security_level: Int
+};
+
+type MlDsaVerificationResult = struct {
+    is_valid: Bool,
+    error_code: Int,
+    message_digest: List[Int]
+};
+
+pub fn ml_dsa_params_87() -> MlDsaParams {
+    return MlDsaParams {
+        k_dim: 8,
+        l_dim: 7,
+        q_mod: 8380417,
+        d_dropped: 13,
+        eta_bound: 2,
+        gamma1: 524288,
+        gamma2: 261888,
+        tau_nonzero: 60,
+        beta_bound: 120,
+        omega_hints: 75,
+        pk_size: 2592,
+        sk_size: 4896,
+        sig_size: 4627
+    };
+}
+
+pub fn ml_dsa_params_65() -> MlDsaParams {
+    return MlDsaParams {
+        k_dim: 6,
+        l_dim: 5,
+        q_mod: 8380417,
+        d_dropped: 13,
+        eta_bound: 4,
+        gamma1: 524288,
+        gamma2: 261888,
+        tau_nonzero: 49,
+        beta_bound: 196,
+        omega_hints: 55,
+        pk_size: 1952,
+        sk_size: 4032,
+        sig_size: 3309
+    };
+}
+
+pub fn ml_dsa_params_44() -> MlDsaParams {
+    return MlDsaParams {
+        k_dim: 4,
+        l_dim: 4,
+        q_mod: 8380417,
+        d_dropped: 13,
+        eta_bound: 2,
+        gamma1: 131072,
+        gamma2: 95232,
+        tau_nonzero: 39,
+        beta_bound: 78,
+        omega_hints: 80,
+        pk_size: 1312,
+        sk_size: 2560,
+        sig_size: 2420
+    };
+}
+
+pub fn ml_dsa_public_key_new(k: Int, l: Int) -> MlDsaPublicKey {
+    return MlDsaPublicKey {
+        k_dim: k,
+        l_dim: l,
+        seed_rho: list_new(),
+        t1_coeffs: list_new(),
+        raw_bytes: list_new(),
+        is_valid: false
+    };
+}
+
+pub fn ml_dsa_private_key_new(k: Int, l: Int) -> MlDsaPrivateKey {
+    return MlDsaPrivateKey {
+        k_dim: k,
+        l_dim: l,
+        seed_rho: list_new(),
+        seed_k: list_new(),
+        tr: list_new(),
+        s1_coeffs: list_new(),
+        s2_coeffs: list_new(),
+        t0_coeffs: list_new(),
+        raw_bytes: list_new()
+    };
+}
+
+pub fn ml_dsa_signature_new(len_bytes: Int) -> MlDsaSignature {
+    return MlDsaSignature {
+        c_tilde: list_new(),
+        z_coeffs: list_new(),
+        hint_bits: list_new(),
+        raw_bytes: list_new(),
+        length_bytes: len_bytes
+    };
+}
+
+pub fn ml_dsa_key_pair_new(pk: MlDsaPublicKey, sk: MlDsaPrivateKey, level: Int) -> MlDsaKeyPair {
+    return MlDsaKeyPair {
+        pk: pk,
+        sk: sk,
+        security_level: level
+    };
+}

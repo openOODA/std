@@ -1,0 +1,67 @@
+// # Probability simplex principle
+//
+// Logline: A distribution has p_i in [0,1] and sum 1. Empty or negative mass is not a simplex.
+//
+// Setup: Pure List[Float]. Slack 1e-9 on the sum.
+//
+// Beats:
+//   1. [0.5, 0.5] is a simplex.
+//   2. Empty list is not.
+//   3. A negative weight is not.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn math_is_simplex(ps: List[Float]) -> DomainCert {
+    let n: Int = list_len(ps);
+    if n == 0 {
+        return domain_cert("math", "simplex", 0);
+    }
+    let mut s: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let p: Float = list_get(ps, i);
+        if p < 0.0 {
+            return domain_cert("math", "simplex", 0);
+        }
+        if p > 1.0 {
+            return domain_cert("math", "simplex", 0);
+        }
+        s = s + p;
+        i = i + 1;
+    }
+    let mut h: Int = 0;
+    if abs_f(s - 1.0) <= 0.000000001 {
+        h = 1;
+    }
+    return domain_cert("math", "simplex", h);
+}
+
+pub fn verify_probability_simplex_principle() -> Bool {
+    let mut okp: List[Float] = list_new();
+    okp = list_push(okp, 0.5);
+    okp = list_push(okp, 0.5);
+    let a: DomainCert = math_is_simplex(okp);
+    let empty: List[Float] = list_new();
+    let b: DomainCert = math_is_simplex(empty);
+    let mut bad: List[Float] = list_new();
+    bad = list_push(bad, 1.5);
+    bad = list_push(bad, 0.0 - 0.5);
+    let c: DomainCert = math_is_simplex(bad);
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 0 {
+        return false;
+    }
+    if c.holds != 0 {
+        return false;
+    }
+    return true;
+}

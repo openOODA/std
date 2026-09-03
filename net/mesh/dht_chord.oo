@@ -1,0 +1,42 @@
+// # Chord Distributed Hash Table Topology
+//
+// Logline: Circular identifier ring distance metrics, finger table lookup, and successor routing for Chord DHT nodes.
+//
+// Setup: Pure routing algebra module operating on a modulo 2^16 identifier ring.
+//
+// Beats:
+//   1. Implement circular interval containment testing (start, end] modulo 2^16.
+//   2. Compute finger table lookup finding closest preceding node.
+//   3. Validate successor step correctness.
+//   4. Enforce monotonic convergence toward target key.
+
+pub fn chord_ring_mod() -> Int {
+    return 65536; // 2^16
+}
+
+pub fn chord_in_interval(val: Int, start: Int, end: Int) -> Bool {
+    let v: Int = val % 65536;
+    let s: Int = start % 65536;
+    let e: Int = end % 65536;
+    if s < e {
+        return v > s && v <= e;
+    }
+    if s > e {
+        return v > s || v <= e;
+    }
+    return true; // full ring
+}
+
+pub fn chord_find_closest_preceding(node_id: Int, target_key: Int, fingers: List[Int]) -> Int {
+    let num_fingers: Int = list_len(fingers);
+    let mut i: Int = num_fingers - 1;
+    while i >= 0 {
+        let finger_id: Int = list_get(fingers, i);
+        // finger in (node_id, target_key)
+        if chord_in_interval(finger_id, node_id, (target_key - 1 + 65536) % 65536) {
+            return finger_id;
+        }
+        i = i - 1;
+    }
+    return node_id;
+}

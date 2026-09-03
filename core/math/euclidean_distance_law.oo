@@ -1,0 +1,32 @@
+// # Euclidean distance
+//
+// Logline: d = sqrt(dx^2 + dy^2 + dz^2). blas_nrm2 stays the list-norm API.
+//
+// Setup: Pure Float. Distance of a zero vector is 0.
+//
+// Beats:
+//   1. Distance is the root of the squared sum.
+//   2. (3,4,0) is 5.
+//   3. Identical points are 0.
+
+pub fn euclidean_distance_3(dx: Float, dy: Float, dz: Float) -> Float {
+    return sqrt((dx * dx) + (dy * dy) + (dz * dz));
+}
+
+pub fn verify_euclidean_distance_law() -> Bool {
+    let d54: Float = euclidean_distance_3(3.0, 4.0, 0.0);
+    let mut d: Float = d54 - 5.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    if euclidean_distance_3(0.0, 0.0, 0.0) != 0.0 {
+        return false;
+    }
+    if euclidean_distance_3(0.0 - 3.0, 4.0, 12.0) < 0.0 {
+        return false;
+    }
+    return true;
+}

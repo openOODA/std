@@ -1,0 +1,51 @@
+// # SDP Session Types
+//
+// Logline: Defines SdpMediaDesc and SdpSession structures for the WebRTC SDP parser.
+//
+// Setup: Two by-value types. media 1=audio 2=video. n_media is a count field.
+//
+// Beats:
+//   1. Define SdpMediaDesc with media kind, port, protocol, format, codec, and clock rate.
+//   2. Define SdpSession with version, origin, ICE/DTLS credentials, and the first media line.
+//   3. Provide an empty session constructor for downstream parsing.
+
+type SdpMediaDesc = struct {
+    media_type: Int,
+    port: Int,
+    proto: Int,
+    fmt: Int,
+    codec_name: Int,
+    clock_rate: Int
+};
+
+type SdpSession = struct {
+    version: Int,
+    origin: Int,
+    session_name: Int,
+    ice_ufrag: Int,
+    ice_pwd: Int,
+    dtls_fingerprint: Int,
+    m0_type: Int,
+    m0_port: Int,
+    m0_fmt: Int,
+    m0_clock: Int,
+    n_media: Int,
+    is_valid: Int
+};
+
+pub fn sdp_session_new() -> SdpSession {
+    return SdpSession {
+        version: 0,
+        origin: 0,
+        session_name: 45,
+        ice_ufrag: 0,
+        ice_pwd: 0,
+        dtls_fingerprint: 0,
+        m0_type: 0,
+        m0_port: 0,
+        m0_fmt: 0,
+        m0_clock: 0,
+        n_media: 0,
+        is_valid: 0
+    };
+}

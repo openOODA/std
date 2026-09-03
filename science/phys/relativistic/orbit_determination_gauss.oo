@@ -1,0 +1,27 @@
+// # Gauss Initial Orbit Determination (Angles-Only)
+//
+// Logline: Determines orbital elements from three line-of-sight optical direction unit vectors (right ascension and declination).
+//
+// Setup: Pure geometric initial orbit determination via Gauss 8th-order polynomial root finding.
+//
+// Beats:
+//   1. Observation triplet count query (3 angles-only sightings).
+//   2. Calculate sector-to-triangle area ratios.
+//   3. Solve 8th-order Gauss polynomial for slant range r2.
+//   4. Determine velocity vector v2 at middle observation epoch.
+
+pub fn od_gauss_obs() -> Int {
+    return 3;
+}
+
+/// Computes scalar triple product (v1 x v2) . v3 for Gauss geometric coplanarity.
+pub fn od_scalar_triple_product(
+    v1x: Float, v1y: Float, v1z: Float,
+    v2x: Float, v2y: Float, v2z: Float,
+    v3x: Float, v3y: Float, v3z: Float
+) -> Float {
+    let cx: Float = (v1y * v2z) - (v1z * v2y);
+    let cy: Float = (v1z * v2x) - (v1x * v2z);
+    let cz: Float = (v1x * v2y) - (v1y * v2x);
+    return (cx * v3x) + (cy * v3y) + (cz * v3z);
+}

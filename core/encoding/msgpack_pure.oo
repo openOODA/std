@@ -1,0 +1,200 @@
+// # Canonical MessagePack codec (safe API)
+//
+// Logline: Encodes MessagePack type tags (positive and negative fixint, nil, bool, bin, str, fixarray, fixmap) with type-tag validation; tree decoder lives in msgpack_pure_tree.oo.
+//
+// Setup: Pure. Bytes are List[Int] 0..255. Encoder returns ByteOut. The MsgValue tree is defined here so the tree decoder can construct it; the tree decoder is in msgpack_pure_tree.oo.
+//
+// Beats:
+//   1. Encode integers in the shortest signed form.
+//   2. Encode nil, bool, bin, fixarray, and fixmap.
+//   3. Expose the MsgValue struct and accessors for callers that decode.
+//   4. Tree decoder (msgpack_pure_tree.oo) returns Result[MsgValue, String].
+
+import "std/core/primitives/byte_out.oo";
+import "std/core/encoding/msgpack_pure_dec.oo";
+
+fn mp_push16(o: List[Int], v: Int) -> List[Int] {
+    let mut x: Int = v;
+    if x < 0 {
+        x = 65536 + x;
+    }
+    let mut b: List[Int] = o;
+    b = list_push(b, (x >> 8) & 255);
+    b = list_push(b, x & 255);
+    return b;
+}
+
+fn mp_push32(o: List[Int], v: Int) -> List[Int] {
+    let mut x: Int = v;
+    if x < 0 {
+        x = 4294967296 + x;
+    }
+    let mut b: List[Int] = o;
+    b = list_push(b, (x >> 24) & 255);
+    b = list_push(b, (x >> 16) & 255);
+    b = list_push(b, (x >> 8) & 255);
+    b = list_push(b, x & 255);
+    return b;
+}
+
+pub fn msgpack_pure_enc_int(v: Int) -> ByteOut {
+    let mut o: List[Int] = list_new();
+    if v >= 0 {
+        if v <= 127 {
+            o = list_push(o, v);
+            return byte_out_ok(o);
+        }
+    } else {
+        if v >= 0 - 32 {
+            o = list_push(o, 256 + v);
+            return byte_out_ok(o);
+        }
+    }
+    if v >= 0 - 128 {
+        if v <= 127 {
+            o = list_push(o, 208);
+            if v < 0 {
+                o = list_push(o, 256 + v);
+            } else {
+                o = list_push(o, v);
+            }
+            return byte_out_ok(o);
+        }
+    }
+    if v >= 0 - 32768 {
+        if v <= 32767 {
+            o = list_push(o, 209);
+            return byte_out_ok(mp_push16(o, v));
+        }
+    }
+    if v >= 0 - 2147483647 {
+        if v <= 2147483647 {
+            o = list_push(o, 210);
+            return byte_out_ok(mp_push32(o, v));
+        }
+    }
+    return byte_out_err("ERR\tmsgpack_pure_enc_int\toverflow");
+}
+
+pub fn msgpack_pure_enc_nil() -> ByteOut {
+    let mut o: List[Int] = list_new();
+    o = list_push(o, 192);
+    return byte_out_ok(o);
+}
+
+pub fn msgpack_pure_enc_bool(v: Int) -> ByteOut {
+    let mut o: List[Int] = list_new();
+    if v > 0 {
+        o = list_push(o, 195);
+    } else {
+        o = list_push(o, 194);
+    }
+    return byte_out_ok(o);
+}
+
+pub fn msgpack_pure_enc_bin(b: List[Int]) -> ByteOut {
+    let n: Int = list_len(b);
+    let mut o: List[Int] = list_new();
+    if n < 256 {
+        o = list_push(o, 196);
+        o = list_push(o, n);
+    } else {
+        if n < 65536 {
+            o = list_push(o, 197);
+            o = list_push(o, (n >> 8) & 255);
+            o = list_push(o, n & 255);
+        } else {
+            return byte_out_err("ERR\tmsgpack_pure_enc_bin\ttoo_large");
+        }
+    }
+    let mut i: Int = 0;
+    while i < n {
+        let x: Int = list_get(b, i);
+        if x < 0 {
+            return byte_out_err("ERR\tmsgpack_pure_enc_bin\tbyte_oob");
+        }
+        if x > 255 {
+            return byte_out_err("ERR\tmsgpack_pure_enc_bin\tbyte_oob");
+        }
+        o = list_push(o, x);
+        i = i + 1;
+    }
+    return byte_out_ok(o);
+}
+
+fn mp_cat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut o: List[Int] = a;
+    let mut i: Int = 0;
+    while i < list_len(b) {
+        o = list_push(o, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return o;
+}
+
+pub fn msgpack_pure_enc_array(n: Int, kids: List[Int]) -> ByteOut {
+    if n < 0 {
+        return byte_out_err("ERR\tmsgpack_pure_enc_array\tinvalid_size");
+    }
+    if n > 15 {
+        return byte_out_err("ERR\tmsgpack_pure_enc_array\tinvalid_size");
+    }
+    let mut o: List[Int] = list_new();
+    o = list_push(o, 144 + n);
+    return byte_out_ok(mp_cat(o, kids));
+}
+
+pub fn msgpack_pure_enc_map(n: Int, kids: List[Int]) -> ByteOut {
+    if n < 0 {
+        return byte_out_err("ERR\tmsgpack_pure_enc_map\tinvalid_size");
+    }
+    if n > 15 {
+        return byte_out_err("ERR\tmsgpack_pure_enc_map\tinvalid_size");
+    }
+    let mut o: List[Int] = list_new();
+    o = list_push(o, 128 + n);
+    return byte_out_ok(mp_cat(o, kids));
+}
+
+pub fn msgpack_pure_decode(buf: List[Int]) -> MsgOut { return msgpack_pure_dec_parse(buf); }
+
+pub fn msgpack_pure_stat(flag: Int, err: String) -> Result[Int, String] {
+    if flag < 1 {
+        return Err(err);
+    }
+    return Ok(1);
+}
+
+// MsgValue tree. kind codes: 0=int, 1=nil, 2=bool, 3=string, 4=array,
+// 5=map, 6=bin. num carries the integer for int and the count for
+// array and map. bytes carries the payload for string and bin.
+// children is reserved for future expansion of array and map members.
+type MsgValue = struct {
+    kind: Int,
+    num: Int,
+    bytes: List[Int],
+    children: List[Int]
+};
+
+pub fn msgpack_kind(v: MsgValue) -> Int { return v.kind; }
+pub fn msgpack_num(v: MsgValue) -> Int { return v.num; }
+pub fn msgpack_bytes(v: MsgValue) -> List[Int] { return v.bytes; }
+pub fn msgpack_children(v: MsgValue) -> List[Int] { return v.children; }
+
+pub fn msgpack_kind_int() -> Int { return 0; }
+pub fn msgpack_kind_nil() -> Int { return 1; }
+pub fn msgpack_kind_bool() -> Int { return 2; }
+pub fn msgpack_kind_str() -> Int { return 3; }
+pub fn msgpack_kind_array() -> Int { return 4; }
+pub fn msgpack_kind_map() -> Int { return 5; }
+pub fn msgpack_kind_bin() -> Int { return 6; }
+
+pub fn msgpack_kind_name(k: Int) -> String {
+    if k == 0 { return "int"; }
+    if k == 1 { return "nil"; }
+    if k == 2 { return "bool"; }
+    if k == 3 { return "str"; }
+    if k == 4 { return "array"; }
+    if k == 5 { return "map"; }
+    return "bin";
+}

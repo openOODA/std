@@ -1,0 +1,31 @@
+// # Cauchy-Schwarz law
+//
+// Logline: |x·y| <= ||x|| * ||y||. Empty vectors hold as 0 <= 0.
+//
+// Setup: Imports std/math/blas_level1.oo. Float slack 1e-9.
+//
+// Beats:
+//   1. Dot and nrm2 on the same lists.
+//   2. holds 1 when the inequality is true.
+//   3. holds 0 only if a computed pair violates it.
+
+import "std/core/math/blas_level1.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn math_cauchy_schwarz_law(x: List[Float], y: List[Float]) -> DomainCert {
+    let d: Float = blas_dot(x, y);
+    let nx: Float = blas_nrm2(x);
+    let ny: Float = blas_nrm2(y);
+    let mut h: Int = 0;
+    if abs_f(d) <= nx * ny + 0.000000001 {
+        h = 1;
+    }
+    return domain_cert("math", "cauchy_schwarz", h);
+}

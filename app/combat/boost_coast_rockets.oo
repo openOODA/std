@@ -1,0 +1,221 @@
+// # Solid Rocket Motor Ballistics and Salvo Dispersion
+//
+// Logline: Canonical physics models for two-phase solid rocket propulsion, quadratic aerodynamic drag coasting, and salvo ripple dispersion.
+//
+// Setup: Pure mathematical implementation conforming to atmospheric rocket flight dynamics with zero ambient authority.
+//
+// Beats:
+//   1. Two-phase solid rocket propulsion model with constant burn thrust and mass depletion.
+//   2. Unpowered coasting phase with quadratic atmospheric drag deceleration.
+//   3. Salvo pod ripple firing sequence and Gaussian angular dispersion cone offset.
+//   4. Blast fragmentation damage falloff with deterministic verification suite.
+
+type SolidRocketParams = struct {
+    mass_initial_kg: Float,
+    mass_dry_kg: Float,
+    thrust_n: Float,
+    burn_time_s: Float,
+    drag_coeff: Float,
+    cross_section_m2: Float
+};
+
+type RocketFlightState = struct {
+    time_s: Float,
+    position_m: Float,
+    velocity_m_s: Float,
+    mass_kg: Float,
+    is_burning: Bool,
+    dynamic_pressure_pa: Float
+};
+
+type SalvoPodConfig = struct {
+    total_capacity: Int,
+    rounds_remaining: Int,
+    ripple_size: Int,
+    ripple_interval_ticks: Int,
+    dispersion_sigma_deg: Float
+};
+
+type SalvoPodState = struct {
+    config: SalvoPodConfig,
+    rounds_in_current_ripple: Int,
+    ripple_timer: Int,
+    is_firing: Bool
+};
+
+fn rkt_abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn rkt_int_to_float(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
+pub fn rocket_motor_thrust_n(params: SolidRocketParams, time_s: Float) -> Float {
+    let t_burn: Float = params.burn_time_s;
+    let thrust: Float = params.thrust_n;
+    if time_s < 0.0 || time_s >= t_burn { return 0.0; }
+    return thrust;
+}
+
+pub fn rocket_mass_at_time(params: SolidRocketParams, time_s: Float) -> Float {
+    let m0: Float = params.mass_initial_kg;
+    let md: Float = params.mass_dry_kg;
+    let tb: Float = params.burn_time_s;
+    if time_s <= 0.0 { return m0; }
+    if time_s >= tb || tb <= 0.0001 { return md; }
+    let frac: Float = time_s / tb;
+    let prop_mass: Float = m0 - md;
+    return m0 - (prop_mass * frac);
+}
+
+pub fn rocket_aerodynamic_drag_n(rho: Float, cd: Float, area_m2: Float, velocity_m_s: Float) -> Float {
+    let v_abs: Float = rkt_abs_val(velocity_m_s);
+    return 0.5 * rho * cd * area_m2 * (v_abs * velocity_m_s);
+}
+
+pub fn rocket_propulsion_step(params: SolidRocketParams, state: RocketFlightState, dt: Float, rho_air: Float) -> RocketFlightState {
+    let cur_t: Float = state.time_s;
+    let cur_v: Float = state.velocity_m_s;
+    let cur_x: Float = state.position_m;
+    let cd: Float = params.drag_coeff;
+    let a_m2: Float = params.cross_section_m2;
+    let tb: Float = params.burn_time_s;
+
+    let cur_m: Float = rocket_mass_at_time(params, cur_t);
+    let thrust: Float = rocket_motor_thrust_n(params, cur_t);
+    let drag: Float = rocket_aerodynamic_drag_n(rho_air, cd, a_m2, cur_v);
+
+    let net_f: Float = thrust - drag;
+    let mut accel: Float = 0.0;
+    if cur_m > 0.001 { accel = net_f / cur_m; }
+
+    let mut new_v: Float = cur_v + (accel * dt);
+    if new_v < 0.0 { new_v = 0.0; }
+    let avg_v: Float = 0.5 * (cur_v + new_v);
+    let new_x: Float = cur_x + (avg_v * dt);
+    let new_t: Float = cur_t + dt;
+    let new_m: Float = rocket_mass_at_time(params, new_t);
+    let is_burn: Bool = new_t < tb;
+    let q_pa: Float = 0.5 * rho_air * (new_v * new_v);
+
+    return RocketFlightState {
+        time_s: new_t,
+        position_m: new_x,
+        velocity_m_s: new_v,
+        mass_kg: new_m,
+        is_burning: is_burn,
+        dynamic_pressure_pa: q_pa
+    };
+}
+
+pub fn step_boost_coast_kinematics(params: SolidRocketParams, state: RocketFlightState, dt: Float, rho_air: Float) -> RocketFlightState {
+    return rocket_propulsion_step(params, state, dt, rho_air);
+}
+
+pub fn rocket_salvo_ripple_dispersion(nominal_heading_deg: Float, salvo_index: Int, dispersion_sigma_deg: Float) -> Float {
+    if dispersion_sigma_deg <= 0.000001 { return nominal_heading_deg; }
+    let idx_f: Float = rkt_int_to_float(salvo_index);
+    let angle_1: Float = idx_f * 2.39996323;
+    let angle_2: Float = idx_f * 1.118034;
+    let factor: Float = sin(angle_1) * cos(angle_2);
+    return nominal_heading_deg + (dispersion_sigma_deg * factor);
+}
+
+pub fn calc_blast_fragmentation_damage(impact_dist_m: Float, blast_radius_m: Float, max_damage: Float) -> Float {
+    if blast_radius_m <= 0.0 || impact_dist_m >= blast_radius_m || impact_dist_m < 0.0 { return 0.0; }
+    let frac: Float = 1.0 - (impact_dist_m / blast_radius_m);
+    return max_damage * (frac * frac);
+}
+
+pub fn salvo_pod_state_init(cfg: SalvoPodConfig) -> SalvoPodState {
+    return SalvoPodState { config: cfg, rounds_in_current_ripple: 0, ripple_timer: 0, is_firing: false };
+}
+
+pub fn salvo_pod_trigger_fire(state: SalvoPodState) -> SalvoPodState {
+    let rem: Int = state.config.rounds_remaining;
+    let is_f: Bool = state.is_firing;
+    if rem <= 0 || is_f { return state; }
+    let rip_sz: Int = state.config.ripple_size;
+    let mut burst: Int = rip_sz;
+    if burst > rem { burst = rem; }
+    return SalvoPodState { config: state.config, rounds_in_current_ripple: burst, ripple_timer: 0, is_firing: burst > 0 };
+}
+
+pub fn verify_boost_coast_rockets() -> Bool {
+    let params: SolidRocketParams = SolidRocketParams {
+        mass_initial_kg: 10.0,
+        mass_dry_kg: 4.0,
+        thrust_n: 6000.0,
+        burn_time_s: 1.5,
+        drag_coeff: 0.35,
+        cross_section_m2: 0.004
+    };
+
+    let m_0: Float = rocket_mass_at_time(params, 0.0);
+    if rkt_abs_val(m_0 - 10.0) > 0.001 { return false; }
+    let m_burn: Float = rocket_mass_at_time(params, 1.5);
+    if rkt_abs_val(m_burn - 4.0) > 0.001 { return false; }
+    let m_mid: Float = rocket_mass_at_time(params, 0.75);
+    if rkt_abs_val(m_mid - 7.0) > 0.001 { return false; }
+
+    let t_boost: Float = rocket_motor_thrust_n(params, 0.5);
+    if rkt_abs_val(t_boost - 6000.0) > 0.001 { return false; }
+    let t_coast: Float = rocket_motor_thrust_n(params, 2.0);
+    if t_coast != 0.0 { return false; }
+
+    let mut state: RocketFlightState = RocketFlightState {
+        time_s: 0.0,
+        position_m: 0.0,
+        velocity_m_s: 0.0,
+        mass_kg: 10.0,
+        is_burning: true,
+        dynamic_pressure_pa: 0.0
+    };
+
+    let rho: Float = 1.225;
+    let dt: Float = 0.1;
+    let mut i: Int = 0;
+    while i < 15 {
+        state = rocket_propulsion_step(params, state, dt, rho);
+        i = i + 1;
+    }
+
+    let v_end: Float = state.velocity_m_s;
+    let t_end: Float = state.time_s;
+    let is_b: Bool = state.is_burning;
+    if v_end < 500.0 { return false; }
+    if !is_b && t_end < 1.5 { return false; }
+
+    let v_burnout: Float = state.velocity_m_s;
+    let mut j: Int = 0;
+    while j < 20 {
+        state = rocket_propulsion_step(params, state, dt, rho);
+        j = j + 1;
+    }
+
+    let is_b2: Bool = state.is_burning;
+    let v_c: Float = state.velocity_m_s;
+    if is_b2 { return false; }
+    if v_c >= v_burnout { return false; }
+
+    let dmg_direct: Float = calc_blast_fragmentation_damage(0.0, 20.0, 100.0);
+    if rkt_abs_val(dmg_direct - 100.0) > 0.001 { return false; }
+    let dmg_half: Float = calc_blast_fragmentation_damage(10.0, 20.0, 100.0);
+    if rkt_abs_val(dmg_half - 25.0) > 0.001 { return false; }
+    let dmg_edge: Float = calc_blast_fragmentation_damage(20.0, 20.0, 100.0);
+    if dmg_edge != 0.0 { return false; }
+
+    let disp_0: Float = rocket_salvo_ripple_dispersion(90.0, 0, 0.0);
+    if rkt_abs_val(disp_0 - 90.0) > 0.0001 { return false; }
+
+    return true;
+}

@@ -1,0 +1,181 @@
+// # Chaitin-Briggs Graph-Coloring Allocator For AArch64
+//
+// Logline: Builds an interference graph from live ranges and K-colors x0–x30 with Briggs optimistic select.
+//
+// Setup: Coalesce copies first. K defaults to 31. Spills use color -1. No extra spill is inserted when a color exists.
+//
+// Beats:
+//   1. Union non-interfering copy endpoints, then add overlap edges between classes.
+//   2. Simplify low-degree nodes and push remaining high-degree nodes Briggs.
+//   3. Select a free color in 0..K-1 or mark a spill when neighbors use every color.
+//   4. Copy each representative color onto every coalesced alias.
+
+import "std/hw/silicon/aarch64_reg_coalesce.oo";
+
+type A64Alloc = struct {
+    colors: List[Int],
+    nspill: Int,
+    ncoalesce: Int
+};
+
+pub fn aarch64_reg_k() -> Int {
+    return 31;
+}
+
+fn rg_nvars(ids: List[Int]) -> Int {
+    let n: Int = list_len(ids);
+    let mut m: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(ids, i);
+        if v + 1 > m { m = v + 1; }
+        i = i + 1;
+    }
+    return m;
+}
+
+fn rg_build_adj(ids: List[Int], starts: List[Int], ends: List[Int], parent: List[Int], nv: Int) -> List[Int] {
+    let mut adj: List[Int] = rg_zeros(nv * nv);
+    let n: Int = list_len(ids);
+    let mut i: Int = 0;
+    while i < n {
+        let a: Int = 0 + rg_find(parent, list_get(ids, i));
+        let mut j: Int = i + 1;
+        while j < n {
+            let b: Int = 0 + rg_find(parent, list_get(ids, j));
+            if a != b {
+                if rg_overlap(list_get(starts, i), list_get(ends, i), list_get(starts, j), list_get(ends, j)) {
+                    adj = rg_set(adj, a * nv + b, 1);
+                    adj = rg_set(adj, b * nv + a, 1);
+                }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return adj;
+}
+
+fn rg_degree(adj: List[Int], nv: Int, v: Int, live: List[Int]) -> Int {
+    let mut d: Int = 0;
+    let mut u: Int = 0;
+    while u < nv {
+        if list_get(live, u) == 1 {
+            if list_get(adj, v * nv + u) == 1 {
+                d = d + 1;
+            }
+        }
+        u = u + 1;
+    }
+    return d;
+}
+
+fn rg_simplify(adj: List[Int], nv: Int, k: Int) -> List[Int] {
+    let mut live: List[Int] = rg_zeros(nv);
+    let mut v: Int = 0;
+    while v < nv {
+        live = rg_set(live, v, 1);
+        v = v + 1;
+    }
+    let mut stack: List[Int] = list_new();
+    let mut left: Int = nv;
+    while left > 0 {
+        let mut pick: Int = -1;
+        let mut u: Int = 0;
+        while u < nv {
+            if list_get(live, u) == 1 {
+                if rg_degree(adj, nv, u, live) < k {
+                    pick = u;
+                }
+            }
+            u = u + 1;
+        }
+        if pick < 0 {
+            u = 0;
+            while u < nv {
+                if list_get(live, u) == 1 { pick = u; }
+                u = u + 1;
+            }
+        }
+        if pick < 0 { return stack; }
+        stack = list_push(stack, pick);
+        live = rg_set(live, pick, 0);
+        left = left - 1;
+    }
+    return stack;
+}
+
+fn rg_select(adj: List[Int], nv: Int, k: Int, stack: List[Int], parent: List[Int]) -> A64Alloc {
+    let mut colors: List[Int] = rg_zeros(nv);
+    let mut i: Int = 0;
+    while i < nv {
+        colors = rg_set(colors, i, -1);
+        i = i + 1;
+    }
+    let mut nspill: Int = 0;
+    let mut s: Int = list_len(stack);
+    while s > 0 {
+        s = s - 1;
+        let v: Int = list_get(stack, s);
+        let mut used: List[Int] = rg_zeros(k);
+        let mut u: Int = 0;
+        while u < nv {
+            if list_get(adj, v * nv + u) == 1 {
+                let c: Int = list_get(colors, u);
+                if c >= 0 {
+                    if c < k { used = rg_set(used, c, 1); }
+                }
+            }
+            u = u + 1;
+        }
+        let mut col: Int = -1;
+        let mut c: Int = 0;
+        while c < k {
+            if list_get(used, c) == 0 {
+                if col < 0 { col = c; }
+            }
+            c = c + 1;
+        }
+        if col < 0 {
+            nspill = nspill + 1;
+        } else {
+            colors = rg_set(colors, v, col);
+        }
+    }
+    i = 0;
+    while i < nv {
+        let r: Int = 0 + rg_find(parent, i);
+        if r != i {
+            colors = rg_set(colors, i, list_get(colors, r));
+        }
+        i = i + 1;
+    }
+    return A64Alloc { colors: colors, nspill: nspill, ncoalesce: 0 };
+}
+
+pub fn aarch64_alloc_color(ids: List[Int], starts: List[Int], ends: List[Int], copy_src: List[Int], copy_dst: List[Int], k: Int) -> Result[A64Alloc, String] {
+    if k <= 0 { return Err("ERR\taarch64_alloc_color\tbad_k"); }
+    if list_len(ids) == 0 { return Err("ERR\taarch64_alloc_color\tempty"); }
+    if list_len(ids) != list_len(starts) { return Err("ERR\taarch64_alloc_color\tlen"); }
+    if list_len(ids) != list_len(ends) { return Err("ERR\taarch64_alloc_color\tlen"); }
+    if list_len(copy_src) != list_len(copy_dst) { return Err("ERR\taarch64_alloc_color\tcopy_len"); }
+    let nv: Int = 0 + rg_nvars(ids);
+    if nv <= 0 { return Err("ERR\taarch64_alloc_color\tnvars"); }
+    let parent0: List[Int] = rg_identity(nv);
+    let parent: List[Int] = rg_coalesce(ids, starts, ends, copy_src, copy_dst, parent0);
+    let adj: List[Int] = rg_build_adj(ids, starts, ends, parent, nv);
+    let stack: List[Int] = rg_simplify(adj, nv, k);
+    let mut a: A64Alloc = rg_select(adj, nv, k, stack, parent);
+    let nc: Int = 0 + rg_count_coalesced(copy_src, copy_dst, parent);
+    return Ok(A64Alloc { colors: a.colors, nspill: a.nspill, ncoalesce: nc });
+}
+
+pub fn aarch64_color_of(a: A64Alloc, id: Int) -> Int {
+    if id < 0 { return -1; }
+    if id >= list_len(a.colors) { return -1; }
+    return list_get(a.colors, id);
+}
+
+pub fn aarch64_is_spilled(a: A64Alloc, id: Int) -> Bool {
+    return aarch64_color_of(a, id) < 0;
+}

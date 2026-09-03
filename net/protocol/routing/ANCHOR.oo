@@ -1,0 +1,30 @@
+// # Net Protocol Routing Submodule Hub -- Zero-Drag
+//
+// Logline: Re-exports network routing protocols: ad-hoc mesh routing (AODV, BATMAN, DSDV, DSR, GPSR, HWMP, OLSR, ZigBee, RPL, Directed Diffusion, Epidemic, PRoPHET) and DHT overlay routing (CAN, Chord, Pastry, Symphony, Tapestry, Viceroy). Split from the prior std/ai/graph_networks/ tree in Phase 3.5: network routing protocols live here, pure CS algorithms moved to std/app/ai/algo/.
+//
+// Setup: Domain module under std/net/protocol/routing. Pure compute, no caps.
+//
+// Beats:
+//   1. Ad-hoc mesh routing: aodv_*, batman_*, dsdv_*, dsr_*, gpsr_*, hwmp_*, olsr_*, zigbee_*, rpl_*, directed_diffusion_*, epidemic_*, prophet_*.
+//   2. DHT overlay routing: can_*, chord_*, pastry_*, symphony_*, tapestry_*, viceroy_*.
+
+import "./aodv_routing_mesh.oo";
+import "./batman_mesh_protocol.oo";
+import "./can_dht_coordinate.oo";
+import "./chord_dht_finger_table.oo";
+import "./directed_diffusion_sensor.oo";
+import "./dsdv_distance_vector.oo";
+import "./dsr_source_routing.oo";
+import "./epidemic_routing_protocol.oo";
+import "./gpsr_geographic_routing.oo";
+import "./hwmp_wireless_mesh.oo";
+import "./olsr_multipoint_relays.oo";
+import "./pastry_prefix_routing.oo";
+import "./prophet_dtn_routing.oo";
+import "./rpl_dodag_tree.oo";
+import "./symphony_small_world_dht.oo";
+import "./tapestry_dolr_overlay.oo";
+import "./viceroy_dht_butterfly.oo";
+import "./zigbee_cluster_tree_routing.oo";
+
+// External callers must import this ANCHOR.oo and use the net_protocol_routing_mod_* surface.

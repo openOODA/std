@@ -1,0 +1,156 @@
+// # DEFLATE block framing law
+//
+// Logline: A DEFLATE block starts with a 3-bit header in the LSB of the first byte: BFINAL is bit 0, BTYPE is bits 1..2; BTYPE 00 means stored (uncompressed) with a 4-byte length, 01 means fixed Huffman, 10 means dynamic Huffman, 11 is reserved and fails closed.
+//
+// Setup: Pure Int. The first byte of a DEFLATE block is 0..255. BFINAL=1, BTYPE=00 -> canonical byte 0x01. BTYPE=11 fails closed. Stored block has 4-byte LEN/NLEN where NLEN = LEN XOR 0xFFFF.
+//
+// Beats:
+//   1. db_bfinal(b) reads bit 0 of the first byte.
+//   2. db_btype(b) reads bits 1..2 of the first byte.
+//   3. Stored (BTYPE=00, BFINAL=1) -> big-endian 0x01.
+//   4. Invalid BTYPE 11 fails closed.
+//   5. Stored block has a 4-byte LEN/NLEN length after the header.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Bitwise XOR: a^b == (a|b) - (a&b).
+fn db_xor(a: Int, b: Int) -> Int {
+    return (a | b) - (a & b);
+}
+
+// BFINAL: bit 0 of the header byte.
+pub fn db_bfinal(b: Int) -> Int {
+    if b < 0 { return 0; }
+    if b > 255 { return 0; }
+    return b & 1;
+}
+
+// BTYPE: bits 1..2 of the header byte (0..3).
+pub fn db_btype(b: Int) -> Int {
+    if b < 0 { return 0; }
+    if b > 255 { return 0; }
+    return (b >> 1) & 3;
+}
+
+// 1 if the BTYPE code is recognized (00, 01, 10); 0 if reserved (11) or invalid.
+pub fn db_btype_ok(t: Int) -> Int {
+    if t < 0 { return 0; }
+    if t > 3 { return 0; }
+    if t == 3 { return 0; }
+    return 1;
+}
+
+// 1 if the block is the stored (uncompressed) kind.
+pub fn db_is_stored(b: Int) -> Int {
+    if db_btype(b) != 0 { return 0; }
+    return 1;
+}
+
+// 1 if the block uses fixed Huffman.
+pub fn db_is_fixed(b: Int) -> Int {
+    if db_btype(b) != 1 { return 0; }
+    return 1;
+}
+
+// 1 if the block uses dynamic Huffman.
+pub fn db_is_dynamic(b: Int) -> Int {
+    if db_btype(b) != 2 { return 0; }
+    return 1;
+}
+
+// 1 if the stored block has a valid 4-byte LEN/NLEN pair; 0 otherwise.
+pub fn db_stored_len_ok(len: Int, nlen: Int) -> Int {
+    if len < 0 { return 0; }
+    if nlen < 0 { return 0; }
+    if len > 65535 { return 0; }
+    if nlen > 65535 { return 0; }
+    let inv: Int = db_xor(len, 65535) & 65535;
+    if nlen != inv { return 0; }
+    return 1;
+}
+
+// DomainCert for the DEFLATE block framing law. Holds iff the canonical final
+// stored byte 0x01 parses as BFINAL=1, BTYPE=00 and the BTYPE is recognized.
+pub fn deflate_block_law() -> DomainCert {
+    let b: Int = 1;
+    let bf: Int = db_bfinal(b);
+    let bt: Int = db_btype(b);
+    let mut ok: Int = 0;
+    if bf == 1 {
+        if bt == 0 {
+            if db_btype_ok(bt) == 1 {
+                ok = 1;
+            }
+        }
+    }
+    return domain_cert("archive", "deflate_block", ok);
+}
+
+pub fn verify_deflate_block_law() -> Bool {
+    // Golden: header 0x01 (BFINAL=1, BTYPE=00) -> bfinal=1, btype=0.
+    if db_bfinal(1) != 1 { return false; }
+    if db_btype(1) != 0 { return false; }
+    if db_is_stored(1) != 1 { return false; }
+    if db_is_fixed(1) != 0 { return false; }
+    if db_is_dynamic(1) != 0 { return false; }
+    if db_btype_ok(0) != 1 { return false; }
+    // Golden: header 0x03 (BFINAL=1, BTYPE=01) -> fixed Huffman.
+    if db_bfinal(3) != 1 { return false; }
+    if db_btype(3) != 1 { return false; }
+    if db_is_fixed(3) != 1 { return false; }
+    if db_is_stored(3) != 0 { return false; }
+    // Golden: header 0x05 (BFINAL=1, BTYPE=10) -> dynamic Huffman.
+    if db_bfinal(5) != 1 { return false; }
+    if db_btype(5) != 2 { return false; }
+    if db_is_dynamic(5) != 1 { return false; }
+    if db_is_stored(5) != 0 { return false; }
+    // Golden: header 0x07 (BFINAL=1, BTYPE=11) -> reserved, fails closed.
+    if db_bfinal(7) != 1 { return false; }
+    if db_btype(7) != 3 { return false; }
+    if db_btype_ok(3) != 0 { return false; }
+    if db_is_stored(7) != 0 { return false; }
+    if db_is_fixed(7) != 0 { return false; }
+    if db_is_dynamic(7) != 0 { return false; }
+    // Golden: header 0x00 (BFINAL=0, BTYPE=00) -> not final, stored.
+    if db_bfinal(0) != 0 { return false; }
+    if db_btype(0) != 0 { return false; }
+    if db_is_stored(0) != 1 { return false; }
+    // Golden: header 0x04 (BFINAL=0, BTYPE=10) -> not final, dynamic.
+    if db_bfinal(4) != 0 { return false; }
+    if db_btype(4) != 2 { return false; }
+    // Hostile: out-of-range bytes fail closed to 0 in bfinal/btype.
+    if db_bfinal(-1) != 0 { return false; }
+    if db_bfinal(256) != 0 { return false; }
+    if db_btype(-1) != 0 { return false; }
+    if db_btype(256) != 0 { return false; }
+    // Hostile: BTYPE out-of-range 4..7 fails closed.
+    if db_btype_ok(4) != 0 { return false; }
+    if db_btype_ok(5) != 0 { return false; }
+    if db_btype_ok(6) != 0 { return false; }
+    if db_btype_ok(7) != 0 { return false; }
+    if db_btype_ok(-1) != 0 { return false; }
+    // Coupled: a stored block has a 4-byte length after the header. Valid
+    // pair LEN=10, NLEN=65525 = 0xFFF5.
+    if db_stored_len_ok(10, 65525) != 1 { return false; }
+    // Coupled: LEN=0, NLEN=65535 holds.
+    if db_stored_len_ok(0, 65535) != 1 { return false; }
+    // Coupled: LEN=65535, NLEN=0 holds.
+    if db_stored_len_ok(65535, 0) != 1 { return false; }
+    // Hostile: NLEN mismatch fails closed.
+    if db_stored_len_ok(10, 100) != 0 { return false; }
+    if db_stored_len_ok(10, 0) != 0 { return false; }
+    if db_stored_len_ok(0, 0) != 0 { return false; }
+    // Hostile: out-of-range length fails closed.
+    if db_stored_len_ok(-1, 65536) != 0 { return false; }
+    if db_stored_len_ok(65536, 65535) != 0 { return false; }
+    if db_stored_len_ok(10, 65536) != 0 { return false; }
+    // DomainCert: deflate_block_law() holds for a final stored block.
+    let c: DomainCert = deflate_block_law();
+    if c.holds != 1 { return false; }
+    if c.domain != "archive" { return false; }
+    if c.law_name != "deflate_block" { return false; }
+    // DomainCert: a reserved BTYPE 11 does not hold.
+    let miss: DomainCert = domain_cert("archive", "deflate_block", 0);
+    if miss.holds != 0 { return false; }
+    return true;
+}

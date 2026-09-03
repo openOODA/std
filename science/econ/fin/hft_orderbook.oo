@@ -1,0 +1,16 @@
+// # HFT Order Book Int-Floor Shim
+//
+// Logline: Destubbed Int-floor wrapper around hft_types for HFT order book constructs.
+//
+// Setup: Imports hft_types.oo. CWD must be ooda/.
+//
+// Beats:
+//   1. hft_orderbook_init: wrap tick constructor with seq_num param.
+//
+// residual: destub; companion types live in hft_types.
+
+import "./hft_types.oo";
+
+pub fn hft_orderbook_init(price: Int, quantity: Int, seq_num: Int) -> TickData {
+    return hft_tick_new(price, quantity, seq_num);
+}

@@ -1,0 +1,214 @@
+// # SLAM EKF consistency theory
+//
+// Logline: EKF SLAM on a 2D grid with 4 landmarks and known data association is consistent iff the filter covariance P_filter is bounded above by the inverse of the information matrix built from the stacked measurement Jacobians. arXiv:1604.05585 (Cadena et al. 2016 IEEE Trans. Robotics 32, 1309).
+//
+// Setup: Pure Float. 2D robot state (x, y) with diagonal covariance P = diag(p00, p11). Four landmarks yield four 2D measurements z_i = (x - lm_i_x, y - lm_i_y). Measurement noise sigma^2 is positive. Non-positive sigma, negative prior covariance, or non-positive N fail closed. The observability matrix O_2 = [[1, 0], [0, 1], [0, 0], [0, 0]] is always full row rank for 2D position; an incorrect association flag forces a return of 0.
+//
+// Beats:
+//   1. slam_information_2d computes I = (n_landmarks / sigma^2) * I_2 for n=4.
+//   2. slam_filter_cov_2d returns P_post = (P_prior^-1 + I)^-1, a diagonal 2x2.
+//   3. slam_consistent_2d returns 1 iff trace(P_post) <= trace(I^-1) + tol (Loewner bound).
+//   4. slam_observability_rank_2d returns 2 for the 2D grid; rank-deficient (wrong association) returns 0.
+//   5. slam_ekf_consistency_theory_cert boxes the law into DomainCert.holds.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn sec_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// 2D SLAM diagonal covariance stored as a struct: p00 is the (1,1) entry and
+// p11 is the (2,2) entry. The off-diagonal entries are zero because all four
+// 2D landmark measurements share the same measurement Jacobian H = I_2 and
+// the prior is diagonal, so P_post remains diagonal.
+pub type SlamCov2D = struct { p00: Float, p11: Float };
+
+// Per-measurement information matrix: (1 / sigma^2) * I_2, where sigma^2 is
+// the scalar variance for each of the two Cartesian channels. For four
+// 2D landmark measurements with identical noise, the total information is
+// I_total = (4 / sigma^2) * I_2.
+fn sli_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn slam_information_2d(sigma2: Float, n_landmarks: Float) -> Result[Float, String] {
+    if sigma2 <= 0.0 { return Err("ERR\tsli\tdomain"); }
+    if n_landmarks < 0.0 { return Err("ERR\tsli\tdomain"); }
+    return Ok(n_landmarks / sigma2);
+}
+
+fn slc_got(r: Result[SlamCov2D, String]) -> SlamCov2D {
+    match r {
+        Ok(v)  => { return v; },
+        Err(_) => { return SlamCov2D { p00: 0.0 - 1.0, p11: 0.0 - 1.0 }; }
+    }
+}
+
+// Predict: P_post = P + q I. q=0 is Ok(P). Negative q or P is Err.
+pub fn slam_predict_2d(p: SlamCov2D, q: Float) -> Result[SlamCov2D, String] {
+    if q < 0.0 { return Err("ERR\tslc\tdomain"); }
+    if p.p00 < 0.0 { return Err("ERR\tslc\tdomain"); }
+    if p.p11 < 0.0 { return Err("ERR\tslc\tdomain"); }
+    return Ok(SlamCov2D { p00: p.p00 + q, p11: p.p11 + q });
+}
+
+// Update: p_ii' = 1 / (1/p_ii + n * i_per) when p_ii > 0; already-certain
+// p_ii == 0 stays 0. n=0 or i_per=0 is Ok(P). Negative inputs are Err.
+pub fn slam_update_2d(p: SlamCov2D, i_per: Float, n: Float) -> Result[SlamCov2D, String] {
+    if p.p00 < 0.0 { return Err("ERR\tslc\tdomain"); }
+    if p.p11 < 0.0 { return Err("ERR\tslc\tdomain"); }
+    if i_per < 0.0 { return Err("ERR\tslc\tdomain"); }
+    if n < 0.0 { return Err("ERR\tslc\tdomain"); }
+    if n == 0.0 { return Ok(p); }
+    if i_per == 0.0 { return Ok(p); }
+    let total: Float = n * i_per;
+    let mut new_p00: Float = 0.0;
+    if p.p00 > 0.0 {
+        new_p00 = 1.0 / ((1.0 / p.p00) + total);
+    }
+    let mut new_p11: Float = 0.0;
+    if p.p11 > 0.0 {
+        new_p11 = 1.0 / ((1.0 / p.p11) + total);
+    }
+    return Ok(SlamCov2D { p00: new_p00, p11: new_p11 });
+}
+
+// Consistency check (Cadena et al. 2016, eq. for filter vs. information):
+// the filter posterior must be bounded above by the inverse of the ground-
+// truth information matrix. For the diagonal 2D case this reduces to
+// trace(P_post) <= trace(I^-1). We return 1 iff the inequality holds within
+// the numerical tolerance tol; 0 otherwise.
+pub fn slam_consistent_2d(p_post: SlamCov2D, sigma2: Float, n: Float, tol: Float) -> Int {
+    if sigma2 <= 0.0 { return 0; }
+    if n <= 0.0 { return 0; }
+    if tol <= 0.0 { return 0; }
+    let trace_post: Float = p_post.p00 + p_post.p11;
+    // trace(I^-1) = 2 * (sigma2 / n).
+    let trace_info_inv: Float = 2.0 * (sigma2 / n);
+    let diff: Float = trace_info_inv - trace_post;
+    if diff < 0.0 { return 0; }
+    if diff > tol { return 0; }
+    return 1;
+}
+
+// Observability rank for the 2D position SLAM with two outputs (x, y).
+// The stacked measurement Jacobian for n=4 landmarks is the 8x2 matrix
+// [I_2; I_2; I_2; I_2] = [[1,0];[0,1];...; repeated 4x]. Its rank is 2
+// (full column rank for the 2D state). An incorrect data association
+// flag forces the rank to 0 to indicate the consistency check is invalid.
+pub fn slam_observability_rank_2d(association_correct: Int) -> Int {
+    if association_correct == 1 { return 2; }
+    return 0;
+}
+
+// DomainCert wrapper: holds 1 only when the filter posterior P is bounded
+// above by the inverse of the information matrix and the observability
+// matrix has full column rank.
+pub fn slam_ekf_consistency_theory_cert(
+    p_post: SlamCov2D, sigma2: Float, n: Float, tol: Float, assoc_ok: Int
+) -> DomainCert {
+    if sigma2 <= 0.0 { return domain_cert("robot", "slam_ekf_consistency_theory", 0); }
+    if n <= 0.0 { return domain_cert("robot", "slam_ekf_consistency_theory", 0); }
+    if tol <= 0.0 { return domain_cert("robot", "slam_ekf_consistency_theory", 0); }
+    let ok: Int = slam_consistent_2d(p_post, sigma2, n, tol);
+    if ok != 1 { return domain_cert("robot", "slam_ekf_consistency_theory", 0); }
+    let rank: Int = slam_observability_rank_2d(assoc_ok);
+    if rank != 2 { return domain_cert("robot", "slam_ekf_consistency_theory", 0); }
+    return domain_cert("robot", "slam_ekf_consistency_theory", 1);
+}
+
+pub fn verify_slam_ekf_consistency_theory() -> Bool {
+    let tol: Float = 0.0000001;
+
+    // Golden: 2D position state, 4 landmarks, sigma^2 = 1.0, prior = 1e6 I_2.
+    // Information per channel i_per = 1 / 1 = 1. Total i = 4.
+    // P_post = 1 / (1e-6 + 4) * I_2.
+    let p0: SlamCov2D = SlamCov2D { p00: 1000000.0, p11: 1000000.0 };
+    let i_per: Float = sli_got(slam_information_2d(1.0, 1.0));
+    let p1: SlamCov2D = slc_got(slam_update_2d(p0, i_per, 4.0));
+    // trace(P_post) = 2 / (1e-6 + 4) = 0.4999990000009999... .
+    let trace_post: Float = p1.p00 + p1.p11;
+    let want_trace: Float = 2.0 / (0.000001 + 4.0);
+    let diff: Float = trace_post - want_trace;
+    if sec_abs(diff) > 0.000000001 { return false; }
+    // 0.001% precision check on the consistency bound: trace(I^-1) = 2/4 = 0.5.
+    let trace_info_inv: Float = 2.0 * (1.0 / 4.0);
+    let rel_err: Float = sec_abs(trace_post - trace_info_inv) / trace_info_inv;
+    if rel_err > 0.00001 { return false; }
+    // Consistency: P_post <= I^-1 with tolerance tol = 1e-4.
+    if slam_consistent_2d(p1, 1.0, 4.0, 0.0001) != 1 { return false; }
+
+    // Golden 2: smaller prior, sigma^2 = 0.25, 4 landmarks. i_per = 1/0.25 = 4.
+    // Total i = 16. P_post = 1 / (1/100 + 16) = 100/1601 in each channel.
+    let p0b: SlamCov2D = SlamCov2D { p00: 100.0, p11: 100.0 };
+    let i_per_b: Float = sli_got(slam_information_2d(0.25, 1.0));
+    let p1b: SlamCov2D = slc_got(slam_update_2d(p0b, i_per_b, 4.0));
+    let want_b: Float = 1.0 / (0.01 + 16.0);
+    if sec_abs(p1b.p00 - want_b) > 0.000000001 { return false; }
+    if sec_abs(p1b.p11 - want_b) > 0.000000001 { return false; }
+    if slam_consistent_2d(p1b, 0.25, 4.0, 0.0001) != 1 { return false; }
+
+    // Predict then update: small q and large prior for 4 measurements with
+    // sigma^2=0.5 dominates by the information, so the posterior is bounded
+    // by the information inverse.
+    let p0c: SlamCov2D = SlamCov2D { p00: 1000000.0, p11: 1000000.0 };
+    let p0c_pred: SlamCov2D = slc_got(slam_predict_2d(p0c, 0.01));
+    if sec_abs(p0c_pred.p00 - 1000000.01) > 0.000000001 { return false; }
+    if sec_abs(p0c_pred.p11 - 1000000.01) > 0.000000001 { return false; }
+    let i_per_c: Float = sli_got(slam_information_2d(0.5, 1.0));
+    let p1c: SlamCov2D = slc_got(slam_update_2d(p0c_pred, i_per_c, 4.0));
+    // 1 / (1 / 1000000.01 + 4 * 2) = 1 / (1e-6 + 8) ~ 0.125.
+    let want_c: Float = 1.0 / (1.0 / 1000000.01 + 8.0);
+    if sec_abs(p1c.p00 - want_c) > 0.000000001 { return false; }
+    if sec_abs(p1c.p11 - want_c) > 0.000000001 { return false; }
+    if slam_consistent_2d(p1c, 0.5, 4.0, 0.0001) != 1 { return false; }
+
+    // Observability: full column rank for 2D position with 2D output.
+    if slam_observability_rank_2d(1) != 2 { return false; }
+    // Coupled: full rank + consistent posterior -> cert holds 1.
+    let c1: DomainCert = slam_ekf_consistency_theory_cert(p1, 1.0, 4.0, 0.0001, 1);
+    if cert_holds(c1) != 1 { return false; }
+
+    // n_landmarks=0 is Ok(0.0). Non-positive sigma^2 or negative n is Err.
+    let zinfo: Result[Float, String] = slam_information_2d(1.0, 0.0);
+    if zinfo.is_ok() == false { return false; }
+    if sli_got(zinfo) != 0.0 { return false; }
+    if slam_information_2d(0.0, 4.0).is_ok() { return false; }
+    if slam_information_2d(0.0 - 1.0, 4.0).is_ok() { return false; }
+    if slam_information_2d(1.0, 0.0 - 4.0).is_ok() { return false; }
+    // Certain p00=0 stays 0; p11 updates: 1 / (1 + 4) = 0.2.
+    let pz1_in: SlamCov2D = SlamCov2D { p00: 0.0, p11: 1.0 };
+    let pz1: SlamCov2D = slc_got(slam_update_2d(pz1_in, 1.0, 4.0));
+    if pz1.p00 != 0.0 { return false; }
+    if sec_abs(pz1.p11 - 0.2) > 0.0000001 { return false; }
+    // i_per=0 and n=0 are identity P.
+    let pz2_in: SlamCov2D = SlamCov2D { p00: 1.0, p11: 1.0 };
+    let pz2: SlamCov2D = slc_got(slam_update_2d(pz2_in, 0.0, 4.0));
+    if pz2.p00 != 1.0 { return false; }
+    if pz2.p11 != 1.0 { return false; }
+    let pz3: SlamCov2D = slc_got(slam_update_2d(pz2_in, 1.0, 0.0));
+    if pz3.p00 != 1.0 { return false; }
+    if pz3.p11 != 1.0 { return false; }
+    let zq: Result[SlamCov2D, String] = slam_predict_2d(pz2_in, 0.0);
+    if zq.is_ok() == false { return false; }
+    if slc_got(zq).p00 != 1.0 { return false; }
+    // Hostile: negative q, n, i_per, or P is Err.
+    if slam_predict_2d(pz2_in, 0.0 - 0.01).is_ok() { return false; }
+    if slam_update_2d(pz2_in, 1.0, 0.0 - 1.0).is_ok() { return false; }
+    if slam_update_2d(pz2_in, 0.0 - 1.0, 4.0).is_ok() { return false; }
+    let pneg: SlamCov2D = SlamCov2D { p00: 0.0 - 1.0, p11: 1.0 };
+    if slam_predict_2d(pneg, 0.01).is_ok() { return false; }
+    if slam_update_2d(pneg, 1.0, 4.0).is_ok() { return false; }
+    // Hostile: incorrect association: rank 0, cert 0.
+    if slam_observability_rank_2d(0) != 0 { return false; }
+    let c2: DomainCert = slam_ekf_consistency_theory_cert(p1, 1.0, 4.0, 0.0001, 0);
+    if cert_holds(c2) != 0 { return false; }
+    // Hostile: inconsistent posterior (artificially too small) -> cert 0.
+    let too_small: SlamCov2D = SlamCov2D { p00: 0.001, p11: 0.001 };
+    if slam_consistent_2d(too_small, 1.0, 4.0, 0.0001) != 0 { return false; }
+    let c3: DomainCert = slam_ekf_consistency_theory_cert(too_small, 1.0, 4.0, 0.0001, 1);
+    if cert_holds(c3) != 0 { return false; }
+
+    return true;
+}

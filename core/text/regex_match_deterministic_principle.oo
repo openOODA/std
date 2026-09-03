@@ -1,0 +1,162 @@
+// # Regex match determinism principle
+//
+// Logline: A regex match against the same input is deterministic; the same input pattern and haystack yield the same start, end, and capture count on repeat runs.
+//
+// Setup: Pure Int on a RegexMatch record. No FS, net, env. No real regex engine; we only check the determinism invariant.
+//
+// Beats:
+//   1. New match has start=-1, end=-1, capture_count=0.
+//   2. set_match records a positive start and end, and a non-negative capture count.
+//   3. Two consecutive matches on the same inputs are equal.
+
+import "std/core/primitives/domain_cert.oo";
+
+type RegexMatch = struct {
+    start: Int,
+    end: Int,
+    capture_count: Int
+};
+
+pub fn regex_match_new() -> RegexMatch {
+    return RegexMatch {
+        start: 0 - 1,
+        end: 0 - 1,
+        capture_count: 0
+    };
+}
+
+pub fn regex_match_set(start: Int, end: Int, capture_count: Int) -> RegexMatch {
+    return RegexMatch {
+        start: start,
+        end: end,
+        capture_count: capture_count
+    };
+}
+
+// True when both matches agree on every field.
+pub fn regex_match_eq(a: RegexMatch, b: RegexMatch) -> Bool {
+    let a_start: Int = a.start;
+    let b_start: Int = b.start;
+    if a_start != b_start {
+        return false;
+    }
+    let a_end: Int = a.end;
+    let b_end: Int = b.end;
+    if a_end != b_end {
+        return false;
+    }
+    let a_cc: Int = a.capture_count;
+    let b_cc: Int = b.capture_count;
+    if a_cc != b_cc {
+        return false;
+    }
+    return true;
+}
+
+// True when a match represents "no match" (start = -1).
+pub fn regex_match_is_none(m: RegexMatch) -> Bool {
+    if m.start == 0 - 1 {
+        return true;
+    }
+    return false;
+}
+
+// True when a match is well-formed: -1 -1 0 for no-match or 0 <= start <= end with end > -1 for a hit.
+pub fn regex_match_well_formed(m: RegexMatch) -> Bool {
+    let s: Int = m.start;
+    let e: Int = m.end;
+    let cc: Int = m.capture_count;
+    if s == 0 - 1 {
+        if e != 0 - 1 {
+            return false;
+        }
+        if cc != 0 {
+            return false;
+        }
+        return true;
+    }
+    if s < 0 {
+        return false;
+    }
+    if e < s {
+        return false;
+    }
+    if cc < 0 {
+        return false;
+    }
+    return true;
+}
+
+pub fn verify_regex_match_deterministic_principle() -> Bool {
+    // Golden: two runs of the same match inputs agree.
+    let m1: RegexMatch = regex_match_set(0, 3, 1);
+    let m2: RegexMatch = regex_match_set(0, 3, 1);
+    if regex_match_eq(m1, m2) != true {
+        return false;
+    }
+    if m1.start != 0 {
+        return false;
+    }
+    if m1.end != 3 {
+        return false;
+    }
+    if m1.capture_count != 1 {
+        return false;
+    }
+    // Golden: no-match sentinel is reproducible.
+    let n1: RegexMatch = regex_match_new();
+    let n2: RegexMatch = regex_match_new();
+    if regex_match_eq(n1, n2) != true {
+        return false;
+    }
+    if regex_match_is_none(n1) != true {
+        return false;
+    }
+    if regex_match_is_none(n2) != true {
+        return false;
+    }
+    if n1.start != 0 - 1 || n1.end != 0 - 1 {
+        return false;
+    }
+    // Well-formedness: hit at 0..5 with 2 captures holds; no-match -1 -1 0 holds.
+    if regex_match_well_formed(m1) != true {
+        return false;
+    }
+    if regex_match_well_formed(n1) != true {
+        return false;
+    }
+    // Hostile: a different start breaks equality.
+    let m3: RegexMatch = regex_match_set(1, 3, 1);
+    if regex_match_eq(m1, m3) != false {
+        return false;
+    }
+    // Hostile: a different end breaks equality.
+    let m4: RegexMatch = regex_match_set(0, 4, 1);
+    if regex_match_eq(m1, m4) != false {
+        return false;
+    }
+    // Hostile: a different capture count breaks equality.
+    let m5: RegexMatch = regex_match_set(0, 3, 2);
+    if regex_match_eq(m1, m5) != false {
+        return false;
+    }
+    // Hostile: an inconsistent no-match fails well-formedness.
+    let bad: RegexMatch = RegexMatch {
+        start: 0 - 1,
+        end: 2,
+        capture_count: 0
+    };
+    if regex_match_well_formed(bad) != false {
+        return false;
+    }
+    // Hostile: end before start fails well-formedness.
+    let bad2: RegexMatch = RegexMatch {
+        start: 5,
+        end: 2,
+        capture_count: 0
+    };
+    if regex_match_well_formed(bad2) != false {
+        return false;
+    }
+    return true;
+}

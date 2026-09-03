@@ -1,0 +1,134 @@
+// # ZKP Operations and Helpers
+//
+// Logline: Implements mathematical operations, parameter builders, and transformation helpers for ZKP.
+//
+// Setup: Imports zkp_math.oo and zkp_types.oo (Int-floor Pedersen).
+//
+// Beats:
+//   1. Import ZKP types.
+//   2. Implement core algorithmic operations and validations.
+//   3. Provide encoding, decoding, and conversion routines.
+
+import "./zkp_math.oo";
+
+// Local definition of SchnorrProof.
+type SchnorrProof = struct {
+    commitment_r: Int,
+    challenge_c: Int,
+    response_s: Int,
+    public_key: Int,
+    generator: Int,
+    modulus: Int,
+    flag_bits: Int,
+    is_valid: Bool
+};
+
+pub fn pedersen_commitment_create(
+    pc_g: Int,
+    pc_h: Int,
+    pc_val: Int,
+    pc_r: Int,
+    modulus: Int
+) -> PedersenCommitment {
+    return pedersen_commit(pc_val, pc_r, pc_g, pc_h, modulus);
+}
+
+pub fn pedersen_commitment_verify(target_pcomm: PedersenCommitment, target_comm_val: Int) -> Bool {
+    if pedersen_flags(target_pcomm) == 0 {
+        return false;
+    }
+    if pedersen_opening(target_pcomm) == target_comm_val {
+        return true;
+    }
+    return false;
+}
+
+pub fn pedersen_commitment_homomorphic_add(
+    pcomm1: PedersenCommitment,
+    pcomm2: PedersenCommitment
+) -> PedersenCommitment {
+    if pedersen_flags(pcomm1) == 0 {
+        return pcomm2;
+    }
+    if pedersen_flags(pcomm2) == 0 {
+        return pcomm1;
+    }
+    let pcomm_comb_c: Int = zkp_mod_mul(pcomm1.commitment, pcomm2.commitment, pcomm1.modulus);
+    return PedersenCommitment {
+        commitment: pcomm_comb_c,
+        modulus: pcomm1.modulus,
+        flag_bits: 1
+    };
+}
+
+pub fn pedersen_commitment_to_string(str_pcomm: PedersenCommitment) -> String {
+    let pc_c_str: String = (str_pcomm.commitment).to_string();
+    let pc_m_str: String = (str_pcomm.modulus).to_string();
+    let pc_f_str: String = (str_pcomm.flag_bits).to_string();
+    return "PedersenComm(C=" + pc_c_str + ", M=" + pc_m_str + ", F=" + pc_f_str + ")";
+}
+
+pub fn schnorr_prove(
+    sp_secret: Int,
+    sp_pub_key: Int,
+    sp_generator: Int,
+    sp_blinding: Int,
+    sp_modulus: Int
+) -> SchnorrProof {
+    if sp_modulus <= 1 {
+        return SchnorrProof {
+            commitment_r: 0,
+            challenge_c: 0,
+            response_s: 0,
+            public_key: sp_pub_key,
+            generator: sp_generator,
+            modulus: sp_modulus,
+            flag_bits: 0,
+            is_valid: false
+        };
+    }
+    let sp_r_val: Int = zkp_mod_pow(sp_generator, sp_blinding, sp_modulus);
+    let sp_challenge: Int = zkp_hash_challenge(sp_r_val, sp_pub_key, sp_modulus);
+    let sp_phi: Int = sp_modulus - 1;
+    let sp_cx: Int = zkp_mod_mul(sp_challenge, sp_secret, sp_phi);
+    let sp_s_val: Int = zkp_mod_add(sp_blinding, sp_cx, sp_phi);
+    let valid_proof: Bool = sp_modulus > 1;
+    return SchnorrProof {
+        commitment_r: sp_r_val,
+        challenge_c: sp_challenge,
+        response_s: sp_s_val,
+        public_key: sp_pub_key,
+        generator: sp_generator,
+        modulus: sp_modulus,
+        flag_bits: 1,
+        is_valid: valid_proof
+    };
+}
+
+pub fn schnorr_verify(sv_s_proof: SchnorrProof) -> Bool {
+    if sv_s_proof.flag_bits == 0 {
+        return false;
+    }
+    if sv_s_proof.modulus <= 1 {
+        return false;
+    }
+    let sv_lhs: Int = zkp_mod_pow(sv_s_proof.generator, sv_s_proof.response_s, sv_s_proof.modulus);
+    let sv_pk_c: Int = zkp_mod_pow(sv_s_proof.public_key, sv_s_proof.challenge_c, sv_s_proof.modulus);
+    let sv_rhs: Int = zkp_mod_mul(sv_s_proof.commitment_r, sv_pk_c, sv_s_proof.modulus);
+    let sv_recomp_c: Int = zkp_hash_challenge(sv_s_proof.commitment_r, sv_s_proof.public_key, sv_s_proof.modulus);
+    if sv_s_proof.challenge_c != sv_recomp_c {
+        return false;
+    }
+    if sv_lhs == sv_rhs {
+        return true;
+    }
+    return false;
+}
+
+pub fn schnorr_proof_to_string(str_sproof: SchnorrProof) -> String {
+    let sp_r_str: String = (str_sproof.commitment_r).to_string();
+    let sp_c_str: String = (str_sproof.challenge_c).to_string();
+    let sp_s_str: String = (str_sproof.response_s).to_string();
+    let sp_pk_str: String = (str_sproof.public_key).to_string();
+    return "SchnorrProof(R=" + sp_r_str + ", C=" + sp_c_str + ", S=" + sp_s_str + ", PK=" + sp_pk_str + ")";
+}

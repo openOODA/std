@@ -1,0 +1,58 @@
+// # Astronomical Julian Date & Epoch Calculations
+//
+// Logline: Converts Gregorian calendar dates and times to Julian Date (JD), Modified Julian Date (MJD), and J2000.0 centuries.
+//
+// Setup: Pure astronomical time reckoning algorithm based on the standard IAU algorithms.
+//
+// Beats:
+//   1. J2000.0 epoch integer base query.
+//   2. Convert Gregorian year, month, day, hour, minute, second to Julian Date.
+//   3. Convert Julian Date to Modified Julian Date (MJD = JD - 2400000.5).
+//   4. Calculate Julian centuries elapsed since J2000.0 epoch.
+
+pub fn j2000_jd() -> Int {
+    return 2451545;
+}
+
+pub fn j2000_epoch() -> Int {
+    return 2451545;
+}
+
+pub fn julian_date_j2000_constant() -> Float {
+    return 2451545.0;
+}
+
+/// Computes Julian Date (JD) from Gregorian date and time.
+pub fn gregorian_to_julian_date(
+    year: Float,
+    month: Float,
+    day: Float,
+    hour: Float,
+    minute: Float,
+    second: Float
+) -> Float {
+    let mut y: Float = year;
+    let mut m: Float = month;
+    if m <= 2.0 {
+        y = y - 1.0;
+        m = m + 12.0;
+    }
+    let a: Float = y / 100.0;
+    let b: Float = 2.0 - a + (a / 4.0);
+
+    let day_fraction: Float = (hour / 24.0) + (minute / 1440.0) + (second / 86400.0);
+    let term1: Float = (365.25 * (y + 4716.0));
+    let term2: Float = (30.6001 * (m + 1.0));
+    let jd: Float = term1 + term2 + day + day_fraction + b - 1524.5;
+    return jd;
+}
+
+/// Computes Modified Julian Date (MJD = JD - 2400000.5).
+pub fn julian_to_mjd(jd: Float) -> Float {
+    return jd - 2400000.5;
+}
+
+/// Computes Julian centuries elapsed since standard J2000.0 epoch (T_UT1 / T_TDB).
+pub fn julian_centuries_j2000(jd: Float) -> Float {
+    return (jd - julian_date_j2000_constant()) / 36525.0;
+}

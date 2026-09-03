@@ -1,0 +1,255 @@
+// # 4-Wide Double-Precision SIMD Float Vector Module
+//
+// Logline: 256-bit 4-lane double-precision floating-point SIMD vector operations, arithmetic, horizontal reductions, and dot products.
+//
+// Setup: Pure math module. Emulates 4-wide double vector processing (AVX/AVX2) for 256-bit SIMD computation.
+//
+// Beats:
+//   1. Construct 4-lane double vector structures, splats, and zero initializers.
+//   2. Element-wise vector addition, subtraction, multiplication, division, and scaling.
+//   3. Fused multiply-add (FMA), min, max, and element indexing.
+//   4. Horizontal addition reduction and Euclidean dot product.
+
+pub type f64x4 = struct {
+    v0: Float,
+    v1: Float,
+    v2: Float,
+    v3: Float
+};
+
+pub type Vec4d = struct {
+    v0: Float,
+    v1: Float,
+    v2: Float,
+    v3: Float
+};
+
+pub fn f64x4_new(v0: Float, v1: Float, v2: Float, v3: Float) -> f64x4 {
+    let res: f64x4 = f64x4 {
+        v0: v0,
+        v1: v1,
+        v2: v2,
+        v3: v3
+    };
+    return res;
+}
+
+pub fn f64x4_splat(v: Float) -> f64x4 {
+    let res: f64x4 = f64x4 {
+        v0: v,
+        v1: v,
+        v2: v,
+        v3: v
+    };
+    return res;
+}
+
+pub fn f64x4_zero() -> f64x4 {
+    return f64x4_splat(0.0);
+}
+
+pub fn f64x4_get_lane(v: f64x4, lane: Int) -> Float {
+    if lane == 0 { return v.v0; }
+    if lane == 1 { return v.v1; }
+    if lane == 2 { return v.v2; }
+    if lane == 3 { return v.v3; }
+    return 0.0;
+}
+
+pub fn f64x4_insert_lane(v: f64x4, lane: Int, val: Float) -> f64x4 {
+    if lane == 0 { return f64x4_new(val, v.v1, v.v2, v.v3); }
+    if lane == 1 { return f64x4_new(v.v0, val, v.v2, v.v3); }
+    if lane == 2 { return f64x4_new(v.v0, v.v1, val, v.v3); }
+    if lane == 3 { return f64x4_new(v.v0, v.v1, v.v2, val); }
+    return v;
+}
+
+pub fn f64x4_add(a: f64x4, b: f64x4) -> f64x4 {
+    let r0: Float = a.v0 + b.v0;
+    let r1: Float = a.v1 + b.v1;
+    let r2: Float = a.v2 + b.v2;
+    let r3: Float = a.v3 + b.v3;
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_sub(a: f64x4, b: f64x4) -> f64x4 {
+    let r0: Float = a.v0 - b.v0;
+    let r1: Float = a.v1 - b.v1;
+    let r2: Float = a.v2 - b.v2;
+    let r3: Float = a.v3 - b.v3;
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_mul(a: f64x4, b: f64x4) -> f64x4 {
+    let r0: Float = a.v0 * b.v0;
+    let r1: Float = a.v1 * b.v1;
+    let r2: Float = a.v2 * b.v2;
+    let r3: Float = a.v3 * b.v3;
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_div(a: f64x4, b: f64x4) -> f64x4 {
+    let r0: Float = a.v0 / b.v0;
+    let r1: Float = a.v1 / b.v1;
+    let r2: Float = a.v2 / b.v2;
+    let r3: Float = a.v3 / b.v3;
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_min(a: f64x4, b: f64x4) -> f64x4 {
+    let r0: Float = if a.v0 < b.v0 { a.v0 } else { b.v0 };
+    let r1: Float = if a.v1 < b.v1 { a.v1 } else { b.v1 };
+    let r2: Float = if a.v2 < b.v2 { a.v2 } else { b.v2 };
+    let r3: Float = if a.v3 < b.v3 { a.v3 } else { b.v3 };
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_max(a: f64x4, b: f64x4) -> f64x4 {
+    let r0: Float = if a.v0 > b.v0 { a.v0 } else { b.v0 };
+    let r1: Float = if a.v1 > b.v1 { a.v1 } else { b.v1 };
+    let r2: Float = if a.v2 > b.v2 { a.v2 } else { b.v2 };
+    let r3: Float = if a.v3 > b.v3 { a.v3 } else { b.v3 };
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_scale(v: f64x4, s: Float) -> f64x4 {
+    let r0: Float = v.v0 * s;
+    let r1: Float = v.v1 * s;
+    let r2: Float = v.v2 * s;
+    let r3: Float = v.v3 * s;
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_fma(a: f64x4, b: f64x4, c: f64x4) -> f64x4 {
+    let r0: Float = a.v0 * b.v0 + c.v0;
+    let r1: Float = a.v1 * b.v1 + c.v1;
+    let r2: Float = a.v2 * b.v2 + c.v2;
+    let r3: Float = a.v3 * b.v3 + c.v3;
+    let res: f64x4 = f64x4 { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn f64x4_reduce_sum(v: f64x4) -> Float {
+    return v.v0 + v.v1 + v.v2 + v.v3;
+}
+
+pub fn f64x4_reduce_min(v: f64x4) -> Float {
+    let mut m: Float = v.v0;
+    if v.v1 < m { m = v.v1; }
+    if v.v2 < m { m = v.v2; }
+    if v.v3 < m { m = v.v3; }
+    return m;
+}
+
+pub fn f64x4_reduce_max(v: f64x4) -> Float {
+    let mut m: Float = v.v0;
+    if v.v1 > m { m = v.v1; }
+    if v.v2 > m { m = v.v2; }
+    if v.v3 > m { m = v.v3; }
+    return m;
+}
+
+pub fn f64x4_dot(a: f64x4, b: f64x4) -> Float {
+    return f64x4_reduce_sum(f64x4_mul(a, b));
+}
+
+pub fn f64x4_to_list(v: f64x4) -> List[Float] {
+    let mut l: List[Float] = list_new();
+    l = list_push(l, v.v0);
+    l = list_push(l, v.v1);
+    l = list_push(l, v.v2);
+    l = list_push(l, v.v3);
+    return l;
+}
+
+pub fn vec4d_new(v0: Float, v1: Float, v2: Float, v3: Float) -> Vec4d {
+    let res: Vec4d = Vec4d { v0: v0, v1: v1, v2: v2, v3: v3 };
+    return res;
+}
+
+pub fn vec4d_splat(v: Float) -> Vec4d {
+    let res: Vec4d = Vec4d { v0: v, v1: v, v2: v, v3: v };
+    return res;
+}
+
+pub fn vec4d_zero() -> Vec4d { return vec4d_splat(0.0); }
+
+pub fn vec4d_add(a: Vec4d, b: Vec4d) -> Vec4d {
+    let r0: Float = a.v0 + b.v0;
+    let r1: Float = a.v1 + b.v1;
+    let r2: Float = a.v2 + b.v2;
+    let r3: Float = a.v3 + b.v3;
+    let res: Vec4d = Vec4d { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn vec4d_sub(a: Vec4d, b: Vec4d) -> Vec4d {
+    let r0: Float = a.v0 - b.v0;
+    let r1: Float = a.v1 - b.v1;
+    let r2: Float = a.v2 - b.v2;
+    let r3: Float = a.v3 - b.v3;
+    let res: Vec4d = Vec4d { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn vec4d_mul(a: Vec4d, b: Vec4d) -> Vec4d {
+    let r0: Float = a.v0 * b.v0;
+    let r1: Float = a.v1 * b.v1;
+    let r2: Float = a.v2 * b.v2;
+    let r3: Float = a.v3 * b.v3;
+    let res: Vec4d = Vec4d { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn vec4d_scale(v: Vec4d, s: Float) -> Vec4d {
+    let r0: Float = v.v0 * s;
+    let r1: Float = v.v1 * s;
+    let r2: Float = v.v2 * s;
+    let r3: Float = v.v3 * s;
+    let res: Vec4d = Vec4d { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn vec4d_fma(a: Vec4d, b: Vec4d, c: Vec4d) -> Vec4d {
+    let r0: Float = a.v0 * b.v0 + c.v0;
+    let r1: Float = a.v1 * b.v1 + c.v1;
+    let r2: Float = a.v2 * b.v2 + c.v2;
+    let r3: Float = a.v3 * b.v3 + c.v3;
+    let res: Vec4d = Vec4d { v0: r0, v1: r1, v2: r2, v3: r3 };
+    return res;
+}
+
+pub fn vec4d_hadd(v: Vec4d) -> Float { return v.v0 + v.v1 + v.v2 + v.v3; }
+
+pub fn vec4d_dot(a: Vec4d, b: Vec4d) -> Float { return vec4d_hadd(vec4d_mul(a, b)); }
+
+pub fn vec4d_norm(v: Vec4d) -> Float { return sqrt(vec4d_dot(v, v)); }
+
+pub fn vec4d_normalize(v: Vec4d) -> Vec4d {
+    let len: Float = vec4d_norm(v);
+    if len == 0.0 { return vec4d_zero(); }
+    return vec4d_scale(v, 1.0 / len);
+}
+
+pub fn vec4d_get(v: Vec4d, idx: Int) -> Float {
+    if idx == 0 { return v.v0; }
+    if idx == 1 { return v.v1; }
+    if idx == 2 { return v.v2; }
+    return v.v3;
+}
+
+pub fn vec4d_to_list(v: Vec4d) -> List[Float] {
+    let mut l: List[Float] = list_new();
+    l = list_push(l, v.v0);
+    l = list_push(l, v.v1);
+    l = list_push(l, v.v2);
+    l = list_push(l, v.v3);
+    return l;
+}

@@ -1,0 +1,137 @@
+// # LCF kernel checker theory (Milner, 1972)
+//
+// Logline: An LCF-style kernel emits theorems only through a small set of trusted primitives; the theory is closed for a single primitive and coupled with soundness: the kernel never emits False.
+//
+// Setup: Pure Int. Primitive ids: 0=ASSUME, 1=REFL (reflexivity), 2=TRANS (transitivity), 3=ABS (abstraction). An untrusted primitive (id outside 0..3) fails closed. The kernel emits a theorem iff the proof chain consists entirely of trusted primitives. Soundness: the kernel never emits False. Coupled: with the de Bruijn criterion (kernel is small and well-audited).
+//
+// Beats:
+//   1. kernel_is_trusted_primitive returns 1 only for ids 0..3.
+//   2. kernel_emit_theorem returns 1 only when every step is trusted.
+//   3. AXIOM + ASSUME → THEOREM witness.
+//   4. Hostile: untrusted primitive fails closed.
+//   5. Coupled: with de Bruijn — the kernel is small (4 primitives).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Primitive ids: 0=ASSUME, 1=REFL, 2=TRANS, 3=ABS.
+pub fn kernel_is_trusted_primitive(prim_id: Int) -> Int {
+    if prim_id == 0 { return 1; }
+    if prim_id == 1 { return 1; }
+    if prim_id == 2 { return 1; }
+    if prim_id == 3 { return 1; }
+    return 0;
+}
+
+// 1 iff the 4-step proof chain is entirely trusted. Closed for a single
+// primitive (i.e., if any step is untrusted, the chain is rejected).
+pub fn kernel_emit_theorem(s0: Int, s1: Int, s2: Int, s3: Int) -> Int {
+    if kernel_is_trusted_primitive(s0) == 0 { return 0; }
+    if kernel_is_trusted_primitive(s1) == 0 { return 0; }
+    if kernel_is_trusted_primitive(s2) == 0 { return 0; }
+    if kernel_is_trusted_primitive(s3) == 0 { return 0; }
+    return 1;
+}
+
+// 1 iff the kernel soundly avoids emitting False. A chain is unsafe if any
+// step explicitly asserts the false proposition. is_false_step = 1 means the
+// step emits the False proposition.
+pub fn kernel_sound(s0: Int, s1: Int, s2: Int, s3: Int,
+                    f0: Int, f1: Int, f2: Int, f3: Int) -> Int {
+    if kernel_emit_theorem(s0, s1, s2, s3) == 0 { return 0; }
+    if f0 == 1 { return 0; }
+    if f1 == 1 { return 0; }
+    if f2 == 1 { return 0; }
+    if f3 == 1 { return 0; }
+    return 1;
+}
+
+// 1 iff the kernel has at most 4 primitives (de Bruijn criterion).
+pub fn kernel_is_small(n_primitives: Int) -> Int {
+    if n_primitives < 0 { return 0; }
+    if n_primitives > 4 { return 0; }
+    return 1;
+}
+
+// Coupled: small + sound ⇒ trustworthy.
+pub fn kernel_trustworthy(n_primitives: Int,
+                          s0: Int, s1: Int, s2: Int, s3: Int,
+                          f0: Int, f1: Int, f2: Int, f3: Int) -> Int {
+    let small: Int = kernel_is_small(n_primitives);
+    let sound: Int = kernel_sound(s0, s1, s2, s3, f0, f1, f2, f3);
+    if small == 1 {
+        if sound == 1 { return 1; }
+    }
+    return 0;
+}
+
+// domain_cert wrapper for the kernel checker theory lock.
+pub fn kernel_holds(s0: Int, s1: Int, s2: Int, s3: Int) -> DomainCert {
+    let v: Int = kernel_emit_theorem(s0, s1, s2, s3);
+    return domain_cert("proof_verifiers", "kernel_checker_theory", v);
+}
+
+pub fn verify_kernel_checker_theory() -> Bool {
+    // Golden: trusted primitives are accepted.
+    if kernel_is_trusted_primitive(0) != 1 { return false; }
+    if kernel_is_trusted_primitive(1) != 1 { return false; }
+    if kernel_is_trusted_primitive(2) != 1 { return false; }
+    if kernel_is_trusted_primitive(3) != 1 { return false; }
+
+    // Hostile: unknown primitives fail closed.
+    if kernel_is_trusted_primitive(4) != 0 { return false; }
+    if kernel_is_trusted_primitive(0 - 1) != 0 { return false; }
+    if kernel_is_trusted_primitive(99) != 0 { return false; }
+
+    // Golden: axiom + axioms → theorem (all 4 primitives are REFL).
+    if kernel_emit_theorem(1, 1, 1, 1) != 1 { return false; }
+
+    // Golden: a mix of trusted primitives still emits a theorem.
+    if kernel_emit_theorem(0, 1, 2, 3) != 1 { return false; }
+    if kernel_emit_theorem(3, 2, 1, 0) != 1 { return false; }
+
+    // Hostile: a single untrusted primitive fails the whole chain.
+    if kernel_emit_theorem(1, 1, 1, 4) != 0 { return false; }
+    if kernel_emit_theorem(4, 1, 1, 1) != 0 { return false; }
+    if kernel_emit_theorem(1, 4, 1, 1) != 0 { return false; }
+    if kernel_emit_theorem(1, 1, 4, 1) != 0 { return false; }
+    if kernel_emit_theorem(0 - 1, 1, 1, 1) != 0 { return false; }
+
+    // Golden: kernel_sound returns 1 for a trusted chain with no false step.
+    if kernel_sound(1, 1, 1, 1, 0, 0, 0, 0) != 1 { return false; }
+    if kernel_sound(0, 1, 2, 3, 0, 0, 0, 0) != 1 { return false; }
+
+    // Hostile: kernel_sound rejects a false step in any slot.
+    if kernel_sound(1, 1, 1, 1, 1, 0, 0, 0) != 0 { return false; }
+    if kernel_sound(1, 1, 1, 1, 0, 1, 0, 0) != 0 { return false; }
+    if kernel_sound(1, 1, 1, 1, 0, 0, 1, 0) != 0 { return false; }
+    if kernel_sound(1, 1, 1, 1, 0, 0, 0, 1) != 0 { return false; }
+
+    // Hostile: kernel_sound rejects an untrusted primitive even without false.
+    if kernel_sound(4, 1, 1, 1, 0, 0, 0, 0) != 0 { return false; }
+
+    // Golden: de Bruijn — kernel is small.
+    if kernel_is_small(0) != 1 { return false; }
+    if kernel_is_small(2) != 1 { return false; }
+    if kernel_is_small(4) != 1 { return false; }
+
+    // Hostile: too many primitives violates de Bruijn.
+    if kernel_is_small(5) != 0 { return false; }
+    if kernel_is_small(100) != 0 { return false; }
+    if kernel_is_small(0 - 1) != 0 { return false; }
+
+    // Coupled: small + sound ⇒ trustworthy.
+    if kernel_trustworthy(4, 1, 1, 1, 1, 0, 0, 0, 0) != 1 { return false; }
+    if kernel_trustworthy(4, 1, 1, 1, 1, 1, 0, 0, 0) != 0 { return false; }
+    if kernel_trustworthy(5, 1, 1, 1, 1, 0, 0, 0, 0) != 0 { return false; }
+    if kernel_trustworthy(4, 4, 1, 1, 1, 0, 0, 0, 0) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the value.
+    let c1: DomainCert = kernel_holds(1, 1, 1, 1);
+    if c1.domain != "proof_verifiers" { return false; }
+    if c1.law_name != "kernel_checker_theory" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = kernel_holds(4, 1, 1, 1);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

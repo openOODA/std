@@ -1,0 +1,112 @@
+// # Progressive Disclosure Principle
+//
+// Logline: Reveal detail on demand; deeper layers only when information complexity and user expertise both warrant them.
+//
+// Setup: Pure Int. info_complexity in [0, 100], user_expertise in [0, 100]. Out-of-range returns 0.
+//
+// Beats:
+//   1. pd_recommended_depth: 1 (shallow), 2 (medium), or 3 (deep).
+//   2. Shallow when complexity is low and expertise is high.
+//   3. Deep when complexity is high and expertise is low.
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Depth code constants.
+pub fn pd_depth_shallow() -> Int {
+    return 1;
+}
+
+pub fn pd_depth_medium() -> Int {
+    return 2;
+}
+
+pub fn pd_depth_deep() -> Int {
+    return 3;
+}
+
+// Recommended depth: 1, 2, or 3 based on info_complexity and user_expertise.
+pub fn pd_recommended_depth(info_complexity: Int, user_expertise: Int) -> Int {
+    if info_complexity < 0 { return 0; }
+    if info_complexity > 100 { return 0; }
+    if user_expertise < 0 { return 0; }
+    if user_expertise > 100 { return 0; }
+    // Score: 0..200. Map low score to shallow, high score to deep.
+    // score = info_complexity + (100 - user_expertise).
+    let deficit: Int = 100 - user_expertise;
+    let score: Int = info_complexity + deficit;
+    if score < 100 { return pd_depth_shallow(); }
+    if score < 150 { return pd_depth_medium(); }
+    return pd_depth_deep();
+}
+
+// Display label for a depth code.
+pub fn pd_depth_label(depth: Int) -> Int {
+    if depth == 1 { return 1; }
+    if depth == 2 { return 2; }
+    if depth == 3 { return 3; }
+    return 0;
+}
+
+// Coarse witness: 1 if the depth matches a coarse category from inputs.
+pub fn pd_consistent(info_complexity: Int, user_expertise: Int) -> Int {
+    let d: Int = pd_recommended_depth(info_complexity, user_expertise);
+    if d == 0 { return 0; }
+    return 1;
+}
+
+// Domain certificate for the progressive disclosure principle.
+pub fn progressive_disclosure_cert(holds: Int) -> DomainCert {
+    return domain_cert("ui", "progressive_disclosure", holds);
+}
+
+// KAT and hostile cases for the progressive disclosure principle.
+pub fn verify_progressive_disclosure_principle() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    // depth constants
+    if pd_depth_shallow() != 1 { return false; }
+    if pd_depth_medium() != 2 { return false; }
+    if pd_depth_deep() != 3 { return false; }
+    // golden: low complexity + high expertise -> 1
+    if pd_recommended_depth(10, 90) != 1 { return false; }
+    if pd_recommended_depth(0, 100) != 1 { return false; }
+    if pd_recommended_depth(20, 80) != 1 { return false; }
+    // golden: high complexity + low expertise -> 3
+    if pd_recommended_depth(90, 10) != 3 { return false; }
+    if pd_recommended_depth(100, 0) != 3 { return false; }
+    if pd_recommended_depth(80, 0) != 3 { return false; }
+    // golden: mid -> 2
+    if pd_recommended_depth(50, 50) != 2 { return false; }
+    if pd_recommended_depth(60, 40) != 2 { return false; }
+    if pd_recommended_depth(70, 50) != 2 { return false; }
+    // edge: both at extremes land on score=100 which maps to medium=2
+    if pd_recommended_depth(100, 100) != 2 { return false; }
+    if pd_recommended_depth(0, 0) != 2 { return false; }
+    // hostile: out-of-range
+    if pd_recommended_depth(0 - 1, 50) != 0 { return false; }
+    if pd_recommended_depth(101, 50) != 0 { return false; }
+    if pd_recommended_depth(50, 0 - 1) != 0 { return false; }
+    if pd_recommended_depth(50, 101) != 0 { return false; }
+    // label
+    if pd_depth_label(1) != 1 { return false; }
+    if pd_depth_label(2) != 2 { return false; }
+    if pd_depth_label(3) != 3 { return false; }
+    if pd_depth_label(0) != 0 { return false; }
+    if pd_depth_label(4) != 0 { return false; }
+    if pd_depth_label(0 - 1) != 0 { return false; }
+    // consistent witness
+    if pd_consistent(0, 100) != 1 { return false; }
+    if pd_consistent(50, 50) != 1 { return false; }
+    if pd_consistent(0 - 1, 50) != 0 { return false; }
+    if pd_consistent(50, 101) != 0 { return false; }
+    // certificate round-trip
+    let c1: DomainCert = progressive_disclosure_cert(1);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = progressive_disclosure_cert(0);
+    if cert_holds(c0) != 0 { return false; }
+    let c5: DomainCert = progressive_disclosure_cert(5);
+    if cert_holds(c5) != 0 { return false; }
+    return true;
+}

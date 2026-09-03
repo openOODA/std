@@ -1,0 +1,86 @@
+// # Carnot Thermodynamic Cycle and Reversible Limits
+//
+// Logline: Calculates theoretical maximum Carnot efficiency, coefficient of performance for heat pumps and refrigeration, and heat rejection.
+//
+// Setup: Pure floating-point thermodynamic equations governed by the Second Law of Thermodynamics and absolute temperature scales.
+//
+// Beats:
+//   1. Carnot thermal engine efficiency eta = 1 - (Tc / Th).
+//   2. Refrigeration COP = Tc / (Th - Tc) and heat pump COP = Th / (Th - Tc).
+//   3. Reversible work extraction and rejected heat balance.
+//   4. Fail-closed guards for absolute zero and inverted thermal reservoirs.
+
+type CarnotCycle = struct {
+    th_kelvin: Float,
+    tc_kelvin: Float,
+    efficiency: Float,
+    cop_refrigerator: Float,
+    cop_heat_pump: Float
+};
+
+// Calculate Carnot cycle efficiency eta = 1 - (Tc / Th). Fail-closed on invalid reservoirs.
+pub fn carnot_efficiency(th_k: Float, tc_k: Float) -> Float {
+    if th_k <= 0.0 || tc_k < 0.0 || tc_k > th_k {
+        return 0.0;
+    }
+    return (th_k - tc_k) / th_k;
+}
+
+// Calculate Carnot refrigerator COP = Tc / (Th - Tc). Fail-closed on invalid reservoirs.
+pub fn carnot_cop_refrigerator(th_k: Float, tc_k: Float) -> Float {
+    if th_k <= 0.0 || tc_k < 0.0 || tc_k >= th_k {
+        return 0.0;
+    }
+    let dt: Float = th_k - tc_k;
+    return tc_k / dt;
+}
+
+// Calculate Carnot heat pump COP = Th / (Th - Tc). Fail-closed on invalid reservoirs.
+pub fn carnot_cop_heat_pump(th_k: Float, tc_k: Float) -> Float {
+    if th_k <= 0.0 || tc_k < 0.0 || tc_k >= th_k {
+        return 0.0;
+    }
+    let dt: Float = th_k - tc_k;
+    return th_k / dt;
+}
+
+// Instantiate complete CarnotCycle state structure.
+pub fn carnot_cycle_new(th_k: Float, tc_k: Float) -> CarnotCycle {
+    let eff: Float = carnot_efficiency(th_k, tc_k);
+    let cop_r: Float = carnot_cop_refrigerator(th_k, tc_k);
+    let cop_hp: Float = carnot_cop_heat_pump(th_k, tc_k);
+    return CarnotCycle {
+        th_kelvin: th_k,
+        tc_kelvin: tc_k,
+        efficiency: eff,
+        cop_refrigerator: cop_r,
+        cop_heat_pump: cop_hp
+    };
+}
+
+// Maximum reversible work output W_net = eta * Q_in (Joules).
+pub fn carnot_work_output(q_in_joules: Float, th_k: Float, tc_k: Float) -> Float {
+    if q_in_joules <= 0.0 {
+        return 0.0;
+    }
+    let eff: Float = carnot_efficiency(th_k, tc_k);
+    return eff * q_in_joules;
+}
+
+// Heat rejected to cold reservoir Q_out = Q_in * (Tc / Th) (Joules).
+pub fn carnot_heat_rejected(q_in_joules: Float, th_k: Float, tc_k: Float) -> Float {
+    if q_in_joules <= 0.0 || th_k <= 0.0 || tc_k < 0.0 || tc_k > th_k {
+        return 0.0;
+    }
+    let w_net: Float = carnot_work_output(q_in_joules, th_k, tc_k);
+    return q_in_joules - w_net;
+}
+
+// Minimum heat input required to generate specified work: Q_in = W / eta (Joules).
+pub fn carnot_min_heat_in(work_required_joules: Float, th_k: Float, tc_k: Float) -> Float {
+    let eff: Float = carnot_efficiency(th_k, tc_k);
+    if eff <= 0.0 || work_required_joules <= 0.0 {
+        return 0.0;
+    }
+    return work_required_joules / eff;
+}

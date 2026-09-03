@@ -1,0 +1,26 @@
+// # std/qa — Self-Test Probe Index
+//
+// Logline: Index of std self-test probe drivers.
+//
+// Setup: Each probe exercises one of the 8 domains. If a probe fails, the std package fails to release.
+//
+// Beats:
+//   1. probe_core.oo — verify core/ primitives (list, map, math, encoding, format)
+//   2. probe_fs.oo — verify fs/ file ops
+//   3. probe_net.oo — verify net/ socket ops
+//   4. probe_sec.oo — verify sec/ sha3 (real Keccak, not DJB2)
+//   5. probe_science.oo — verify science/ bio/chem/phys/econ
+//   6. probe_app.oo — verify app/ ai/robot/ui/data
+//   7. probe_hw.oo — verify hw/ silicon/gpu/mem
+//   8. probe_meta.oo — verify meta/ test/diag
+//   9. probe_api_surface.oo — verify std ANCHOR.oo exposes exactly 8 public subdirs
+
+import "probe_core.oo";
+import "probe_fs.oo";
+import "probe_net.oo";
+import "probe_sec.oo";
+import "probe_science.oo";
+import "probe_app.oo";
+import "probe_hw.oo";
+import "probe_meta.oo";
+import "probe_api_surface.oo";

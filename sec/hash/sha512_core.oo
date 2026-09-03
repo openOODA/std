@@ -1,0 +1,124 @@
+// # SHA-512 K Table, Primitives, and Rounds
+//
+// Logline: 64-bit add/xor/rotr primitives implemented as 32-bit halves (hi, lo) with carry, plus the 80-entry K table (FIPS 180-4 first 64 bits of cube roots of first 80 primes), Ch, Maj, Sigma0, Sigma1, sigma0, sigma1.
+//
+// Setup: Pure Int 32-bit halves. Sibling of sha512_codec.oo, called by sha512.oo.
+//
+// Beats:
+//   1. W64 add/xor/rotr with 32-bit halves.
+//   2. Ch, Maj, Sigma0, Sigma1, sigma0, sigma1 primitives.
+//   3. s5_k: 80-entry K table as one hex string, parsed on demand.
+
+type W64 = struct {
+    hi: Int,
+    lo: Int
+};
+
+pub fn s5_mask(x: Int) -> Int {
+    return x & 4294967295;
+}
+
+pub fn s5_xor_i(a: Int, b: Int) -> Int {
+    return (a | b) - (a & b);
+}
+
+pub fn s5_nib(c: Int) -> Int {
+    if c >= 97 {
+        return c - 87;
+    }
+    return c - 48;
+}
+
+pub fn s5_ph32(s: String, off: Int) -> Int {
+    let mut v: Int = 0;
+    let mut j: Int = 0;
+    while j < 8 {
+        v = (v << 4) + s5_nib(byte_at(s, off + j));
+        j = j + 1;
+    }
+    return v;
+}
+
+pub fn s5_add(a: W64, b: W64) -> W64 {
+    let lo: Int = s5_mask(a.lo + b.lo);
+    let carry: Int = (a.lo + b.lo) >> 32;
+    return W64 { hi: s5_mask(a.hi + b.hi + carry), lo: lo };
+}
+
+pub fn s5_xor(a: W64, b: W64) -> W64 {
+    return W64 { hi: s5_xor_i(a.hi, b.hi), lo: s5_xor_i(a.lo, b.lo) };
+}
+
+pub fn s5_rotr(x: W64, n: Int) -> W64 {
+    if n == 0 {
+        return x;
+    }
+    if n < 32 {
+        let hi: Int = s5_mask((x.hi >> n) | (x.lo << (32 - n)));
+        let lo: Int = s5_mask((x.lo >> n) | (x.hi << (32 - n)));
+        return W64 { hi: hi, lo: lo };
+    }
+    if n == 32 {
+        return W64 { hi: x.lo, lo: x.hi };
+    }
+    let m: Int = n - 32;
+    let hi: Int = s5_mask((x.lo >> m) | (x.hi << (32 - m)));
+    let lo: Int = s5_mask((x.hi >> m) | (x.lo << (32 - m)));
+    return W64 { hi: hi, lo: lo };
+}
+
+pub fn s5_ch(x: W64, y: W64, z: W64) -> W64 {
+    let a1: Int = x.hi & y.hi;
+    let a2: Int = s5_xor_i(x.hi, 4294967295) & z.hi;
+    let b1: Int = x.lo & y.lo;
+    let b2: Int = s5_xor_i(x.lo, 4294967295) & z.lo;
+    return W64 { hi: s5_xor_i(a1, a2), lo: s5_xor_i(b1, b2) };
+}
+
+pub fn s5_maj(x: W64, y: W64, z: W64) -> W64 {
+    return W64 { hi: s5_xor_i(s5_xor_i(x.hi & y.hi, x.hi & z.hi), y.hi & z.hi), lo: s5_xor_i(s5_xor_i(x.lo & y.lo, x.lo & z.lo), y.lo & z.lo) };
+}
+
+pub fn s5_Sigma0(x: W64) -> W64 {
+    let a: W64 = s5_rotr(x, 28);
+    let b: W64 = s5_rotr(x, 34);
+    let c: W64 = s5_rotr(x, 39);
+    return s5_xor(s5_xor(a, b), c);
+}
+
+pub fn s5_Sigma1(x: W64) -> W64 {
+    let a: W64 = s5_rotr(x, 14);
+    let b: W64 = s5_rotr(x, 18);
+    let c: W64 = s5_rotr(x, 41);
+    return s5_xor(s5_xor(a, b), c);
+}
+
+pub fn s5_sigma0(x: W64) -> W64 {
+    let a: W64 = s5_rotr(x, 1);
+    let b: W64 = s5_rotr(x, 8);
+    let c: W64 = W64 { hi: s5_mask(x.hi >> 7), lo: (s5_mask(x.lo >> 7) | s5_mask(x.hi << 25)) };
+    return s5_xor(s5_xor(a, b), c);
+}
+
+pub fn s5_sigma1(x: W64) -> W64 {
+    let a: W64 = s5_rotr(x, 19);
+    let b: W64 = s5_rotr(x, 61);
+    let c: W64 = W64 { hi: s5_mask(x.hi >> 6), lo: (s5_mask(x.lo >> 6) | s5_mask(x.hi << 26)) };
+    return s5_xor(s5_xor(a, b), c);
+}
+
+pub fn s5_k(i: Int) -> W64 {
+    let ks: String = "428a2f98d728ae227137449123ef65cdb5c0fbcfec4d3b2fe9b5dba58189dbbc3956c25bf348b53859f111f1b605d019923f82a4af194f9bab1c5ed5da6d8118d807aa98a303024212835b0145706fbe243185be4ee4b28c550c7dc3d5ffb4e272be5d74f27b896f80deb1fe3b1696b19bdc06a725c71235c19bf174cf692694e49b69c19ef14ad2efbe4786384f25e30fc19dc68b8cd5b5240ca1cc77ac9c652de92c6f592b02754a7484aa6ea6e4835cb0a9dcbd41fbd476f988da831153b5983e5152ee66dfaba831c66d2db43210b00327c898fb213fbf597fc7beef0ee4c6e00bf33da88fc2d5a79147930aa72506ca6351e003826f142929670a0e6e7027b70a8546d22ffc2e1b21385c26c9264d2c6dfc5ac42aed53380d139d95b3df650a73548baf63de766a0abb3c77b2a881c2c92e47edaee692722c851482353ba2bfe8a14cf10364a81a664bbc423001c24b8b70d0f89791c76c51a30654be30d192e819d6ef5218d69906245565a910f40e35855771202a106aa07032bbd1b819a4c116b8d2d0c81e376c085141ab532748774cdf8eeb9934b0bcb5e19b48a8391c0cb3c5c95a634ed8aa4ae3418acb5b9cca4f7763e373682e6ff3d6b2b8a3748f82ee5defb2fc78a5636f43172f6084c87814a1f0ab728cc702081a6439ec90befffa23631e28a4506cebde82bde9bef9a3f7b2c67915c67178f2e372532bca273eceea26619cd186b8c721c0c207eada7dd6cde0eb1ef57d4f7fee6ed17806f067aa72176fba0a637dc5a2c898a6113f9804bef90dae1b710b35131c471b28db77f523047d8432caab7b40c724933c9ebe0a15c9bebc431d67c49c100d4c4cc5d4becb3e42b6597f299cfc657e2a5fcb6fab3ad6faec6c44198c4a475817";
+    let off: Int = i * 16;
+    let hi: Int = s5_ph32(ks, off);
+    let lo: Int = s5_ph32(ks, off + 8);
+    return W64 { hi: hi, lo: lo };
+}
+
+pub fn s5_h(w: W64) -> Int {
+    return w.hi;
+}
+
+pub fn s5_l(w: W64) -> Int {
+    return w.lo;
+}

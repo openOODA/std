@@ -1,0 +1,70 @@
+// # Monostatic radar range (R^4)
+//
+// Logline: Received power falls as 1/R^4. Detection range scales as RCS^(1/4).
+//
+// Setup: Self-contained EM. combat_engagement.oo keeps the BVR caller.
+//
+// Beats:
+//   1. Pr uses (4 pi)^3 R^4 in the denominator.
+//   2. R_det = R0 * RCS^(1/4) when RCS > 0.
+//   3. Non-physical inputs return Err.
+
+pub fn radar_received_power(pt: Float, gain: Float, lambda: Float, rcs: Float, range: Float) -> Result[Float, String] {
+    if pt <= 0.0 || gain <= 0.0 || lambda <= 0.0 || rcs <= 0.0 || range <= 0.0 {
+        return Err("ERR\tradar\tdomain");
+    }
+    let four_pi: Float = 12.566370614359172;
+    let r2: Float = range * range;
+    let r4: Float = r2 * r2;
+    let num: Float = pt * gain * gain * lambda * lambda * rcs;
+    let den: Float = four_pi * four_pi * four_pi * r4;
+    if den <= 0.0 {
+        return Err("ERR\tradar\tden");
+    }
+    return Ok(num / den);
+}
+
+pub fn radar_detection_range(base_range: Float, rcs: Float) -> Result[Float, String] {
+    if base_range <= 0.0 || rcs <= 0.000001 {
+        return Err("ERR\tradar\trcs");
+    }
+    return Ok(base_range * sqrt(sqrt(rcs)));
+}
+
+fn rr_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn verify_radar_range_law() -> Bool {
+    let p1: Float = rr_got(radar_received_power(1000.0, 10.0, 0.03, 1.0, 1000.0));
+    let p2: Float = rr_got(radar_received_power(1000.0, 10.0, 0.03, 1.0, 2000.0));
+    if p1 <= 0.0 {
+        return false;
+    }
+    let mut d: Float = (p1 / p2) - 16.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0001 {
+        return false;
+    }
+    let r1: Float = rr_got(radar_detection_range(10000.0, 1.0));
+    let r16: Float = rr_got(radar_detection_range(10000.0, 16.0));
+    d = r1 - 10000.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0001 {
+        return false;
+    }
+    d = r16 - 20000.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0001 {
+        return false;
+    }
+    if radar_detection_range(10000.0, 0.0).is_ok() { return false; }
+    if radar_received_power(1000.0, 10.0, 0.03, 1.0, 0.0).is_ok() { return false; }
+    return true;
+}

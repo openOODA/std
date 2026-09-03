@@ -1,0 +1,40 @@
+// # Asymmetric Crypto Submodule Hub -- Zero-Drag
+//
+// Logline: Asymmetric-key primitives: Ed25519, Curve25519, ECDSA, secp256k1, RSA-OAEP, BLS aggregation, PQC (Dilithium/ML-DSA, Falcon, SPHINCS+/SLH-DSA, Kyber/ML-KEM), FHE, and key management. Re-exports a stable asym_mod_* surface for the most-used public API.
+//
+// Setup: Pure compute, no caps. Key management may take SysCap at the call site.
+//
+// Beats:
+//   1. Re-export classical signature surface (Ed25519, ECDSA, secp256k1) as asym_mod_sig_*.
+//   2. Re-export KEX/DH surface (Curve25519, BLS) as asym_mod_kex_*.
+//   3. Re-export PQC signature surface (Dilithium, Falcon, SPHINCS+) as asym_mod_pqc_sig_*.
+//   4. Re-export PQC KEM surface (Kyber/ML-KEM) as asym_mod_pqc_kem_*.
+//   5. Re-export FHE (BFV, BGV, CKKS, TFHE) as asym_mod_fhe_*.
+//   6. Re-export Ristretto255 group and key management.
+//   7. Document private siblings (sibling _core, _ops, _types, _stubs, _invariants, _law, _theory files).
+
+import "ed25519.oo";
+import "ecdsa.oo";
+import "curve25519.oo";
+import "ristretto255.oo";
+import "ristretto_fp.oo";
+import "ristretto_fp_red.oo";
+import "keys.oo";
+import "keys_engine.oo";
+import "keys_ops.oo";
+import "keys_store.oo";
+import "keys_stubs.oo";
+import "keys_types.oo";
+import "fhe.oo";
+import "fhe_engine.oo";
+import "fhe_ops.oo";
+import "fhe_stubs.oo";
+import "fhe_types.oo";
+import "bls_signature_aggregation_law.oo";
+import "diffie_hellman_principle.oo";
+import "ml_kem_theory.oo";
+import "rsa_oaep_law.oo";
+
+pub fn asym_mod_ed25519_sign_hex(seed_hex: String, msg_hex: String) -> Result[String, String] { return ed25519_sign_hex(seed_hex, msg_hex); }
+pub fn asym_mod_ed25519_verify_hex(pubkey_hex: String, msg_hex: String, sig_hex: String) -> Bool { return ed25519_verify_hex(pubkey_hex, msg_hex, sig_hex); }
+pub fn asym_mod_curve25519_diffie_hellman(my_secret: List[Int], their_public: List[Int]) -> List[Int] { return curve25519_diffie_hellman(my_secret, their_public); }

@@ -1,0 +1,74 @@
+// # Capability-Directed Userland Fault Dispatcher
+//
+// Logline: Userland exception handling, MMU page fault routing, and capability-directed thread fault resolution.
+//
+// Setup: Declared capability: None. Pure mathematical fault descriptor encoding and exception resolution state.
+//
+// Beats:
+//   1. Declare FaultMessage and FaultContext algebraic structures.
+//   2. Implement exception and MMU page-fault classification.
+//   3. Implement fault dispatch to registered IPC handler endpoints.
+//   4. Implement thread resumption disposition.
+
+type FaultMessage = struct {
+    thread_id: Int,
+    fault_code: Int,
+    fault_addr: Int,
+    ip_addr: Int,
+    is_handled: Bool,
+    retry_instruction: Bool
+};
+
+type FaultRegistry = struct {
+    handler_endpoint: Int,
+    total_faults_dispatched: Int,
+    resolved_count: Int
+};
+
+pub fn fault_message_new(tid: Int, code: Int, addr: Int, ip: Int) -> FaultMessage {
+    let safe_tid: Int = if tid < 0 { 0 } else { tid };
+    let safe_code: Int = if code < 0 { 0 } else { code };
+    let safe_addr: Int = if addr < 0 { 0 } else { addr };
+    let safe_ip: Int = if ip < 0 { 0 } else { ip };
+    return FaultMessage {
+        thread_id: safe_tid,
+        fault_code: safe_code,
+        fault_addr: safe_addr,
+        ip_addr: safe_ip,
+        is_handled: false,
+        retry_instruction: false
+    };
+}
+
+pub fn fault_registry_init(handler_ep: Int) -> FaultRegistry {
+    let safe_ep: Int = if handler_ep < 0 { 0 } else { handler_ep };
+    return FaultRegistry {
+        handler_endpoint: safe_ep,
+        total_faults_dispatched: 0,
+        resolved_count: 0
+    };
+}
+
+pub fn fault_is_page_fault(msg: FaultMessage) -> Bool {
+    let c: Int = msg.fault_code;
+    return c == 14;
+}
+
+pub fn fault_resolve(msg: FaultMessage, retry: Bool) -> FaultMessage {
+    return FaultMessage {
+        thread_id: msg.thread_id,
+        fault_code: msg.fault_code,
+        fault_addr: msg.fault_addr,
+        ip_addr: msg.ip_addr,
+        is_handled: true,
+        retry_instruction: retry
+    };
+}
+
+pub fn fault_registry_record_resolution(reg: FaultRegistry) -> FaultRegistry {
+    return FaultRegistry {
+        handler_endpoint: reg.handler_endpoint,
+        total_faults_dispatched: reg.total_faults_dispatched + 1,
+        resolved_count: reg.resolved_count + 1
+    };
+}

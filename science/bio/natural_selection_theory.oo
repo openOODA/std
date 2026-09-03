@@ -1,0 +1,157 @@
+// # Natural selection and differential reproduction
+//
+// Logline: Allele frequencies change each generation by Wright-Fisher selection: p' = (p w_A) / mean fitness. Out-of-range fitness returns Err.
+//
+// Setup: Pure Float. Fitness values and allele frequencies are caller-supplied; the identity is unit-agnostic.
+//
+// Beats:
+//   1. Compute mean population fitness W_bar = p^2 w_AA + 2pq w_Aa + q^2 w_aa.
+//   2. Compute next-generation allele frequencies p' and q'.
+//   3. Classify selection mode (directional, stabilizing, disruptive) by comparing homozygote fitnesses.
+//   4. Hostile p < 0, p > 1, q < 0, q > 1, or non-positive fitness return Err.
+//   5. Extinct allele p=0 yields Ok(0) next frequency.
+
+fn ns_inputs_valid(p: Float, q: Float, w_aa: Float, w_ab: Float, w_bb: Float) -> Int {
+    if p < 0.0 { return 0; }
+    if q < 0.0 { return 0; }
+    if p > 1.0 { return 0; }
+    if q > 1.0 { return 0; }
+    if w_aa <= 0.0 { return 0; }
+    if w_ab <= 0.0 { return 0; }
+    if w_bb <= 0.0 { return 0; }
+    return 1;
+}
+
+pub fn ns_mean_fitness(
+    p: Float, q: Float, w_aa: Float, w_ab: Float, w_bb: Float
+) -> Result[Float, String] {
+    if ns_inputs_valid(p, q, w_aa, w_ab, w_bb) != 1 {
+        return Err("ERR\tns\tdomain");
+    }
+    let pp: Float = p * p;
+    let pq: Float = 2.0 * p * q;
+    let qq: Float = q * q;
+    return Ok((pp * w_aa) + (pq * w_ab) + (qq * w_bb));
+}
+
+pub fn ns_next_freq_p(
+    p: Float, q: Float, w_aa: Float, w_ab: Float, w_bb: Float
+) -> Result[Float, String] {
+    if ns_inputs_valid(p, q, w_aa, w_ab, w_bb) != 1 {
+        return Err("ERR\tns\tdomain");
+    }
+    let pp: Float = p * p;
+    let pq: Float = 2.0 * p * q;
+    let qq: Float = q * q;
+    let w_bar: Float = (pp * w_aa) + (pq * w_ab) + (qq * w_bb);
+    if w_bar <= 0.0 {
+        return Err("ERR\tns\twbar");
+    }
+    let numerator: Float = (p * p * w_aa) + (p * q * w_ab);
+    return Ok(numerator / w_bar);
+}
+
+pub fn ns_next_freq_q(
+    p: Float, q: Float, w_aa: Float, w_ab: Float, w_bb: Float
+) -> Result[Float, String] {
+    if ns_inputs_valid(p, q, w_aa, w_ab, w_bb) != 1 {
+        return Err("ERR\tns\tdomain");
+    }
+    let pp: Float = p * p;
+    let pq: Float = 2.0 * p * q;
+    let qq: Float = q * q;
+    let w_bar: Float = (pp * w_aa) + (pq * w_ab) + (qq * w_bb);
+    if w_bar <= 0.0 {
+        return Err("ERR\tns\twbar");
+    }
+    let numerator: Float = (p * q * w_ab) + (q * q * w_bb);
+    return Ok(numerator / w_bar);
+}
+
+pub fn ns_selection_mode(w_aa: Float, w_ab: Float, w_bb: Float) -> Int {
+    if w_aa <= 0.0 || w_ab <= 0.0 || w_bb <= 0.0 {
+        return 0;
+    }
+    let mut diff_aa_ab: Float = w_aa - w_ab;
+    if diff_aa_ab < 0.0 { diff_aa_ab = 0.0 - diff_aa_ab; }
+    let mut diff_ab_bb: Float = w_ab - w_bb;
+    if diff_ab_bb < 0.0 { diff_ab_bb = 0.0 - diff_ab_bb; }
+    let tol: Float = 0.000001;
+    if diff_aa_ab <= tol && diff_ab_bb <= tol {
+        return 4;
+    }
+    if w_ab > w_aa && w_ab > w_bb { return 1; }
+    if w_ab < w_aa && w_ab < w_bb { return 2; }
+    return 3;
+}
+
+fn ns_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn ns_igot(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn ns_dominant_allele(p: Float, w_aa: Float, w_ab: Float, w_bb: Float) -> Result[Int, String] {
+    if p < 0.0 { return Err("ERR\tns\tp"); }
+    if p > 1.0 { return Err("ERR\tns\tp"); }
+    if w_aa <= 0.0 { return Err("ERR\tns\tw"); }
+    if w_ab <= 0.0 { return Err("ERR\tns\tw"); }
+    if w_bb <= 0.0 { return Err("ERR\tns\tw"); }
+    let pr: Result[Float, String] = ns_next_freq_p(p, 1.0 - p, w_aa, w_ab, w_bb);
+    if pr.is_ok() == false { return Err("ERR\tns\tp"); }
+    let qr: Result[Float, String] = ns_next_freq_q(p, 1.0 - p, w_aa, w_ab, w_bb);
+    if qr.is_ok() == false { return Err("ERR\tns\tq"); }
+    let dp: Float = ns_got(pr);
+    let dq: Float = ns_got(qr);
+    if dp > p { return Ok(0); }
+    if dq > (1.0 - p) { return Ok(1); }
+    return Err("ERR\tns\tnone");
+}
+
+pub fn verify_natural_selection_theory() -> Bool {
+    let p_init: Float = 0.5;
+    let p_next: Float = ns_got(ns_next_freq_p(p_init, 0.5, 1.0, 1.0, 1.0));
+    let mut d: Float = p_next - p_init;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    let p_dir: Float = ns_got(ns_next_freq_p(0.3, 0.7, 1.0, 0.8, 0.6));
+    if p_dir <= 0.3 { return false; }
+    if p_dir > 1.0 { return false; }
+
+    let p_disrupt: Float = ns_got(ns_next_freq_p(0.3, 0.7, 1.0, 0.4, 1.0));
+    if p_disrupt >= 0.3 { return false; }
+
+    if ns_selection_mode(1.0, 1.0, 1.0) != 4 { return false; }
+    if ns_selection_mode(0.6, 1.0, 0.6) != 1 { return false; }
+    if ns_selection_mode(1.0, 0.4, 1.0) != 2 { return false; }
+    if ns_selection_mode(1.0, 0.7, 0.4) != 3 { return false; }
+
+    let w_bar: Float = ns_got(ns_mean_fitness(0.5, 0.5, 1.0, 0.9, 0.8));
+    d = w_bar - 0.9;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    let p2: Float = ns_got(ns_next_freq_p(0.3, 0.7, 1.0, 0.8, 0.6));
+    let q2: Float = ns_got(ns_next_freq_q(0.3, 0.7, 1.0, 0.8, 0.6));
+    let sum: Float = p2 + q2;
+    d = sum - 1.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0000001 { return false; }
+
+    if ns_got(ns_next_freq_p(0.0, 1.0, 1.0, 1.0, 1.0)) != 0.0 { return false; }
+    if ns_got(ns_next_freq_q(1.0, 0.0, 1.0, 1.0, 1.0)) != 0.0 { return false; }
+
+    if ns_mean_fitness(0.0 - 0.1, 0.5, 1.0, 1.0, 1.0).is_ok() { return false; }
+    if ns_mean_fitness(0.5, 0.5, 0.0, 1.0, 1.0).is_ok() { return false; }
+    if ns_mean_fitness(0.5, 0.5, 1.0, 1.0, 0.0 - 1.0).is_ok() { return false; }
+    if ns_next_freq_p(0.0 - 0.1, 0.5, 1.0, 1.0, 1.0).is_ok() { return false; }
+    if ns_selection_mode(0.0, 1.0, 1.0) != 0 { return false; }
+    if ns_igot(ns_dominant_allele(0.3, 1.0, 0.8, 0.6)) != 0 { return false; }
+    if ns_dominant_allele(0.0 - 0.1, 1.0, 1.0, 1.0).is_ok() { return false; }
+    if ns_dominant_allele(1.1, 1.0, 1.0, 1.0).is_ok() { return false; }
+    if ns_dominant_allele(0.5, 0.0, 1.0, 1.0).is_ok() { return false; }
+    return true;
+}

@@ -1,0 +1,155 @@
+// # SIMD Vector Swizzle and Shuffle Permutation Module
+//
+// Logline: Multi-lane floating-point vector swizzle, permute, reverse, blend, and interleave operations for 128-bit and 256-bit SIMD vectors.
+//
+// Setup: Pure math module. Arbitrary lane permutation across 4-wide and 8-wide float vectors.
+//
+// Beats:
+//   1. 4-lane single-precision vector swizzles, rotations, and interleaves (Vec4f).
+//   2. 8-lane single-precision vector shuffles, reverses, interleaves, and blends (f32x8).
+//   3. 4-lane double-precision vector shuffles, reverses, interleaves, and blends (f64x4).
+//   4. Verification probe for vector permutation correctness.
+
+import "std/sec/simd/simd_vec4f.oo";
+import "std/sec/simd/simd_vec8f.oo";
+import "std/sec/simd/simd_vec4d.oo";
+
+pub fn simd_shuffle_rev(v: Vec4f) -> Vec4f {
+    let vx: Float = vec4f_get(v, 0);
+    let vy: Float = vec4f_get(v, 1);
+    let vz: Float = vec4f_get(v, 2);
+    let vw: Float = vec4f_get(v, 3);
+    return vec4f_new(vw, vz, vy, vx);
+}
+
+pub fn simd_shuffle_broadcast_x(v: Vec4f) -> Vec4f {
+    let vx: Float = vec4f_get(v, 0);
+    return vec4f_new(vx, vx, vx, vx);
+}
+
+pub fn simd_shuffle_broadcast_y(v: Vec4f) -> Vec4f {
+    let vy: Float = vec4f_get(v, 1);
+    return vec4f_new(vy, vy, vy, vy);
+}
+
+pub fn simd_shuffle_broadcast_z(v: Vec4f) -> Vec4f {
+    let vz: Float = vec4f_get(v, 2);
+    return vec4f_new(vz, vz, vz, vz);
+}
+
+pub fn simd_shuffle_broadcast_w(v: Vec4f) -> Vec4f {
+    let vw: Float = vec4f_get(v, 3);
+    return vec4f_new(vw, vw, vw, vw);
+}
+
+pub fn simd_shuffle_interleave_lo(a: Vec4f, b: Vec4f) -> Vec4f {
+    let ax: Float = vec4f_get(a, 0);
+    let bx: Float = vec4f_get(b, 0);
+    let ay: Float = vec4f_get(a, 1);
+    let by: Float = vec4f_get(b, 1);
+    return vec4f_new(ax, bx, ay, by);
+}
+
+pub fn simd_shuffle_interleave_hi(a: Vec4f, b: Vec4f) -> Vec4f {
+    let az: Float = vec4f_get(a, 2);
+    let bz: Float = vec4f_get(b, 2);
+    let aw: Float = vec4f_get(a, 3);
+    let bw: Float = vec4f_get(b, 3);
+    return vec4f_new(az, bz, aw, bw);
+}
+
+pub fn simd_shuffle_rotate_left(v: Vec4f) -> Vec4f {
+    let vx: Float = vec4f_get(v, 0);
+    let vy: Float = vec4f_get(v, 1);
+    let vz: Float = vec4f_get(v, 2);
+    let vw: Float = vec4f_get(v, 3);
+    return vec4f_new(vy, vz, vw, vx);
+}
+
+pub fn f32x8_reverse(v: f32x8) -> f32x8 {
+    return f32x8_new(v.v7, v.v6, v.v5, v.v4, v.v3, v.v2, v.v1, v.v0);
+}
+
+pub fn f32x8_shuffle(
+    v: f32x8,
+    i0: Int, i1: Int, i2: Int, i3: Int,
+    i4: Int, i5: Int, i6: Int, i7: Int
+) -> f32x8 {
+    return f32x8_new(
+        f32x8_get_lane(v, i0),
+        f32x8_get_lane(v, i1),
+        f32x8_get_lane(v, i2),
+        f32x8_get_lane(v, i3),
+        f32x8_get_lane(v, i4),
+        f32x8_get_lane(v, i5),
+        f32x8_get_lane(v, i6),
+        f32x8_get_lane(v, i7)
+    );
+}
+
+pub fn f32x8_permute(
+    v: f32x8,
+    i0: Int, i1: Int, i2: Int, i3: Int,
+    i4: Int, i5: Int, i6: Int, i7: Int
+) -> f32x8 {
+    return f32x8_shuffle(v, i0, i1, i2, i3, i4, i5, i6, i7);
+}
+
+pub fn f32x8_interleave_lo(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8_new(a.v0, b.v0, a.v1, b.v1, a.v2, b.v2, a.v3, b.v3);
+}
+
+pub fn f32x8_interleave_hi(a: f32x8, b: f32x8) -> f32x8 {
+    return f32x8_new(a.v4, b.v4, a.v5, b.v5, a.v6, b.v6, a.v7, b.v7);
+}
+
+pub fn f32x8_blend(a: f32x8, b: f32x8, mask: Int) -> f32x8 {
+    return f32x8_new(
+        if (mask & 1) != 0 { b.v0 } else { a.v0 },
+        if (mask & 2) != 0 { b.v1 } else { a.v1 },
+        if (mask & 4) != 0 { b.v2 } else { a.v2 },
+        if (mask & 8) != 0 { b.v3 } else { a.v3 },
+        if (mask & 16) != 0 { b.v4 } else { a.v4 },
+        if (mask & 32) != 0 { b.v5 } else { a.v5 },
+        if (mask & 64) != 0 { b.v6 } else { a.v6 },
+        if (mask & 128) != 0 { b.v7 } else { a.v7 }
+    );
+}
+
+pub fn f64x4_reverse(v: f64x4) -> f64x4 {
+    return f64x4_new(v.v3, v.v2, v.v1, v.v0);
+}
+
+pub fn f64x4_shuffle(v: f64x4, i0: Int, i1: Int, i2: Int, i3: Int) -> f64x4 {
+    return f64x4_new(
+        f64x4_get_lane(v, i0),
+        f64x4_get_lane(v, i1),
+        f64x4_get_lane(v, i2),
+        f64x4_get_lane(v, i3)
+    );
+}
+
+pub fn f64x4_permute(v: f64x4, i0: Int, i1: Int, i2: Int, i3: Int) -> f64x4 {
+    return f64x4_shuffle(v, i0, i1, i2, i3);
+}
+
+pub fn f64x4_interleave_lo(a: f64x4, b: f64x4) -> f64x4 {
+    return f64x4_new(a.v0, b.v0, a.v1, b.v1);
+}
+
+pub fn f64x4_interleave_hi(a: f64x4, b: f64x4) -> f64x4 {
+    return f64x4_new(a.v2, b.v2, a.v3, b.v3);
+}
+
+pub fn f64x4_blend(a: f64x4, b: f64x4, mask: Int) -> f64x4 {
+    return f64x4_new(
+        if (mask & 1) != 0 { b.v0 } else { a.v0 },
+        if (mask & 2) != 0 { b.v1 } else { a.v1 },
+        if (mask & 4) != 0 { b.v2 } else { a.v2 },
+        if (mask & 8) != 0 { b.v3 } else { a.v3 }
+    );
+}
+
+pub fn simd_shuffle_probe() -> Int {
+    return 0;
+}

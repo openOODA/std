@@ -1,0 +1,178 @@
+// # AArch64 String Runtime
+//
+// Logline: Emits parse_int, contains, to_string, bytes_len, and byte_at for AArch64 images.
+//
+// Setup: C strings on the bump heap. parse_int folds ASCII digits; contains is a naive scan.
+//
+// Beats:
+//   1. parse_int returns Ok(value) or Err with an ERR tab message.
+//   2. contains returns 1 when the needle is a substring of the haystack.
+//   3. to_string writes a signed decimal C string onto the bump heap.
+//   4. bytes_len is strlen; byte_at is LDRB [hay, idx].
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_itoa.oo";
+
+pub fn a64rt_str(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "bytes_len");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_bl(x, "__strlen");
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "chars_len");
+    x = a64rt_prol(r.x);
+    x = a64x_bl(x, "__strlen");
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "len");
+    x = a64rt_prol(r.x);
+    x = a64x_bl(x, "__strlen");
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "byte_at");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_ldrb_reg(0, 0, 1));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "ord");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_movz(1, 0, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(0, 0, 1));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "byte_in_range");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_lt(), 6));
+    x = a64x_emit(x, arm64_word_movz(1, 255, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 3));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    x = a64x_emit(x, arm64_word_b(2));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "byte_clamp");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 3));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_b(5));
+    x = a64x_emit(x, arm64_word_movz(1, 255, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_le(), 2));
+    x = a64x_emit(x, arm64_word_movz(0, 255, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    if a64rt_has(r, "parse_int") {
+        return a64rt_str2(r);
+    }
+    r = a64rt_fn(r, "parse_int");
+    x = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_movz(10, 0, 0));
+    x = a64x_emit(x, arm64_word_movz(11, 0, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 9, 11));
+    x = a64x_emit(x, arm64_word_movz(3, 45, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 3));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 3));
+    x = a64x_emit(x, arm64_word_movz(10, 1, 0));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    x = a64x_emit(x, arm64_word_movz(12, 0, 0));
+    x = a64x_emit(x, arm64_word_movz(13, 0, 0));
+    let loopi: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_ldrb_reg(2, 9, 11));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 31));
+    let brd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_movz(3, 48, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 3));
+    let brb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_lt(), 0));
+    x = a64x_emit(x, arm64_word_movz(3, 57, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 3));
+    let brb2: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 0));
+    x = a64x_emit(x, arm64_word_sub_imm(2, 2, 48));
+    x = a64x_emit(x, arm64_word_movz(3, 10, 0));
+    x = a64x_emit(x, arm64_word_mul(12, 12, 3));
+    x = a64x_emit(x, arm64_word_add_reg(12, 12, 2));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    x = a64x_emit(x, arm64_word_movz(13, 1, 0));
+    let bloop: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(loopi - bloop));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, brd, arm64_word_b_cond(arm64_cond_eq(), done - brd)));
+    x = a64x_emit(x, arm64_word_cmp_reg(13, 31));
+    let brb3: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(10, 31));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 2));
+    x = a64x_emit(x, arm64_word_neg(12, 12));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(1, 12));
+    let jmpok: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let bad: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, brb, arm64_word_b_cond(arm64_cond_lt(), bad - brb)));
+    x = a64x_set_words(x, a64_wset(x.p.words, brb2, arm64_word_b_cond(arm64_cond_gt(), bad - brb2)));
+    x = a64x_set_words(x, a64_wset(x.p.words, brb3, arm64_word_b_cond(arm64_cond_eq(), bad - brb3)));
+    x = a64x_intern(x, "ERR\tparse_int\tinvalid_digit");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    let endp: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, jmpok, arm64_word_b(endp - jmpok)));
+    r = a64rt_setx(r, a64rt_epi(x));
+    return a64rt_str2(r);
+}
+
+fn a64rt_str2(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "contains");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 10));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_mov_reg(12, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 9));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_mov_reg(11, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(12, 31));
+    let bempty: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_movz(13, 0, 0));
+    let outer: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_add_reg(2, 13, 12));
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 11));
+    let bgt: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 0));
+    x = a64x_emit(x, arm64_word_movz(14, 0, 0));
+    let inner: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(14, 12));
+    let bmatch: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_add_reg(2, 13, 14));
+    x = a64x_emit(x, arm64_word_ldrb_reg(3, 9, 2));
+    x = a64x_emit(x, arm64_word_ldrb_reg(4, 10, 14));
+    x = a64x_emit(x, arm64_word_cmp_reg(3, 4));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 3));
+    x = a64x_emit(x, arm64_word_add_imm(14, 14, 1));
+    let binn: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(inner - binn));
+    x = a64x_emit(x, arm64_word_add_imm(13, 13, 1));
+    let bout: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(outer - bout));
+    let no: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    let jmp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let yes: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    let endc: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bempty, arm64_word_b_cond(arm64_cond_eq(), yes - bempty)));
+    x = a64x_set_words(x, a64_wset(x.p.words, bgt, arm64_word_b_cond(arm64_cond_gt(), no - bgt)));
+    x = a64x_set_words(x, a64_wset(x.p.words, bmatch, arm64_word_b_cond(arm64_cond_eq(), yes - bmatch)));
+    x = a64x_set_words(x, a64_wset(x.p.words, jmp, arm64_word_b(endc - jmp)));
+    r = a64rt_setx(r, a64rt_epi(x));
+    return a64rt_itoa(r);
+}

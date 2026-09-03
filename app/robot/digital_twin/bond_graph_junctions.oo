@@ -1,0 +1,161 @@
+// # Bond Graph Junctions & Structural Power Balance
+//
+// Logline: 0-junction (common effort) and 1-junction (common flow) power continuity and algebraic node balance equations.
+//
+// Setup: Resolves algebraic effort and flow balances across arbitrary multi-port bond graph junctions.
+//
+// Beats:
+//   1. Define 0-junction (parallel) and 1-junction (series) data structures.
+//   2. Solve common effort and flow conservation for 0-junctions (sum(f) = 0, e_i = e).
+//   3. Solve common flow and effort conservation for 1-junctions (sum(e) = 0, f_i = f).
+
+type JunctionType = struct {
+    is_zero_junction: Bool, // true for 0-junction, false for 1-junction
+    num_ports: Int,
+    causal_stroke_port_idx: Int // index of port establishing common variable
+};
+
+type JunctionState = struct {
+    efforts: List[Float],
+    flows: List[Float],
+    common_variable: Float,
+    is_balanced: Bool
+};
+
+pub fn junction_new(is_zero: Bool, num_ports: Int, causal_port: Int) -> JunctionType {
+    return JunctionType {
+        is_zero_junction: is_zero,
+        num_ports: num_ports,
+        causal_stroke_port_idx: causal_port
+    };
+}
+
+pub fn solve_zero_junction(junc: JunctionType, port_efforts: List[Float], port_flows: List[Float], incoming_signs: List[Float]) -> JunctionState {
+    let n: Int = junc.num_ports;
+    let causal_idx: Int = junc.causal_stroke_port_idx;
+
+    let mut common_e: Float = 0.0;
+    if causal_idx >= 0 && causal_idx < list_len(*port_efforts) {
+        common_e = list_get(*port_efforts, causal_idx);
+    }
+
+    let mut efforts_out: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        efforts_out = list_push(efforts_out, common_e);
+        i = i + 1;
+    }
+
+    let mut sum_other_flows: Float = 0.0;
+    i = 0;
+    while i < n {
+        let mut f: Float = 0.0;
+        if i < list_len(*port_flows) {
+            f = list_get(*port_flows, i);
+        }
+        let mut s: Float = 1.0;
+        if i < list_len(*incoming_signs) {
+            s = list_get(*incoming_signs, i);
+        }
+        if i != causal_idx {
+            sum_other_flows = sum_other_flows + (s * f);
+        }
+        i = i + 1;
+    }
+
+    let mut causal_sign: Float = 1.0;
+    if causal_idx >= 0 && causal_idx < list_len(*incoming_signs) {
+        causal_sign = list_get(*incoming_signs, causal_idx);
+    }
+    let mut solved_causal_flow: Float = 0.0;
+    if causal_sign != 0.0 {
+        solved_causal_flow = (0.0 - sum_other_flows) / causal_sign;
+    }
+
+    let mut flows_out: List[Float] = list_new();
+    i = 0;
+    while i < n {
+        if i == causal_idx {
+            flows_out = list_push(flows_out, solved_causal_flow);
+        } else {
+            let mut f_val: Float = 0.0;
+            if i < list_len(*port_flows) {
+                f_val = list_get(*port_flows, i);
+            }
+            flows_out = list_push(flows_out, f_val);
+        }
+        i = i + 1;
+    }
+
+    return JunctionState {
+        efforts: efforts_out,
+        flows: flows_out,
+        common_variable: common_e,
+        is_balanced: true
+    };
+}
+
+pub fn solve_one_junction(junc: JunctionType, port_efforts: List[Float], port_flows: List[Float], incoming_signs: List[Float]) -> JunctionState {
+    let n: Int = junc.num_ports;
+    let causal_idx: Int = junc.causal_stroke_port_idx;
+
+    let mut common_f: Float = 0.0;
+    if causal_idx >= 0 && causal_idx < list_len(*port_flows) {
+        common_f = list_get(*port_flows, causal_idx);
+    }
+
+    let mut flows_out: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        flows_out = list_push(flows_out, common_f);
+        i = i + 1;
+    }
+
+    let mut sum_other_efforts: Float = 0.0;
+    i = 0;
+    while i < n {
+        let mut e: Float = 0.0;
+        if i < list_len(*port_efforts) {
+            e = list_get(*port_efforts, i);
+        }
+        let mut s: Float = 1.0;
+        if i < list_len(*incoming_signs) {
+            s = list_get(*incoming_signs, i);
+        }
+        if i != causal_idx {
+            sum_other_efforts = sum_other_efforts + (s * e);
+        }
+        i = i + 1;
+    }
+
+    let mut causal_sign: Float = 1.0;
+    if causal_idx >= 0 && causal_idx < list_len(*incoming_signs) {
+        causal_sign = list_get(*incoming_signs, causal_idx);
+    }
+    let mut solved_causal_effort: Float = 0.0;
+    if causal_sign != 0.0 {
+        solved_causal_effort = (0.0 - sum_other_efforts) / causal_sign;
+    }
+
+    let mut efforts_out: List[Float] = list_new();
+    i = 0;
+    while i < n {
+        if i == causal_idx {
+            efforts_out = list_push(efforts_out, solved_causal_effort);
+        } else {
+            let mut e_val: Float = 0.0;
+            if i < list_len(*port_efforts) {
+                e_val = list_get(*port_efforts, i);
+            }
+            efforts_out = list_push(efforts_out, e_val);
+        }
+        i = i + 1;
+    }
+
+    return JunctionState {
+        efforts: efforts_out,
+        flows: flows_out,
+        common_variable: common_f,
+        is_balanced: true
+    };
+}

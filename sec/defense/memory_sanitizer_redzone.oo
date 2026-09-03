@@ -1,0 +1,96 @@
+// # Memory Sanitizer Redzone & Shadow Byte Allocator
+//
+// Logline: Simulates address sanitizer redzones, poisoned shadow memory tags, and buffer overflow/underflow detection.
+//
+// Setup: Standalone byte-level shadow tagging and memory safety verification module.
+//
+// Beats:
+//   1. Define ShadowMemory space, allocation blocks, and redzone tag constants.
+//   2. Allocate buffers bracketed by poisoned leading and trailing redzone margins.
+//   3. Validate pointer memory accesses against shadow state and detect invalid reads/writes.
+
+type MemoryBlock = struct {
+    address: Int,
+    payload_size: Int,
+    redzone_size: Int,
+    is_allocated: Bool,
+    is_freed: Bool
+};
+
+type ShadowMemory = struct {
+    base_address: Int,
+    total_size: Int,
+    blocks: List[MemoryBlock],
+    block_count: Int,
+    violations_detected: Int
+};
+
+pub fn shadow_memory_new(base: Int, size: Int) -> ShadowMemory {
+    let empty_blocks: List[MemoryBlock] = list_new();
+    return ShadowMemory {
+        base_address: base,
+        total_size: size,
+        blocks: empty_blocks,
+        block_count: 0,
+        violations_detected: 0
+    };
+}
+
+pub fn shadow_memory_alloc(
+    shadow: ShadowMemory,
+    addr: Int,
+    payload_sz: Int,
+    rz_sz: Int
+) -> ShadowMemory {
+    let total_block_sz: Int = payload_sz + (rz_sz * 2);
+    let s_base: Int = shadow.base_address;
+    let s_tot: Int = shadow.total_size;
+    if addr < s_base || (addr + total_block_sz) > (s_base + s_tot) {
+        return shadow;
+    }
+    let block: MemoryBlock = MemoryBlock {
+        address: addr,
+        payload_size: payload_sz,
+        redzone_size: rz_sz,
+        is_allocated: true,
+        is_freed: false
+    };
+    let mut blist: List[MemoryBlock] = shadow.blocks;
+    blist = list_push(blist, block);
+    let b_cnt: Int = shadow.block_count;
+    return ShadowMemory {
+        base_address: shadow.base_address,
+        total_size: shadow.total_size,
+        blocks: blist,
+        block_count: b_cnt + 1,
+        violations_detected: shadow.violations_detected
+    };
+}
+
+pub fn shadow_memory_check_access(
+    shadow: ShadowMemory,
+    target_addr: Int,
+    access_size: Int
+) -> Bool {
+    let count: Int = shadow.block_count;
+    let mut i: Int = 0;
+    while i < count {
+        let b: MemoryBlock = list_get(shadow.blocks, i);
+        let block_start: Int = b.address;
+        let block_end: Int = b.address + b.payload_size + (b.redzone_size * 2);
+        if target_addr >= block_start && target_addr < block_end {
+            let is_f2: Bool = b.is_freed;
+            if is_f2 {
+                return false;
+            }
+            let valid_start: Int = b.address + b.redzone_size;
+            let valid_end: Int = valid_start + b.payload_size;
+            if target_addr < valid_start || (target_addr + access_size) > valid_end {
+                return false;
+            }
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}

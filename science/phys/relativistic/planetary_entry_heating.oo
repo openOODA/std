@@ -1,0 +1,27 @@
+// # Atmospheric Planetary Entry Aerothermal Heating
+//
+// Logline: Calculates convective and radiative stagnation-point aerothermal heat flux during atmospheric entry (Sutton-Graves / Fay-Riddell).
+//
+// Setup: Pure high-enthalpy hypersonic aerothermodynamics for Earth, Mars, and Venus entry thermal protection systems (TPS).
+//
+// Beats:
+//   1. Nominal entry peak heat flux query in W/cm^2 (~1100 W/cm^2 for lunar return).
+//   2. Calculate Sutton-Graves convective stagnation heat flux q_dot = k * sqrt(rho / R_nose) * v^3.
+//   3. Compute radiative shock-layer heat flux q_rad = C * R_nose^a * rho^b * v^c.
+//   4. Calculate integrated heat load Q_total = integral(q_dot * dt) for TPS sizing.
+
+pub fn entry_qdot() -> Int {
+    return 1100;
+}
+
+/// Computes convective stagnation heat flux (W/m^2) using Sutton-Graves relation: q_dot = k_sg * sqrt(rho / R_nose) * v^3.
+pub fn sutton_graves_heat_flux(
+    density_kg_m3: Float,
+    nose_radius_m: Float,
+    velocity_m_s: Float
+) -> Float {
+    if nose_radius_m <= 0.0001 { return 0.0; }
+    let k_sg_earth: Float = 0.00017415; // Earth Sutton-Graves constant (kg/m^3)^-0.5 * (m/s)^-3 * W/m^2
+    let v3: Float = (velocity_m_s * velocity_m_s) * velocity_m_s;
+    return k_sg_earth * sqrt(density_kg_m3 / nose_radius_m) * v3;
+}

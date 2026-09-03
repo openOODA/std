@@ -1,0 +1,114 @@
+// # SI Dimensional Analysis and Physical Quantities
+//
+// Logline: Dimensional analysis system tracking the 7 SI base units to prevent unit mismatch errors at runtime.
+//
+// Setup: Pure dimensional structs tracking integer exponent powers across [M, L, T, I, Θ, N, J].
+//
+// Beats:
+//   1. Base SI dimensions (Length, Mass, Time, Current, Temp, Mole, Candela).
+//   2. Derived dimensional constructors (Velocity, Force, Energy, Power, Pressure).
+//   3. Multiplication and division exponent addition/subtraction.
+//   4. Dimensional equality check for safe addition/subtraction.
+//   5. Quantities combining floating point magnitudes with dimensions.
+
+type SiDim = struct {
+    m: Int,
+    kg: Int,
+    s: Int,
+    a: Int,
+    k: Int,
+    mol: Int,
+    cd: Int
+};
+
+type Quantity = struct {
+    val: Float,
+    dim: SiDim
+};
+
+pub fn dim_dimensionless() -> SiDim {
+    return SiDim { m: 0, kg: 0, s: 0, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_length() -> SiDim {
+    return SiDim { m: 1, kg: 0, s: 0, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_mass() -> SiDim {
+    return SiDim { m: 0, kg: 1, s: 0, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_time() -> SiDim {
+    return SiDim { m: 0, kg: 0, s: 1, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_velocity() -> SiDim {
+    return SiDim { m: 1, kg: 0, s: 0 - 1, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_acceleration() -> SiDim {
+    return SiDim { m: 1, kg: 0, s: 0 - 2, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_force() -> SiDim {
+    return SiDim { m: 1, kg: 1, s: 0 - 2, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_energy() -> SiDim {
+    return SiDim { m: 2, kg: 1, s: 0 - 2, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_power() -> SiDim {
+    return SiDim { m: 2, kg: 1, s: 0 - 3, a: 0, k: 0, mol: 0, cd: 0 };
+}
+
+pub fn dim_eq(d1: SiDim, d2: SiDim) -> Bool {
+    if d1.m != d2.m { return false; }
+    if d1.kg != d2.kg { return false; }
+    if d1.s != d2.s { return false; }
+    if d1.a != d2.a { return false; }
+    if d1.k != d2.k { return false; }
+    if d1.mol != d2.mol { return false; }
+    if d1.cd != d2.cd { return false; }
+    return true;
+}
+
+pub fn dim_mul(d1: SiDim, d2: SiDim) -> SiDim {
+    return SiDim {
+        m: d1.m + d2.m,
+        kg: d1.kg + d2.kg,
+        s: d1.s + d2.s,
+        a: d1.a + d2.a,
+        k: d1.k + d2.k,
+        mol: d1.mol + d2.mol,
+        cd: d1.cd + d2.cd
+    };
+}
+
+pub fn dim_div(d1: SiDim, d2: SiDim) -> SiDim {
+    return SiDim {
+        m: d1.m - d2.m,
+        kg: d1.kg - d2.kg,
+        s: d1.s - d2.s,
+        a: d1.a - d2.a,
+        k: d1.k - d2.k,
+        mol: d1.mol - d2.mol,
+        cd: d1.cd - d2.cd
+    };
+}
+
+pub fn qty_make(v: Float, d: SiDim) -> Quantity {
+    return Quantity { val: v, dim: d };
+}
+
+pub fn qty_mul(q1: Quantity, q2: Quantity) -> Quantity {
+    let nv: Float = q1.val * q2.val;
+    let nd: SiDim = dim_mul(q1.dim, q2.dim);
+    return Quantity { val: nv, dim: nd };
+}
+
+pub fn qty_div(q1: Quantity, q2: Quantity) -> Quantity {
+    let nv: Float = q1.val / q2.val;
+    let nd: SiDim = dim_div(q1.dim, q2.dim);
+    return Quantity { val: nv, dim: nd };
+}

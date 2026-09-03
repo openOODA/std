@@ -1,0 +1,168 @@
+// # Ed25519 Wide Scalar Multiplication
+//
+// Logline: 256-bit scalar multiplication on the Ed25519 twisted Edwards curve for full RFC 8032 sign and verify, walking 256 bits and applying the standard double-and-add ladder.
+//
+// Setup: Pure. The scalar is 16 limbs of 16 bits (matching ed25519_curve field element shape). The point is the 64-Int extended-coordinate representation used by ed25519_curve_add.
+//
+// Beats:
+//   1. Walk the scalar from the most significant bit down to bit zero.
+//   2. Double the accumulator at every step.
+//   3. Conditionally add the base point when the current scalar bit is one.
+//   4. Return the final extended-coordinate point.
+
+import "std/core/primitives/list.oo";
+import "std/sec/asymmetric/ed25519_curve.oo";
+
+pub fn ed25519_curve_scalarmult_wide(p: List[Int], scalar_limbs: List[Int]) -> List[Int] {
+    let mut q: List[Int] = ed25519_curve_identity();
+    let limb_count: Int = list_len(scalar_limbs);
+    let mut li: Int = limb_count - 1;
+    while li >= 0 {
+        let limb: Int = list_get(scalar_limbs, li);
+        let mut bit: Int = 15;
+        while bit >= 0 {
+            q = ed25519_curve_double(q);
+            let mask: Int = 1 << bit;
+            let sbit: Int = (limb & mask) != 0;
+            q = ed25519_curve_add_if(sbit, q, p);
+            bit = bit - 1;
+        }
+        li = li - 1;
+    }
+    return q;
+}
+
+pub fn ed25519_curve_scalarmult_bytes(p: List[Int], scalar_bytes: List[Int]) -> List[Int] {
+    let n: Int = list_len(scalar_bytes);
+    let mut limbs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let lo: Int = list_get(scalar_bytes, i) & 255;
+        let mut j: Int = i + 1;
+        let mut hi: Int = 0;
+        if j < n {
+            hi = list_get(scalar_bytes, j) & 255;
+        }
+        limbs = list_push(limbs, lo + (hi * 256));
+        i = i + 2;
+    }
+    return ed25519_curve_scalarmult_wide(p, limbs);
+}
+
+pub fn ed25519_curve_neg(p: List[Int]) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let n: Int = list_len(p);
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(p, i);
+        if i == 0 { out = list_push(out, 0 - v); }
+        else if i == 3 { out = list_push(out, 0 - v); }
+        else { out = list_push(out, v); }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn ed25519_limbs16_add(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let mut carry: Int = 0;
+    let mut i: Int = 0;
+    while i < 16 {
+        let av: Int = list_get(a, i);
+        let bv: Int = list_get(b, i);
+        let sum: Int = av + bv + carry;
+        let limb: Int = sum & 65535;
+        carry = sum >> 16;
+        out = list_push(out, limb);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn ed25519_limbs16_mul(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut acc: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 32 {
+        acc = list_push(acc, 0);
+        i = i + 1;
+    }
+    let mut ai: Int = 0;
+    while ai < 16 {
+        let av: Int = list_get(a, ai);
+        let mut bj: Int = 0;
+        while bj < 16 {
+            let bv: Int = list_get(b, bj);
+            let prod: Int = av * bv;
+            let k: Int = ai + bj;
+            let lo: Int = prod & 65535;
+            let hi: Int = prod >> 16;
+            let cur: Int = list_get(acc, k) + lo;
+            acc = list_set(acc, k, cur & 65535);
+            if k + 1 < 32 {
+                let cur2: Int = list_get(acc, k + 1) + hi + (cur >> 16);
+                acc = list_set(acc, k + 1, cur2 & 65535);
+                if k + 2 < 32 {
+                    let carry2: Int = cur2 >> 16;
+                    if carry2 != 0 {
+                        let cur3: Int = list_get(acc, k + 2) + carry2;
+                        acc = list_set(acc, k + 2, cur3 & 65535);
+                    }
+                }
+            }
+            bj = bj + 1;
+        }
+        ai = ai + 1;
+    }
+    return acc;
+}
+
+pub fn ed25519_limbs16_sub(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let mut borrow: Int = 0;
+    let mut i: Int = 0;
+    while i < 16 {
+        let av: Int = list_get(a, i);
+        let bv: Int = list_get(b, i);
+        let diff: Int = av - bv - borrow;
+        if diff < 0 {
+            out = list_push(out, diff + 65536);
+            borrow = 1;
+        } else {
+            out = list_push(out, diff);
+            borrow = 0;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn ed25519_limbs16_to_bytes_le(a: List[Int]) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 {
+        let limb: Int = list_get(a, i);
+        out = list_push(out, limb & 255);
+        out = list_push(out, (limb >> 8) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn ed25519_curve_order_limbs16() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 53571);
+    out = list_push(out, 23796);
+    out = list_push(out, 12706);
+    out = list_push(out, 4712);
+    out = list_push(out, 22701);
+    out = list_push(out, 31201);
+    out = list_push(out, 41694);
+    out = list_push(out, 61204);
+    let mut i: Int = 8;
+    while i < 15 {
+        out = list_push(out, 0);
+        i = i + 1;
+    }
+    out = list_push(out, 4096);
+    return out;
+}

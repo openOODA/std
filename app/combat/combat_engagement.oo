@@ -1,0 +1,63 @@
+// # Aerial Combat Hierarchy and Tactical BVR Engagement
+//
+// Logline: Evaluates radar detection ranges and multi-generation beyond-visual-range exchange outcomes.
+//
+// Setup: Fourth-power radar range equations and generational tactical combat rules.
+//
+// Beats:
+//   1. Compute radar detection ranges from target radar cross sections.
+//   2. Evaluate generational exchange advantages across air combat eras.
+//   3. Calculate missile hit probabilities under electronic countermeasures.
+
+import "std/app/combat/weapons_types.oo";
+
+pub fn radar_compute_detection_range(base_range_m: Float, target_rcs_sqm: Float) -> Float {
+    if target_rcs_sqm <= 0.000001 {
+        return 0.0;
+    }
+    let rcs_factor: Float = sqrt(sqrt(target_rcs_sqm));
+    return base_range_m * rcs_factor;
+}
+
+pub fn combat_evaluate_bvr_engagement(
+    attacker_gen: Int,
+    defender_gen: Int,
+    attacker_radar_range_m: Float,
+    defender_rcs_sqm: Float,
+    defender_has_dew: Bool
+) -> Float {
+    let det_range: Float = radar_compute_detection_range(attacker_radar_range_m, defender_rcs_sqm);
+    if det_range < 15000.0 {
+        return 0.0;
+    }
+    let mut base_pk: Float = 0.50;
+    if attacker_gen >= 5 {
+        base_pk = 0.92;
+    } else if attacker_gen == 4 {
+        base_pk = 0.75;
+    } else if attacker_gen == 3 {
+        base_pk = 0.45;
+    } else {
+        base_pk = 0.0;
+    }
+    if defender_has_dew {
+        base_pk = base_pk * 0.05;
+    }
+    return base_pk;
+}
+
+pub fn combat_evaluate_dogfight_superiority(
+    attacker_ps_fps: Float,
+    defender_ps_fps: Float,
+    attacker_g: Float,
+    defender_g: Float
+) -> Int {
+    let delta_ps: Float = attacker_ps_fps - defender_ps_fps;
+    if delta_ps > 20.0 && attacker_g >= defender_g {
+        return 1;
+    }
+    if delta_ps < (0.0 - 20.0) && defender_g >= attacker_g {
+        return 0 - 1;
+    }
+    return 0;
+}

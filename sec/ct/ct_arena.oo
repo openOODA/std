@@ -1,0 +1,85 @@
+// # Zero-Heap Linear Arena Allocator
+//
+// Logline: High-throughput linear memory arena with bump-pointer allocation and O(1) bulk resets for hot paths.
+// Setup: Memory allocations are contiguous, bounds-checked, and reset in bulk without individual heap deallocations.
+// Beats:
+//   1. Standard operating routine for this driver.
+//   2. Errata/edge case handling.
+// capability: Requires explicit &AllocCap token for initial block allocation.
+// verification: Tested for zero memory leakage, strict capacity enforcement, and zero-churn reuse across cycles.
+
+type CtLinearArena = struct {
+    capacity: Int,
+    offset: Int,
+    buffer: List[Int],
+    allocated_total: Int,
+    reset_count: Int
+};
+
+type CtArenaAllocation = struct {
+    arena: CtLinearArena,
+    offset: Int,
+    size: Int
+};
+
+pub fn ct_arena_new(alloc: &AllocCap, capacity: Int) -> CtLinearArena {
+    let mut buf: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < capacity {
+        buf = list_push(buf, 0);
+        i = i + 1;
+    }
+    return CtLinearArena {
+        capacity: capacity,
+        offset: 0,
+        buffer: buf,
+        allocated_total: 0,
+        reset_count: 0
+    };
+}
+
+pub fn ct_arena_alloc(arena: CtLinearArena, size: Int) -> Result[CtArenaAllocation, String] {
+    if size <= 0 {
+        return Err("CtArenaError: Invalid allocation size");
+    }
+    let cur_off: Int = arena.offset;
+    let new_off: Int = cur_off + size;
+    if new_off > arena.capacity {
+        return Err("CtArenaError: Out of memory");
+    }
+    let mut a: CtLinearArena = arena;
+    a.offset = new_off;
+    a.allocated_total = a.allocated_total + size;
+    return Ok(CtArenaAllocation {
+        arena: a,
+        offset: cur_off,
+        size: size
+    });
+}
+
+pub fn ct_arena_reset(arena: CtLinearArena) -> CtLinearArena {
+    let mut a: CtLinearArena = arena;
+    a.offset = 0;
+    a.reset_count = a.reset_count + 1;
+    return a;
+}
+
+pub fn ct_arena_remaining(arena: CtLinearArena) -> Int {
+    return arena.capacity - arena.offset;
+}
+
+pub fn ct_arena_write_byte(arena: CtLinearArena, index: Int, val: Int) -> Result[CtLinearArena, String] {
+    if index < 0 || index >= arena.capacity {
+        return Err("CtArenaError: Write index out of bounds");
+    }
+    let mut a: CtLinearArena = arena;
+    a.buffer = list_set(a.buffer, index, val & 255);
+    return Ok(a);
+}
+
+pub fn ct_arena_read_byte(arena: CtLinearArena, index: Int) -> Result[Int, String] {
+    if index < 0 || index >= arena.capacity {
+        return Err("CtArenaError: Read index out of bounds");
+    }
+    return Ok(list_get(arena.buffer, index));
+}

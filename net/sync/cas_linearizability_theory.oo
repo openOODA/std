@@ -1,0 +1,228 @@
+// # CAS linearizability theory
+//
+// Logline: Compare-and-swap (CAS) is linearizable: it appears to take effect atomically at a single point between invocation and response; a single CAS on an address, expected, and new value either succeeds (when *addr == expected) and writes new, or fails without writing. The lock-free stack coupled view exposes the ABA problem (a counter that detects mismatched A-B-A sequences).
+//
+// Setup: Pure Int arithmetic on a memory cell record. No FS, net, env, or thread. The state machine is a closed transition system.
+//
+// Beats:
+//   1. CAS(addr, expected, new) succeeds iff *addr == expected; returns 1 on success, 0 on fail.
+//   2. An invalid address (negative or out-of-range) returns 0 without writing.
+//   3. A successful CAS records the swap and increments an ABA counter for re-entry detection.
+//   4. Coupled: lock-free stack's CAS-on-top detects ABA when the versioned pointer mismatches.
+
+import "std/core/primitives/domain_cert.oo";
+
+type CasCell = struct {
+    value: Int,
+    version: Int
+};
+
+pub fn cas_cell_new(v: Int) -> CasCell {
+    return CasCell {
+        value: v,
+        version: 0
+    };
+}
+
+pub fn cas_status(cell: CasCell, addr: Int, expected: Int, new: Int) -> Int {
+    if addr < 0 {
+        return 0;
+    }
+    if addr > 0 {
+        return 0;
+    }
+    let cur: Int = cell.value;
+    if cur == expected {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn cas_apply(cell: CasCell, addr: Int, expected: Int, new: Int) -> CasCell {
+    let status: Int = cas_status(cell, addr, expected, new);
+    if status == 1 {
+        return CasCell {
+            value: new,
+            version: cell.version + 1
+        };
+    }
+    return cell;
+}
+
+pub fn cas_succeeds_holds(addr: Int) -> DomainCert {
+    if addr < 0 {
+        return domain_cert("sync", "cas_linearizable", 0);
+    }
+    if addr > 0 {
+        return domain_cert("sync", "cas_linearizable", 0);
+    }
+    return domain_cert("sync", "cas_linearizable", 1);
+}
+
+pub fn cas_atomic_step_holds(before: CasCell, after: CasCell) -> DomainCert {
+    let vb: Int = before.value;
+    let va: Int = after.value;
+    let ve: Int = before.version;
+    let va_v: Int = after.version;
+    if vb == va {
+        if ve == va_v {
+            return domain_cert("sync", "cas_atomic", 1);
+        }
+        return domain_cert("sync", "cas_atomic", 0);
+    }
+    if ve + 1 == va_v {
+        return domain_cert("sync", "cas_atomic", 1);
+    }
+    return domain_cert("sync", "cas_atomic", 0);
+}
+
+pub fn cas_invalid_addr_holds() -> DomainCert {
+    let c0: CasCell = cas_cell_new(7);
+    let c1: CasCell = cas_apply(c0, 0 - 1, 7, 9);
+    if c1.value != 7 {
+        return domain_cert("sync", "cas_invalid_addr", 0);
+    }
+    if c1.version != 0 {
+        return domain_cert("sync", "cas_invalid_addr", 0);
+    }
+    return domain_cert("sync", "cas_invalid_addr", 1);
+}
+
+pub fn cas_correct_holds() -> DomainCert {
+    let c0: CasCell = cas_cell_new(5);
+    let c1: CasCell = cas_apply(c0, 0, 5, 9);
+    if c1.value != 9 {
+        return domain_cert("sync", "cas_correct", 0);
+    }
+    if c1.version != 1 {
+        return domain_cert("sync", "cas_correct", 0);
+    }
+    let c2: CasCell = cas_apply(c1, 0, 5, 11);
+    if c2.value != 9 {
+        return domain_cert("sync", "cas_correct", 0);
+    }
+    if c2.version != 1 {
+        return domain_cert("sync", "cas_correct", 0);
+    }
+    return domain_cert("sync", "cas_correct", 1);
+}
+
+// Coupled: lock-free stack top with ABA version counter.
+type StackTop = struct {
+    pointer: Int,
+    aba_tag: Int
+};
+
+pub fn stack_top_new(p: Int) -> StackTop {
+    return StackTop {
+        pointer: p,
+        aba_tag: 0
+    };
+}
+
+pub fn stack_top_cas(top: StackTop, expected_ptr: Int, expected_tag: Int, new_ptr: Int) -> StackTop {
+    let cur_p: Int = top.pointer;
+    let cur_t: Int = top.aba_tag;
+    let mut updated: StackTop = top;
+    if cur_p == expected_ptr {
+        if cur_t == expected_tag {
+            updated = StackTop {
+                pointer: new_ptr,
+                aba_tag: cur_t + 1
+            };
+        }
+    }
+    return updated;
+}
+
+// Returns 1 if CAS would succeed (current pointer and tag match observed), 0 otherwise.
+pub fn stack_top_cas_status(top: StackTop, observed_ptr: Int, observed_tag: Int) -> Int {
+    let cur_p: Int = top.pointer;
+    let cur_t: Int = top.aba_tag;
+    if cur_p == observed_ptr {
+        if cur_t == observed_tag {
+            return 1;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+pub fn stack_top_aba_detect_holds(top: StackTop, observed_ptr: Int, observed_tag: Int) -> DomainCert {
+    let s: Int = stack_top_cas_status(top, observed_ptr, observed_tag);
+    if s == 1 {
+        return domain_cert("sync", "cas_aba_detect", 1);
+    }
+    return domain_cert("sync", "cas_aba_detect", 0);
+}
+
+pub fn verify_cas_linearizability_theory() -> Bool {
+    // Golden: CAS(addr, expected, new) succeeds iff *addr == expected; returns 1 on success, 0 on fail.
+    let c0: CasCell = cas_cell_new(5);
+    if cas_status(c0, 0, 5, 9) != 1 {
+        return false;
+    }
+    if cas_status(c0, 0, 6, 9) != 0 {
+        return false;
+    }
+    let c1: CasCell = cas_apply(c0, 0, 5, 9);
+    if c1.value != 9 {
+        return false;
+    }
+    if c1.version != 1 {
+        return false;
+    }
+    // Hostile: addr invalid returns 0.
+    if cas_status(c0, 0 - 1, 5, 9) != 0 {
+        return false;
+    }
+    if cas_status(c0, 7, 5, 9) != 0 {
+        return false;
+    }
+    let c_inv: CasCell = cas_apply(c0, 0 - 1, 5, 9);
+    if c_inv.value != 5 {
+        return false;
+    }
+    if c_inv.version != 0 {
+        return false;
+    }
+    // Coupled: ABA counter detects mismatched version.
+    let t0: StackTop = stack_top_new(0);
+    let t1: StackTop = stack_top_cas(t0, 0, 0, 1);
+    if t1.pointer != 1 {
+        return false;
+    }
+    if t1.aba_tag != 1 {
+        return false;
+    }
+    // CAS that expects stale (ptr=0, tag=0) must fail because pointer moved and tag advanced.
+    let t2: StackTop = stack_top_cas(t1, 0, 0, 2);
+    if t2.pointer != 1 {
+        return false;
+    }
+    if t2.aba_tag != 1 {
+        return false;
+    }
+    // CAS status on t1 with observed (0,0) -> 0 (CAS would fail; pointer differs).
+    if stack_top_cas_status(t1, 0, 0) != 0 {
+        return false;
+    }
+    // CAS status on t1 with observed (1,1) -> 1 (CAS would succeed; matches).
+    if stack_top_cas_status(t1, 1, 1) != 1 {
+        return false;
+    }
+    // ABA scenario: A=(0,0) -> B=(1,1) -> A=(0,2). Stale observed (0,0) on top (0,2) -> CAS fails (tag differs).
+    let tA: StackTop = stack_top_new(0);
+    let tB: StackTop = stack_top_cas(tA, 0, 0, 1);
+    let tA2: StackTop = stack_top_cas(tB, 1, 1, 0);
+    if tA2.pointer != 0 {
+        return false;
+    }
+    if tA2.aba_tag != 2 {
+        return false;
+    }
+    if stack_top_cas_status(tA2, 0, 0) != 0 {
+        return false;
+    }
+    return true;
+}

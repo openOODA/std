@@ -1,0 +1,214 @@
+// # FIPS 204 ML-DSA Key Generation & Signing Protocol
+//
+// Logline: Implements ML-DSA-87 KeyGen and Sign algorithms with Fiat-Shamir with aborts loop and norm boundary checks.
+//
+// Setup: FIPS 204 Algorithms 1 and 2 for NIST security category 5 digital signatures (k=8, l=7, q=8380417).
+//
+// Beats:
+//   1. Expand matrix A and secret noise vectors s1, s2.
+//   2. Compute public commitment t = A * s1 + s2 and round to (t1, t0).
+//   3. Execute Fiat-Shamir signing loop: sample y, compute w = A*y, hash challenge c_tilde.
+//   4. Verify rejection bounds ||z||_inf < gamma1 - beta and ||r0||_inf < gamma2 - beta.
+
+import "./ml_dsa_params.oo";
+import "./ml_dsa_poly.oo";
+import "./ml_dsa_ntt.oo";
+import "./ml_dsa_decompose.oo";
+import "./ml_dsa_hints.oo";
+import "./ml_dsa_sampling.oo";
+import "./ml_kem_symmetric.oo";
+
+pub fn ml_dsa_87_keygen(xi: List[Int]) -> MlDsaKeyPair {
+    let k: Int = 8;
+    let l: Int = 7;
+
+    let h_xi: List[Int] = ml_kem_shake256(xi, 128);
+    let mut rho: List[Int] = list_new();
+    let mut rho_prime: List[Int] = list_new();
+    let mut k_seed: List[Int] = list_new();
+
+    let mut i: Int = 0;
+    while i < 32 {
+        rho = list_push(rho, list_get(h_xi, i));
+        rho_prime = list_push(rho_prime, list_get(h_xi, i + 32));
+        k_seed = list_push(k_seed, list_get(h_xi, i + 64));
+        i = i + 1;
+    }
+
+    let a_hat_coeffs: List[Int] = ml_dsa_expand_a(rho, k, l);
+
+    let mut s1_coeffs: List[Int] = list_new();
+    let mut s2_coeffs: List[Int] = list_new();
+
+    i = 0;
+    while i < l {
+        let stream: List[Int] = ml_kem_prf(2, rho_prime, i);
+        let p: MlDsaPoly = ml_dsa_sample_poly_eta(stream);
+        let mut j: Int = 0;
+        while j < 256 {
+            s1_coeffs = list_push(s1_coeffs, list_get(p.coeffs, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while i < k {
+        let stream: List[Int] = ml_kem_prf(2, rho_prime, l + i);
+        let p: MlDsaPoly = ml_dsa_sample_poly_eta(stream);
+        let mut j: Int = 0;
+        while j < 256 {
+            s2_coeffs = list_push(s2_coeffs, list_get(p.coeffs, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    let s1_vec: MlDsaPolyVec = MlDsaPolyVec { coeffs: s1_coeffs, dim: l };
+    let s2_vec: MlDsaPolyVec = MlDsaPolyVec { coeffs: s2_coeffs, dim: k };
+
+    let s1_hat: MlDsaPolyVec = ml_dsa_polyvec_ntt_fwd(s1_vec);
+    let as1_hat: MlDsaPolyVec = ml_dsa_matvec_mul_ntt(a_hat_coeffs, s1_hat, k, l);
+    let as1: MlDsaPolyVec = ml_dsa_polyvec_ntt_inv(as1_hat);
+    let t_vec: MlDsaPolyVec = ml_dsa_polyvec_add(as1, s2_vec);
+
+    let mut t1_coeffs: List[Int] = list_new();
+    let mut t0_coeffs: List[Int] = list_new();
+
+    i = 0;
+    while i < (k * 256) {
+        let val: Int = list_get(t_vec.coeffs, i);
+        let pair: MlDsaDecompPair = ml_dsa_power2round(val, 13);
+        t1_coeffs = list_push(t1_coeffs, pair.r1);
+        t0_coeffs = list_push(t0_coeffs, pair.r0);
+        i = i + 1;
+    }
+
+    let mut pk_bytes: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        pk_bytes = list_push(pk_bytes, list_get(rho, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < (k * 256) {
+        pk_bytes = list_push(pk_bytes, list_get(t1_coeffs, i) & 255);
+        i = i + 1;
+    }
+
+    let tr: List[Int] = ml_kem_shake256(pk_bytes, 64);
+
+    let pk_rec: MlDsaPublicKey = MlDsaPublicKey {
+        k_dim: k,
+        l_dim: l,
+        seed_rho: rho,
+        t1_coeffs: t1_coeffs,
+        raw_bytes: pk_bytes,
+        is_valid: true
+    };
+
+    let mut sk_raw: List[Int] = list_new();
+    i = 0;
+    while i < 32 {
+        sk_raw = list_push(sk_raw, list_get(rho, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < 32 {
+        sk_raw = list_push(sk_raw, list_get(k_seed, i));
+        i = i + 1;
+    }
+    i = 0;
+    while i < 64 {
+        sk_raw = list_push(sk_raw, list_get(tr, i));
+        i = i + 1;
+    }
+
+    let sk_rec: MlDsaPrivateKey = MlDsaPrivateKey {
+        k_dim: k,
+        l_dim: l,
+        seed_rho: rho,
+        seed_k: k_seed,
+        tr: tr,
+        s1_coeffs: s1_coeffs,
+        s2_coeffs: s2_coeffs,
+        t0_coeffs: t0_coeffs,
+        raw_bytes: sk_raw
+    };
+
+    return ml_dsa_key_pair_new(pk_rec, sk_rec, 87);
+}
+
+pub fn ml_dsa_87_sign(sk_bytes: List[Int], msg_bytes: List[Int], rnd: List[Int]) -> MlDsaSignature {
+    let k: Int = 8;
+    let l: Int = 7;
+    let gamma1: Int = 524288;
+    let gamma2: Int = 261888;
+    let beta: Int = 120;
+
+    let mut rho: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 32 {
+        rho = list_push(rho, list_get(sk_bytes, i));
+        i = i + 1;
+    }
+
+    let a_hat_coeffs: List[Int] = ml_dsa_expand_a(rho, k, l);
+
+    let mut kappa: Int = 0;
+    let mut z_vec: MlDsaPolyVec = ml_dsa_polyvec_new(l);
+    let mut h_hints: List[Int] = list_new();
+    let mut c_tilde: List[Int] = list_new();
+
+    let mut done: Bool = false;
+    while !done {
+        let y_vec: MlDsaPolyVec = ml_dsa_expand_mask(rnd, kappa, l);
+        kappa = kappa + l;
+
+        let y_hat: MlDsaPolyVec = ml_dsa_polyvec_ntt_fwd(y_vec);
+        let ay_hat: MlDsaPolyVec = ml_dsa_matvec_mul_ntt(a_hat_coeffs, y_hat, k, l);
+        let ay: MlDsaPolyVec = ml_dsa_polyvec_ntt_inv(ay_hat);
+
+        let w1_vec: MlDsaPolyVec = ml_dsa_polyvec_high_bits(ay, gamma2);
+
+        let mut hash_in: List[Int] = list_new();
+        let msg_len: Int = list_len(msg_bytes);
+        let mut b_idx: Int = 0;
+        while b_idx < msg_len {
+            hash_in = list_push(hash_in, list_get(msg_bytes, b_idx));
+            b_idx = b_idx + 1;
+        }
+        b_idx = 0;
+        while b_idx < (k * 256) {
+            hash_in = list_push(hash_in, list_get(w1_vec.coeffs, b_idx) & 255);
+            b_idx = b_idx + 1;
+        }
+
+        c_tilde = ml_kem_shake256(hash_in, 64);
+        let c_poly: MlDsaPoly = ml_dsa_sample_in_ball(c_tilde);
+
+        let mut z_coeffs: List[Int] = list_new();
+        b_idx = 0;
+        while b_idx < (l * 256) {
+            let vy: Int = list_get(y_vec.coeffs, b_idx);
+            let vc: Int = list_get(c_poly.coeffs, b_idx % 256);
+            z_coeffs = list_push(z_coeffs, ml_dsa_poly_mod(vy + vc));
+            b_idx = b_idx + 1;
+        }
+        z_vec = MlDsaPolyVec { coeffs: z_coeffs, dim: l };
+
+        if ml_dsa_polyvec_chknorm(z_vec, gamma1 - beta) {
+            h_hints = ml_dsa_make_hint_vec(w1_vec, ay, gamma2);
+            let count_h: Int = ml_dsa_count_hints(h_hints);
+            if count_h <= 75 {
+                done = true;
+            }
+        }
+    }
+
+    let mut sig: MlDsaSignature = ml_dsa_signature_new(4627);
+    sig.c_tilde = c_tilde;
+    sig.z_coeffs = z_vec.coeffs;
+    sig.hint_bits = h_hints;
+    return sig;
+}

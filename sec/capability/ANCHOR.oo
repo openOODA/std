@@ -1,0 +1,76 @@
+// # Capability Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard object-capability (OCap) security domain library. Re-exports a stable cap_mod_* surface for unforgeable capabilities, rights masks, attenuation delegation, cryptographic sealing, registry bookkeeping, and fail-closed kernel/FFI stubs. Private siblings (internal type-layout anchors, the original 200-line monolith) remain non-public.
+//
+// Setup: Imports private capability siblings; pure security math (rights masks, attenuation) takes no caps. Kernel descriptor mapping, HMAC bearer verify, proxy membrane install, and remote RPC marshal take &SysCap at the call site.
+//
+// Beats:
+//   1. Re-export the type surface (CapabilityRights, ObjectCapability, registry records) as cap_mod_types_*.
+//   2. Re-export the rights surface (mask encode/decode, has-permission, format-str) as cap_mod_rights_*.
+//   3. Re-export the attenuation surface (filter create/validate/apply) as cap_mod_att_*.
+//   4. Re-export the seal surface (revocation, sealing, unsealing, HMAC seal) as cap_mod_seal_* / cap_mod_hmac_*.
+//   5. Re-export the registry engine surface (revoke, exercise, audit, do_work) as cap_mod_engine_*.
+//   6. Re-export the fail-closed stubs (kernel descriptor, MAC verify, membrane, RPC marshal) as cap_mod_stub_*.
+//   7. Document the private siblings that external callers must NOT import directly: object_capability.oo (200-line monolith) and the internal type-layout anchors.
+
+import "object_capability.oo";
+import "capability_types.oo";
+import "rights.oo";
+import "attenuate.oo";
+import "seal.oo";
+import "objcap_hmac_seal.oo";
+import "engine.oo";
+import "registry.oo";
+import "objcap_stubs.oo";
+
+// Public type surface: cap_mod_types_*
+pub fn cap_mod_types_rights_none() -> CapabilityRights { return capability_rights_none(); }
+pub fn cap_mod_types_objcap_empty() -> ObjectCapability { return objcap_empty(); }
+
+// Public rights surface: cap_mod_rights_*
+pub fn cap_mod_rights_from_mask(mask_val: Int) -> CapabilityRights { return capability_rights_from_mask(mask_val); }
+pub fn cap_mod_rights_to_mask(rights: CapabilityRights) -> Int { return capability_rights_to_mask(rights); }
+pub fn cap_mod_rights_diminish(parent_rights: Int, requested_rights: Int) -> Int { return capability_rights_diminish(parent_rights, requested_rights); }
+pub fn cap_mod_rights_format_str(rights: CapabilityRights) -> String { return capability_rights_format_str(rights); }
+pub fn cap_mod_rights_has_permission(granted: Int, required: Int) -> Bool { return capability_rights_has_permission(granted, required); }
+
+// Public attenuation surface: cap_mod_att_*
+pub fn cap_mod_att_create(att_id: String, source_cap_id: String, rights: Int, path: String, max_uses: Int, valid_until: Int) -> CapabilityAttenuation { return objcap_attenuation_create(att_id, source_cap_id, rights, path, max_uses, valid_until); }
+pub fn cap_mod_att_validate(att: &CapabilityAttenuation, current_time: Int) -> Bool { return objcap_attenuation_validate(att, current_time); }
+pub fn cap_mod_att_apply(source: &ObjectCapability, att: CapabilityAttenuation, new_cap_id: String, current_time: Int) -> Result[ObjectCapability, String] { return objcap_attenuate(source, att, new_cap_id, current_time); }
+
+// Public seal surface: cap_mod_seal_*
+pub fn cap_mod_seal_default() -> SealedCapability { return objcap_seal_default(); }
+pub fn cap_mod_seal_create(seal_id: String, cap: &ObjectCapability, sealer_id: String) -> CapabilitySeal { return objcap_seal_create(seal_id, cap, sealer_id); }
+pub fn cap_mod_seal_unseal(seal: &CapabilitySeal, expected_sealer: String, target: &ObjectCapability) -> Result[Bool, String] { return objcap_seal_unseal(seal, expected_sealer, target); }
+pub fn cap_mod_seal_checksum(payload: String) -> Int { return objcap_seal_checksum(payload); }
+
+// Public HMAC seal surface: cap_mod_hmac_*
+pub fn cap_mod_hmac_seal(key: String, payload: String) -> String { return objcap_hmac_seal(key, payload); }
+
+// Public engine surface: cap_mod_engine_*
+pub fn cap_mod_engine_revoke(reg: &mut ObjectCapabilityRegistry, cap_id: String, issuer: String, reason: String, current_time: Int) -> Result[Bool, String] { return objcap_registry_revoke(reg, cap_id, issuer, reason, current_time); }
+pub fn cap_mod_engine_exercise(reg: &mut ObjectCapabilityRegistry, cap_id: String, required_right: Int, current_time: Int) -> Result[Bool, String] { return objcap_registry_exercise(reg, cap_id, required_right, current_time); }
+pub fn cap_mod_engine_audit_count(reg: &ObjectCapabilityRegistry) -> Int { return objcap_registry_audit_count(reg); }
+pub fn cap_mod_engine_do_work(reg: &ObjectCapabilityRegistry) -> Int { return objcap_registry_do_work(reg); }
+
+// Public registry surface: cap_mod_registry_*
+pub fn cap_mod_registry_init(registry_id: String) -> ObjectCapabilityRegistry { return objcap_registry_init(registry_id); }
+pub fn cap_mod_registry_is_revoked(reg: ObjectCapabilityRegistry, target_cap_id: String) -> Bool { return objcap_registry_is_revoked(reg, target_cap_id); }
+
+// Public stubs surface: cap_mod_stub_*
+pub fn cap_mod_stub_kernel_descriptor(sys: &SysCap, cap: &ObjectCapability) -> Result[Int, String] { return objcap_kernel_descriptor_map(sys, cap); }
+pub fn cap_mod_stub_crypto_verify_mac(cap: &ObjectCapability, secret_key: String) -> Bool { return objcap_crypto_verify_mac_signature(cap, secret_key); }
+pub fn cap_mod_stub_membrane_install(membrane_id: String, trap_func_name: String) -> Result[Bool, String] { return objcap_membrane_install_interceptor_trap(membrane_id, trap_func_name); }
+pub fn cap_mod_stub_remote_rpc_marshal(cap: &ObjectCapability) -> Result[String, String] { return objcap_remote_rpc_marshal_capability(cap); }
+
+// Public capability construction: cap_mod_create, cap_mod_validate, cap_mod_has_right
+pub fn cap_mod_create(cap_id: String, resource_uri: String, owner_id: String, rights_bitmask: Int, timestamp: Int, ttl_seconds: Int) -> ObjectCapability { return objcap_create(cap_id, resource_uri, owner_id, rights_bitmask, timestamp, ttl_seconds); }
+pub fn cap_mod_validate(cap: &ObjectCapability, current_time: Int) -> Bool { return objcap_validate(cap, current_time); }
+pub fn cap_mod_is_expired(cap: &ObjectCapability, current_time: Int) -> Bool { return objcap_is_expired(cap, current_time); }
+pub fn cap_mod_has_right(cap: &ObjectCapability, required_right: Int) -> Bool { return objcap_has_right(cap, required_right); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   object_capability.oo (was sec/objcap.oo / base.oo) — 200-line single-file OCap monolith; only re-exported via cap_mod_create
+//   capability_types.oo — internal type-layout anchors (capability_rights_none, objcap_empty)
+//   rights.oo / attenuate.oo / seal.oo / engine.oo / registry.oo / objcap_stubs.oo / hmac.oo — internal split modules

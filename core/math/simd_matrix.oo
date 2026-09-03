@@ -1,0 +1,128 @@
+// # SIMD Matrix Kernels
+//
+// Logline: 4-wide SIMD-accelerated numeric kernels for matrix-vector products, dot products, saxpy, and 4x4 matrix multiplication using Vec4f element-wise parallelism.
+//
+// Setup: Pure. Reuses std/math/simd_vec.oo Vec4f registers. Pure data structures with zero heap allocations.
+//
+// Beats:
+//   1. Define a horizontal sum reducer that collapses a Vec4f into a single Float lane sum.
+//   2. Compute fused multiply-add (FMA) and vector scaling with 4-lane parallelism.
+//   3. Implement Mat4x4 matrix layout with identity, transposition, and trace extraction.
+//   4. Multiply 4x4 matrices and 4x4 matrix-vector products using SIMD dot products.
+
+import "std/core/math/simd_vec.oo";
+
+type Mat4x4 = struct {
+    r0: Vec4f,
+    r1: Vec4f,
+    r2: Vec4f,
+    r3: Vec4f
+};
+
+pub fn simd_hsum(v: Vec4f) -> Float {
+    return ((v.x + v.y) + v.z) + v.w;
+}
+
+pub fn simd_v4_scale(v: Vec4f, s: Float) -> Vec4f {
+    return Vec4f {
+        x: v.x * s,
+        y: v.y * s,
+        z: v.z * s,
+        w: v.w * s
+    };
+}
+
+pub fn simd_v4_fma(a: Vec4f, b: Vec4f, c: Vec4f) -> Vec4f {
+    let prod: Vec4f = simd_vec_mul(a, b);
+    return simd_vec_add(prod, c);
+}
+
+pub fn simd_mat4_new(r0: Vec4f, r1: Vec4f, r2: Vec4f, r3: Vec4f) -> Mat4x4 {
+    return Mat4x4 {
+        r0: r0,
+        r1: r1,
+        r2: r2,
+        r3: r3
+    };
+}
+
+pub fn simd_mat4_identity() -> Mat4x4 {
+    return Mat4x4 {
+        r0: Vec4f { x: 1.0, y: 0.0, z: 0.0, w: 0.0 },
+        r1: Vec4f { x: 0.0, y: 1.0, z: 0.0, w: 0.0 },
+        r2: Vec4f { x: 0.0, y: 0.0, z: 1.0, w: 0.0 },
+        r3: Vec4f { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
+    };
+}
+
+pub fn simd_mat4_trace(m: Mat4x4) -> Float {
+    let d0: Float = (m.r0).x;
+    let d1: Float = (m.r1).y;
+    let d2: Float = (m.r2).z;
+    let d3: Float = (m.r3).w;
+    return ((d0 + d1) + d2) + d3;
+}
+
+pub fn simd_mat4_transpose(m: Mat4x4) -> Mat4x4 {
+    let r0: Vec4f = m.r0;
+    let r1: Vec4f = m.r1;
+    let r2: Vec4f = m.r2;
+    let r3: Vec4f = m.r3;
+
+    return Mat4x4 {
+        r0: Vec4f { x: r0.x, y: r1.x, z: r2.x, w: r3.x },
+        r1: Vec4f { x: r0.y, y: r1.y, z: r2.y, w: r3.y },
+        r2: Vec4f { x: r0.z, y: r1.z, z: r2.z, w: r3.z },
+        r3: Vec4f { x: r0.w, y: r1.w, z: r2.w, w: r3.w }
+    };
+}
+
+pub fn simd_mat4_mul_vec(m: Mat4x4, v: Vec4f) -> Vec4f {
+    return Vec4f {
+        x: simd_vec_dot(m.r0, v),
+        y: simd_vec_dot(m.r1, v),
+        z: simd_vec_dot(m.r2, v),
+        w: simd_vec_dot(m.r3, v)
+    };
+}
+
+pub fn simd_mat4_mul(a: Mat4x4, b: Mat4x4) -> Mat4x4 {
+    let bt: Mat4x4 = simd_mat4_transpose(b);
+
+    let row0: Vec4f = a.r0;
+    let row1: Vec4f = a.r1;
+    let row2: Vec4f = a.r2;
+    let row3: Vec4f = a.r3;
+
+    let col0: Vec4f = bt.r0;
+    let col1: Vec4f = bt.r1;
+    let col2: Vec4f = bt.r2;
+    let col3: Vec4f = bt.r3;
+
+    return Mat4x4 {
+        r0: Vec4f {
+            x: simd_vec_dot(row0, col0),
+            y: simd_vec_dot(row0, col1),
+            z: simd_vec_dot(row0, col2),
+            w: simd_vec_dot(row0, col3)
+        },
+        r1: Vec4f {
+            x: simd_vec_dot(row1, col0),
+            y: simd_vec_dot(row1, col1),
+            z: simd_vec_dot(row1, col2),
+            w: simd_vec_dot(row1, col3)
+        },
+        r2: Vec4f {
+            x: simd_vec_dot(row2, col0),
+            y: simd_vec_dot(row2, col1),
+            z: simd_vec_dot(row2, col2),
+            w: simd_vec_dot(row2, col3)
+        },
+        r3: Vec4f {
+            x: simd_vec_dot(row3, col0),
+            y: simd_vec_dot(row3, col1),
+            z: simd_vec_dot(row3, col2),
+            w: simd_vec_dot(row3, col3)
+        }
+    };
+}

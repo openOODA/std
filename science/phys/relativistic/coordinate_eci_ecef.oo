@@ -1,0 +1,57 @@
+// # ECI and ECEF Coordinate Transformations
+//
+// Logline: Transforms position and velocity vectors between Earth-Centered Inertial (ECI) and Earth-Centered Earth-Fixed (ECEF) frames.
+//
+// Setup: Pure WGS-84 geodetic and celestial frame transformation algorithms with sidereal rotation.
+//
+// Beats:
+//   1. 3D spatial coordinate axis query.
+//   2. Rotate position vector from ECI to ECEF given Greenwich Mean Sidereal Time (GMST).
+//   3. Rotate position vector from ECEF to ECI given GMST.
+//   4. Convert geodetic latitude, longitude, and altitude to ECEF Cartesian coordinates.
+
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+pub fn earth_omega_nano() -> Int {
+    return 72921; // Earth rotation angular velocity: ~72921 nrad/s
+}
+
+pub fn eci_axes() -> Int {
+    return 3;
+}
+
+pub fn eci_to_ecef_position(r_eci: Vec3, gmst_rad: Float) -> Vec3 {
+    let cos_g: Float = cos(gmst_rad);
+    let sin_g: Float = sin(gmst_rad);
+    let x_ecef: Float = (cos_g * r_eci.x) + (sin_g * r_eci.y);
+    let y_ecef: Float = (0.0 - sin_g * r_eci.x) + (cos_g * r_eci.y);
+    let z_ecef: Float = r_eci.z;
+    return Vec3 { x: x_ecef, y: y_ecef, z: z_ecef };
+}
+
+pub fn ecef_to_eci_position(r_ecef: Vec3, gmst_rad: Float) -> Vec3 {
+    let cos_g: Float = cos(gmst_rad);
+    let sin_g: Float = sin(gmst_rad);
+    let x_eci: Float = (cos_g * r_ecef.x) - (sin_g * r_ecef.y);
+    let y_eci: Float = (sin_g * r_ecef.x) + (cos_g * r_ecef.y);
+    let z_eci: Float = r_ecef.z;
+    return Vec3 { x: x_eci, y: y_eci, z: z_eci };
+}
+
+/// Convert geodetic coordinates (lat_rad, lon_rad, alt_m) to WGS-84 ECEF (meters).
+pub fn geodetic_to_ecef(lat_rad: Float, lon_rad: Float, alt_m: Float) -> Vec3 {
+    let a: Float = 6378137.0; // WGS-84 semi-major axis (m)
+    let e2: Float = 0.00669437999014; // WGS-84 first eccentricity squared
+    let sin_lat: Float = sin(lat_rad);
+    let cos_lat: Float = cos(lat_rad);
+    let n: Float = a / sqrt(1.0 - (e2 * sin_lat * sin_lat));
+
+    let x: Float = (n + alt_m) * cos_lat * cos(lon_rad);
+    let y: Float = (n + alt_m) * cos_lat * sin(lon_rad);
+    let z: Float = ((n * (1.0 - e2)) + alt_m) * sin_lat;
+    return Vec3 { x: x, y: y, z: z };
+}

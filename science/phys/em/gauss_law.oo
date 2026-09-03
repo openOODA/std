@@ -1,0 +1,100 @@
+// # Gauss's Law for Electric Field
+//
+// Logline: Closed-surface electric flux equals enclosed charge divided by vacuum permittivity.
+//
+// Setup: Pure Float. Uses vacuum permittivity eps0 from physics/constants.oo. Q may be positive or negative.
+//
+// Beats:
+//   1. Point-charge field magnitude E = Q / (4*pi*eps0*r^2).
+//   2. Spherical-shell flux: closed surface integral equals Q / eps0.
+//   3. Infinite line charge: E = lambda / (2*pi*eps0*r).
+//   4. Infinite plane charge: E = sigma / (2*eps0). r <= 0 returns Err.
+
+import "std/science/phys/classical/phys_constants.oo";
+
+fn gs_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Vacuum permittivity eps0 in F/m (~8.8541878128e-12).
+pub fn gauss_vacuum_permittivity() -> Float {
+    return 8.8541878128 / 1000000000000.0;
+}
+
+// Electric field magnitude at distance r from a point charge Q (V/m).
+// Uses Gauss's law on a sphere: E * 4*pi*r^2 = Q / eps0.
+pub fn gauss_point_field(q_coulombs: Float, distance_m: Float) -> Result[Float, String] {
+    if distance_m <= 0.0 { return Err("ERR\tgauss\tr"); }
+    let eps0: Float = gauss_vacuum_permittivity();
+    let four_pi: Float = 12.566370614359172;
+    let r2: Float = distance_m * distance_m;
+    let den: Float = four_pi * eps0 * r2;
+    if den <= 0.0 { return Err("ERR\tgauss\tden"); }
+    let phys_const_ok: Float = phys_boltzmann_constant();
+    if phys_const_ok <= 0.0 { return Err("ERR\tgauss\tk"); }
+    return Ok(q_coulombs / den);
+}
+
+// Closed-surface electric flux Phi_E = Q / eps0 (V*m) for a Gaussian surface enclosing charge Q.
+pub fn gauss_total_flux(enclosed_charge_coulombs: Float) -> Result[Float, String] {
+    let eps0: Float = gauss_vacuum_permittivity();
+    if eps0 <= 0.0 { return Err("ERR\tgauss\teps"); }
+    return Ok(enclosed_charge_coulombs / eps0);
+}
+
+// Electric field magnitude at distance r from an infinite straight line charge (V/m).
+// E = lambda / (2 * pi * eps0 * r).
+pub fn gauss_line_field(linear_charge_density: Float, distance_m: Float) -> Result[Float, String] {
+    if distance_m <= 0.0 { return Err("ERR\tgauss\tr"); }
+    let eps0: Float = gauss_vacuum_permittivity();
+    let two_pi: Float = 6.283185307179586;
+    let den: Float = two_pi * eps0 * distance_m;
+    if den <= 0.0 { return Err("ERR\tgauss\tden"); }
+    return Ok(linear_charge_density / den);
+}
+
+// Electric field magnitude near an infinite plane with surface charge density sigma (V/m).
+// E = sigma / (2 * eps0), independent of distance.
+pub fn gauss_plane_field(surface_charge_density: Float) -> Result[Float, String] {
+    let eps0: Float = gauss_vacuum_permittivity();
+    let two_eps0: Float = 2.0 * eps0;
+    if two_eps0 <= 0.0 { return Err("ERR\tgauss\teps"); }
+    return Ok(surface_charge_density / two_eps0);
+}
+
+// KAT and hostile cases for Gauss's law.
+pub fn verify_gauss_law() -> Bool {
+    let eps0: Float = gauss_vacuum_permittivity();
+    let four_pi: Float = 12.566370614359172;
+    let e_one_meter: Float = gs_got(gauss_point_field(1.0, 1.0));
+    let target: Float = 1.0 / (four_pi * eps0);
+    let mut d: Float = e_one_meter - target;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let e_double: Float = gs_got(gauss_point_field(1.0, 2.0));
+    let target2: Float = 1.0 / (four_pi * eps0 * 4.0);
+    let mut dd: Float = e_double - target2;
+    if dd < 0.0 { dd = 0.0 - dd; }
+    if dd > 0.0001 { return false; }
+    let flux_q: Float = gs_got(gauss_total_flux(1.0));
+    let target_f: Float = 1.0 / eps0;
+    let mut df: Float = flux_q - target_f;
+    if df < 0.0 { df = 0.0 - df; }
+    if df > 0.0001 { return false; }
+    let e_line: Float = gs_got(gauss_line_field(0.00000001, 0.1));
+    let two_pi: Float = 6.283185307179586;
+    let target_l: Float = 0.00000001 / (two_pi * eps0 * 0.1);
+    let mut dl: Float = e_line - target_l;
+    if dl < 0.0 { dl = 0.0 - dl; }
+    if dl > 0.000001 { return false; }
+    let e_plane: Float = gs_got(gauss_plane_field(0.000001));
+    let target_p: Float = 0.000001 / (2.0 * eps0);
+    let mut dp: Float = e_plane - target_p;
+    if dp < 0.0 { dp = 0.0 - dp; }
+    if dp > 0.0001 { return false; }
+    if gs_got(gauss_point_field(0.0, 1.0)) != 0.0 { return false; }
+    if gauss_point_field(1.0, 0.0).is_ok() { return false; }
+    if gauss_point_field(1.0, 0.0 - 1.0).is_ok() { return false; }
+    if gauss_line_field(0.00000001, 0.0).is_ok() { return false; }
+    return true;
+}

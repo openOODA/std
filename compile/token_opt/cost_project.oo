@@ -1,0 +1,75 @@
+// # Annualized Cost Projection from Token Savings
+//
+// Logline: Project annual cost savings across N runs per day at the user-supplied pricing; no hardcoded cost constants.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) W7 cost projection.
+//
+// Beats:
+//   1. Define CostProjectionInputs and CostProjectionResult structures.
+//   2. Take a Pricing parameter from the caller; never hardcode cost constants.
+//   3. Compute daily, monthly, and annual savings.
+//   4. Record the pricing name and source in the result for envelope provenance.
+
+type CostProjectionInputs = struct {
+    tokens_saved_per_run: Int,
+    runs_per_day: Int,
+    run_cost_micro: Int,
+    pricing_name: String,
+    pricing_source: String
+};
+
+type CostProjectionResult = struct {
+    daily_saved_micro: Int,
+    monthly_saved_micro: Int,
+    annual_saved_micro: Int,
+    payback_days_x1000: Int,
+    daily_runs: Int,
+    pricing_name: String,
+    pricing_source: String
+};
+
+pub fn cost_projection_inputs_new(
+    saved: Int,
+    runs: Int,
+    pricing: Pricing,
+    run_cost: Int
+) -> CostProjectionInputs {
+    return CostProjectionInputs {
+        tokens_saved_per_run: saved,
+        runs_per_day: runs,
+        run_cost_micro: run_cost,
+        pricing_name: pricing.name,
+        pricing_source: pricing.source
+    };
+}
+
+pub fn cost_projection_compute(inp: CostProjectionInputs, pricing: Pricing) -> CostProjectionResult {
+    let saved_per_run_micro: Int = (inp.tokens_saved_per_run * pricing.prompt_per_million) / 1000000;
+    let daily: Int = saved_per_run_micro * inp.runs_per_day;
+    let monthly: Int = daily * 30;
+    let annual: Int = daily * 365;
+    let daily_run_cost: Int = inp.run_cost_micro * inp.runs_per_day;
+    let mut payback: Int = 0;
+    if daily > 0 {
+        payback = (daily_run_cost * 1000) / daily;
+    }
+    return CostProjectionResult {
+        daily_saved_micro: daily,
+        monthly_saved_micro: monthly,
+        annual_saved_micro: annual,
+        payback_days_x1000: payback,
+        daily_runs: inp.runs_per_day,
+        pricing_name: pricing.name,
+        pricing_source: pricing.source
+    };
+}
+
+pub fn cost_projection_format(r: CostProjectionResult) -> String {
+    let mut out: String = "";
+    out = out + "daily_runs:        " + (r).daily_runs.to_string() + "\n";
+    out = out + "daily_saved_micro: " + (r).daily_saved_micro.to_string() + "\n";
+    out = out + "monthly_saved:     " + (r).monthly_saved_micro.to_string() + "\n";
+    out = out + "annual_saved:      " + (r).annual_saved_micro.to_string() + "\n";
+    out = out + "payback_days_x1000:" + (r).payback_days_x1000.to_string() + "\n";
+    return out;
+}

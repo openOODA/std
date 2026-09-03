@@ -1,0 +1,225 @@
+// # Stealth & Radar Cross Section Signature Dynamics
+//
+// Logline: Canonical physics models for aspect-dependent dynamic RCS signatures and internal weapons bay door cavity bloom dynamics.
+//
+// Setup: Pure mathematical implementation conforming to low-observable scattering theory with zero ambient authority.
+//
+// Beats:
+//   1. Dynamic aspect-dependent RCS model combining nose, beam, and tail hemisphere scattering.
+//   2. Internal weapons bay 36-tick actuation state machine (Closed, Opening, Ejecting, Closing).
+//   3. Quadratic cavity bloom RCS elevation during weapons bay door opening and ordnance release.
+//   4. Composite 3D dynamic RCS evaluation with deterministic verification suite.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_sensors_stealth_rcs_laws() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type StealthRcsProfile = struct {
+    sigma_nose_m2: Float,
+    sigma_beam_m2: Float,
+    sigma_tail_m2: Float,
+    peak_bay_cavity_rcs_m2: Float
+};
+
+type WeaponsBayState = struct {
+    door_phase: Int,
+    open_fraction: Float,
+    cycle_tick: Int,
+    total_cycle_ticks: Int
+};
+
+type DynamicRcsResult = struct {
+    total_rcs_m2: Float,
+    aspect_rcs_m2: Float,
+    cavity_bloom_rcs_m2: Float,
+    bay_is_open: Bool
+};
+
+fn stealth_pi_val() -> Float { return circ_pi_std_phys_sensors_stealth_rcs_laws(); }
+
+fn stealth_abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn stealth_clamp_val(val: Float, min_val: Float, max_val: Float) -> Float {
+    if val < min_val { return min_val; }
+    if val > max_val { return max_val; }
+    return val;
+}
+
+fn stealth_int_to_float(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
+fn stealth_deg_to_rad(deg: Float) -> Float { return deg * (stealth_pi_val() / 180.0); }
+
+pub fn stealth_bay_phase_closed() -> Int { return 0; }
+pub fn stealth_bay_phase_opening() -> Int { return 1; }
+pub fn stealth_bay_phase_ejecting() -> Int { return 2; }
+pub fn stealth_bay_phase_closing() -> Int { return 3; }
+
+pub fn stealth_aspect_rcs(alpha_deg: Float, sigma_nose: Float, sigma_beam: Float, sigma_tail: Float) -> Float {
+    let alpha_rad: Float = stealth_deg_to_rad(alpha_deg);
+    let cos_a: Float = cos(alpha_rad);
+    let sin_a: Float = sin(alpha_rad);
+    let cos2: Float = cos_a * cos_a;
+    let sin2: Float = sin_a * sin_a;
+    let mut longitudinal: Float = sigma_nose * cos2;
+    if cos_a < 0.0 { longitudinal = sigma_tail * cos2; }
+    let lateral: Float = sigma_beam * sin2;
+    let total: Float = longitudinal + lateral;
+    if total <= 0.000000000001 { return 0.0; }
+    return total;
+}
+
+pub fn calc_aspect_rcs(alpha_deg: Float, sigma_nose: Float, sigma_beam: Float, sigma_tail: Float) -> Float {
+    return stealth_aspect_rcs(alpha_deg, sigma_nose, sigma_beam, sigma_tail);
+}
+
+pub fn stealth_aspect_rcs_3d(az_deg: Float, el_deg: Float, s_nose: Float, s_beam: Float, s_tail: Float) -> Float {
+    let base_rcs: Float = stealth_aspect_rcs(az_deg, s_nose, s_beam, s_tail);
+    let elev_rad: Float = stealth_deg_to_rad(el_deg);
+    let sin_e: Float = sin(elev_rad);
+    let elev_factor: Float = 1.0 + (2.2 * (sin_e * sin_e));
+    return base_rcs * elev_factor;
+}
+
+pub fn stealth_bay_door_bloom_rcs(base_rcs: Float, open_fraction: Float, peak_cavity_rcs: Float) -> Float {
+    let frac: Float = stealth_clamp_val(open_fraction, 0.0, 1.0);
+    if frac <= 0.001 || peak_cavity_rcs <= base_rcs { return base_rcs; }
+    let delta: Float = peak_cavity_rcs - base_rcs;
+    return base_rcs + (delta * frac * frac);
+}
+
+pub fn calc_weapons_bay_bloom_rcs(base_rcs: Float, open_fraction: Float, peak_cavity_rcs: Float) -> Float {
+    return stealth_bay_door_bloom_rcs(base_rcs, open_fraction, peak_cavity_rcs);
+}
+
+pub fn weapons_bay_state_init() -> WeaponsBayState {
+    return WeaponsBayState { door_phase: 0, open_fraction: 0.0, cycle_tick: 0, total_cycle_ticks: 36 };
+}
+
+pub fn weapons_bay_open_fraction(state: WeaponsBayState) -> Float { return state.open_fraction; }
+
+pub fn weapons_bay_is_active(state: WeaponsBayState) -> Bool { return state.door_phase != 0; }
+
+pub fn weapons_bay_step_actuation(state: WeaponsBayState, trigger_release: Bool) -> WeaponsBayState {
+    let mut phase: Int = state.door_phase;
+    let mut tick: Int = state.cycle_tick;
+    let mut frac: Float = state.open_fraction;
+
+    if phase == 0 && trigger_release {
+        phase = 1;
+        tick = 1;
+        frac = 1.0 / 12.0;
+    } else if phase != 0 {
+        tick = tick + 1;
+        if tick <= 12 {
+            phase = 1;
+            frac = stealth_int_to_float(tick) / 12.0;
+        } else if tick <= 24 {
+            phase = 2;
+            frac = 1.0;
+        } else if tick <= 36 {
+            phase = 3;
+            frac = 1.0 - (stealth_int_to_float(tick - 24) / 12.0);
+        } else {
+            phase = 0;
+            tick = 0;
+            frac = 0.0;
+        }
+    }
+
+    return WeaponsBayState {
+        door_phase: phase,
+        open_fraction: stealth_clamp_val(frac, 0.0, 1.0),
+        cycle_tick: tick,
+        total_cycle_ticks: 36
+    };
+}
+
+pub fn calculate_dynamic_rcs(profile: StealthRcsProfile, bay: WeaponsBayState, alpha_deg: Float) -> DynamicRcsResult {
+    let aspect: Float = stealth_aspect_rcs(alpha_deg, profile.sigma_nose_m2, profile.sigma_beam_m2, profile.sigma_tail_m2);
+    let total: Float = stealth_bay_door_bloom_rcs(aspect, bay.open_fraction, profile.peak_bay_cavity_rcs_m2);
+    let bloom: Float = total - aspect;
+    return DynamicRcsResult {
+        total_rcs_m2: total,
+        aspect_rcs_m2: aspect,
+        cavity_bloom_rcs_m2: bloom,
+        bay_is_open: bay.door_phase != 0
+    };
+}
+
+pub fn calculate_dynamic_rcs_3d(profile: StealthRcsProfile, bay: WeaponsBayState, az_deg: Float, el_deg: Float) -> DynamicRcsResult {
+    let aspect: Float = stealth_aspect_rcs_3d(az_deg, el_deg, profile.sigma_nose_m2, profile.sigma_beam_m2, profile.sigma_tail_m2);
+    let total: Float = stealth_bay_door_bloom_rcs(aspect, bay.open_fraction, profile.peak_bay_cavity_rcs_m2);
+    let bloom: Float = total - aspect;
+    return DynamicRcsResult {
+        total_rcs_m2: total,
+        aspect_rcs_m2: aspect,
+        cavity_bloom_rcs_m2: bloom,
+        bay_is_open: bay.door_phase != 0
+    };
+}
+
+pub fn verify_stealth_rcs_laws() -> Bool {
+    let sigma_nose: Float = 0.0001;
+    let sigma_beam: Float = 2.0;
+    let sigma_tail: Float = 0.5;
+    let peak_bay: Float = 1.2;
+
+    let rcs_nose: Float = stealth_aspect_rcs(0.0, sigma_nose, sigma_beam, sigma_tail);
+    let diff_nose: Float = stealth_abs_val(rcs_nose - sigma_nose);
+    if diff_nose > 0.000001 { return false; }
+
+    let rcs_beam: Float = stealth_aspect_rcs(90.0, sigma_nose, sigma_beam, sigma_tail);
+    let diff_beam: Float = stealth_abs_val(rcs_beam - sigma_beam);
+    if diff_beam > 0.0001 { return false; }
+
+    let rcs_tail: Float = stealth_aspect_rcs(180.0, sigma_nose, sigma_beam, sigma_tail);
+    let diff_tail: Float = stealth_abs_val(rcs_tail - sigma_tail);
+    if diff_tail > 0.0001 { return false; }
+
+    let mut bay: WeaponsBayState = weapons_bay_state_init();
+    if bay.door_phase != 0 { return false; }
+    let frac0: Float = weapons_bay_open_fraction(bay);
+    if frac0 > 0.0001 { return false; }
+
+    bay = weapons_bay_step_actuation(bay, true);
+    if bay.door_phase != 1 { return false; }
+
+    let mut i: Int = 0;
+    while i < 17 {
+        bay = weapons_bay_step_actuation(bay, false);
+        i = i + 1;
+    }
+    if bay.door_phase != 2 { return false; }
+    let frac18: Float = weapons_bay_open_fraction(bay);
+    let diff_frac18: Float = stealth_abs_val(frac18 - 1.0);
+    if diff_frac18 > 0.0001 { return false; }
+
+    let profile: StealthRcsProfile = StealthRcsProfile {
+        sigma_nose_m2: sigma_nose,
+        sigma_beam_m2: sigma_beam,
+        sigma_tail_m2: sigma_tail,
+        peak_bay_cavity_rcs_m2: peak_bay
+    };
+
+    let dyn_res: DynamicRcsResult = calculate_dynamic_rcs(profile, bay, 0.0);
+    let diff_bloom: Float = stealth_abs_val(dyn_res.total_rcs_m2 - peak_bay);
+    if diff_bloom > 0.001 { return false; }
+
+    while bay.door_phase != 0 {
+        bay = weapons_bay_step_actuation(bay, false);
+    }
+    if bay.cycle_tick != 0 { return false; }
+
+    return true;
+}

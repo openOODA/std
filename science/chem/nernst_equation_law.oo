@@ -1,0 +1,132 @@
+// # Nernst equation for electrochemical cell potential
+//
+// Logline: E = E_standard - (R * T / (n * F)) * ln(Q). Hostile T, n, F, or Q return Err.
+//
+// Setup: Pure Float. R and F are physical constants supplied by the caller; unit-agnostic.
+// At equilibrium Q = K_eq, the cell potential collapses to 0 V (ΔG = 0).
+//
+// Beats:
+//   1. Ideal cell potential E = E_standard - (R * T / (n * F)) * ln(Q).
+//   2. Non-ideal form uses the activity-based quotient Q_gamma.
+//   3. Reaction quotient inversion Q_from_E given the standard potential.
+//   4. At equilibrium Q = K_eq, E = 0 (ΔG = 0, microscopic reversibility).
+//   5. Hostile T <= 0, n <= 0, F <= 0, or non-positive Q return Err.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/trig.oo";
+
+fn ne_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn ne_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn nernst_gas_constant() -> Float {
+    return 8.314;
+}
+
+pub fn nernst_faraday_constant() -> Float {
+    return 96485.0;
+}
+
+pub fn nernst_cell_potential(
+    e_standard_v: Float,
+    n_electrons: Float,
+    temp_k: Float,
+    q_reaction: Float,
+    f_coulomb: Float
+) -> Result[Float, String] {
+    if n_electrons <= 0.0 { return Err("ERR\tnernst\tn"); }
+    if temp_k <= 0.0 { return Err("ERR\tnernst\tt"); }
+    if f_coulomb <= 0.0 { return Err("ERR\tnernst\tf"); }
+    if q_reaction <= 0.0 { return Err("ERR\tnernst\tq"); }
+    let r: Float = nernst_gas_constant();
+    let ln_q: Float = math_ln(q_reaction);
+    let thermal: Float = (r * temp_k) / (n_electrons * f_coulomb);
+    return Ok(e_standard_v - (thermal * ln_q));
+}
+
+pub fn nernst_nonideal_potential(
+    e_standard_v: Float,
+    n_electrons: Float,
+    temp_k: Float,
+    q_activity: Float,
+    f_coulomb: Float
+) -> Result[Float, String] {
+    return nernst_cell_potential(e_standard_v, n_electrons, temp_k, q_activity, f_coulomb);
+}
+
+pub fn nernst_reaction_quotient(
+    e_observed_v: Float,
+    e_standard_v: Float,
+    n_electrons: Float,
+    temp_k: Float,
+    f_coulomb: Float
+) -> Result[Float, String] {
+    if n_electrons <= 0.0 { return Err("ERR\tnernst\tn"); }
+    if temp_k <= 0.0 { return Err("ERR\tnernst\tt"); }
+    if f_coulomb <= 0.0 { return Err("ERR\tnernst\tf"); }
+    let r: Float = nernst_gas_constant();
+    let delta_e: Float = e_standard_v - e_observed_v;
+    let mut arg: Float = (delta_e * n_electrons * f_coulomb) / (r * temp_k);
+    if arg > 700.0 { arg = 700.0; }
+    return Ok(math_exp(arg));
+}
+
+pub fn nernst_equilibrium_constant(
+    e_standard_v: Float,
+    n_electrons: Float,
+    temp_k: Float,
+    f_coulomb: Float
+) -> Result[Float, String] {
+    if n_electrons <= 0.0 { return Err("ERR\tnernst\tn"); }
+    if temp_k <= 0.0 { return Err("ERR\tnernst\tt"); }
+    if f_coulomb <= 0.0 { return Err("ERR\tnernst\tf"); }
+    let r: Float = nernst_gas_constant();
+    let arg: Float = (n_electrons * f_coulomb * e_standard_v) / (r * temp_k);
+    let mut clamped: Float = arg;
+    if clamped > 700.0 { clamped = 700.0; }
+    if clamped < (0.0 - 700.0) { clamped = 0.0 - 700.0; }
+    return Ok(math_exp(clamped));
+}
+
+pub fn nernst_equation_cert(
+    n_electrons: Float,
+    temp_k: Float,
+    f_coulomb: Float
+) -> DomainCert {
+    let mut holds: Int = 0;
+    if n_electrons > 0.0 && temp_k > 0.0 && f_coulomb > 0.0 {
+        holds = 1;
+    }
+    return domain_cert("chem", "nernst_equation", holds);
+}
+
+pub fn verify_nernst_equation_law() -> Bool {
+    let f: Float = nernst_faraday_constant();
+    let e_gold: Float = ne_got(nernst_cell_potential(1.10, 2.0, 298.0, 0.01, f));
+    if ne_eabs(e_gold - 1.159) > 0.0058 { return false; }
+    let k_eq: Float = ne_got(nernst_equilibrium_constant(1.10, 2.0, 298.0, f));
+    if k_eq <= 0.0 { return false; }
+    let e_at_eq: Float = ne_got(nernst_cell_potential(1.10, 2.0, 298.0, k_eq, f));
+    if ne_eabs(e_at_eq) > 0.001 { return false; }
+    let e_n1: Float = ne_got(nernst_cell_potential(1.10, 1.0, 298.0, 0.01, f));
+    let e_n2: Float = ne_got(nernst_cell_potential(1.10, 2.0, 298.0, 0.01, f));
+    if e_n1 <= e_n2 { return false; }
+    let e_q_small: Float = ne_got(nernst_cell_potential(0.5, 2.0, 298.0, 0.001, f));
+    if e_q_small <= 0.5 { return false; }
+    let e_q_large: Float = ne_got(nernst_cell_potential(0.5, 2.0, 298.0, 1000.0, f));
+    if e_q_large >= 0.5 { return false; }
+    let q_back: Float = ne_got(nernst_reaction_quotient(e_gold, 1.10, 2.0, 298.0, f));
+    if ne_eabs(q_back - 0.01) > 0.0005 { return false; }
+    let e_ni: Float = ne_got(nernst_nonideal_potential(1.10, 2.0, 298.0, 0.01, f));
+    if ne_eabs(e_ni - e_gold) > 0.0000001 { return false; }
+    if nernst_cell_potential(1.10, 2.0, 0.0, 0.01, f).is_ok() { return false; }
+    if nernst_cell_potential(1.10, 0.0, 298.0, 0.01, f).is_ok() { return false; }
+    if nernst_cell_potential(1.10, 2.0, 298.0, 0.01, 0.0).is_ok() { return false; }
+    if nernst_cell_potential(1.10, 2.0, 298.0, 0.0, f).is_ok() { return false; }
+    return true;
+}

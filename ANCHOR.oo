@@ -1,0 +1,47 @@
+// # std/ — Anchor for Agents
+//
+// Logline: Front door for the openOODA standard library. Re-exports the 8 domain ANCHOR.oo files.
+//
+// Setup: Pure structural file. The 8 domains are: core (primitives), fs (filesystem), net (network + concurrency), sec (security), science (bio/chem/phys/econ), app (ai/robot/ui/data), hw (hardware), meta (test/diag).
+//
+// Beats:
+//   1. The 8 functional domains, each with its own ANCHOR.oo.
+//   2. No compat layers, no fallbacks, no shims. Old paths are dead.
+//   3. ONE VERSION declares api_surface=8.
+//
+// The 8-domain structure reflects functional alignment (one concept = one location).
+//   - core/      — universal primitives (math, text, encoding, list/map, capability, principles, proofs, cli)
+//   - fs/        — filesystem, OS, time, archive, compression, process
+//   - net/       — network protocols, transport, mesh, sync, actor, telemetry
+//   - sec/       — security (hash, symmetric, asymmetric, mac, zk, enclave, capability, simd, threat_model, etc.)
+//   - science/   — bio, chem, phys, econ, comm
+//   - app/       — ai, robot, ui, data, agent, combat
+//   - hw/        — silicon, gpu, mem, runtime, bare_metal, drivers_hal, unikernel
+//   - meta/      — test, diag
+
+import "core/ANCHOR.oo";
+import "fs/ANCHOR.oo";
+import "net/ANCHOR.oo";
+import "sec/ANCHOR.oo";
+import "science/ANCHOR.oo";
+import "app/ANCHOR.oo";
+import "hw/ANCHOR.oo";
+import "meta/ANCHOR.oo";
+
+// Public std version: std_mod_version_*
+pub fn std_mod_version() -> String { return "std/0.1.0"; }
+
+// Public std domain inventory: std_mod_*
+pub fn std_mod_subdir_count() -> Int { return 8; }
+pub fn std_mod_subdir_list() -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, "core");
+    out = list_push(out, "fs");
+    out = list_push(out, "net");
+    out = list_push(out, "sec");
+    out = list_push(out, "science");
+    out = list_push(out, "app");
+    out = list_push(out, "hw");
+    out = list_push(out, "meta");
+    return out;
+}

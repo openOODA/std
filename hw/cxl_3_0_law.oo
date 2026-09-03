@@ -1,0 +1,120 @@
+// # CXL 3.0 specification law
+//
+// Logline: CXL 3.0 (Compute Express Link 3.0 spec 1.0, Aug 2022) fixes 64B flits, 3 sub-protocols (.cache, .mem, .io) and MESI coherency (4 states); sub-spec inputs that do not match CXL 3.0 features (64B flit, port-based routing, peer-to-peer DMA, memory sharing) fail closed; against CXL 2.0 the flit size contracts from 68B to 64B.
+//
+// Setup: Pure Int. cxl30_max_payload returns 64 (CXL 3.0 spec 1.0, Aug 2022, Compute Express Link). cxl30_sub_protocol_count returns 3 (.cache, .mem, .io). cxl30_coherency_state_count returns 4 (M, E, S, I). cxl30_verify_subspec(flit_bytes, port_routed, p2p_dma, mem_share) returns Ok(1) iff all four match CXL 3.0 features; otherwise Err (fails closed). cxl30_vs_cxl20_flit_ratio at scale 1_000_000 returns 64*1_000_000/68 (a 0.001%-precision ratio witness). Hostile sub-specs fail closed. Uses domain_cert("hw", ...).
+//
+// Beats:
+//   1. cxl30_max_payload = 64; sub_protocol_count = 3; coherency_state_count = 4.
+//   2. cxl30_verify_subspec(64, 1, 1, 1) = Ok(1); any mismatch = Err.
+//   3. cxl30_vs_cxl20_flit_ratio at 1e6 = 941176 (true 941176.47 within 0.001%).
+
+import "std/core/primitives/domain_cert.oo";
+
+fn cxl30_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// CXL 3.0 max payload per flit in bytes.
+// Source: CXL 3.0 specification 1.0, Aug 2022, Compute Express Link.
+pub fn cxl30_max_payload() -> Int {
+    return 64;  // CXL 3.0 spec 1.0, Aug 2022
+}
+
+// CXL 3.0 sub-protocol count: .cache, .mem, .io.
+// Source: CXL 3.0 specification 1.0, Aug 2022, Compute Express Link.
+pub fn cxl30_sub_protocol_count() -> Int {
+    return 3;  // CXL 3.0 spec 1.0, Aug 2022
+}
+
+// CXL 3.0 memory coherency states: M, E, S, I (4-state MESI).
+// Source: CXL 3.0 specification 1.0, Aug 2022, Compute Express Link.
+pub fn cxl30_coherency_state_count() -> Int {
+    return 4;  // CXL 3.0 spec 1.0, Aug 2022
+}
+
+// Verify a CXL 3.0 sub-spec candidate matches all CXL 3.0 features.
+// CXL 3.0 introduces: 64B flit, port-based routing, peer-to-peer DMA, memory sharing.
+// Source: CXL 3.0 specification 1.0, Aug 2022.
+pub fn cxl30_verify_subspec(flit_bytes: Int, port_routed: Int, p2p_dma: Int, mem_share: Int) -> Result[Int, String] {
+    if flit_bytes != 64 { return Err("ERR\tcxl30\tflit"); }      // CXL 3.0 spec 1.0, Aug 2022
+    if port_routed != 1 { return Err("ERR\tcxl30\tport"); }     // CXL 3.0 spec 1.0, Aug 2022
+    if p2p_dma != 1 { return Err("ERR\tcxl30\tp2p"); }          // CXL 3.0 spec 1.0, Aug 2022
+    if mem_share != 1 { return Err("ERR\tcxl30\tmemshare"); }   // CXL 3.0 spec 1.0, Aug 2022
+    return Ok(1);
+}
+
+// Coupled: CXL 3.0 (64B) / CXL 2.0 (68B) flit ratio at scale 1_000_000.
+// Source: CXL 2.0 specification 1.0, June 2020, Compute Express Link.
+pub fn cxl30_vs_cxl20_flit_ratio() -> Int {
+    let num: Int = 64 * 1000000;    // CXL 3.0 spec 1.0, Aug 2022
+    let den: Int = 68;              // CXL 2.0 spec 1.0, June 2020
+    return num / den;
+}
+
+pub fn cxl30_golden_cert() -> DomainCert {
+    let payload: Int = cxl30_max_payload();
+    let sub: Int = cxl30_sub_protocol_count();
+    let coh: Int = cxl30_coherency_state_count();
+    let mut holds: Int = 0;
+    if payload == 64 { if sub == 3 { if coh == 4 { holds = 1; } } }
+    return domain_cert("hw", "cxl30_golden", holds);
+}
+
+pub fn cxl30_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    // CXL 2.0 sub-specs (68B flit) must fail closed on a CXL 3.0 verifier.
+    if cxl30_verify_subspec(68, 0, 0, 0).is_ok() == false {
+        if cxl30_verify_subspec(128, 1, 1, 1).is_ok() == false {
+            if cxl30_verify_subspec(64, 0, 1, 1).is_ok() == false {
+                if cxl30_verify_subspec(64, 1, 0, 1).is_ok() == false {
+                    if cxl30_verify_subspec(64, 1, 1, 0).is_ok() == false {
+                        holds = 1;
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("hw", "cxl30_hostile", holds);
+}
+
+pub fn cxl30_coupled_cert() -> DomainCert {
+    // 64 / 68 at scale 1_000_000 = 941176 (true 941176.47, 0.001% band: 941166..941186).
+    let r: Int = cxl30_vs_cxl20_flit_ratio();
+    let mut holds: Int = 0;
+    if r >= 941166 { if r <= 941186 { holds = 1; } }
+    return domain_cert("hw", "cxl30_coupled", holds);
+}
+
+pub fn verify_cxl_3_0_law() -> Bool {
+    // Golden: payload 64, sub-protocol 3, coherency 4.
+    if cxl30_max_payload() != 64 { return false; }
+    if cxl30_sub_protocol_count() != 3 { return false; }
+    if cxl30_coherency_state_count() != 4 { return false; }
+    // Sub-spec verify: full match returns Ok(1).
+    if cxl30_got(cxl30_verify_subspec(64, 1, 1, 1)) != 1 { return false; }
+    // Hostile: any mismatch returns Err.
+    if cxl30_verify_subspec(68, 1, 1, 1).is_ok() { return false; }
+    if cxl30_verify_subspec(64, 0, 1, 1).is_ok() { return false; }
+    if cxl30_verify_subspec(64, 1, 0, 1).is_ok() { return false; }
+    if cxl30_verify_subspec(64, 1, 1, 0).is_ok() { return false; }
+    if cxl30_verify_subspec(128, 1, 1, 1).is_ok() { return false; }
+    if cxl30_verify_subspec(0, 1, 1, 1).is_ok() { return false; }
+    if cxl30_verify_subspec(0 - 1, 1, 1, 1).is_ok() { return false; }
+    if cxl30_verify_subspec(64, 2, 1, 1).is_ok() { return false; }
+    if cxl30_verify_subspec(64, 1, 1, 2).is_ok() { return false; }
+    // Coupled: 64/68 = 941176.47 at scale 1_000_000 -> 941176.
+    let r: Int = cxl30_vs_cxl20_flit_ratio();
+    if r != 941176 { return false; }
+    // Re-check ratio tolerance 0.001%: 941176 in [941166, 941186].
+    if r < 941166 { return false; }
+    if r > 941186 { return false; }
+    // Certificates: golden, hostile, coupled all hold.
+    let g: DomainCert = cxl30_golden_cert();
+    let h: DomainCert = cxl30_hostile_cert();
+    let cu: DomainCert = cxl30_coupled_cert();
+    if g.holds != 1 { return false; }
+    if h.holds != 1 { return false; }
+    if cu.holds != 1 { return false; }
+    return true;
+}

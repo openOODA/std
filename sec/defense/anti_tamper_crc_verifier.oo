@@ -1,0 +1,131 @@
+// # Runtime Anti-Tamper CRC32 & Memory Section Verifier
+//
+// Logline: Calculates cyclic redundancy checksums over executable memory pages to detect inline hooks and patches.
+//
+// Setup: Standalone integrity verification scanner over .text segments and critical entry points.
+//
+// Beats:
+//   1. Define CodeSegmentDigest and AntiTamperContext descriptors.
+//   2. Compute 32-bit CRC polynomials over executable byte slices at runtime.
+//   3. Compare observed checksums against baseline hashes and detect binary modifications.
+
+type CodeSegmentDigest = struct {
+    segment_name: String,
+    base_address: Int,
+    size_bytes: Int,
+    expected_crc: Int
+};
+
+type AntiTamperContext = struct {
+    segment_names: List[String],
+    segment_bases: List[Int],
+    segment_sizes: List[Int],
+    segment_crcs: List[Int],
+    segment_count: Int,
+    tamper_events: Int,
+    is_compromised: Bool
+};
+
+fn crc32_xor(a: Int, b: Int) -> Int {
+    return (a | b) - (a & b);
+}
+
+pub fn crc32_step(crc: Int, byte_val: Int) -> Int {
+    let mut c: Int = crc32_xor(crc, byte_val);
+    let poly: Int = 3988292384;
+    let mut j: Int = 0;
+    while j < 8 {
+        let bit: Int = c & 1;
+        c = c >> 1;
+        if bit != 0 {
+            c = crc32_xor(c, poly);
+        }
+        j = j + 1;
+    }
+    return c & 2147483647;
+}
+
+pub fn compute_bytes_crc32(bytes: List[Int], len: Int) -> Int {
+    let mut crc: Int = 2147483647;
+    let mut i: Int = 0;
+    while i < len {
+        let b: Int = list_get(bytes, i);
+        crc = crc32_step(crc, b & 255);
+        i = i + 1;
+    }
+    return crc32_xor(crc, 2147483647);
+}
+
+pub fn anti_tamper_context_new() -> AntiTamperContext {
+    let empty_names: List[String] = list_new();
+    let empty_bases: List[Int] = list_new();
+    let empty_sizes: List[Int] = list_new();
+    let empty_crcs: List[Int] = list_new();
+    return AntiTamperContext {
+        segment_names: empty_names,
+        segment_bases: empty_bases,
+        segment_sizes: empty_sizes,
+        segment_crcs: empty_crcs,
+        segment_count: 0,
+        tamper_events: 0,
+        is_compromised: false
+    };
+}
+
+pub fn anti_tamper_register_segment(
+    ctx: AntiTamperContext,
+    name: String,
+    base: Int,
+    sz: Int,
+    expected: Int
+) -> AntiTamperContext {
+    let mut names: List[String] = ctx.segment_names;
+    names = list_push(names, name);
+
+    let mut bases: List[Int] = ctx.segment_bases;
+    bases = list_push(bases, base);
+
+    let mut sizes: List[Int] = ctx.segment_sizes;
+    sizes = list_push(sizes, sz);
+
+    let mut crcs: List[Int] = ctx.segment_crcs;
+    crcs = list_push(crcs, expected);
+
+    let cnt: Int = ctx.segment_count;
+    return AntiTamperContext {
+        segment_names: names,
+        segment_bases: bases,
+        segment_sizes: sizes,
+        segment_crcs: crcs,
+        segment_count: cnt + 1,
+        tamper_events: ctx.tamper_events,
+        is_compromised: ctx.is_compromised
+    };
+}
+
+pub fn anti_tamper_verify_segment(
+    ctx: AntiTamperContext,
+    seg_idx: Int,
+    actual_bytes: List[Int],
+    actual_len: Int
+) -> AntiTamperContext {
+    let cnt: Int = ctx.segment_count;
+    if seg_idx < 0 || seg_idx >= cnt {
+        return ctx;
+    }
+    let expected: Int = list_get(ctx.segment_crcs, seg_idx);
+    let computed: Int = compute_bytes_crc32(actual_bytes, actual_len);
+    if computed != expected {
+        let ev: Int = ctx.tamper_events;
+        return AntiTamperContext {
+            segment_names: ctx.segment_names,
+            segment_bases: ctx.segment_bases,
+            segment_sizes: ctx.segment_sizes,
+            segment_crcs: ctx.segment_crcs,
+            segment_count: ctx.segment_count,
+            tamper_events: ev + 1,
+            is_compromised: true
+        };
+    }
+    return ctx;
+}

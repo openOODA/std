@@ -1,0 +1,243 @@
+// # TUI Hierarchical Tree View Widget
+//
+// Logline: Collapsible hierarchical node tree view with expand/collapse toggles and depth indentation.
+//
+// Setup: File system, AST, and hierarchical data navigation component for terminal interfaces.
+//
+// Beats:
+//   1. Define TreeNode hierarchical descriptor with depth, parent references, and expansion state.
+//   2. Manage node selection navigation and subtree collapse/expansion toggling.
+//   3. Render tree branch glyphs, node icons, and selection indicators into screen buffer.
+
+import "std/app/ui/tui/tui_cell.oo";
+import "std/app/ui/tui/tui_buffer.oo";
+
+type TreeNode = struct {
+    id: Int,
+    parent_id: Int,
+    label: String,
+    is_expanded: Bool,
+    is_leaf: Bool,
+    depth: Int
+};
+
+pub fn tree_node_new(id: Int, parent_id: Int, label: String, is_leaf: Bool, depth: Int) -> TreeNode {
+    return TreeNode {
+        id: id,
+        parent_id: parent_id,
+        label: label,
+        is_expanded: false,
+        is_leaf: is_leaf,
+        depth: depth
+    };
+}
+
+type WidgetTreeView = struct {
+    id: Int,
+    area: BufferArea,
+    ids: List[Int],
+    parent_ids: List[Int],
+    labels: List[String],
+    depths: List[Int],
+    flags: List[Int],
+    selected_index: Int,
+    scroll_offset: Int,
+    is_focused: Bool
+};
+
+pub fn widget_treeview_new(id: Int, area: BufferArea) -> WidgetTreeView {
+    let ids: List[Int] = list_new();
+    let parent_ids: List[Int] = list_new();
+    let labels: List[String] = list_new();
+    let depths: List[Int] = list_new();
+    let flags: List[Int] = list_new();
+    return WidgetTreeView {
+        id: id,
+        area: area,
+        ids: ids,
+        parent_ids: parent_ids,
+        labels: labels,
+        depths: depths,
+        flags: flags,
+        selected_index: 0,
+        scroll_offset: 0,
+        is_focused: false
+    };
+}
+
+pub fn widget_treeview_add_node(tv: WidgetTreeView, node: TreeNode) -> WidgetTreeView {
+    let mut ids: List[Int] = tv.ids;
+    let mut parent_ids: List[Int] = tv.parent_ids;
+    let mut labels: List[String] = tv.labels;
+    let mut depths: List[Int] = tv.depths;
+    let mut flags: List[Int] = tv.flags;
+
+    ids = list_push(ids, node.id);
+    parent_ids = list_push(parent_ids, node.parent_id);
+    labels = list_push(labels, node.label);
+    depths = list_push(depths, node.depth);
+
+    let mut fl: Int = 0;
+    if node.is_leaf { fl = fl + 1; }
+    if node.is_expanded { fl = fl + 2; }
+    flags = list_push(flags, fl);
+
+    return WidgetTreeView {
+        id: tv.id,
+        area: tv.area,
+        ids: ids,
+        parent_ids: parent_ids,
+        labels: labels,
+        depths: depths,
+        flags: flags,
+        selected_index: tv.selected_index,
+        scroll_offset: tv.scroll_offset,
+        is_focused: tv.is_focused
+    };
+}
+
+pub fn widget_treeview_select_next(tv: WidgetTreeView) -> WidgetTreeView {
+    let total: Int = list_len(tv.ids);
+    if total == 0 {
+        return tv;
+    }
+    let mut sel: Int = tv.selected_index;
+    let mut off: Int = tv.scroll_offset;
+    if sel < (total - 1) {
+        sel = sel + 1;
+        let view_h: Int = (tv.area).height;
+        if (sel - off) >= view_h {
+            off = sel - view_h + 1;
+        }
+    }
+    return WidgetTreeView {
+        id: tv.id,
+        area: tv.area,
+        ids: tv.ids,
+        parent_ids: tv.parent_ids,
+        labels: tv.labels,
+        depths: tv.depths,
+        flags: tv.flags,
+        selected_index: sel,
+        scroll_offset: off,
+        is_focused: tv.is_focused
+    };
+}
+
+pub fn widget_treeview_select_prev(tv: WidgetTreeView) -> WidgetTreeView {
+    let mut sel: Int = tv.selected_index;
+    let mut off: Int = tv.scroll_offset;
+    if sel > 0 {
+        sel = sel - 1;
+        if sel < off {
+            off = sel;
+        }
+    }
+    return WidgetTreeView {
+        id: tv.id,
+        area: tv.area,
+        ids: tv.ids,
+        parent_ids: tv.parent_ids,
+        labels: tv.labels,
+        depths: tv.depths,
+        flags: tv.flags,
+        selected_index: sel,
+        scroll_offset: off,
+        is_focused: tv.is_focused
+    };
+}
+
+pub fn widget_treeview_toggle_expand(tv: WidgetTreeView) -> WidgetTreeView {
+    let total: Int = list_len(tv.ids);
+    if total == 0 {
+        return tv;
+    }
+    let idx: Int = tv.selected_index;
+    let fl: Int = list_get(tv.flags, idx);
+    let is_leaf: Bool = (fl & 1) != 0;
+    if !is_leaf {
+        let new_fl: Int = fl ^ 2;
+        let next_flags: List[Int] = list_set(tv.flags, idx, new_fl);
+        return WidgetTreeView {
+            id: tv.id,
+            area: tv.area,
+            ids: tv.ids,
+            parent_ids: tv.parent_ids,
+            labels: tv.labels,
+            depths: tv.depths,
+            flags: next_flags,
+            selected_index: tv.selected_index,
+            scroll_offset: tv.scroll_offset,
+            is_focused: tv.is_focused
+        };
+    }
+    return tv;
+}
+
+pub fn widget_treeview_render(tv: WidgetTreeView, buf: TuiBuffer) -> TuiBuffer {
+    let a: BufferArea = tv.area;
+    if a.width < 4 || a.height < 1 {
+        return buf;
+    }
+
+    let total: Int = list_len(tv.ids);
+    let mut r: Int = 0;
+    let mut out: TuiBuffer = buf;
+
+    while r < a.height {
+        let actual_idx: Int = tv.scroll_offset + r;
+        let row_y: Int = a.y + r;
+        if actual_idx < total {
+            let label: String = list_get(tv.labels, actual_idx);
+            let depth_val: Int = list_get(tv.depths, actual_idx);
+            let fl: Int = list_get(tv.flags, actual_idx);
+            let is_leaf: Bool = (fl & 1) != 0;
+            let is_expanded: Bool = (fl & 2) != 0;
+
+            let is_sel: Bool = actual_idx == tv.selected_index;
+            let is_foc: Bool = tv.is_focused;
+
+            let fg: Int = if is_sel && is_foc { 0 } else { 15 };
+            let bg: Int = if is_sel && is_foc { 14 } else { 0 };
+
+            // Fill line background
+            let mut x: Int = a.x;
+            while x < (a.x + a.width) {
+                out = tui_buffer_set_cell(out, x, row_y, tui_cell_new(32, fg, bg));
+                x = x + 1;
+            }
+
+            // Indentation
+            let mut indent: String = "";
+            let mut d: Int = 0;
+            while d < depth_val {
+                indent = indent + "  ";
+                d = d + 1;
+            }
+
+            // Node expand icon
+            let icon: String = if is_leaf {
+                "* "
+            } else if is_expanded {
+                "- "
+            } else {
+                "+ "
+            };
+
+            let prefix: String = indent + icon;
+            out = tui_buffer_write_string(out, a.x, row_y, prefix, fg, bg, 0);
+            let sel_mod: Int = if is_sel { 1 } else { 0 };
+            out = tui_buffer_write_string(
+                out,
+                a.x + prefix.len(),
+                row_y,
+                label,
+                fg,
+                bg,
+                sel_mod
+            );
+        }
+        r = r + 1;
+    }
+    return out;
+}

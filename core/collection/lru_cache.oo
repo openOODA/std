@@ -1,0 +1,167 @@
+// # Least Recently Used (LRU) Cache
+//
+// Logline: Bounded string-to-string LRU cache whose recency order is tracked by a doubly-linked index array of pre-allocated slots.
+//
+// Setup: All capacity slots are allocated up front. The recency list runs from head (most recently used) to tail (least recently used). Each slot carries its prev/next pointers in parallel List[Int] arrays, with -1 meaning the slot is at one end of the list or unused.
+//
+// Beats:
+//   1. Construct LruCache with a capacity limit; all slots are unused.
+//   2. Find a slot by key, allocate a free slot, or evict the tail.
+//   3. Unlink a slot from its current position by patching its neighbours.
+//   4. Link a slot at the head so it becomes the most recently used.
+//   5. Put a key/value, updating or inserting, and evicting tail when full.
+//   6. Get a key, promoting it to head, and remove a key outright.
+
+import "std/core/primitives/list.oo";
+
+type LruCache = struct {
+    keys: List[String],
+    values: List[String],
+    idx_prev: List[Int],
+    idx_next: List[Int],
+    idx_used: List[Int],
+    head: Int,
+    tail: Int,
+    size: Int,
+    capacity: Int
+};
+
+pub fn lru_new(capacity: Int) -> LruCache {
+    let mut cap: Int = capacity;
+    if cap < 1 { cap = 1; }
+    let mut ks: List[String] = list_new();
+    let mut vs: List[String] = list_new();
+    let mut pr: List[Int] = list_new();
+    let mut nx: List[Int] = list_new();
+    let mut us: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < cap {
+        ks = list_push(ks, "");
+        vs = list_push(vs, "");
+        pr = list_push(pr, 0 - 1);
+        nx = list_push(nx, 0 - 1);
+        us = list_push(us, 0);
+        i = i + 1;
+    }
+    return LruCache { keys: ks, values: vs, idx_prev: pr, idx_next: nx, idx_used: us, head: 0 - 1, tail: 0 - 1, size: 0, capacity: cap };
+}
+
+// Rebuild a LruCache with patched prev/next/head/tail. Other fields pass through.
+fn lru_rebuild(c: LruCache, pr: List[Int], nx: List[Int], new_head: Int, new_tail: Int) -> LruCache {
+    return LruCache { keys: c.keys, values: c.values, idx_prev: pr, idx_next: nx, idx_used: c.idx_used, head: new_head, tail: new_tail, size: c.size, capacity: c.capacity };
+}
+
+// Find the slot index that currently stores key, or -1 if absent.
+fn lru_find_slot(c: LruCache, key: String) -> Int {
+    let n: Int = c.capacity;
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(c.idx_used, i) == 1 {
+            if list_get(c.keys, i) == key { return i; }
+        }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+// Find a free slot index, or -1 if every slot is used.
+fn lru_find_free(c: LruCache) -> Int {
+    let n: Int = c.capacity;
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(c.idx_used, i) == 0 { return i; }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+// Unlink slot s from the doubly-linked list, patching its neighbours.
+fn lru_unlink(c: LruCache, s: Int) -> LruCache {
+    let prev: Int = list_get(c.idx_prev, s);
+    let next: Int = list_get(c.idx_next, s);
+    let mut pr: List[Int] = c.idx_prev;
+    let mut nx: List[Int] = c.idx_next;
+    let mut nh: Int = c.head;
+    let mut nt: Int = c.tail;
+    if prev >= 0 { nx = list_set(nx, prev, next); }
+    if next >= 0 { pr = list_set(pr, next, prev); }
+    if nh == s { nh = next; }
+    if nt == s { nt = prev; }
+    pr = list_set(pr, s, 0 - 1);
+    nx = list_set(nx, s, 0 - 1);
+    return lru_rebuild(c, pr, nx, nh, nt);
+}
+
+// Link slot s at the head of the doubly-linked list.
+fn lru_link_head(c: LruCache, s: Int) -> LruCache {
+    let old_head: Int = c.head;
+    let mut pr: List[Int] = list_set(c.idx_prev, s, 0 - 1);
+    let mut nx: List[Int] = list_set(c.idx_next, s, old_head);
+    let mut nh: Int = s;
+    let mut nt: Int = c.tail;
+    if old_head >= 0 { pr = list_set(pr, old_head, s); }
+    if nt < 0 { nt = s; }
+    return lru_rebuild(c, pr, nx, nh, nt);
+}
+
+pub fn lru_len(c: LruCache) -> Int { return c.size; }
+pub fn lru_capacity(c: LruCache) -> Int { return c.capacity; }
+pub fn lru_is_empty(c: LruCache) -> Bool { return c.size == 0; }
+pub fn lru_clear(c: LruCache) -> LruCache { return lru_new(c.capacity); }
+pub fn lru_contains(c: LruCache, key: String) -> Bool { return lru_find_slot(c, key) >= 0; }
+
+pub fn lru_get(c: LruCache, key: String) -> Result[String, String] {
+    let s: Int = lru_find_slot(c, key);
+    if s < 0 { return Err("ERR\tlru_get\tkey_not_found"); }
+    let mut w: LruCache = lru_unlink(c, s);
+    w = lru_link_head(w, s);
+    return Ok(list_get(c.values, s));
+}
+
+pub fn lru_put(c: LruCache, key: String, val: String) -> LruCache {
+    let mut w: LruCache = c;
+    let s: Int = lru_find_slot(w, key);
+    if s >= 0 {
+        let new_vals: List[String] = list_set(w.values, s, val);
+        w = LruCache { keys: w.keys, values: new_vals, idx_prev: w.idx_prev, idx_next: w.idx_next, idx_used: w.idx_used, head: w.head, tail: w.tail, size: w.size, capacity: w.capacity };
+        w = lru_unlink(w, s);
+        w = lru_link_head(w, s);
+        return w;
+    }
+    if w.size >= w.capacity {
+        let evict: Int = w.tail;
+        w = lru_unlink(w, evict);
+        let new_used: List[Int] = list_set(w.idx_used, evict, 0);
+        w = LruCache { keys: w.keys, values: w.values, idx_prev: w.idx_prev, idx_next: w.idx_next, idx_used: new_used, head: w.head, tail: w.tail, size: w.size - 1, capacity: w.capacity };
+    }
+    let free_slot: Int = lru_find_free(w);
+    let new_keys: List[String] = list_set(w.keys, free_slot, key);
+    let new_vals2: List[String] = list_set(w.values, free_slot, val);
+    let new_used2: List[Int] = list_set(w.idx_used, free_slot, 1);
+    w = LruCache { keys: new_keys, values: new_vals2, idx_prev: w.idx_prev, idx_next: w.idx_next, idx_used: new_used2, head: w.head, tail: w.tail, size: w.size, capacity: w.capacity };
+    w = lru_link_head(w, free_slot);
+    w = LruCache { keys: w.keys, values: w.values, idx_prev: w.idx_prev, idx_next: w.idx_next, idx_used: w.idx_used, head: w.head, tail: w.tail, size: w.size + 1, capacity: w.capacity };
+    return w;
+}
+
+pub fn lru_remove(c: LruCache, key: String) -> LruCache {
+    let s: Int = lru_find_slot(c, key);
+    if s < 0 { return c; }
+    let mut w: LruCache = lru_unlink(c, s);
+    let new_used: List[Int] = list_set(w.idx_used, s, 0);
+    return LruCache { keys: w.keys, values: w.values, idx_prev: w.idx_prev, idx_next: w.idx_next, idx_used: new_used, head: w.head, tail: w.tail, size: w.size - 1, capacity: w.capacity };
+}
+
+// Return keys in order from MRU (index 0) to LRU (last).
+pub fn lru_keys(c: LruCache) -> List[String] {
+    let mut out: List[String] = list_new();
+    let mut s: Int = c.head;
+    let guard: Int = c.size;
+    let mut count: Int = 0;
+    while s >= 0 && count < guard {
+        out = list_push(out, list_get(c.keys, s));
+        s = list_get(c.idx_next, s);
+        count = count + 1;
+    }
+    return out;
+}

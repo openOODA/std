@@ -1,0 +1,93 @@
+// # Preemptive scheduling principle
+//
+// Logline: A kernel may preempt a user process at any instruction boundary, subject to a minimum quantum; below that quantum the kernel is effectively cooperative and gives no preemption guarantee.
+//
+// Setup: Pure Int. min_quantum_us is a non-negative microsecond quantum; the heuristic is encoded as preempt_granularity(min_quantum_us) returning 1 when min_quantum_us >= 1 (i.e. quantum exists) and 0 when 0 (cooperative).
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+//
+// Beats:
+//   1. preempt_granularity(0) is 0 (cooperative).
+//   2. preempt_granularity(1) is 1 (preemptive with 1us quantum).
+//   3. Negative quantum fails closed to 0.
+//   4. Coupled: preempt_cap(max_instructions, quantum) returns max_instructions when quantum >= 1 (i.e. preemption possible) and 0 when quantum == 0.
+
+import "std/fs/os/os_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// True when the OODA_FS_WRITEDIR prefix is allowlisted (cross-law witness).
+fn pp_env_ok() -> Int {
+    return os_env_key_allowed("OODA_FS_WRITEDIR");
+}
+
+// Integer absolute value without abs_f.
+fn pp_abs(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+// 1 if min_quantum_us >= 1 (preemptive kernel).
+// 0 if min_quantum_us == 0 (cooperative kernel).
+// Negative quantum fails closed to 0.
+pub fn preempt_granularity(min_quantum_us: Int) -> Int {
+    if min_quantum_us < 0 { return 0; }
+    if min_quantum_us == 0 { return 0; }
+    return 1;
+}
+
+fn ppc_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Coupled: Ok(max_instructions) if preemptive, Ok(0) if cooperative. Negative inputs are Err.
+pub fn preempt_cap(max_instructions: Int, min_quantum_us: Int) -> Result[Int, String] {
+    if max_instructions < 0 { return Err("ERR\tppc\tdomain"); }
+    if min_quantum_us < 0 { return Err("ERR\tppc\tdomain"); }
+    if preempt_granularity(min_quantum_us) != 1 { return Ok(0); }
+    return Ok(max_instructions);
+}
+
+// Domain certificate: 1 if the preemption heuristic is satisfied for the given quantum.
+pub fn preempt_principle_holds(min_quantum_us: Int) -> DomainCert {
+    if pp_env_ok() != 1 { return domain_cert("os", "preemptive_principle", 0); }
+    return domain_cert("os", "preemptive_principle", preempt_granularity(min_quantum_us));
+}
+
+pub fn verify_preemptive_principle() -> Bool {
+    // Golden: min_quantum=1 -> 1 (preemptive at 1us quantum).
+    if preempt_granularity(1) != 1 { return false; }
+    // Golden: min_quantum=0 -> 0 (cooperative).
+    if preempt_granularity(0) != 0 { return false; }
+    // Golden: large quanta are still preemptive.
+    if preempt_granularity(10) != 1 { return false; }
+    if preempt_granularity(1000) != 1 { return false; }
+    if preempt_granularity(100000) != 1 { return false; }
+    // Hostile: negative quantum fails closed to 0.
+    if preempt_granularity(0 - 1) != 0 { return false; }
+    if preempt_granularity(0 - 100) != 0 { return false; }
+    // Coupled: preempt_cap returns max_instructions when preemptive.
+    if ppc_got(preempt_cap(1000, 1)) != 1000 { return false; }
+    if ppc_got(preempt_cap(500, 10)) != 500 { return false; }
+    // Coupled: cooperative quantum is Ok(0).
+    let zcoop: Result[Int, String] = preempt_cap(1000, 0);
+    if zcoop.is_ok() == false { return false; }
+    if ppc_got(zcoop) != 0 { return false; }
+    // Hostile: negative inputs are Err (0 is in-band cap).
+    if preempt_cap(0 - 1, 1).is_ok() { return false; }
+    if preempt_cap(0 - 1, 0).is_ok() { return false; }
+    if preempt_cap(1000, 0 - 1).is_ok() { return false; }
+    // Domain certificate round-trip.
+    let c1: DomainCert = preempt_principle_holds(1);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "os" { return false; }
+    if c1.law_name != "preemptive_principle" { return false; }
+    let c0: DomainCert = preempt_principle_holds(0);
+    if c0.holds != 0 { return false; }
+    let cn: DomainCert = preempt_principle_holds(0 - 5);
+    if cn.holds != 0 { return false; }
+    // pp_abs sanity (no abs_f).
+    if pp_abs(0) != 0 { return false; }
+    if pp_abs(3) != 3 { return false; }
+    if pp_abs(0 - 3) != 3 { return false; }
+    return true;
+}

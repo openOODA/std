@@ -1,0 +1,81 @@
+// # Monoid identity law
+//
+// Logline: For Int addition, the identity 0 composed with any x equals x on both sides, and a non-zero candidate for the identity fails closed.
+//
+// Setup: Pure Int. Additive monoid over Int with element-wise addition and identity 0.
+//
+// Beats:
+//   1. left_identity(x) = (0 + x) equals x for any x.
+//   2. right_identity(x) = (x + 0) equals x for any x.
+//   3. A claim that a non-zero element is identity fails closed to 0.
+//   4. The identity element is unique: 0 is the only identity for additive Int.
+
+// (0 + x) is x. The function adds 0 to x to mirror the monoid law.
+pub fn core_monoid_left_identity(x: Int) -> Int {
+    return 0 + x;
+}
+
+// (x + 0) is x. The function adds 0 to x to mirror the monoid law.
+pub fn core_monoid_right_identity(x: Int) -> Int {
+    return x + 0;
+}
+
+// Claim: "0 is the additive identity". Holds (1) when both left and right identities return x.
+pub fn core_monoid_is_identity(x: Int) -> Int {
+    let l: Int = core_monoid_left_identity(x);
+    let r: Int = core_monoid_right_identity(x);
+    if l == x {
+        if r == x {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Hostile check: claim that candidate c is the identity. Returns 1 only when c is 0 and the law holds.
+pub fn core_monoid_claim_identity(c: Int, x: Int) -> Int {
+    let mut l: Int = c;
+    let mut i: Int = 0;
+    while i < 1 {
+        l = l + x;
+        i = i + 1;
+    }
+    if l == x {
+        let mut r: Int = x;
+        let mut j: Int = 0;
+        while j < 1 {
+            r = r + c;
+            j = j + 1;
+        }
+        if r == x {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn verify_monoid_identity_law() -> Bool {
+    // Golden: 0 is identity for several values.
+    if core_monoid_is_identity(0) != 1 { return false; }
+    if core_monoid_is_identity(1) != 1 { return false; }
+    if core_monoid_is_identity(0 - 7) != 1 { return false; }
+    if core_monoid_is_identity(100) != 1 { return false; }
+    if core_monoid_is_identity(0 - 1) != 1 { return false; }
+
+    // Golden: left and right identities agree for representative values.
+    if core_monoid_left_identity(42) != 42 { return false; }
+    if core_monoid_right_identity(42) != 42 { return false; }
+    if core_monoid_left_identity(0) != 0 { return false; }
+    if core_monoid_right_identity(0) != 0 { return false; }
+
+    // Golden: claim that 0 is identity for x=3 holds.
+    if core_monoid_claim_identity(0, 3) != 1 { return false; }
+
+    // Hostile: claim that 5 is identity for x=3. (5+3) != 3 and (3+5) != 3.
+    if core_monoid_claim_identity(5, 3) != 0 { return false; }
+
+    // Hostile: claim that 1 is identity for x=0. (1+0) = 1 != 0.
+    if core_monoid_claim_identity(1, 0) != 0 { return false; }
+
+    return true;
+}

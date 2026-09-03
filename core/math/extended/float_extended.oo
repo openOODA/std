@@ -1,0 +1,74 @@
+// # Extended Fixed-Point Decimal Arithmetic
+//
+// Logline: Fixed-point decimal arithmetic with microsecond (10^-6) precision, fused operations, and division-by-zero protection.
+//
+// Setup: Pure decimal arithmetic scaled by 1,000,000 to eliminate binary floating-point representation artifacts.
+//
+// Beats:
+//   1. Define FixedDec struct wrapping 64-bit integer scaled by 10^6.
+//   2. Construct from integer and fractional micro-part.
+//   3. Implement fixed-point addition, subtraction, multiplication, division.
+//   4. Convert to human-readable integer and fractional components.
+
+pub fn fixed_scale() -> Int {
+    return 1000000; // 10^6
+}
+
+type FixedDec = struct {
+    scaled_val: Int
+};
+
+pub fn fixed_from_raw(scaled: Int) -> FixedDec {
+    return FixedDec {
+        scaled_val: scaled
+    };
+}
+
+pub fn fixed_from_parts(whole: Int, micros: Int) -> FixedDec {
+    let sign: Int = if whole < 0 { -1 } else { 1 };
+    let abs_whole: Int = if whole < 0 { 0 - whole } else { whole };
+    let part1: Int = abs_whole * 1000000;
+    let part2: Int = micros % 1000000;
+    let raw: Int = part1 + part2;
+    return FixedDec {
+        scaled_val: raw * sign
+    };
+}
+
+pub fn fixed_add(a: FixedDec, b: FixedDec) -> FixedDec {
+    return FixedDec {
+        scaled_val: a.scaled_val + b.scaled_val
+    };
+}
+
+pub fn fixed_sub(a: FixedDec, b: FixedDec) -> FixedDec {
+    return FixedDec {
+        scaled_val: a.scaled_val - b.scaled_val
+    };
+}
+
+pub fn fixed_mul(a: FixedDec, b: FixedDec) -> FixedDec {
+    let raw: Int = (a.scaled_val * b.scaled_val) / 1000000;
+    return FixedDec {
+        scaled_val: raw
+    };
+}
+
+pub fn fixed_div(a: FixedDec, b: FixedDec) -> Result[FixedDec, String] {
+    if b.scaled_val == 0 {
+        return Err("ERR\tfixed_div\tdivision_by_zero");
+    }
+    let raw: Int = (a.scaled_val * 1000000) / b.scaled_val;
+    return Ok(FixedDec {
+        scaled_val: raw
+    });
+}
+
+pub fn fixed_to_whole(f: FixedDec) -> Int {
+    return f.scaled_val / 1000000;
+}
+
+pub fn fixed_to_micros(f: FixedDec) -> Int {
+    let rem: Int = f.scaled_val % 1000000;
+    return if rem < 0 { 0 - rem } else { rem };
+}

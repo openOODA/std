@@ -1,0 +1,96 @@
+// # Test Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard test domain library. Re-exports a stable test_mod_* surface for the most-used public API (adversarial probing, fault injection, fuzz, GPU/multi-compiler cross-validation, L2 mutation). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private test siblings; no caps required for harness construction. Cross-validation and mutation may take CompileCap at the call site.
+//
+// Beats:
+//   1. Re-export the adversarial probe surface as test_mod_adversarial_*.
+//   2. Re-export the fault injection surface (profile, vector, corrupt, evaluate, report) as test_mod_fault_*.
+//   3. Re-export the fuzz surface (seed, range, boundary, report) as test_mod_fuzz_*.
+//   4. Re-export the GPU cross-validation and multi-compiler matrix surface as test_mod_gpu_xval_*, test_mod_matrix_*.
+//   5. Re-export the L2 mutation surface and document the private siblings.
+
+import "adversarial_probe.oo";
+import "fault_injection.oo";
+import "scenario.oo";
+import "runner.oo";
+import "fuzz.oo";
+import "gpu_cross_val.oo";
+import "multi_compiler.oo";
+import "mutation_l2.oo";
+
+// Public adversarial probe surface: test_mod_adversarial_*
+pub fn test_mod_adversarial_create_domain(name: String, pos: Int, neg: Int, killed: Int) -> StdDomainProbe { return adversarial_probe_create_domain(name, pos, neg, killed); }
+pub fn test_mod_adversarial_validate_domain(p: StdDomainProbe) -> Result[Bool, String] { return adversarial_probe_validate_domain(p); }
+pub fn test_mod_adversarial_audit_suite() -> DomainAuditReport { return adversarial_probe_audit_suite(); }
+
+// Public fault injection surface: test_mod_fault_*
+pub fn test_mod_fault_profile_default(subsystem: String) -> FaultProfile { return fault_profile_default(subsystem); }
+pub fn test_mod_fault_vector_new(id: Int, subsystem: String, f_type: String, payload: String) -> FaultVector { return fault_vector_new(id, subsystem, f_type, payload); }
+pub fn test_mod_fault_corrupt_slice(start: Int, end: Int, len: Int) -> List[Int] { return fault_corrupt_slice_bounds(start, end, len); }
+pub fn test_mod_fault_corrupt_memory_idx(idx: Int, max_len: Int) -> Int { return fault_corrupt_memory_index(idx, max_len); }
+pub fn test_mod_fault_corrupt_cap_token(token_id: Int) -> Int { return fault_corrupt_cap_token(token_id); }
+pub fn test_mod_fault_evaluate_trap(vec: FaultVector) -> Result[Bool, String] { return fault_evaluate_trap(vec); }
+pub fn test_mod_fault_report_aggregate(total: Int, detected: Int) -> FaultInjectionReport { return fault_report_aggregate(total, detected); }
+
+// Public fuzz surface: test_mod_fuzz_*
+pub fn test_mod_fuzz_next_seed(seed: Int) -> Int { return fuzz_next_seed(seed); }
+pub fn test_mod_fuzz_int_range(seed: Int, min_val: Int, max_val: Int) -> Int { return fuzz_int_range(seed, min_val, max_val); }
+pub fn test_mod_fuzz_boundary_int(step: Int) -> Int { return fuzz_boundary_int(step); }
+pub fn test_mod_fuzz_boundary_string(step: Int) -> String { return fuzz_boundary_string(step); }
+pub fn test_mod_fuzz_report_new() -> FuzzReport { return fuzz_report_new(); }
+pub fn test_mod_fuzz_record_pass(mut rep: FuzzReport) -> FuzzReport { return fuzz_record_pass(rep); }
+pub fn test_mod_fuzz_record_fail(mut rep: FuzzReport, counterexample_msg: String) -> FuzzReport { return fuzz_record_fail(rep, counterexample_msg); }
+
+// Public GPU cross-validation surface: test_mod_gpu_xval_*
+pub fn test_mod_gpu_xval_evaluate_gemm(m: Int, n: Int, k: Int) -> TensorParityResult { return gpu_cross_val_evaluate_gemm(m, n, k); }
+pub fn test_mod_gpu_xval_evaluate_vector_add(dim: Int) -> TensorParityResult { return gpu_cross_val_evaluate_vector_add(dim); }
+pub fn test_mod_gpu_xval_assert_passed(report: GpuCrossValReport) -> Result[Bool, String] { return gpu_cross_val_assert_passed(report); }
+
+// Public multi-compiler matrix surface: test_mod_matrix_*
+pub fn test_mod_matrix_config_default() -> MatrixConfig { return matrix_config_default(); }
+pub fn test_mod_matrix_build_default_suite() -> List[BackendSpec] { return matrix_build_default_backend_suite(); }
+pub fn test_mod_matrix_compare(mod_name: String, r1: ExecutionResult, r2: ExecutionResult) -> ParityComparison { return matrix_compare_results(mod_name, r1, r2); }
+pub fn test_mod_matrix_evaluate(mod_name: String, primary: ExecutionResult, targets: List[ExecutionResult]) -> List[ParityComparison] { return matrix_evaluate_module(mod_name, primary, targets); }
+pub fn test_mod_matrix_aggregate(comparisons: List[ParityComparison], total_modules: Int, total_backends: Int) -> CrossValMatrixReport { return matrix_aggregate_report(comparisons, total_modules, total_backends); }
+pub fn test_mod_matrix_assert_zero_divergence(report: CrossValMatrixReport) -> Result[Bool, String] { return matrix_assert_zero_divergence(report); }
+
+// Public L2 mutation surface: test_mod_l2_*
+pub fn test_mod_l2_config_default() -> L2CampaignConfig { return l2_config_default(); }
+pub fn test_mod_l2_mutant_new(id: Int, kind: String, line: Int, orig: String, mut_expr: String, is_2x: Bool) -> L2Mutant { return l2_mutant_new(id, kind, line, orig, mut_expr, is_2x); }
+pub fn test_mod_l2_mutate_relational(op: String) -> String { return l2_mutate_relational(op); }
+pub fn test_mod_l2_mutate_arithmetic(op: String) -> String { return l2_mutate_arithmetic(op); }
+pub fn test_mod_l2_mutate_logical(op: String) -> String { return l2_mutate_logical(op); }
+pub fn test_mod_l2_mutate_boundary(val: Int, offset: Int) -> Int { return l2_mutate_boundary_int(val, offset); }
+pub fn test_mod_l2_calculate_score(total: Int, killed: Int) -> L2MutationScore { return l2_calculate_score(total, killed); }
+pub fn test_mod_l2_assert_gate_passed(score: L2MutationScore) -> Result[Bool, String] { return l2_assert_gate_passed(score); }
+pub fn test_mod_l2_run_campaign(cfg: L2CampaignConfig, killed: Int, total: Int) -> L2MutationScore { return l2_run_campaign(cfg, killed, total); }
+
+// Public scenario (acceptance-test) surface: test_mod_scenario_*, test_mod_check, test_mod_expect_*
+pub fn test_mod_scenario(p: &ProcessCap, fs: &FsReadCap, name: String) -> Result[Void, String] { return scenario(p, fs, name); }
+pub fn test_mod_check(p: &ProcessCap, cmd: String, within: Int) -> Result[Void, String] { return check(p, cmd, within); }
+pub fn test_mod_expect_present(fs: &FsReadCap, path: String) -> Result[Void, String] { return expect_present(fs, path); }
+pub fn test_mod_expect_absent(fs: &FsReadCap, path: String) -> Result[Void, String] { return expect_absent(fs, path); }
+pub fn test_mod_expect_line_count(fs: &FsReadCap, path: String, n: Int) -> Result[Void, String] { return expect_line_count(fs, path, n); }
+pub fn test_mod_expect_substring(fs: &FsReadCap, path: String, needle: String) -> Result[Void, String] { return expect_substring(fs, path, needle); }
+pub fn test_mod_expect_quiet(p: &ProcessCap, cmd: String) -> Result[Void, String] { return expect_quiet(p, cmd); }
+pub fn test_mod_expect_no_phantoms(fs: &FsReadCap, dir: String, allow: List[String]) -> Result[Void, String] { return expect_no_phantoms(fs, dir, allow); }
+pub fn test_mod_expect_count(fs: &FsReadCap, dir: String, pattern: String, n: Int) -> Result[Void, String] { return expect_count(fs, dir, pattern, n); }
+pub fn test_mod_expect_clean(p: &ProcessCap, cmd: String) -> Result[Void, String] { return expect_clean(p, cmd); }
+pub fn test_mod_expect_equal(a: String, b: String) -> Result[Void, String] { return expect_equal(a, b); }
+pub fn test_mod_expect_lt(a: Int, b: Int) -> Result[Void, String] { return expect_lt(a, b); }
+
+// Public test-runner surface: test_mod_runner_*, test_mod_assert_*, test_mod_summary_*
+pub fn test_mod_runner_new() -> TestRunner { return test_runner_new(); }
+pub fn test_mod_assert_eq_int(r: TestRunner, name: String, got: Int, want: Int) -> TestRunner { return test_assert_eq_int(r, name, got, want); }
+pub fn test_mod_assert_eq_str(r: TestRunner, name: String, got: String, want: String) -> TestRunner { return test_assert_eq_str(r, name, got, want); }
+pub fn test_mod_assert(r: TestRunner, name: String, cond: Bool) -> TestRunner { return test_assert(r, name, cond); }
+pub fn test_mod_summary(r: TestRunner) { return test_summary(r); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. assertion_count_law.oo, flaky_test_law.oo, mutation_score_law.oo, property_based_law.oo)
+//   _theory files (e.g. coverage_theory.oo, quickcheck_shrink_theory.oo)
+//   _principle files (e.g. fuzzing_coverage_principle.oo, mutation_score_principle.oo, test_isolation_principle.oo)
+//   _invariants files (e.g. test_invariants.oo)
+//   _kat files (e.g. test_kat.oo)

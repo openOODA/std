@@ -1,0 +1,37 @@
+// # Zero is not a multiplicative unit
+//
+// Logline: There is no Int x with 0 * x = 1. This bound applies to every ring in math/.
+//
+// Setup: Pure Int arithmetic. Holds 1 when 0*x != 1.
+//
+// Beats:
+//   1. 0 * 1 != 1, 0 * 0 != 1, 0 * (-1) != 1.
+//   2. domain_cert boxes the holds bit.
+//   3. verify_zero_not_unit_principle is true.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn math_zero_not_unit(x: Int) -> DomainCert {
+    let p: Int = 0 * x;
+    let mut h: Int = 0;
+    if p != 1 {
+        h = 1;
+    }
+    return domain_cert("math", "zero_not_unit", h);
+}
+
+pub fn verify_zero_not_unit_principle() -> Bool {
+    let a: DomainCert = math_zero_not_unit(1);
+    let b: DomainCert = math_zero_not_unit(0);
+    let c: DomainCert = math_zero_not_unit(0 - 1);
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    if c.holds != 1 {
+        return false;
+    }
+    return true;
+}

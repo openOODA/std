@@ -1,0 +1,147 @@
+// # Fermat's principle (stationary optical time)
+//
+// Logline: The actual light path makes optical time stationary; for refraction at a planar interface this is equivalent to Snell's law n1*sin(theta_i) = n2*sin(theta_t).
+//
+// Setup: Pure Float. n1>0, n2>0, theta_i in [0, pi/2], L1>0, L2>0. n<=0 or illegal angles return Err. theta_i=0 is Ok(0).
+//
+// Beats:
+//   1. fermat_snell_theta_t returns asin(n1*sin(theta_i)/n2) clamped to [0, pi/2].
+//   2. fermat_optical_time returns T = n1*L1/cos(theta_i) + n2*L2/cos(theta_t).
+//   3. fermat_stationary_check returns true when Snell is satisfied within 1e-6.
+//   4. fermat_principle_cert returns DomainCert with holds=1 iff stationary.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_principles_fermat_optimal_path_principle() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+fn ft_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn fermat_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn fermat_clamp_pi_2(x: Float) -> Float {
+    let pi_2: Float = 1.5707963267948966;
+    if x < 0.0 { return 0.0; }
+    if x > pi_2 { return pi_2; }
+    return x;
+}
+
+fn fermat_asin(x: Float) -> Float {
+    let mut clamped: Float = x;
+    if clamped > 1.0 { clamped = 1.0; }
+    if clamped < (0.0 - 1.0) { clamped = 0.0 - 1.0; }
+    let pi_2: Float = 1.5707963267948966;
+    let mut ax: Float = clamped;
+    let mut flip: Float = 1.0;
+    if ax < 0.0 {
+        ax = 0.0 - ax;
+        flip = 0.0 - 1.0;
+    }
+    let mut theta: Float = ax;
+    let mut i: Int = 0;
+    while i < 32 {
+        let s: Float = sin(theta);
+        let c: Float = cos(theta);
+        let diff: Float = s - ax;
+        if fermat_abs(diff) < 0.0000000001 { i = 32; } else {
+            if c == 0.0 { theta = pi_2; i = 32; } else {
+                theta = theta - (diff / c);
+                if theta < 0.0 { theta = 0.0; }
+                if theta > pi_2 { theta = pi_2; }
+            }
+        }
+        i = i + 1;
+    }
+    return flip * theta;
+}
+
+pub fn fermat_snell_theta_t(n1: Float, n2: Float, theta_i_rad: Float) -> Result[Float, String] {
+    if n1 <= 0.0 { return Err("ERR\tft\tn"); }
+    if n2 <= 0.0 { return Err("ERR\tft\tn"); }
+    let pi_2: Float = 1.5707963267948966;
+    if theta_i_rad < 0.0 { return Err("ERR\tft\ttheta"); }
+    if theta_i_rad > pi_2 { return Err("ERR\tft\ttheta"); }
+    let s: Float = sin(theta_i_rad);
+    let ratio: Float = (n1 * s) / n2;
+    return Ok(fermat_clamp_pi_2(fermat_asin(ratio)));
+}
+
+pub fn fermat_optical_time(n1: Float, n2: Float, theta_i_rad: Float, theta_t_rad: Float, l1: Float, l2: Float) -> Result[Float, String] {
+    if n1 <= 0.0 { return Err("ERR\tft\tn"); }
+    if n2 <= 0.0 { return Err("ERR\tft\tn"); }
+    if l1 <= 0.0 { return Err("ERR\tft\tl"); }
+    if l2 <= 0.0 { return Err("ERR\tft\tl"); }
+    let pi_2: Float = 1.5707963267948966;
+    if theta_i_rad < 0.0 { return Err("ERR\tft\ttheta"); }
+    if theta_t_rad < 0.0 { return Err("ERR\tft\ttheta"); }
+    if theta_i_rad > pi_2 { return Err("ERR\tft\ttheta"); }
+    if theta_t_rad > pi_2 { return Err("ERR\tft\ttheta"); }
+    let ci: Float = cos(theta_i_rad);
+    let ct: Float = cos(theta_t_rad);
+    if ci <= 0.0 { return Err("ERR\tft\tcos"); }
+    if ct <= 0.0 { return Err("ERR\tft\tcos"); }
+    return Ok((n1 * l1 / ci) + (n2 * l2 / ct));
+}
+
+pub fn fermat_stationary_check(n1: Float, n2: Float, theta_i_rad: Float, theta_t_rad: Float) -> Bool {
+    if n1 <= 0.0 { return false; }
+    if n2 <= 0.0 { return false; }
+    if theta_i_rad < 0.0 { return false; }
+    if theta_t_rad < 0.0 { return false; }
+    let pi_2: Float = 1.5707963267948966;
+    if theta_i_rad > pi_2 { return false; }
+    if theta_t_rad > pi_2 { return false; }
+    let lhs: Float = n1 * sin(theta_i_rad);
+    let rhs: Float = n2 * sin(theta_t_rad);
+    let mut d: Float = lhs - rhs;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.000001 { return false; }
+    return true;
+}
+
+pub fn fermat_principle_cert(n1: Float, n2: Float, theta_i_rad: Float, l1: Float, l2: Float) -> DomainCert {
+    let mut h: Int = 0;
+    let ttr: Result[Float, String] = fermat_snell_theta_t(n1, n2, theta_i_rad);
+    if ttr.is_ok() {
+        let tt: Float = ft_got(ttr);
+        let otr: Result[Float, String] = fermat_optical_time(n1, n2, theta_i_rad, tt, l1, l2);
+        if otr.is_ok() {
+            if ft_got(otr) > 0.0 {
+                if fermat_stationary_check(n1, n2, theta_i_rad, tt) { h = 1; }
+            }
+        }
+    }
+    return domain_cert("principles", "fermat_optimal_path", h);
+}
+
+pub fn verify_fermat_optimal_path_principle() -> Bool {
+    let pi: Float = circ_pi_std_principles_fermat_optimal_path_principle();
+    let theta_i: Float = (30.0 * pi) / 180.0;
+    let tt: Float = ft_got(fermat_snell_theta_t(1.0, 1.5, theta_i));
+    let exp_rad: Float = (19.47122063449069 * pi) / 180.0;
+    let mut d: Float = tt - exp_rad;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    if fermat_stationary_check(1.0, 1.5, theta_i, tt) == false { return false; }
+    let t: Float = ft_got(fermat_optical_time(1.0, 1.5, theta_i, tt, 1.0, 1.0));
+    if t <= 0.0 { return false; }
+    if fermat_stationary_check(1.0, 1.5, theta_i, tt + 0.01) == true { return false; }
+    if fermat_stationary_check(1.0, 1.5, theta_i, 0.0 - 0.1) == true { return false; }
+    if fermat_stationary_check(1.0, 1.5, theta_i, pi / 2.0 + 0.1) == true { return false; }
+    if fermat_stationary_check(0.0, 1.5, theta_i, tt) == true { return false; }
+    if fermat_stationary_check(0.0 - 1.0, 1.5, theta_i, tt) == true { return false; }
+    if fermat_stationary_check(1.0, 0.0, theta_i, tt) == true { return false; }
+    if fermat_stationary_check(1.0, 1.5, 0.0 - 0.1, tt) == true { return false; }
+    if fermat_stationary_check(1.0, 1.5, pi / 2.0 + 0.1, tt) == true { return false; }
+    if fermat_snell_theta_t(0.0, 1.5, theta_i).is_ok() { return false; }
+    if fermat_snell_theta_t(0.0 - 1.0, 1.5, theta_i).is_ok() { return false; }
+    if fermat_snell_theta_t(1.0, 0.0, theta_i).is_ok() { return false; }
+    if fermat_optical_time(0.0, 1.5, theta_i, tt, 1.0, 1.0).is_ok() { return false; }
+    if fermat_optical_time(1.0, 1.5, theta_i, tt, 0.0, 1.0).is_ok() { return false; }
+    if ft_got(fermat_snell_theta_t(1.0, 1.5, 0.0)) != 0.0 { return false; }
+    return true;
+}

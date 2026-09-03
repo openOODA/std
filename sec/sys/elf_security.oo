@@ -1,0 +1,125 @@
+// # ELF Security Feature Analysis Engine
+//
+// Logline: Score NX, RELRO, PIE, canary, and exec-stack features; build ElfSecurityReport.
+//
+// Setup: Imports elf_inspect.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. elf_analyze_security: scan program headers for PT_GNU_STACK and PT_GNU_RELRO.
+//   2. elf_score_pie: gate e_type against ET_DYN.
+//   3. elf_score_relro: gate presence of PT_GNU_RELRO with DF_BIND_NOW.
+//   4. elf_security_report: bind score, violations, and feature flags.
+//
+// residual: live ELF patch is process_exit in elf_stubs.
+
+// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
+// RULES.oot 1.3: Fail-closed residual for unimplemented builtins.
+
+import "std/sec/sys/elf_inspect.oo";
+
+// -------------------------------------------------------------------
+// Security Feature Analysis Engine
+// -------------------------------------------------------------------
+
+pub fn elf_analyze_security(file: &ElfFile) -> ElfSecurityReport {
+    let mut score: Int = 0;
+    let mut violations: Int = 0;
+    let mut nx: Bool = true;
+    let mut relro: Bool = false;
+    let mut is_pie_val: Bool = false;
+    let mut canary: Bool = false;
+    let mut exec_stack: Bool = false;
+
+    // Check PIE (e_type == ET_DYN)
+    let hdr_val: ElfHeader = file.header;
+    let et: Int = hdr_val.e_type;
+    let et_dyn_type: Int = elf_et_dyn();
+    if et == et_dyn_type {
+        is_pie_val = true;
+        score = score + 25;
+    } else {
+        violations = violations + 1;
+    }
+
+    // Check Program Headers for PT_GNU_STACK and PT_GNU_RELRO
+    let phs: List[ProgramHeader] = file.program_headers;
+    let n_ph: Int = list_len(phs);
+    let stack_type: Int = pt_gnu_stack();
+    let relro_type: Int = pt_gnu_relro();
+    let mut i_ph: Int = 0;
+    while i_ph < n_ph {
+        let p: ProgramHeader = list_get(phs, i_ph);
+        if p.p_type == stack_type {
+            if p.is_executable == true {
+                exec_stack = true;
+                nx = false;
+                violations = violations + 1;
+            } else {
+                score = score + 25;
+            }
+        }
+        if p.p_type == relro_type {
+            relro = true;
+            score = score + 25;
+        }
+        i_ph = i_ph + 1;
+    }
+
+    // Check symbols for __stack_chk_fail (Stack Canary indicator)
+    let syms: List[ElfSymbol] = file.symbols;
+    let n_sym: Int = list_len(syms);
+    let mut i_sym: Int = 0;
+    while i_sym < n_sym {
+        let s: ElfSymbol = list_get(syms, i_sym);
+        if s.st_name_str == "__stack_chk_fail" {
+            canary = true;
+            score = score + 25;
+        }
+        i_sym = i_sym + 1;
+    }
+
+    let mut is_comp: Bool = false;
+    if violations == 0 {
+        if score >= 75 {
+            is_comp = true;
+        }
+    }
+
+    return ElfSecurityReport {
+        has_nx_stack: nx,
+        has_relro: relro,
+        has_bind_now: false,
+        has_canary_symbol: canary,
+        is_pie: is_pie_val,
+        has_rpath: false,
+        has_executable_stack: exec_stack,
+        security_score: score,
+        violation_count: violations,
+        is_compliant: is_comp
+    };
+}
+
+pub fn elf_file_set_security_report(file: ElfFile, report: ElfSecurityReport) -> ElfFile {
+    return ElfFile {
+        filename: file.filename,
+        header: file.header,
+        program_headers: file.program_headers,
+        section_headers: file.section_headers,
+        symbols: file.symbols,
+        is_parsed: file.is_parsed,
+        security_report: report
+    };
+}
+
+pub fn elf_file_do_work(file: &ElfFile) -> Int {
+    let n_ph: Int = list_len(file.program_headers);
+    let n_sh: Int = list_len(file.section_headers);
+    let n_sym: Int = list_len(file.symbols);
+    let hdr_val: ElfHeader = file.header;
+    let entry: Int = hdr_val.e_entry;
+    return n_ph + n_sh + n_sym + entry;
+}
+
+pub fn elf_security_probe() -> Int {
+    return 0;
+}

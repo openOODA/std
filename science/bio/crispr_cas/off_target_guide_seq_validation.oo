@@ -1,0 +1,96 @@
+// # Experimental Off-Target Validation (GUIDE-seq / CIRCLE-seq)
+//
+// Logline: Parses and validates empirical genome-wide cleavage capture datasets from GUIDE-seq, CIRCLE-seq, and SITE-seq assays.
+//
+// Setup: Experimental benchmark module computing sequencing read counts, dsODN tag integration frequencies, and validation concordance.
+//
+// Beats:
+//   1. Define GuideSeqLocusEntry and GuideSeqExperimentSummary structures.
+//   2. Process sequencing read support counts for candidate off-target loci.
+//   3. Compute empirical vs predicted off-target correlation metrics.
+
+type GuideSeqLocusEntry = struct {
+    chromosome: String,
+    genomic_start: Int,
+    read_count: Int,
+    mismatch_string: String,
+    is_on_target: Bool
+};
+
+type GuideSeqExperimentSummary = struct {
+    total_validated_sites: Int,
+    total_offtarget_reads: Int,
+    on_target_fraction_pct: Float,
+    highest_offtarget_read_count: Int
+};
+
+pub fn guideseq_summarize(loci: List[GuideSeqLocusEntry]) -> GuideSeqExperimentSummary {
+    let count: Int = list_len(loci);    let mut total_reads: Int = 0;    let mut on_target_reads: Int = 0;    let mut max_off: Int = 0;
+    let mut i: Int = 0;    while i < count {
+        let entry: GuideSeqLocusEntry = list_get(loci, i);        let r = entry.read_count;
+        total_reads = total_reads + r;
+        if entry.is_on_target {
+            on_target_reads = on_target_reads + r;
+        } else {
+            if r > max_off {
+                max_off = r;
+            }
+        }
+        i = i + 1;
+    }
+
+    let mut on_pct: Float = 0.0;
+
+
+    if total_reads > 0 {
+
+
+        on_pct = off_target_guide_seq_validation_to_f((on_target_reads) / off_target_guide_seq_validation_to_f(total_reads)) * 100.0;
+
+
+    }
+
+    return GuideSeqExperimentSummary {
+        total_validated_sites: count,
+        total_offtarget_reads: total_reads - on_target_reads,
+        on_target_fraction_pct: on_pct,
+        highest_offtarget_read_count: max_off
+    };
+}
+
+pub fn off_target_guide_seq_validation_probe() -> Int {
+    return 0;
+}
+
+
+fn off_target_guide_seq_validation_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

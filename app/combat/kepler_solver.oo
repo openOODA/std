@@ -1,0 +1,77 @@
+// # Kepler Equation Solver
+//
+// Logline: Solves Kepler's transcendental equation using Newton-Raphson iteration with cubic initial guesses.
+//
+// Setup: Pure mathematical module operating over double precision floating-point values.
+//
+// Beats:
+//   1. Normalize input mean anomaly into the standard positive 2-pi interval.
+//   2. Generate cubic initial guess for high-eccentricity regimes to ensure monotonic convergence.
+//   3. Execute Newton-Raphson iteration until quadratic convergence reaches machine precision.
+
+import "./orbital_types.oo";
+
+pub fn normalize_angle_2pi(ang: Float) -> Float {
+    let two_pi: Float = const_two_pi();
+    let mut a: Float = ang;
+    while a < 0.0 {
+        a = a + two_pi;
+    }
+    while a >= two_pi {
+        a = a - two_pi;
+    }
+    return a;
+}
+
+pub fn float_abs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn kepler_initial_guess(m_norm: Float, ecc: Float) -> Float {
+    if ecc >= 0.8 {
+        let sin_m: Float = sin(m_norm);
+        let mut sign_sin: Float = 1.0;
+        if sin_m < 0.0 {
+            sign_sin = 0.0 - 1.0;
+        }
+        let guess: Float = m_norm + (0.85 * (ecc * sign_sin));
+        return guess;
+    }
+    if ecc < 0.2 {
+        return m_norm + (ecc * sin(m_norm));
+    }
+    let sin_m: Float = sin(m_norm);
+    let sin_2m: Float = sin(2.0 * m_norm);
+    let term1: Float = ecc * sin_m;
+    let term2: Float = ((ecc * ecc) / 2.0) * sin_2m;
+    return m_norm + term1 + term2;
+}
+
+pub fn kepler_solve_eccentric_anomaly(mean_anomaly: Float, eccentricity: Float) -> Float {
+    if eccentricity <= 0.000000000001 {
+        return normalize_angle_2pi(mean_anomaly);
+    }
+    let m_norm: Float = normalize_angle_2pi(mean_anomaly);
+    let mut e_curr: Float = kepler_initial_guess(m_norm, eccentricity);
+    let mut iter: Int = 0;
+    let max_iter: Int = 50;
+    let tol: Float = 0.0000000000001;
+
+    while iter < max_iter {
+        let sin_e: Float = sin(e_curr);
+        let cos_e: Float = cos(e_curr);
+        let f_val: Float = (e_curr - (eccentricity * sin_e)) - m_norm;
+        let f_prime: Float = 1.0 - (eccentricity * cos_e);
+        let delta: Float = f_val / f_prime;
+        e_curr = e_curr - delta;
+        if float_abs(delta) < tol {
+            iter = max_iter;
+        } else {
+            iter = iter + 1;
+        }
+    }
+    return normalize_angle_2pi(e_curr);
+}

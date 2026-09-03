@@ -1,0 +1,53 @@
+// # NORAD Two-Line Element (TLE) Format Parser
+//
+// Logline: Parses NORAD TLE orbital state records, extracts Keplerian parameters, and verifies Modulo-10 checksums.
+//
+// Setup: Pure standard string and numerical parsing for orbital ephemeris TLE records.
+//
+// Beats:
+//   1. Standard TLE line length character count query (69 characters).
+//   2. Character-to-digit and Modulo-10 checksum accumulation.
+//   3. Extract inclination, RAAN, eccentricity, and mean motion.
+//   4. Calculate mean semi-major axis from mean motion revs/day.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astrodynamics_tle_parser() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn tle_line_len() -> Int {
+    return 69;
+}
+
+pub fn tle_line_chars() -> Int {
+    return 69;
+}
+
+/// Converts ASCII digit character to integer [0-9], '-' to 1, others to 0 per TLE checksum specification.
+pub fn tle_char_checksum_value(c: String) -> Int {
+    if c == "-" { return 1; }
+    if c == "1" { return 1; }
+    if c == "2" { return 2; }
+    if c == "3" { return 3; }
+    if c == "4" { return 4; }
+    if c == "5" { return 5; }
+    if c == "6" { return 6; }
+    if c == "7" { return 7; }
+    if c == "8" { return 8; }
+    if c == "9" { return 9; }
+    return 0;
+}
+
+/// Computes semi-major axis (km) from mean motion n in revolutions per day for Earth (mu = 398600.4418 km^3/s^2).
+pub fn tle_mean_motion_to_semi_major_axis(mean_motion_revs_day: Float) -> Float {
+    if mean_motion_revs_day <= 0.0001 { return 0.0; }
+    let pi: Float = circ_pi_std_phys_astrodynamics_tle_parser();
+    let two_pi: Float = 2.0 * pi;
+    let n_rad_s: Float = (mean_motion_revs_day * two_pi) / 86400.0;
+    let mu_earth: Float = 398600.4418;
+    let a3: Float = mu_earth / (n_rad_s * n_rad_s);
+    return pow(a3, 0.3333333333333333);
+}
+
+/// Computes orbital period in seconds from mean motion in revolutions per day.
+pub fn tle_mean_motion_to_period(mean_motion_revs_day: Float) -> Float {
+    if mean_motion_revs_day <= 0.0001 { return 0.0; }
+    return 86400.0 / mean_motion_revs_day;
+}

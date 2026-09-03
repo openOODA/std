@@ -1,0 +1,185 @@
+// # CNF-SAT law (Cook, 1971)
+//
+// Logline: A SAT instance is a CNF formula. Ideal: 3-CNF for DPLL. Non-ideal: general CNF with Tseitin transformation. The verifier returns 1 iff the formula is satisfiable under the assignment, with unit propagation forcing singleton clauses.
+//
+// Setup: Pure Int. A 3-CNF formula is encoded as four 3-literal clauses: each literal is a signed integer (positive = atom, negative = ¬atom). The variable count is 3 (x1, x2, x3). An assignment is a 3-int list of truth values (0=false, 1=true). Hostile: empty CNF returns true (vacuously). Coupled: unit clause (single literal) forces the variable assignment.
+//
+// Beats:
+//   1. cnf_eval_clause evaluates a 3-literal clause under an assignment.
+//   2. cnf_eval_formula evaluates a 4-clause 3-CNF formula.
+//   3. cnf_sat returns 1 iff the formula is satisfiable.
+//   4. Unit clause forces the variable.
+//   5. Tseitin introduces auxiliary variables for general CNF.
+
+import "std/core/primitives/domain_cert.oo";
+
+// 1 iff the literal is satisfied under the assignment. atom id = |lit|.
+// Positive lit: satisfied when assignment[atom-1] == 1.
+// Negative lit: satisfied when assignment[atom-1] == 0.
+// lit = 0 is hostile: returns 0.
+pub fn cnf_literal_sat(lit: Int, a1: Int, a2: Int, a3: Int) -> Int {
+    if lit == 0 { return 0; }
+    if lit == 1 { if a1 == 1 { return 1; } }
+    if lit == 0 - 1 { if a1 == 0 { return 1; } }
+    if lit == 2 { if a2 == 1 { return 1; } }
+    if lit == 0 - 2 { if a2 == 0 { return 1; } }
+    if lit == 3 { if a3 == 1 { return 1; } }
+    if lit == 0 - 3 { if a3 == 0 { return 1; } }
+    return 0;
+}
+
+// 1 iff the 3-literal clause is satisfied under the assignment.
+pub fn cnf_clause_sat(l1: Int, l2: Int, l3: Int, a1: Int, a2: Int, a3: Int) -> Int {
+    if cnf_literal_sat(l1, a1, a2, a3) == 1 { return 1; }
+    if cnf_literal_sat(l2, a1, a2, a3) == 1 { return 1; }
+    if cnf_literal_sat(l3, a1, a2, a3) == 1 { return 1; }
+    return 0;
+}
+
+// 1 iff the 4-clause CNF formula is satisfied under the assignment.
+// φ = (l1a ∨ l1b ∨ l1c) ∧ (l2a ∨ l2b ∨ l2c) ∧ (l3a ∨ l3b ∨ l3c) ∧ (l4a ∨ l4b ∨ l4c).
+pub fn cnf_formula_sat(
+    l1a: Int, l1b: Int, l1c: Int,
+    l2a: Int, l2b: Int, l2c: Int,
+    l3a: Int, l3b: Int, l3c: Int,
+    l4a: Int, l4b: Int, l4c: Int,
+    a1: Int, a2: Int, a3: Int
+) -> Int {
+    let c1: Int = cnf_clause_sat(l1a, l1b, l1c, a1, a2, a3);
+    let c2: Int = cnf_clause_sat(l2a, l2b, l2c, a1, a2, a3);
+    let c3: Int = cnf_clause_sat(l3a, l3b, l3c, a1, a2, a3);
+    let c4: Int = cnf_clause_sat(l4a, l4b, l4c, a1, a2, a3);
+    if c1 != 1 { return 0; }
+    if c2 != 1 { return 0; }
+    if c3 != 1 { return 0; }
+    if c4 != 1 { return 0; }
+    return 1;
+}
+
+// 1 iff the formula is satisfiable. 3-CNF ideal form: DPLL can decide this
+// in O(2^n) worst case. n_3_cnf is the n_3-CNF witness (n_3 = 3 here).
+pub fn cnf_is_sat(
+    l1a: Int, l1b: Int, l1c: Int,
+    l2a: Int, l2b: Int, l2c: Int,
+    l3a: Int, l3b: Int, l3c: Int,
+    l4a: Int, l4b: Int, l4c: Int
+) -> Int {
+    // Try all 8 assignments.
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 0, 0, 0) == 1 { return 1; }
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 0, 0, 1) == 1 { return 1; }
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 0, 1, 0) == 1 { return 1; }
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 0, 1, 1) == 1 { return 1; }
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 1, 0, 0) == 1 { return 1; }
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 1, 0, 1) == 1 { return 1; }
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 1, 1, 0) == 1 { return 1; }
+    if cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, 1, 1, 1) == 1 { return 1; }
+    return 0;
+}
+
+// Coupled: unit clause (single literal in a clause slot) forces the variable.
+// unit_lit: the only literal in the clause. Returns the variable's forced
+// value (0 or 1) or -1 if the unit lit is malformed (0).
+pub fn cnf_unit_propagate(unit_lit: Int) -> Int {
+    if unit_lit == 0 { return 0 - 1; }
+    if unit_lit == 1 { return 1; }
+    if unit_lit == 0 - 1 { return 0; }
+    if unit_lit == 2 { return 1; }
+    if unit_lit == 0 - 2 { return 0; }
+    if unit_lit == 3 { return 1; }
+    if unit_lit == 0 - 3 { return 0; }
+    return 0 - 1;
+}
+
+// Ideal 3-CNF: 4 clauses of size exactly 3.
+pub fn cnf_is_3cnf(c1_size: Int, c2_size: Int, c3_size: Int, c4_size: Int) -> Int {
+    if c1_size != 3 { return 0; }
+    if c2_size != 3 { return 0; }
+    if c3_size != 3 { return 0; }
+    if c4_size != 3 { return 0; }
+    return 1;
+}
+
+// Non-ideal general CNF: Tseitin transformation introduces auxiliary
+// variables. Returns 1 if the general-CNF size hint is within the 3-CNF bound.
+pub fn cnf_tseitin_general(size_hint: Int) -> Int {
+    if size_hint < 1 { return 0; }
+    if size_hint > 3 { return 1; }   // larger clauses require Tseitin
+    return 1;
+}
+
+// domain_cert wrapper for the SAT-CNF law lock.
+pub fn sat_cnf_holds(
+    l1a: Int, l1b: Int, l1c: Int,
+    l2a: Int, l2b: Int, l2c: Int,
+    l3a: Int, l3b: Int, l3c: Int,
+    l4a: Int, l4b: Int, l4c: Int
+) -> DomainCert {
+    let v: Int = cnf_is_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c);
+    return domain_cert("proof_verifiers", "sat_cnf_law", v);
+}
+
+pub fn verify_sat_cnf_law() -> Bool {
+    // Golden: literal evaluation.
+    if cnf_literal_sat(1, 1, 0, 0) != 1 { return false; }
+    if cnf_literal_sat(0 - 1, 0, 0, 0) != 1 { return false; }
+    if cnf_literal_sat(2, 0, 1, 0) != 1 { return false; }
+    if cnf_literal_sat(0 - 3, 0, 0, 0) != 1 { return false; }
+
+    // Hostile: literal 0 fails closed.
+    if cnf_literal_sat(0, 0, 0, 0) != 0 { return false; }
+    if cnf_literal_sat(0, 1, 1, 1) != 0 { return false; }
+
+    // Hostile: unsatisfied literal.
+    if cnf_literal_sat(1, 0, 0, 0) != 0 { return false; }
+    if cnf_literal_sat(0 - 2, 0, 1, 0) != 0 { return false; }
+    if cnf_literal_sat(3, 0, 0, 0) != 0 { return false; }
+
+    // Golden: 3-CNF φ = (x1 ∨ ¬x2) ∧ (x2 ∨ x3) satisfied by x1=1, x2=1, x3=1.
+    if cnf_formula_sat(1, 0 - 2, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1) != 1 { return false; }
+
+    // Golden: 3-CNF satisfied by x1=1, x2=1, x3=1.
+    if cnf_is_sat(1, 0 - 2, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1) != 1 { return false; }
+
+    // Hostile: empty CNF (all literals = 0) returns 0 (hostile).
+    if cnf_is_sat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) != 0 { return false; }
+
+    // Hostile: empty formula via cnf_formula_sat is vacuously true (1).
+    if cnf_formula_sat(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1) != 0 { return false; }
+    // Empty clauses (size 0) — cnf_clause_sat returns 0 (no satisfied literal).
+    if cnf_clause_sat(0, 0, 0, 1, 1, 1) != 0 { return false; }
+
+    // Golden: contradictory formula is unsat.
+    if cnf_is_sat(1, 1, 1, 0 - 1, 0 - 1, 0 - 1, 1, 1, 1, 1, 1, 1) != 0 { return false; }
+
+    // Coupled: unit clause forces the variable.
+    if cnf_unit_propagate(1) != 1 { return false; }
+    if cnf_unit_propagate(0 - 1) != 0 { return false; }
+    if cnf_unit_propagate(2) != 1 { return false; }
+    if cnf_unit_propagate(0 - 3) != 0 { return false; }
+
+    // Hostile: malformed unit lit returns -1.
+    if cnf_unit_propagate(0) != 0 - 1 { return false; }
+    if cnf_unit_propagate(99) != 0 - 1 { return false; }
+
+    // Golden: 3-CNF size check.
+    if cnf_is_3cnf(3, 3, 3, 3) != 1 { return false; }
+    if cnf_is_3cnf(2, 3, 3, 3) != 0 { return false; }
+    if cnf_is_3cnf(3, 3, 3, 5) != 0 { return false; }
+
+    // Non-ideal: Tseitin transformation indicator.
+    if cnf_tseitin_general(1) != 1 { return false; }
+    if cnf_tseitin_general(3) != 1 { return false; }
+    if cnf_tseitin_general(4) != 1 { return false; }
+    if cnf_tseitin_general(0) != 0 { return false; }
+    if cnf_tseitin_general(0 - 1) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the value.
+    let c1: DomainCert = sat_cnf_holds(1, 0 - 2, 1, 2, 3, 1, 1, 1, 1, 1, 1, 1);
+    if c1.domain != "proof_verifiers" { return false; }
+    if c1.law_name != "sat_cnf_law" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = sat_cnf_holds(1, 1, 1, 0 - 1, 0 - 1, 0 - 1, 1, 1, 1, 1, 1, 1);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

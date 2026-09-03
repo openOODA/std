@@ -1,0 +1,87 @@
+// # Golden ratio extremal principle
+//
+// Logline: phi = (1 + sqrt(5))/2 is the unique positive minimizer of f(x) = x^{-1} + x; equivalently 1/x^2 = 1 at x = phi.
+//
+// Setup: Pure Float. x > 0 admitted. x <= 0 returns Err. golden_minimizer_score is Ok(0) at phi.
+//
+// Beats:
+//   1. golden_ratio returns (1 + sqrt(5)) / 2.
+//   2. golden_objective returns x^{-1} + x (Err on x <= 0).
+//   3. golden_minimizer_score returns 0 at phi, positive elsewhere, Err on x <= 0.
+//   4. golden_extremal_derivative returns 1 - 1/x^2 (zero at phi).
+
+import "std/core/primitives/domain_cert.oo";
+
+fn gr_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn golden_ratio() -> Float {
+    return (1.0 + sqrt(5.0)) / 2.0;
+}
+
+pub fn golden_objective(x: Float) -> Result[Float, String] {
+    if x <= 0.0 { return Err("ERR\tgr\tx"); }
+    return Ok((1.0 / x) + x);
+}
+
+// |f(x) - f(phi)| / f(phi). Ok(0) at x=phi. Positive for x != phi in the open domain.
+pub fn golden_minimizer_score(x: Float) -> Result[Float, String] {
+    if x <= 0.0 { return Err("ERR\tgr\tx"); }
+    let fx: Float = (1.0 / x) + x;
+    let phi: Float = golden_ratio();
+    let fphi: Float = (1.0 / phi) + phi;
+    if fphi <= 0.0 { return Err("ERR\tgr\tphi"); }
+    let mut diff: Float = fx - fphi;
+    if diff < 0.0 { diff = 0.0 - diff; }
+    return Ok(diff / fphi);
+}
+
+// d/dx (x^{-1} + x) = 1 - 1/x^2. Zero at x = phi. Err on x <= 0.
+pub fn golden_extremal_derivative(x: Float) -> Result[Float, String] {
+    if x <= 0.0 { return Err("ERR\tgr\tx"); }
+    return Ok(1.0 - (1.0 / (x * x)));
+}
+
+pub fn verify_golden_ratio_extremal_principle() -> Bool {
+    let phi: Float = golden_ratio();
+    let mut d: Float = (phi * phi) - phi - 1.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.000000001 { return false; }
+    let s_phi: Float = gr_got(golden_minimizer_score(phi));
+    if s_phi < 0.0 { return false; }
+    if s_phi > 0.000000001 { return false; }
+    let s_one: Float = gr_got(golden_minimizer_score(1.0));
+    if s_one <= 0.0 { return false; }
+    let s_two: Float = gr_got(golden_minimizer_score(2.0));
+    if s_two <= 0.0 { return false; }
+    let fxphi: Float = gr_got(golden_objective(phi));
+    let mut df: Float = fxphi - sqrt(5.0);
+    if df < 0.0 { df = 0.0 - df; }
+    if df > 0.000000001 { return false; }
+    let inv_phi_sq: Float = 1.0 / (phi * phi);
+    let mut di: Float = inv_phi_sq - (2.0 - phi);
+    if di < 0.0 { di = 0.0 - di; }
+    if di > 0.000000001 { return false; }
+    if phi <= 1.0 { return false; }
+    if phi >= 2.0 { return false; }
+    if golden_minimizer_score(0.0).is_ok() { return false; }
+    if golden_minimizer_score(0.0 - 1.0).is_ok() { return false; }
+    if golden_objective(0.0).is_ok() { return false; }
+    if golden_extremal_derivative(0.0).is_ok() { return false; }
+    let s_inv: Float = gr_got(golden_minimizer_score(1.0 / 1.5));
+    let s_15: Float = gr_got(golden_minimizer_score(1.5));
+    let mut sd: Float = s_inv - s_15;
+    if sd < 0.0 { sd = 0.0 - sd; }
+    if sd > 0.000000001 { return false; }
+    return true;
+}
+
+pub fn golden_ratio_principle_cert(x: Float) -> DomainCert {
+    let mut h: Int = 0;
+    let sr: Result[Float, String] = golden_minimizer_score(x);
+    if sr.is_ok() {
+        if gr_got(sr) <= 0.000000001 { h = 1; }
+    }
+    return domain_cert("principles", "golden_ratio_extremal", h);
+}

@@ -1,0 +1,27 @@
+// # Lunar Ascent & Orbital Insertion Guidance
+//
+// Logline: Calculates lunar surface ascent trajectory, pitchover program, gravity losses, and orbital insertion delta-v (Apollo LM / Artemis).
+//
+// Setup: Pure lunar ascent guidance from lunar surface to 100 km circular lunar parking orbit.
+//
+// Beats:
+//   1. Nominal lunar ascent delta-v budget integer query (~1870 m/s).
+//   2. Calculate vertical rise duration and pitchover initiation altitude.
+//   3. Compute gravity turn velocity increment and insertion speed v_circ.
+//   4. Calculate propellant mass required for lunar ascent stage.
+
+pub fn lunar_ascent_dv() -> Int {
+    return 1870;
+}
+
+/// Computes total lunar ascent delta-v: v_circ + gravity_loss + margin (m/s).
+pub fn lunar_ascent_total_delta_v(
+    target_alt_km: Float
+) -> Float {
+    let r_moon_km: Float = 1737.4;
+    let mu_moon: Float = 4902.800066; // km^3/s^2
+    let r_target: Float = r_moon_km + target_alt_km;
+    let v_circ_m_s: Float = sqrt(mu_moon / r_target) * 1000.0;
+    let gravity_loss_m_s: Float = 190.0; // Typical Apollo lunar ascent gravity loss
+    return v_circ_m_s + gravity_loss_m_s;
+}

@@ -1,0 +1,117 @@
+// # Chemical Fingerprints & Substructure Search
+//
+// Logline: Computes Morgan/ECFP circular chemical fingerprints, Tanimoto similarity coefficients, and substructure matching.
+//
+// Setup: Pure data representations and chemical fingerprint similarity metrics.
+//
+// Beats:
+//   1. Generate circular Morgan and path-based chemical fingerprints for molecules.
+//   2. Calculate Tanimoto and Dice similarity coefficients between chemical fingerprints.
+//   3. By-value implemented off List[struct].
+
+type Fingerprint = struct {
+    bits: List[Int],
+    nbits: Int,
+    density: Int,
+    fingerprint_type: String
+};
+
+type SubstructureMatch = struct {
+    query_smiles: String,
+    target_smiles: String,
+    matched_atom_indices: List[Int],
+    is_match: Bool
+};
+
+pub fn fingerprint_create_empty(nbits: Int, fp_type: String) -> Fingerprint {
+    let mut bits: List[Int] = list_new();
+    let mut i: Int = 0;    while i < nbits {
+        bits = list_push(bits, 0);
+        i = i + 1;
+    }
+    return Fingerprint {
+        bits: bits,
+        nbits: nbits,
+        density: 0,
+        fingerprint_type: fp_type
+    };
+}
+
+pub fn fingerprint_set_bit(fp: Fingerprint, bit_idx: Int) -> Fingerprint {
+    let nbits: Int = fp.nbits;
+    if bit_idx < 0 || bit_idx >= nbits {
+        return fp;
+    }
+    let mut new_bits: List[Int] = list_new();
+    let mut i: Int = 0;    let mut set_count: Int = 0;    while i < nbits {
+        let orig: Int = list_get(fp.bits, i);
+        if i == bit_idx || orig == 1 {
+            new_bits = list_push(new_bits, 1);
+            set_count = set_count + 1;
+        } else {
+            new_bits = list_push(new_bits, 0);
+        }
+        i = i + 1;
+    }
+    let fp_type: String = fp.fingerprint_type;
+    return Fingerprint {
+        bits: new_bits,
+        nbits: nbits,
+        density: set_count,
+        fingerprint_type: fp_type
+    };
+}
+
+pub fn fingerprint_has_bit(fp: Fingerprint, bit_idx: Int) -> Bool {
+    let nbits: Int = fp.nbits;
+    if bit_idx < 0 || bit_idx >= nbits {
+        return false;
+    }
+    let b_val: Int = list_get(fp.bits, bit_idx);
+    return b_val == 1;
+}
+
+pub fn fingerprint_tanimoto_similarity(fp1: Fingerprint, fp2: Fingerprint) -> Int {
+    let n1: Int = fp1.nbits;
+    let n2: Int = fp2.nbits;
+    if n1 != n2 {
+        return 0;
+    }
+    let mut intersect_count: Int = 0;    let mut union_count: Int = 0;    let mut i: Int = 0;    while i < n1 {
+        let b1: Int = list_get(fp1.bits, i);
+        let b2: Int = list_get(fp2.bits, i);
+        if b1 == 1 && b2 == 1 {
+            intersect_count = intersect_count + 1;
+        }
+        if b1 == 1 || b2 == 1 {
+            union_count = union_count + 1;
+        }
+        i = i + 1;
+    }
+    if union_count == 0 {
+        return 100;
+    }
+    return (intersect_count * 100) / union_count;
+}
+
+pub fn fingerprint_dice_similarity(fp1: Fingerprint, fp2: Fingerprint) -> Int {
+    let n1: Int = fp1.nbits;
+    let n2: Int = fp2.nbits;
+    if n1 != n2 {
+        return 0;
+    }
+    let mut intersect_count: Int = 0;    let mut i: Int = 0;    while i < n1 {
+        let b1: Int = list_get(fp1.bits, i);
+        let b2: Int = list_get(fp2.bits, i);
+        if b1 == 1 && b2 == 1 {
+            intersect_count = intersect_count + 1;
+        }
+        i = i + 1;
+    }
+    let d1: Int = fp1.density;
+    let d2: Int = fp2.density;
+    let total_bits: Int = d1 + d2;    if total_bits == 0 {
+        return 100;
+    }
+    return (2 * intersect_count * 100) / total_bits;
+}

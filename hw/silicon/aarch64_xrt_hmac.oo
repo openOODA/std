@@ -1,0 +1,101 @@
+// # AArch64 SHA-256 Work Rotate And Byte Copy
+//
+// Logline: Rotates SHA-256 working variables and copies or XOR-pads byte buffers.
+//
+// Setup: Work slots are eight 8-byte words. HMAC ipad/opad live on the bump heap.
+//
+// Beats:
+//   1. __sha_shift stores a=t1+t2 through h=g.
+//   2. __sha_cpy copies n bytes dst <- src.
+//   3. __sha_xorpad writes 64 key bytes XOR a constant, zero-padded.
+//   4. HMAC continues in aarch64_xrt_hmac2.oo.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_hmac2.oo";
+
+fn a64rt_shift(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_shift");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(11, 2));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 48));
+    x = a64x_emit(x, arm64_word_str(3, 9, 56));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 40));
+    x = a64x_emit(x, arm64_word_str(3, 9, 48));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 32));
+    x = a64x_emit(x, arm64_word_str(3, 9, 40));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 24));
+    x = a64x_emit(x, arm64_word_add_reg(3, 3, 10));
+    x = a64x_emit(x, arm64_word_movz(4, 65535, 0));
+    x = a64x_emit(x, arm64_word_movk(4, 65535, 1));
+    x = a64x_emit(x, arm64_word_and_reg(3, 3, 4));
+    x = a64x_emit(x, arm64_word_str(3, 9, 32));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 16));
+    x = a64x_emit(x, arm64_word_str(3, 9, 24));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 8));
+    x = a64x_emit(x, arm64_word_str(3, 9, 16));
+    x = a64x_emit(x, arm64_word_ldr(3, 9, 0));
+    x = a64x_emit(x, arm64_word_str(3, 9, 8));
+    x = a64x_emit(x, arm64_word_str(11, 9, 0));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_cpy(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_cpy");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(11, 2));
+    x = a64x_emit(x, arm64_word_movz(12, 0, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(12, 11));
+    let bd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(3, 10, 12));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 9, 12));
+    x = a64x_emit(x, arm64_word_add_imm(12, 12, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bd, arm64_word_b_cond(arm64_cond_eq(), done - bd)));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_xorpad(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_xorpad");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(10, 1));
+    x = a64x_emit(x, arm64_word_mov_reg(11, 2));
+    x = a64x_emit(x, arm64_word_mov_reg(13, 3));
+    x = a64x_emit(x, arm64_word_movz(12, 0, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 64, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(12, 0));
+    let bd: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0));
+    x = a64x_emit(x, arm64_word_movz(3, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(12, 10));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 2));
+    x = a64x_emit(x, arm64_word_ldrb_reg(3, 9, 12));
+    x = a64x_emit(x, arm64_word_eor_reg(3, 3, 13));
+    x = a64x_emit(x, arm64_word_strb_reg(3, 11, 12));
+    x = a64x_emit(x, arm64_word_add_imm(12, 12, 1));
+    let bb: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(lp - bb));
+    let done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bd, arm64_word_b_cond(arm64_cond_eq(), done - bd)));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_hmac(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_shift(r0);
+    r = a64rt_cpy(r);
+    r = a64rt_xorpad(r);
+    return a64rt_hmac2(r);
+}

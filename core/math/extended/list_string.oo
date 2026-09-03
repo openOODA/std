@@ -1,0 +1,31 @@
+// # List String
+//
+// Logline: Standard library verification and domain capabilities for List String.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_list_string() -> Bool {
+    let mut xs: List[String] = list_new();
+    xs = xs.push("hi");
+    xs = xs.push("yo");
+    println(xs.len());
+    println(list_get(xs, 0));
+    println(list_get(xs, 1));
+    for s in xs {
+        println(s);
+    }
+    let mut a: List[String] = list_new();
+    a = a.push("hi" + "yo");
+    let mut b: List[String] = list_new();
+    b = b.push("hiyo");
+    if a == b {
+        println(1);
+    } else {
+        println(0);
+    }
+    return true;
+}

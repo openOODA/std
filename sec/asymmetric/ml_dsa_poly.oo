@@ -1,0 +1,157 @@
+// # FIPS 204 ML-DSA Polynomial & Vector Ring Operations
+//
+// Logline: Implements polynomial ring operations over R_q = Z_8380417[X]/(X^256 + 1) and vector infinity norm checks.
+//
+// Setup: Canonical polynomial structure and ring arithmetic for ML-DSA module lattices.
+//
+// Beats:
+//   1. Represent degree-256 polynomial with modulus q = 8380417.
+//   2. Implement modular addition, subtraction, and scaling.
+//   3. Represent vector of polynomials with flat 256*dim coefficient array.
+//   4. Implement infinity norm bound verification ||p||_inf < bound.
+
+import "./ml_dsa_params.oo";
+
+type MlDsaPoly = struct {
+    coeffs: List[Int],
+    degree: Int,
+    modulus: Int
+};
+
+type MlDsaPolyVec = struct {
+    coeffs: List[Int],
+    dim: Int
+};
+
+pub fn ml_dsa_poly_zero() -> MlDsaPoly {
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        c = list_push(c, 0);
+        i = i + 1;
+    }
+    return MlDsaPoly {
+        coeffs: c,
+        degree: 256,
+        modulus: 8380417
+    };
+}
+
+pub fn ml_dsa_poly_mod(val: Int) -> Int {
+    let mut r: Int = val % 8380417;
+    if r < 0 {
+        r = r + 8380417;
+    }
+    return r;
+}
+
+pub fn ml_dsa_poly_add(a: MlDsaPoly, b: MlDsaPoly) -> MlDsaPoly {
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        c = list_push(c, ml_dsa_poly_mod(va + vb));
+        i = i + 1;
+    }
+    return MlDsaPoly {
+        coeffs: c,
+        degree: 256,
+        modulus: 8380417
+    };
+}
+
+pub fn ml_dsa_poly_sub(a: MlDsaPoly, b: MlDsaPoly) -> MlDsaPoly {
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        c = list_push(c, ml_dsa_poly_mod(va - vb));
+        i = i + 1;
+    }
+    return MlDsaPoly {
+        coeffs: c,
+        degree: 256,
+        modulus: 8380417
+    };
+}
+
+pub fn ml_dsa_poly_chknorm(p: MlDsaPoly, bound: Int) -> Bool {
+    let mut i: Int = 0;
+    while i < 256 {
+        let mut c: Int = list_get(p.coeffs, i);
+        if c > (8380417 / 2) {
+            c = 8380417 - c;
+        }
+        if c >= bound {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+pub fn ml_dsa_polyvec_new(dim: Int) -> MlDsaPolyVec {
+    let mut c: List[Int] = list_new();
+    let total: Int = 256 * dim;
+    let mut i: Int = 0;
+    while i < total {
+        c = list_push(c, 0);
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: c,
+        dim: dim
+    };
+}
+
+pub fn ml_dsa_polyvec_add(a: MlDsaPolyVec, b: MlDsaPolyVec) -> MlDsaPolyVec {
+    let dim: Int = a.dim;
+    let total: Int = 256 * dim;
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        c = list_push(c, ml_dsa_poly_mod(va + vb));
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: c,
+        dim: dim
+    };
+}
+
+pub fn ml_dsa_polyvec_sub(a: MlDsaPolyVec, b: MlDsaPolyVec) -> MlDsaPolyVec {
+    let dim: Int = a.dim;
+    let total: Int = 256 * dim;
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        c = list_push(c, ml_dsa_poly_mod(va - vb));
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: c,
+        dim: dim
+    };
+}
+
+pub fn ml_dsa_polyvec_chknorm(v: MlDsaPolyVec, bound: Int) -> Bool {
+    let total: Int = 256 * v.dim;
+    let mut i: Int = 0;
+    while i < total {
+        let mut c: Int = list_get(v.coeffs, i);
+        if c > (8380417 / 2) {
+            c = 8380417 - c;
+        }
+        if c >= bound {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}

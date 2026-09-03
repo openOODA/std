@@ -1,0 +1,31 @@
+// # FHE Fail-Closed Stubs
+//
+// Logline: Enforces fail-closed barriers for unverified cryptographic operations in FHE.
+//
+// Setup: Imports fhe_types.oo (Int-floor FheParams).
+//
+// Beats:
+//   1. Import FHE engine and state types.
+//   2. Guard unverified low-level primitives.
+//   3. Guard unaudited hardware acceleration and FFI routines.
+//
+// CONTEXT INITIALIZATION: fhe_context_init and fhe_context_do_work
+// have been removed entirely. The previous bodies set
+// is_initialized = true without performing any real key generation,
+// parameter validation, or RLWE bootstrapping. A context built from
+// those mocks would be indistinguishable from an uninitialized one
+// and could not be used for any meaningful FHE workload. Real FHE
+// context construction requires a vetted lattice-crypto FFI (OpenFHE
+// / SEAL / Lattigo / HElib); the openOODA compiler does not provide
+// one.
+
+import "./fhe_engine.oo";
+
+pub fn fhe_npu_hardware_bootstrap(_sys_cap: &SysCap, _raw_cipher_ptr: Int) -> Int {
+    // Hardware NPU/GPU acceleration returns negative error code when disabled.
+    return 0 - 1;
+}
+
+pub fn fhe_stubs_probe() -> Int {
+    return 0;
+}

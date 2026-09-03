@@ -1,0 +1,20 @@
+// # Net TLS ◈ ZERO-DRAG
+//
+// Logline: Flat-prefix TLS wrapper with minimal TcpCap.
+//
+// Setup: Requires &TcpCap for tls_connect.
+//
+// Beats:
+//   1. Connect TLS via TcpCap.
+//   2. Return Result, no fallback to plain TCP.
+
+// ## CAPs
+//   TcpCap:  tls_connect
+
+pub fn net_tls_connect(
+  tcp: &TcpCap,
+  host: String,
+  port: Int
+) -> Result[Int, String] {
+  return tls_connect(tcp, host, port);
+}

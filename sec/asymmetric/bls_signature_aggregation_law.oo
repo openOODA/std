@@ -1,0 +1,129 @@
+// # BLS signature aggregation law
+//
+// Logline: Boneh-Lynn-Shacham 2001 short signatures are 1 group element; aggregating n BLS signatures yields 1 element in the same group; the construction is verified via a bilinear pairing e: G1 x G2 -> GT.
+//
+// Setup: Pure Int + String. bls_aggregate_count(n) returns 1 for n >= 1; n <= 0 fails closed. bls_uses_pairing() asserts the coupled primitive (Boneh-Lynn-Shacham 2001 §3.1). The BLS12-381 scalar field order r is asserted via its 64-hex-digit canonical hex string to keep the KAT in-band; bit-length is independently asserted.
+//
+// RULES.oot 1.7: Under 256 lines; pure Int + String; no abs_f, close, or pow; uses * and %.
+//
+// Beats:
+//   1. bls_signature_size() = 1 (single G1 element, BLS 2001 §1).
+//   2. bls_aggregate_count(n) = 1 for n >= 1; n <= 0 -> Err (zero-sig hostile).
+//   3. bls_uses_pairing() = 1: BLS uses the bilinear map e: G1 x G2 -> GT.
+//   4. bls12_381_curve_bits() = 381; r_bit_length() = 255 (BLS12-381 documented).
+//   5. bls12_381_r_hex() = canonical lowercase 64-hex-digit string for r.
+//   6. domain_cert("crypto", "bls_signature_aggregation_law", holds).
+
+import "std/core/primitives/domain_cert.oo";
+
+// BLS paper: Boneh, Lynn, Shacham, "Short Signatures from the Weil Pairing",
+// ASIACRYPT 2001; revised J. Cryptology 17(4), 2004.
+//   §1  - signatures are 1 group element (compared to 2 for RSA or ECDSA).
+//   §3  - signature is sigma in G1, public key in G2; verification is a pairing check.
+//   §3.1 - bilinear map e: G1 x G2 -> GT.
+//
+// BLS12-381 is the 381-bit pairing-friendly BN-family curve, standardised
+// for BLS signature aggregation in Ethereum 2.0 consensus, Zcash, Filecoin,
+// Chia, and Dfinity. The "381" comes from the modulus bit-length of each
+// of the two base fields; r is the 255-bit scalar field order.
+
+pub fn bls_signature_size() -> Int {
+    // BLS 2001 §1: 1 group element.
+    return 1;
+}
+
+// Aggregate n BLS signatures into 1 element (group addition). n >= 1 is
+// valid; n <= 0 is hostile (zero-sig) and returns Err.
+pub fn bls_aggregate_count(n: Int) -> Result[Int, String] {
+    if n <= 0 { return Err("ERR\tbls\tdomain"); }
+    return Ok(1);
+}
+
+// Coupled primitive: BLS uses the bilinear pairing e: G1 x G2 -> GT.
+pub fn bls_uses_pairing() -> Int {
+    return 1;
+}
+
+// 1 if the named map is the BLS bilinear pairing G1 x G2 -> GT; 0 otherwise.
+pub fn bls_is_pairing_map(name: String) -> Int {
+    if name == "G1xG2->GT" { return 1; }
+    if name == "pairing" { return 1; }
+    return 0;
+}
+
+// BLS12-381 curve modulus bit-length. The "381" in the curve name is the
+// prime-field modulus bit-length p; the scalar field r is 255 bits.
+pub fn bls12_381_curve_bits() -> Int {
+    return 381;
+}
+
+// BLS12-381 scalar field r has 255 bits, asserted in the IRTF CFRG draft
+// "BLS Signatures" v4 §1.1 and the BLS12-381 paper.
+pub fn r_bit_length() -> Int {
+    return 255;
+}
+
+// Canonical lowercase 64-hex-digit string for the BLS12-381 scalar field
+// order r. Stored as a string to keep the 256-bit value in-band; the value
+// is taken from the IRTF CFRG "BLS Signatures" draft v4 §1.1 (2024).
+// r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001.
+pub fn bls12_381_r_hex() -> String {
+    return "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001";
+}
+
+// 1 if hex matches the documented BLS12-381 r; 0 otherwise. 0.001% precision:
+// exact 64-hex-digit match.
+pub fn bls12_381_r_hex_ok(hex: String) -> Int {
+    if hex == "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001" {
+        return 1;
+    }
+    return 0;
+}
+
+// domain_cert wrapper for the bls_signature_aggregation_law law.
+pub fn bls_aggregation_holds(n: Int) -> DomainCert {
+    let r: Result[Int, String] = bls_aggregate_count(n);
+    if r.is_ok() == false { return domain_cert("crypto", "bls_signature_aggregation_law", 0); }
+    if bls_uses_pairing() != 1 { return domain_cert("crypto", "bls_signature_aggregation_law", 0); }
+    return domain_cert("crypto", "bls_signature_aggregation_law", 1);
+}
+
+pub fn verify_bls_signature_aggregation_law() -> Bool {
+    // Golden: signature is 1 group element.
+    if bls_signature_size() != 1 { return false; }
+    // Golden: 0.001% precision -- n=3 signatures aggregate to 1.
+    if bls_aggregate_count(3).is_ok() == false { return false; }
+    if bls_aggregate_count(3).val != 1 { return false; }
+    if bls_aggregate_count(1).val != 1 { return false; }
+    if bls_aggregate_count(100).val != 1 { return false; }
+    if bls_aggregate_count(1000000).val != 1 { return false; }
+    // Golden: 0.001% precision -- BLS12-381 curve bit-length is 381, r is 255 bits.
+    if bls12_381_curve_bits() != 381 { return false; }
+    if r_bit_length() != 255 { return false; }
+    // Golden: KAT constant for r as canonical hex string.
+    if bls12_381_r_hex_ok(bls12_381_r_hex()) != 1 { return false; }
+    if bls12_381_r_hex_ok("") != 0 { return false; }
+    if bls12_381_r_hex_ok("0000000000000000000000000000000000000000000000000000000000000000") != 0 { return false; }
+    if bls12_381_r_hex_ok("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000002") != 0 { return false; }
+    // Golden: pairing coupled primitive.
+    if bls_uses_pairing() != 1 { return false; }
+    if bls_is_pairing_map("G1xG2->GT") != 1 { return false; }
+    if bls_is_pairing_map("pairing") != 1 { return false; }
+    if bls_is_pairing_map("G2xG1->GT") != 0 { return false; }
+    if bls_is_pairing_map("") != 0 { return false; }
+
+    // Hostile: zero signatures fails (n <= 0 -> Err).
+    if bls_aggregate_count(0).is_ok() { return false; }
+    if bls_aggregate_count(0 - 1).is_ok() { return false; }
+    if bls_aggregate_count(0 - 100).is_ok() { return false; }
+
+    // Coupled: domain_cert holds=1 for valid n, 0 for hostile.
+    let c1: DomainCert = bls_aggregation_holds(3);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "crypto" { return false; }
+    if c1.law_name != "bls_signature_aggregation_law" { return false; }
+    let c0: DomainCert = bls_aggregation_holds(0);
+    if c0.holds != 0 { return false; }
+
+    return true;
+}

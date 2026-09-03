@@ -1,0 +1,68 @@
+// # Prime-field F_p theory
+//
+// Logline: In F_p, a * a^{-1} = 1 for a != 0. Inverse of 0 is 0. p<2 folds to 2.
+//
+// Setup: Imports std/math/algebra/prime_field.oo. Holds 1 or 0.
+//
+// Beats:
+//   1. In F_5, 2 * inv(2) = 1.
+//   2. inv(0) = 0.
+//   3. fp_new(0) has modulus 2.
+
+import "std/core/math/algebra/prime_field.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn prime_field_pin(f: PrimeField) -> Int {
+    return fp_modulus(f);
+}
+
+pub fn math_fp_unit_inverse_law() -> DomainCert {
+    let f: PrimeField = fp_new(5);
+    let two: Int = fp_reduce(f, 2);
+    let inv: Int = fp_inv(f, two);
+    let prod: Int = fp_mul(f, two, inv);
+    let mut h: Int = 0;
+    if prod == 1 {
+        h = 1;
+    }
+    return domain_cert("math", "fp_unit_inverse", h);
+}
+
+pub fn math_fp_zero_inv_law() -> DomainCert {
+    let f: PrimeField = fp_new(5);
+    let mut h: Int = 0;
+    if fp_inv(f, 0) == 0 {
+        h = 1;
+    }
+    return domain_cert("math", "fp_zero_inv", h);
+}
+
+pub fn math_fp_bad_p_folds() -> DomainCert {
+    let f: PrimeField = fp_new(0);
+    let mut h: Int = 0;
+    if fp_modulus(f) == 2 {
+        h = 1;
+    }
+    return domain_cert("math", "fp_p_lt_2_folds", h);
+}
+
+pub fn verify_fp_field_theory() -> Bool {
+    let f0: PrimeField = fp_new(5);
+    let _m: Int = prime_field_pin(f0);
+    let a: DomainCert = math_fp_unit_inverse_law();
+    let b: DomainCert = math_fp_zero_inv_law();
+    let c: DomainCert = math_fp_bad_p_folds();
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    if c.holds != 1 {
+        return false;
+    }
+    if _m != 5 {
+        return false;
+    }
+    return true;
+}

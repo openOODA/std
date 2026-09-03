@@ -1,0 +1,16 @@
+// # Secure Boot Operations & Image Verification
+//
+// Logline: standardized onto ./secure_boot_types.oo Int-floor API.
+//
+// Setup: Companion types standardized; keep fail-closed real calls.
+//
+// Beats:
+//   1. Import standardized companion.
+//   2. Wrap constructor and Int query.
+//   3. Deterministic work helper for prove.
+
+import "std/sec/sys/secure_boot_types.oo";
+
+pub fn secure_boot_ops_init(violation_type: Int, action_taken: Int) -> SecureBootViolation {
+    return sboot_violation_new(violation_type, action_taken);
+}

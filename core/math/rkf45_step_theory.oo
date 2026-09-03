@@ -1,0 +1,50 @@
+// # RKF45 harmonic-step theory
+//
+// Logline: One RKF45 step returns a 6-pack. Integrate with h<=0 is Err.
+//
+// Setup: Imports std/math/ode/rkf45_adaptive.oo. Holds 1 or 0.
+//
+// Beats:
+//   1. rkf45_harmonic_step length is 6.
+//   2. Integrate with h0<=0 is Err.
+//   3. domain_cert boxes both.
+
+import "std/core/math/ode/rkf45_adaptive.oo";
+import "std/core/primitives/domain_cert.oo";
+
+pub fn math_rkf45_step_pack_law() -> DomainCert {
+    let st: List[Float] = rkf45_harmonic_step(0.0, 1.0, 0.0, 0.01, 1.0, 0.0001);
+    let mut h: Int = 0;
+    if list_len(st) == 6 {
+        h = 1;
+    }
+    return domain_cert("math", "rkf45_step_len6", h);
+}
+
+pub fn math_rkf45_h_rejected() -> DomainCert {
+    let r: Result[List[Float], String] = rkf45_harmonic_integrate(
+        1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0001, 10
+    );
+    let mut h: Int = 0;
+    match r {
+        Ok(_xs) => {
+            h = 0;
+        }
+        Err(_e) => {
+            h = 1;
+        }
+    }
+    return domain_cert("math", "rkf45_h_rejected", h);
+}
+
+pub fn verify_rkf45_theory() -> Bool {
+    let a: DomainCert = math_rkf45_step_pack_law();
+    let b: DomainCert = math_rkf45_h_rejected();
+    if a.holds != 1 {
+        return false;
+    }
+    if b.holds != 1 {
+        return false;
+    }
+    return true;
+}

@@ -1,0 +1,199 @@
+// # Binary heap parent-ge-child theory
+//
+// Logline: A binary max-heap array satisfies parent[i] >= child[2i+1] and parent[i] >= child[2i+2] for every internal node.
+//
+// Setup: Pure Int. Heap array is a List[Int] of length n. Closed form checks the array alone; coupled form applies a linear-time heapify to the input.
+//
+// Beats:
+//   1. A heap-shaped array holds when every parent is greater than or equal to its children.
+//   2. An empty or single-element array trivially holds (no internal parent).
+//   3. heapify builds a valid max-heap from an unsorted array in O(n).
+//   4. Heapsort yields a non-decreasing output that matches the sorted input.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Closed: check the parent >= child invariant for every internal node.
+// Returns DomainCert holds=1 when the array is a valid max-heap.
+pub fn collections_heap_invariant_holds(heap: List[Int]) -> DomainCert {
+    let n: Int = list_len(heap);
+    if n < 2 {
+        return domain_cert("collections", "heap_invariant", 1);
+    }
+    let mut i: Int = 0;
+    while i < n {
+        let p: Int = list_get(heap, i);
+        let lch: Int = 2 * i + 1;
+        let rch: Int = 2 * i + 2;
+        if lch < n {
+            if list_get(heap, lch) > p {
+                return domain_cert("collections", "heap_invariant", 0);
+            }
+        }
+        if rch < n {
+            if list_get(heap, rch) > p {
+                return domain_cert("collections", "heap_invariant", 0);
+            }
+        }
+        i = i + 1;
+    }
+    return domain_cert("collections", "heap_invariant", 1);
+}
+
+// Coupled: heapify_sift_down assumes the subtrees rooted at 2i+1 and 2i+2 are heaps.
+// After running it for every internal node in reverse order, the whole array is a heap.
+pub fn collections_heapify(xs: List[Int]) -> List[Int] {
+    let n: Int = list_len(xs);
+    let mut out: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < n {
+        out = list_push(out, list_get(xs, k));
+        k = k + 1;
+    }
+    if n < 2 {
+        return out;
+    }
+    let mut i: Int = (n - 2) / 2;
+    while i >= 0 {
+        let mut cur: Int = i;
+        while cur < n {
+            let p: Int = list_get(out, cur);
+            let lch: Int = 2 * cur + 1;
+            let rch: Int = 2 * cur + 2;
+            let mut largest: Int = cur;
+            if lch < n {
+                if list_get(out, lch) > list_get(out, largest) {
+                    largest = lch;
+                }
+            }
+            if rch < n {
+                if list_get(out, rch) > list_get(out, largest) {
+                    largest = rch;
+                }
+            }
+            if largest == cur {
+                break;
+            }
+            out = list_set(out, cur, list_get(out, largest));
+            out = list_set(out, largest, p);
+            cur = largest;
+        }
+        i = i - 1;
+    }
+    return out;
+}
+
+// Coupled: heapsort repeatedly swaps root with last and re-sinks, then unwinds.
+pub fn collections_heapsort(xs: List[Int]) -> List[Int] {
+    let h0: List[Int] = collections_heapify(xs);
+    let n: Int = list_len(h0);
+    if n < 2 {
+        return h0;
+    }
+    let mut arr: List[Int] = h0;
+    let mut end: Int = n - 1;
+    while end > 0 {
+        let root: Int = list_get(arr, 0);
+        let last: Int = list_get(arr, end);
+        arr = list_set(arr, 0, last);
+        arr = list_set(arr, end, root);
+        let mut cur: Int = 0;
+        while cur < end {
+            let p: Int = list_get(arr, cur);
+            let lch: Int = 2 * cur + 1;
+            let rch: Int = 2 * cur + 2;
+            let mut largest: Int = cur;
+            if lch < end {
+                if list_get(arr, lch) > list_get(arr, largest) {
+                    largest = lch;
+                }
+            }
+            if rch < end {
+                if list_get(arr, rch) > list_get(arr, largest) {
+                    largest = rch;
+                }
+            }
+            if largest == cur {
+                break;
+            }
+            arr = list_set(arr, cur, list_get(arr, largest));
+            arr = list_set(arr, largest, p);
+            cur = largest;
+        }
+        end = end - 1;
+    }
+    return arr;
+}
+
+pub fn verify_collections_heap_invariant_theory() -> Bool {
+    // Golden: [10, 5, 8, 3, 1] is a max-heap: 10 >= 5, 10 >= 8, 5 >= 3, 5 >= 1.
+    let mut g1: List[Int] = list_new();
+    g1 = list_push(g1, 10);
+    g1 = list_push(g1, 5);
+    g1 = list_push(g1, 8);
+    g1 = list_push(g1, 3);
+    g1 = list_push(g1, 1);
+    if cert_holds(collections_heap_invariant_holds(g1)) != 1 { return false; }
+
+    // Golden: a 7-element heap [20, 15, 18, 7, 12, 9, 14] also holds.
+    let mut g2: List[Int] = list_new();
+    g2 = list_push(g2, 20);
+    g2 = list_push(g2, 15);
+    g2 = list_push(g2, 18);
+    g2 = list_push(g2, 7);
+    g2 = list_push(g2, 12);
+    g2 = list_push(g2, 9);
+    g2 = list_push(g2, 14);
+    if cert_holds(collections_heap_invariant_holds(g2)) != 1 { return false; }
+
+    // Golden: equal siblings allowed: [5, 5, 5, 5, 5].
+    let mut g3: List[Int] = list_new();
+    g3 = list_push(g3, 5);
+    g3 = list_push(g3, 5);
+    g3 = list_push(g3, 5);
+    g3 = list_push(g3, 5);
+    g3 = list_push(g3, 5);
+    if cert_holds(collections_heap_invariant_holds(g3)) != 1 { return false; }
+
+    // Hostile: empty array trivially holds (no internal parents).
+    let mut h0: List[Int] = list_new();
+    if cert_holds(collections_heap_invariant_holds(h0)) != 1 { return false; }
+
+    // Hostile: single element [7] trivially holds.
+    let mut h1: List[Int] = list_new();
+    h1 = list_push(h1, 7);
+    if cert_holds(collections_heap_invariant_holds(h1)) != 1 { return false; }
+
+    // Hostile: [1, 5, 3] is not a max-heap because 1 < 5 and 1 < 3.
+    let mut h2: List[Int] = list_new();
+    h2 = list_push(h2, 1);
+    h2 = list_push(h2, 5);
+    h2 = list_push(h2, 3);
+    if cert_holds(collections_heap_invariant_holds(h2)) != 0 { return false; }
+
+    // Hostile: [5, 10, 3] is not a max-heap because 5 < 10.
+    let mut h3: List[Int] = list_new();
+    h3 = list_push(h3, 5);
+    h3 = list_push(h3, 10);
+    h3 = list_push(h3, 3);
+    if cert_holds(collections_heap_invariant_holds(h3)) != 0 { return false; }
+
+    // Coupled: heapify([3, 1, 10, 5, 8]) yields a valid max-heap.
+    let mut raw: List[Int] = list_new();
+    raw = list_push(raw, 3);
+    raw = list_push(raw, 1);
+    raw = list_push(raw, 10);
+    raw = list_push(raw, 5);
+    raw = list_push(raw, 8);
+    let hp: List[Int] = collections_heapify(raw);
+    if cert_holds(collections_heap_invariant_holds(hp)) != 1 { return false; }
+
+    // Coupled: heapsort of [3, 1, 10, 5, 8] = [1, 3, 5, 8, 10].
+    let sorted: List[Int] = collections_heapsort(raw);
+    if list_get(sorted, 0) != 1 { return false; }
+    if list_get(sorted, 1) != 3 { return false; }
+    if list_get(sorted, 2) != 5 { return false; }
+    if list_get(sorted, 3) != 8 { return false; }
+    if list_get(sorted, 4) != 10 { return false; }
+
+    return true;
+}

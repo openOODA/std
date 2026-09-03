@@ -1,0 +1,104 @@
+// # Stack-Transient Rolling XOR String Cryptor
+//
+// Logline: Encrypts and decrypts string payloads dynamically using stack-transient rolling XOR schedules.
+//
+// Setup: Pure. Ephemeral decryption buffers are consumed in local stack frames without heap retention.
+//
+// Beats:
+//   1. Encrypt byte arrays using dynamic non-linear rolling XOR key schedules.
+//   2. Decrypt encrypted string payloads on-demand into ephemeral stack buffers.
+//   3. Provide string-to-payload conversion and cryptographic checksum validation.
+
+import "./encrypt_types.oo";
+
+pub fn string_crypto_encrypt(
+    plain: List[Int],
+    seed_key: Int
+) -> EncryptedStringPayload {
+    return stack_string_encrypt(plain, seed_key);
+}
+
+pub fn string_crypto_decrypt(payload: EncryptedStringPayload) -> List[Int] {
+    return stack_string_decrypt(payload);
+}
+
+fn compute_payload_checksum(ct: List[Int], len: Int) -> Int {
+    let mut csum: Int = 5381;
+    let mut i: Int = 0;
+    while i < len {
+        let b: Int = list_get(ct, i);
+        csum = ((csum * 33) + b) & 65535;
+        i = i + 1;
+    }
+    return csum;
+}
+
+pub fn stack_string_encrypt(
+    plain: List[Int],
+    seed_key: Int
+) -> EncryptedStringPayload {
+    let len: Int = list_len(plain);
+    let mut cipher: List[Int] = list_new();
+    let mut i: Int = 0;
+
+    while i < len {
+        let b: Int = list_get(plain, i);
+        let k: Int = key_schedule_compute_byte_key(seed_key, i);
+        let enc_b: Int = (b ^ k) & 255;
+        cipher = list_push(cipher, enc_b);
+        i = i + 1;
+    }
+
+    let csum: Int = compute_payload_checksum(cipher, len);
+    return encrypted_payload_new(cipher, len, seed_key, csum);
+}
+
+pub fn string_payload_verify_checksum(payload: EncryptedStringPayload) -> Bool {
+    let len: Int = payload.length;
+    let actual_csum: Int = compute_payload_checksum(payload.ciphertext, len);
+    return actual_csum == payload.checksum;
+}
+
+pub fn stack_string_decrypt(payload: EncryptedStringPayload) -> List[Int] {
+    if !string_payload_verify_checksum(payload) {
+        let empty_err: List[Int] = list_new();
+        return empty_err;
+    }
+
+    let len: Int = payload.length;
+    let key: Int = payload.xor_key;
+    let mut plain: List[Int] = list_new();
+    let mut i: Int = 0;
+
+    while i < len {
+        let enc_b: Int = list_get(payload.ciphertext, i);
+        let k: Int = key_schedule_compute_byte_key(key, i);
+        let orig_b: Int = (enc_b ^ k) & 255;
+        plain = list_push(plain, orig_b);
+        i = i + 1;
+    }
+
+    return plain;
+}
+
+pub fn string_encrypt_from_str(
+    s: String,
+    seed_key: Int
+) -> EncryptedStringPayload {
+    let n: Int = chars_len(s);
+    let mut plain_bytes: List[Int] = list_new();
+    let mut i: Int = 0;
+
+    while i < n {
+        let b: Int = byte_at(s, i);
+        plain_bytes = list_push(plain_bytes, b);
+        i = i + 1;
+    }
+
+    return stack_string_encrypt(plain_bytes, seed_key);
+}
+
+pub fn string_decrypt_to_str(payload: EncryptedStringPayload) -> String {
+    let bytes: List[Int] = stack_string_decrypt(payload);
+    return bytes_to_str(bytes);
+}

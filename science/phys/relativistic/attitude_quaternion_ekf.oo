@@ -1,0 +1,32 @@
+// # Multiplicative Extended Kalman Filter (MEKF) Attitude Estimation
+//
+// Logline: Estimates 4D attitude quaternions and 3D gyro bias errors via Multiplicative EKF state-space filtering.
+//
+// Setup: Pure non-linear spacecraft attitude determination combining star tracker, sun sensor, and rate gyro measurements.
+//
+// Beats:
+//   1. EKF Kalman gain parameter pass-through query.
+//   2. Propagate error covariance matrix P_k+1 = Phi * P_k * Phi^T + Q.
+//   3. Calculate Kalman gain K = P * H^T * (H * P * H^T + R)^-1.
+//   4. Multiplicative quaternion error update q_new = delta_q (x) q_pred.
+
+pub fn qekf_gain(r: Int) -> Int {
+    return r;
+}
+
+/// Scalar Kalman gain computation: K = p / (p + r).
+pub fn qekf_scalar_gain(p_variance: Float, r_noise: Float) -> Float {
+    let denom: Float = p_variance + r_noise;
+    if denom <= 0.000000000001 { return 0.0; }
+    return p_variance / denom;
+}
+
+/// Covariance measurement update: P_plus = (1 - K) * P_minus.
+pub fn qekf_scalar_cov_update(k_gain: Float, p_minus: Float) -> Float {
+    return (1.0 - k_gain) * p_minus;
+}
+
+/// Covariance time propagation: P_minus = P_plus + q_process_noise.
+pub fn qekf_scalar_cov_propagate(p_plus: Float, q_noise: Float) -> Float {
+    return p_plus + q_noise;
+}

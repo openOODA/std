@@ -1,0 +1,179 @@
+// # Numerical Methods: Root Finding, Integration, ODEs, and Linear Solve
+//
+// Logline: Newton, bisection, secant, trapezoid, Simpson, Euler, RK4, and 2x2 Gauss. Domain errors return Err.
+//
+// Setup: Quad {a,b,c} is ax^2+bx+c. Ode {k} is y'=k*y. Gauss returns Vec2.
+//
+// Beats:
+//   1. Root finders Err on bad tol/iter, zero derivative, same-sign bracket, or no convergence.
+//   2. Quadrature Err on too few or odd Simpson intervals.
+//   3. RK4 integrate Err on non-positive dt. Gauss Err on singular det.
+//   4. convergence_order Err when either error is not positive.
+
+type Quad = struct { a: Float, b: Float, c: Float };
+type Ode = struct { k: Float };
+type Vec2 = struct { x: Float, y: Float };
+
+fn abs_diff(a: Float, b: Float) -> Float {
+    let d = a - b;
+    if d < 0.0 { return 0.0 - d; }
+    return d;
+}
+
+pub fn apply_quad(q: Quad, x: Float) -> Float {
+    let a = q.a; let b = q.b; let c = q.c;
+    return a * x * x + b * x + c;
+}
+
+pub fn is_close(a: Float, b: Float, tol: Float) -> Bool {
+    if tol < 0.0 { return false; }
+    return abs_diff(a, b) < tol;
+}
+
+pub fn newton_raphson(f: Quad, f_prime: Quad, x0: Float, tol: Float, max_iter: Int) -> Result[Float, String] {
+    if max_iter <= 0 { return Err("ERR\tnewton\titer"); }
+    if tol < 0.0 { return Err("ERR\tnewton\ttol"); }
+    let mut x = x0;
+    let mut k: Int = 0;
+    while k < max_iter {
+        let fx = apply_quad(f, x);
+        if abs_diff(fx, 0.0) < tol { return Ok(x); }
+        let dfx = apply_quad(f_prime, x);
+        if dfx == 0.0 { return Err("ERR\tnewton\tderiv"); }
+        let x_next = x - fx / dfx;
+        if abs_diff(x_next, x) < tol { return Ok(x_next); }
+        x = x_next;
+        k = k + 1;
+    }
+    return Err("ERR\tnewton\tnoconv");
+}
+
+pub fn bisect_root(a: Float, b: Float, c: Float, lo: Float, hi: Float, tol: Float, max_iter: Int) -> Result[Float, String] {
+    if max_iter <= 0 { return Err("ERR\tbisect\titer"); }
+    if tol < 0.0 { return Err("ERR\tbisect\ttol"); }
+    let q = Quad { a: a, b: b, c: c };
+    let mut flow = apply_quad(q, lo);
+    let fhi = apply_quad(q, hi);
+    if flow == 0.0 { return Ok(lo); }
+    if fhi == 0.0 { return Ok(hi); }
+    if flow * fhi > 0.0 { return Err("ERR\tbisect\tsign"); }
+    let mut l = lo;
+    let mut h = hi;
+    let mut k: Int = 0;
+    while k < max_iter {
+        let mid = 0.5 * (l + h);
+        let fmid = apply_quad(q, mid);
+        if abs_diff(fmid, 0.0) < tol { return Ok(mid); }
+        if abs_diff(h, l) < tol { return Ok(mid); }
+        if flow * fmid < 0.0 {
+            h = mid;
+        } else {
+            l = mid;
+            flow = fmid;
+        }
+        k = k + 1;
+    }
+    return Err("ERR\tbisect\tnoconv");
+}
+
+pub fn secant_root(f: Quad, x0: Float, x1: Float, tol: Float, max_iter: Int) -> Result[Float, String] {
+    if max_iter <= 0 { return Err("ERR\tsecant\titer"); }
+    if tol < 0.0 { return Err("ERR\tsecant\ttol"); }
+    let mut a = x0;
+    let mut b = x1;
+    let mut fa = apply_quad(f, a);
+    let mut fb = apply_quad(f, b);
+    let mut k: Int = 0;
+    while k < max_iter {
+        if abs_diff(fb, 0.0) < tol { return Ok(b); }
+        let denom = fb - fa;
+        if denom == 0.0 { return Err("ERR\tsecant\tden"); }
+        let b_next = b - fb * (b - a) / denom;
+        if abs_diff(b_next, b) < tol { return Ok(b_next); }
+        a = b; fa = fb; b = b_next; fb = apply_quad(f, b);
+        k = k + 1;
+    }
+    return Err("ERR\tsecant\tnoconv");
+}
+
+pub fn trapezoidal_integral(f: Quad, a: Float, b: Float, n_intervals: Int) -> Result[Float, String] {
+    if n_intervals < 1 { return Err("ERR\ttrap\tn"); }
+    let h = (b - a) / (1.0 * (n_intervals));
+    let fa = apply_quad(f, a);
+    let fb = apply_quad(f, b);
+    let mut sum = 0.5 * (fa + fb);
+    let mut i: Int = 1;
+    while i < n_intervals {
+        let xi = a + 1.0 * (i) * h;
+        sum = sum + apply_quad(f, xi);
+        i = i + 1;
+    }
+    return Ok(sum * h);
+}
+
+pub fn simpson_integral(f: Quad, a: Float, b: Float, n_intervals: Int) -> Result[Float, String] {
+    if n_intervals < 2 { return Err("ERR\tsimpson\tn"); }
+    if (n_intervals % 2) != 0 { return Err("ERR\tsimpson\todd"); }
+    let h = (b - a) / (1.0 * (n_intervals));
+    let fa = apply_quad(f, a);
+    let fb = apply_quad(f, b);
+    let mut sum = fa + fb;
+    let mut i: Int = 1;
+    while i < n_intervals {
+        let xi = a + 1.0 * (i) * h;
+        let w = apply_quad(f, xi);
+        if (i % 2) == 0 {
+            sum = sum + 2.0 * w;
+        } else {
+            sum = sum + 4.0 * w;
+        }
+        i = i + 1;
+    }
+    return Ok(sum * h / 3.0);
+}
+
+pub fn euler_ode_step(y: Float, t: Float, dt: Float, f_y: Ode) -> Float {
+    let k = f_y.k;
+    return y + dt * (k * y);
+}
+
+pub fn rk4_step(y: Float, t: Float, dt: Float, f_y: Ode) -> Float {
+    let k = f_y.k;
+    let k1 = k * y;
+    let k2 = k * (y + 0.5 * dt * k1);
+    let k3 = k * (y + 0.5 * dt * k2);
+    let k4 = k * (y + dt * k3);
+    return y + dt * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0;
+}
+
+pub fn rk4_integrate(y0: Float, t0: Float, t_end: Float, dt: Float, f_y: Ode) -> Result[Float, String] {
+    if dt <= 0.0 { return Err("ERR\trk4\tdt"); }
+    let mut y = y0;
+    let mut t = t0;
+    let mut remaining = t_end - t0;
+    while remaining > 0.0 {
+        if remaining < dt {
+            y = rk4_step(y, t, remaining, f_y);
+            remaining = 0.0;
+        } else {
+            y = rk4_step(y, t, dt, f_y);
+            t = t + dt;
+            remaining = remaining - dt;
+        }
+    }
+    return Ok(y);
+}
+
+pub fn gauss_elim_2x2(a: Float, b: Float, c: Float, d: Float, e: Float, f: Float) -> Result[Vec2, String] {
+    let det = a * d - b * c;
+    if det == 0.0 { return Err("ERR\tgauss\tsingular"); }
+    let x = (e * d - b * f) / det;
+    let y = (a * f - e * c) / det;
+    return Ok(Vec2 { x: x, y: y });
+}
+
+pub fn convergence_order(err_new: Float, err_old: Float) -> Result[Float, String] {
+    if err_new <= 0.0 { return Err("ERR\tconv\terr"); }
+    if err_old <= 0.0 { return Err("ERR\tconv\terr"); }
+    return Ok(ln(err_old / err_new));
+}

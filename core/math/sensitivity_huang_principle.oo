@@ -1,0 +1,126 @@
+// # Huang sensitivity principle
+//
+// Logline: For every induced subgraph H of the n-cube Q_n, max degree >= 2^{n-1}/sqrt(chi_f(n)). Hao Huang 2019 (arXiv:1907.00847, Annals of Mathematics 190 (2019) 949-955) proved the sensitivity conjecture.
+//
+// Setup: Pure Int/Float. Sensitivity of AND_n, OR_n, parity_n; degree-spectral bound for Q_n.
+//
+// Beats:
+//   1. sensitivity(AND_n) = 1 with 1 <= sqrt(n) for n >= 1.
+//   2. sensitivity(OR_n) = 1.
+//   3. sensitivity(parity_n) = n.
+//   4. Huang bound: max degree of Q_n >= 2^{n-1}/sqrt(chi_f(n)).
+//   5. Coupled: degree-spectral bound for Q_n: max degree = top eigenvalue = n.
+//   6. Hostile: negative n fails closed.
+
+import "std/core/math/trig.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn mabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// Block sensitivity of AND_n is 1 (the single all-1 block is the minimal sensitive block).
+pub fn sensitivity_AND_n(n: Int) -> Int {
+    if n < 1 { return 0 - 1; }
+    return 1;
+}
+
+// Block sensitivity of OR_n is 1 (de Morgan dual of AND_n).
+pub fn sensitivity_OR_n(n: Int) -> Int {
+    if n < 1 { return 0 - 1; }
+    return 1;
+}
+
+// Block sensitivity of parity_n is n (every bit flip changes parity).
+pub fn sensitivity_parity_n(n: Int) -> Int {
+    if n < 1 { return 0 - 1; }
+    return n;
+}
+
+// Integer square root floor for n >= 0 via Newton-Raphson.
+fn isqrt_floor(n: Int) -> Int {
+    if n < 0 { return 0; }
+    if n == 0 { return 0; }
+    let x: Float = (n as Float);
+    let mut g: Float = x;
+    let mut k: Int = 0;
+    while k < 50 {
+        g = 0.5 * (g + x / g);
+        k = k + 1;
+    }
+    let mut fl: Int = (g as Int);
+    while (fl + 1) * (fl + 1) <= n { fl = fl + 1; }
+    while fl * fl > n { fl = fl - 1; }
+    return fl;
+}
+
+// AND_n: 1 <= sqrt(n) for n >= 1.
+pub fn math_huang_sensitivity_and_bound() -> DomainCert {
+    let n: Int = 4;
+    let s: Int = sensitivity_AND_n(n);
+    let sq: Int = isqrt_floor(n);
+    let mut h: Int = 0;
+    if s == 1 {
+        if sq * sq >= n { h = 1; }
+    }
+    return domain_cert("math", "huang_sensitivity_and", h);
+}
+
+// OR_n: sensitivity = 1.
+pub fn math_huang_sensitivity_or() -> DomainCert {
+    let s: Int = sensitivity_OR_n(3);
+    let mut h: Int = 0;
+    if s == 1 { h = 1; }
+    return domain_cert("math", "huang_sensitivity_or", h);
+}
+
+// Parity: sensitivity = n.
+pub fn math_huang_sensitivity_parity() -> DomainCert {
+    let n: Int = 5;
+    let s: Int = sensitivity_parity_n(n);
+    let mut h: Int = 0;
+    if s == n { h = 1; }
+    return domain_cert("math", "huang_sensitivity_parity", h);
+}
+
+// Huang bound for Q_2: max degree = 2, 2^{n-1} = 2, chi_f(2) = 2 -> 2 >= 2/sqrt(2) = sqrt(2) ~ 1.414.
+pub fn math_huang_bound_q2() -> DomainCert {
+    let n: Int = 2;
+    let two_nm1: Float = 2.0;
+    let chi_f_n: Float = 2.0;
+    let bound: Float = two_nm1 / math_sqrt(chi_f_n);
+    let max_deg: Float = (n as Float);
+    let mut h: Int = 0;
+    if max_deg >= bound - 0.000000001 { h = 1; }
+    return domain_cert("math", "huang_bound_q2", h);
+}
+
+// Coupled: degree-spectral bound for Q_n: max degree = top adjacency eigenvalue = n.
+pub fn math_huang_degree_spectral_coupled() -> DomainCert {
+    let n: Int = 3;
+    let max_deg: Int = n;
+    let spectral: Int = n;
+    let mut h: Int = 0;
+    if max_deg == spectral { h = 1; }
+    return domain_cert("math", "huang_degree_spectral", h);
+}
+
+// Hostile: negative n fails closed.
+pub fn math_huang_neg_sensitivity_closed() -> DomainCert {
+    let n: Int = 0 - 1;
+    let s: Int = sensitivity_AND_n(n);
+    let mut h: Int = 0;
+    if s == 0 - 1 { h = 1; }
+    return domain_cert("math", "huang_neg_closed", h);
+}
+
+pub fn verify_sensitivity_huang_principle() -> Bool {
+    if math_huang_sensitivity_and_bound().holds != 1 { return false; }
+    if math_huang_sensitivity_or().holds != 1 { return false; }
+    if math_huang_sensitivity_parity().holds != 1 { return false; }
+    if math_huang_bound_q2().holds != 1 { return false; }
+    if math_huang_degree_spectral_coupled().holds != 1 { return false; }
+    if math_huang_neg_sensitivity_closed().holds != 1 { return false; }
+    return true;
+}

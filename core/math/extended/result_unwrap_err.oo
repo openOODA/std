@@ -1,0 +1,20 @@
+// # Result Unwrap Err
+//
+// Logline: Standard library verification and domain capabilities for Result Unwrap Err.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn make_err() -> Result[String, String] {
+    return Err("boom");
+}
+
+pub fn verify_result_unwrap_err() -> Bool {
+    let r: Result[String, String] = make_err();
+    let s: String = r.unwrap();
+    println(s);
+    return true;
+}

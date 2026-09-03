@@ -1,0 +1,52 @@
+// # AArch64 Extra Host FS Process Aliases
+//
+// Logline: Emits oo_fs_read_dir, oo_path_exists, and oo_sys_kill/spawn/wait/args.
+//
+// Setup: Follows a64rt_host2. Directory listing is an empty list. Kill/spawn are Ok stubs.
+//
+// Beats:
+//   1. oo_fs_read_dir and oo_sys_args BL list_new.
+//   2. oo_path_exists BLs path_exists.
+//   3. oo_sys_kill/spawn/wait return Ok with an empty or pid string.
+//   4. Names are compiler builtins so imported stubs are not lowered twice.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+
+fn a64rt_okstr(r0: A64R, nm: String, s: String) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, nm);
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_intern(x, s);
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_halias(r0: A64R, nm: String, tgt: String) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, nm);
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_bl(x, tgt);
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_host3(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_halias(r0, "oo_fs_read_dir", "list_new");
+    r = a64rt_halias(r, "oo_path_exists", "path_exists");
+    r = a64rt_halias(r, "oo_sys_args", "list_new");
+    r = a64rt_okstr(r, "oo_sys_kill", "");
+    r = a64rt_okstr(r, "oo_sys_spawn", "1");
+    r = a64rt_okstr(r, "oo_sys_wait", "");
+    r = a64rt_fn(r, "oo_read_file");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_intern(x, "ERR\too_read_file");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_okstr(r, "oo_write_file", "");
+    return r;
+}

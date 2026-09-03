@@ -1,0 +1,170 @@
+// # Duration arithmetic theory
+//
+// Logline: Adding a duration advances a clock; subtracting two clocks yields a duration; an interval intersection [a,b] ∩ [c,d] is [max(a,c), min(b,d)] and is empty when max > min; intervals in monotonic time stay contiguous.
+//
+// Setup: Pure Int. Negative durations fail closed (0). Empty intervals have low > high.
+//
+// Beats:
+//   1. clock_add and clock_sub are inverses modulo duration sign.
+//   2. interval_intersect returns the canonical [max(a,c), min(b,d)] interval.
+//   3. interval_empty returns 1 when low > high; 0 otherwise.
+//   4. Coupled: contiguous monotonic intervals in clock order.
+
+import "std/core/primitives/domain_cert.oo";
+
+type Interval = struct {
+    low: Int,
+    high: Int
+};
+
+// Build a new interval with low <= high. Out-of-order input is reordered
+// (the larger goes to high). Negative widths fail closed by clamping both
+// ends to 0.
+pub fn interval_new(low: Int, high: Int) -> Interval {
+    let mut a: Int = low;
+    let mut b: Int = high;
+    if a < 0 { a = 0; }
+    if b < 0 { b = 0; }
+    if a > b {
+        let t: Int = a;
+        a = b;
+        b = t;
+    }
+    return Interval { low: a, high: b };
+}
+
+// 1 if the interval is empty (low > high); 0 otherwise.
+pub fn interval_empty(iv: Interval) -> Int {
+    let lo: Int = iv.low;
+    let hi: Int = iv.high;
+    if lo > hi { return 1; }
+    return 0;
+}
+
+// True when two intervals are equal.
+pub fn interval_eq(a: Interval, b: Interval) -> Bool {
+    let al: Int = a.low;
+    let ah: Int = a.high;
+    let bl: Int = b.low;
+    let bh: Int = b.high;
+    if al != bl { return false; }
+    if ah != bh { return false; }
+    return true;
+}
+
+// Interval intersection: [max(a.low, b.low), min(a.high, b.high)].
+// Returns an empty interval when the two do not overlap.
+pub fn interval_intersect(a: Interval, b: Interval) -> Interval {
+    let al: Int = a.low;
+    let ah: Int = a.high;
+    let bl: Int = b.low;
+    let bh: Int = b.high;
+    let mut lo: Int = al;
+    if bl > lo { lo = bl; }
+    let mut hi: Int = ah;
+    if bh < hi { hi = bh; }
+    if lo > hi {
+        // Empty: pick a sentinel low > high so interval_empty returns 1.
+        return Interval { low: hi + 1, high: hi };
+    }
+    return Interval { low: lo, high: hi };
+}
+
+// Add a non-negative duration to a clock tick; negative duration fails closed.
+fn clk_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn clock_add(tick: Int, duration: Int) -> Result[Int, String] {
+    if tick < 0 { return Err("ERR\tclk\tdomain"); }
+    if duration < 0 { return Err("ERR\tclk\tdomain"); }
+    return Ok(tick + duration);
+}
+
+// Subtract two clock ticks: later - earlier. Equal ticks are Ok(0). Inverted or negative is Err.
+pub fn clock_sub(earlier: Int, later: Int) -> Result[Int, String] {
+    if earlier < 0 { return Err("ERR\tclk\tdomain"); }
+    if later < earlier { return Err("ERR\tclk\tdomain"); }
+    return Ok(later - earlier);
+}
+
+// 1 if intervals are contiguous in monotonic order: the gap between a and b
+// is at most 1 (touching, sharing a boundary, or overlapping by one tick).
+pub fn interval_contiguous(a: Interval, b: Interval) -> Int {
+    let ah: Int = a.high;
+    let bl: Int = b.low;
+    let gap: Int = bl - ah;
+    if gap < 0 { return 0; }
+    if gap <= 1 { return 1; }
+    return 0;
+}
+
+pub fn duration_arithmetic_holds(a: Interval, b: Interval) -> DomainCert {
+    let inter: Interval = interval_intersect(a, b);
+    let ok: Int = interval_empty(inter);
+    // Holds=1 when the intersection is non-empty AND the two intervals agree
+    // on at least one tick.
+    let mut h: Int = 0;
+    if ok == 0 {
+        h = 1;
+    }
+    return domain_cert("time", "duration_arithmetic", h);
+}
+
+pub fn verify_duration_arithmetic_theory() -> Bool {
+    // Golden: clock arithmetic.
+    if clk_got(clock_add(0, 100)) != 100 { return false; }
+    if clk_got(clock_add(50, 25)) != 75 { return false; }
+    if clk_got(clock_sub(100, 250)) != 150 { return false; }
+    let zdur: Result[Int, String] = clock_sub(200, 200);
+    if zdur.is_ok() == false { return false; }
+    if clk_got(zdur) != 0 { return false; }
+    if clock_add(0 - 1, 10).is_ok() { return false; }
+    if clock_add(10, 0 - 1).is_ok() { return false; }
+    if clock_sub(0 - 1, 100).is_ok() { return false; }
+    if clock_sub(100, 50).is_ok() { return false; }
+    // Golden: interval_new reorders out-of-order.
+    let i1: Interval = interval_new(50, 150);
+    if i1.low != 50 { return false; }
+    if i1.high != 150 { return false; }
+    let i2: Interval = interval_new(150, 50);
+    if i2.low != 50 { return false; }
+    if i2.high != 150 { return false; }
+    // Hostile: interval_new clamps negatives.
+    let i3: Interval = interval_new(0 - 5, 0 - 1);
+    if i3.low != 0 { return false; }
+    if i3.high != 0 { return false; }
+    // Golden: [0,100] ∩ [50,150] = [50,100].
+    let a: Interval = interval_new(0, 100);
+    let b: Interval = interval_new(50, 150);
+    let ab: Interval = interval_intersect(a, b);
+    if ab.low != 50 { return false; }
+    if ab.high != 100 { return false; }
+    if interval_empty(ab) != 0 { return false; }
+    // Golden: [10, 20] ∩ [20, 30] = [20, 20] (one point).
+    let c: Interval = interval_new(10, 20);
+    let d: Interval = interval_new(20, 30);
+    let cd: Interval = interval_intersect(c, d);
+    if cd.low != 20 { return false; }
+    if cd.high != 20 { return false; }
+    // Hostile: [0, 10] ∩ [20, 30] is empty.
+    let e: Interval = interval_new(0, 10);
+    let f: Interval = interval_new(20, 30);
+    let ef: Interval = interval_intersect(e, f);
+    if interval_empty(ef) != 1 { return false; }
+    // Golden: interval_eq distinguishes.
+    if interval_eq(a, b) != false { return false; }
+    if interval_eq(a, interval_new(0, 100)) != true { return false; }
+    // Golden: contiguous in monotonic order: [0,10] and [10, 20] share a boundary.
+    if interval_contiguous(interval_new(0, 10), interval_new(10, 20)) != 1 { return false; }
+    if interval_contiguous(interval_new(0, 9), interval_new(10, 20)) != 1 { return false; }
+    if interval_contiguous(interval_new(0, 5), interval_new(20, 30)) != 0 { return false; }
+    // Golden: domain_cert wrapper.
+    let c1: DomainCert = duration_arithmetic_holds(interval_new(0, 100), interval_new(50, 150));
+    if c1.holds != 1 { return false; }
+    if c1.domain != "time" { return false; }
+    if c1.law_name != "duration_arithmetic" { return false; }
+    let c2: DomainCert = duration_arithmetic_holds(interval_new(0, 10), interval_new(20, 30));
+    if c2.holds != 0 { return false; }
+    return true;
+}

@@ -1,0 +1,85 @@
+// # 3x3 inverse law
+//
+// Logline: Diagonal A * A^-1 is I. The zero matrix has det 0.
+//
+// Setup: Self-contained 3x3 mul and det. Product invert cannot be imported (Result C clash).
+//
+// Beats:
+//   1. diag(2,3,4) times diag(1/2,1/3,1/4) is I.
+//   2. Zero matrix det is 0.
+//   3. domain_cert boxes both.
+
+import "std/core/primitives/domain_cert.oo";
+
+type M3 = struct {
+    a00: Float, a01: Float, a02: Float,
+    a10: Float, a11: Float, a12: Float,
+    a20: Float, a21: Float, a22: Float
+};
+
+fn abs_f(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn m3_new(
+    a00: Float, a01: Float, a02: Float,
+    a10: Float, a11: Float, a12: Float,
+    a20: Float, a21: Float, a22: Float
+) -> M3 {
+    return M3 {
+        a00: a00, a01: a01, a02: a02,
+        a10: a10, a11: a11, a12: a12,
+        a20: a20, a21: a21, a22: a22
+    };
+}
+
+fn m3_mul(a: M3, b: M3) -> M3 {
+    return m3_new(
+        a.a00 * b.a00 + a.a01 * b.a10 + a.a02 * b.a20,
+        a.a00 * b.a01 + a.a01 * b.a11 + a.a02 * b.a21,
+        a.a00 * b.a02 + a.a01 * b.a12 + a.a02 * b.a22,
+        a.a10 * b.a00 + a.a11 * b.a10 + a.a12 * b.a20,
+        a.a10 * b.a01 + a.a11 * b.a11 + a.a12 * b.a21,
+        a.a10 * b.a02 + a.a11 * b.a12 + a.a12 * b.a22,
+        a.a20 * b.a00 + a.a21 * b.a10 + a.a22 * b.a20,
+        a.a20 * b.a01 + a.a21 * b.a11 + a.a22 * b.a21,
+        a.a20 * b.a02 + a.a21 * b.a12 + a.a22 * b.a22
+    );
+}
+
+fn m3_det(m: M3) -> Float {
+    return m.a00 * (m.a11 * m.a22 - m.a12 * m.a21)
+        - m.a01 * (m.a10 * m.a22 - m.a12 * m.a20)
+        + m.a02 * (m.a10 * m.a21 - m.a11 * m.a20);
+}
+
+fn m3_is_i(m: M3, eps: Float) -> Int {
+    if abs_f(m.a00 - 1.0) > eps { return 0; }
+    if abs_f(m.a11 - 1.0) > eps { return 0; }
+    if abs_f(m.a22 - 1.0) > eps { return 0; }
+    if abs_f(m.a01) > eps { return 0; }
+    if abs_f(m.a02) > eps { return 0; }
+    if abs_f(m.a10) > eps { return 0; }
+    if abs_f(m.a12) > eps { return 0; }
+    if abs_f(m.a20) > eps { return 0; }
+    if abs_f(m.a21) > eps { return 0; }
+    return 1;
+}
+
+pub fn math_mat3_inverse_identity_law() -> DomainCert {
+    let a: M3 = m3_new(2.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 4.0);
+    let inv: M3 = m3_new(0.5, 0.0, 0.0, 0.0, 1.0 / 3.0, 0.0, 0.0, 0.0, 0.25);
+    return domain_cert("math", "mat3_a_ainv_is_i", m3_is_i(m3_mul(a, inv), 0.0000001));
+}
+
+pub fn math_mat3_singular_rejected() -> DomainCert {
+    let z: M3 = m3_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    let mut h: Int = 0;
+    if m3_det(z) == 0.0 {
+        h = 1;
+    }
+    return domain_cert("math", "mat3_singular_rejected", h);
+}

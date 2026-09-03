@@ -1,0 +1,103 @@
+// # Keplerian Orbital Mechanics and Vis-Viva Trajectory Dynamics
+//
+// Logline: Calculates orbital velocities, escape velocities, Keplerian periods, and Hohmann transfer delta-v budgets.
+//
+// Setup: Pure astrodynamics equations modeling two-body celestial gravitational mechanics.
+//
+// Beats:
+//   1. Standard gravitational parameter μ = G * M.
+//   2. Vis-viva orbital velocity v = sqrt(GM * (2/r - 1/a)).
+//   3. Circular orbital velocity and escape velocity.
+//   4. Kepler's Third Law orbital period T = 2π * sqrt(a^3 / GM).
+//   5. Hohmann transfer orbit delta-v calculation between two circular orbits.
+
+import "std/science/phys/classical/phys_constants.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_physics_orbital() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+type Orbit2D = struct {
+    semi_major_axis: Float,
+    eccentricity: Float,
+    central_mass: Float
+};
+
+pub fn orb_new(semi_major_axis_meters: Float, eccentricity: Float, central_mass_kg: Float) -> Orbit2D {
+    return Orbit2D {
+        semi_major_axis: semi_major_axis_meters,
+        eccentricity: eccentricity,
+        central_mass: central_mass_kg
+    };
+}
+
+// Standard gravitational parameter μ = G * M (m³/s²)
+pub fn orb_mu(central_mass_kg: Float) -> Float {
+    let g: Float = phys_gravitational_constant();
+    return g * central_mass_kg;
+}
+
+// Vis-viva instantaneous orbital velocity v = sqrt(μ * (2/r - 1/a)) in m/s
+pub fn orb_vis_viva(radius_meters: Float, semi_major_axis_meters: Float, central_mass_kg: Float) -> Float {
+    if radius_meters <= 0.0 || semi_major_axis_meters <= 0.0 { return 0.0; }
+    let mu: Float = orb_mu(central_mass_kg);
+    let term: Float = (2.0 / radius_meters) - (1.0 / semi_major_axis_meters);
+    if term <= 0.0 { return 0.0; }
+    return sqrt(mu * term);
+}
+
+// Circular orbital velocity v_circ = sqrt(GM / r) in m/s
+pub fn orb_circular_velocity(radius_meters: Float, central_mass_kg: Float) -> Float {
+    if radius_meters <= 0.0 { return 0.0; }
+    let mu: Float = orb_mu(central_mass_kg);
+    return sqrt(mu / radius_meters);
+}
+
+// Escape velocity v_esc = sqrt(2 * GM / r) in m/s
+pub fn orb_escape_velocity(radius_meters: Float, central_mass_kg: Float) -> Float {
+    let v_circ: Float = orb_circular_velocity(radius_meters, central_mass_kg);
+    let sqrt2: Float = 1.4142135623730951;
+    return sqrt2 * v_circ;
+}
+
+// Keplerian orbital period T = 2π * sqrt(a³ / GM) in seconds
+pub fn orb_period(semi_major_axis_meters: Float, central_mass_kg: Float) -> Float {
+    if semi_major_axis_meters <= 0.0 { return 0.0; }
+    let mu: Float = orb_mu(central_mass_kg);
+    let a3: Float = semi_major_axis_meters * semi_major_axis_meters * semi_major_axis_meters;
+    let pi: Float = circ_pi_std_phys_physics_orbital();
+    return 2.0 * pi * sqrt(a3 / mu);
+}
+
+// Total delta-v for Hohmann transfer between circular orbit r1 and circular orbit r2 (m/s)
+pub fn orb_hohmann_delta_v(r1_meters: Float, r2_meters: Float, central_mass_kg: Float) -> Float {
+    if r1_meters <= 0.0 || r2_meters <= 0.0 { return 0.0; }
+    let mu: Float = orb_mu(central_mass_kg);
+    let v1: Float = sqrt(mu / r1_meters);
+    let v2: Float = sqrt(mu / r2_meters);
+    let a_trans: Float = (r1_meters + r2_meters) / 2.0;
+    let v_trans1: Float = sqrt(mu * ((2.0 / r1_meters) - (1.0 / a_trans)));
+    let v_trans2: Float = sqrt(mu * ((2.0 / r2_meters) - (1.0 / a_trans)));
+
+    let mut dv1: Float = v_trans1 - v1;
+    if dv1 < 0.0 { dv1 = 0.0 - dv1; }
+    let mut dv2: Float = v2 - v_trans2;
+    if dv2 < 0.0 { dv2 = 0.0 - dv2; }
+    return dv1 + dv2;
+}
+
+pub fn verify_vis_viva() -> Bool {
+    let r: Float = 7000000.0;
+    let m: Float = 5972200000000000000000000.0;
+    let v: Float = orb_vis_viva(r, r, m);
+    let c: Float = orb_circular_velocity(r, m);
+    let mut d: Float = v - c;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.001 {
+        return false;
+    }
+    if orb_vis_viva(0.0, r, 1.0) != 0.0 {
+        return false;
+    }
+    return true;
+}

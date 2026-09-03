@@ -1,0 +1,192 @@
+// # x86-64 Native Machine Instruction Encoder
+//
+// Logline: Encodes x86-64 machine instructions into raw executable bytecode sequences.
+//
+// Setup: Pure instruction encoder emitting byte arrays for integer arithmetic, data movement, and control flow.
+//
+// Beats:
+//   1. Encode register-to-register MOV, ADD, SUB, XOR, and CMP instructions.
+//   2. Encode 64-bit immediate loads (MOV reg, imm64).
+//   3. Encode stack frame operations (PUSH, POP, RET) and system calls.
+//   4. Encode IEEE-754 single and double precision scalar SSE instructions.
+
+import "std/hw/silicon/x86_regs.oo";
+
+pub fn x86_encode_ret() -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, 195); // 0xC3
+    return bytes;
+}
+
+pub fn x86_encode_syscall() -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, 15);  // 0x0F
+    bytes = list_push(bytes, 5);   // 0x05
+    return bytes;
+}
+
+pub fn x86_encode_push(reg: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    if x86_is_extended(reg) {
+        bytes = list_push(bytes, x86_rex_prefix(false, false, true));
+    }
+    bytes = list_push(bytes, 80 + x86_reg_code(reg)); // 0x50 + reg
+    return bytes;
+}
+
+pub fn x86_encode_pop(reg: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    if x86_is_extended(reg) {
+        bytes = list_push(bytes, x86_rex_prefix(false, false, true));
+    }
+    bytes = list_push(bytes, 88 + x86_reg_code(reg)); // 0x58 + reg
+    return bytes;
+}
+
+pub fn x86_encode_mov_rr(dst: Int, src: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_extended(src), x86_is_extended(dst)));
+    bytes = list_push(bytes, 137); // 0x89
+    bytes = list_push(bytes, x86_modrm(3, src, dst)); // mod=11 (register-direct)
+    return bytes;
+}
+
+pub fn x86_encode_add_rr(dst: Int, src: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_extended(src), x86_is_extended(dst)));
+    bytes = list_push(bytes, 1); // 0x01
+    bytes = list_push(bytes, x86_modrm(3, src, dst));
+    return bytes;
+}
+
+pub fn x86_encode_sub_rr(dst: Int, src: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_extended(src), x86_is_extended(dst)));
+    bytes = list_push(bytes, 41); // 0x29
+    bytes = list_push(bytes, x86_modrm(3, src, dst));
+    return bytes;
+}
+
+pub fn x86_encode_xor_rr(dst: Int, src: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_extended(src), x86_is_extended(dst)));
+    bytes = list_push(bytes, 49); // 0x31
+    bytes = list_push(bytes, x86_modrm(3, src, dst));
+    return bytes;
+}
+
+pub fn x86_encode_mov_ri64(dst: Int, imm: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, x86_rex_prefix(true, false, x86_is_extended(dst)));
+    bytes = list_push(bytes, 184 + x86_reg_code(dst)); // 0xB8 + reg
+    let mut val: Int = imm;
+    let mut i: Int = 0;
+    while i < 8 {
+        bytes = list_push(bytes, val & 255);
+        val = val >> 8;
+        i = i + 1;
+    }
+    return bytes;
+}
+
+pub fn x86_encode_sse_op(prefix: Int, op: Int, dst: Int, src: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    if prefix > 0 {
+        bytes = list_push(bytes, prefix);
+    }
+    if x86_is_xmm_extended(dst) || x86_is_xmm_extended(src) {
+        bytes = list_push(bytes, x86_rex_prefix(false, x86_is_xmm_extended(dst), x86_is_xmm_extended(src)));
+    }
+    bytes = list_push(bytes, 15); // 0x0F
+    bytes = list_push(bytes, op);
+    bytes = list_push(bytes, x86_modrm(3, dst, src));
+    return bytes;
+}
+
+pub fn x86_encode_movss(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(243, 16, dst, src);
+}
+
+pub fn x86_encode_movsd(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(242, 16, dst, src);
+}
+
+pub fn x86_encode_addss(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(243, 88, dst, src);
+}
+
+pub fn x86_encode_addsd(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(242, 88, dst, src);
+}
+
+pub fn x86_encode_subss(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(243, 92, dst, src);
+}
+
+pub fn x86_encode_subsd(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(242, 92, dst, src);
+}
+
+pub fn x86_encode_mulss(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(243, 89, dst, src);
+}
+
+pub fn x86_encode_mulsd(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(242, 89, dst, src);
+}
+
+pub fn x86_encode_divss(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(243, 94, dst, src);
+}
+
+pub fn x86_encode_divsd(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(242, 94, dst, src);
+}
+
+pub fn x86_encode_ucomiss(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(0, 46, dst, src);
+}
+
+pub fn x86_encode_ucomisd(dst: Int, src: Int) -> List[Int] {
+    return x86_encode_sse_op(102, 46, dst, src);
+}
+
+pub fn x86_encode_cvtsi2sd(dst_xmm: Int, src_gpr: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, 242);
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_xmm_extended(dst_xmm), x86_is_extended(src_gpr)));
+    bytes = list_push(bytes, 15);
+    bytes = list_push(bytes, 42);
+    bytes = list_push(bytes, x86_modrm(3, dst_xmm, src_gpr));
+    return bytes;
+}
+
+pub fn x86_encode_cvtsi2ss(dst_xmm: Int, src_gpr: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, 243);
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_xmm_extended(dst_xmm), x86_is_extended(src_gpr)));
+    bytes = list_push(bytes, 15);
+    bytes = list_push(bytes, 42);
+    bytes = list_push(bytes, x86_modrm(3, dst_xmm, src_gpr));
+    return bytes;
+}
+
+pub fn x86_encode_cvttsd2si(dst_gpr: Int, src_xmm: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, 242);
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_extended(dst_gpr), x86_is_xmm_extended(src_xmm)));
+    bytes = list_push(bytes, 15);
+    bytes = list_push(bytes, 44);
+    bytes = list_push(bytes, x86_modrm(3, dst_gpr, src_xmm));
+    return bytes;
+}
+
+pub fn x86_encode_cvttss2si(dst_gpr: Int, src_xmm: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, 243);
+    bytes = list_push(bytes, x86_rex_prefix(true, x86_is_extended(dst_gpr), x86_is_xmm_extended(src_xmm)));
+    bytes = list_push(bytes, 15);
+    bytes = list_push(bytes, 44);
+    bytes = list_push(bytes, x86_modrm(3, dst_gpr, src_xmm));
+    return bytes;
+}

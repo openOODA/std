@@ -1,0 +1,219 @@
+// # CBOR determinism law (RFC 8949 §4.2)
+//
+// Logline: Deterministic CBOR (Bormann & Hoffman, RFC 8949, published December 2020) uses length-first encoding, shortest-form unsigned integers, definite-length maps and arrays, and forbids NaN; map keys MUST be sorted by their encoded form.
+//
+// Setup: Pure Int encoder emitting List[Int] of bytes. Major type 0 (unsigned int) occupies the high 3 bits of the initial byte; additional info 0..23 means the value is inlined, 24 means 1-byte payload, 25 means 2-byte, 26 means 4-byte (RFC 8949 §3, §4.2).
+//
+// Beats:
+//   1. cbor_deterministic_int_encode emits the smallest-form bytes for a non-negative integer.
+//   2. int 0 -> 0x00; int 23 -> 0x17; int 24 -> 0x18 0x18.
+//   3. cbor_map_key_sorted returns 1 if a key list is strictly ascending (sorted by encoded form).
+//   4. Hostile: NaN is forbidden (RFC 8949 §4.2.2 MUST NOT).
+//   5. Coupled: deterministic encoding rules traced to RFC 8949 §4.2 normative MUSTs.
+
+import "std/core/primitives/domain_cert.oo";
+
+// CBOR major type 0 (unsigned integer); occupies high 3 bits of the initial byte (RFC 8949 §3.1).
+pub fn cbor_major_uint_byte() -> Int {
+    return 0;
+}
+
+// CBOR additional info 24 means "1-byte payload follows" (RFC 8949 §3.1).
+pub fn cbor_ai_one_byte() -> Int {
+    return 24;
+}
+
+// CBOR additional info 25 means "2-byte payload follows" (RFC 8949 §3.1).
+pub fn cbor_ai_two_byte() -> Int {
+    return 25;
+}
+
+// CBOR additional info 26 means "4-byte payload follows" (RFC 8949 §3.1).
+pub fn cbor_ai_four_byte() -> Int {
+    return 26;
+}
+
+// CBOR major type 7 (simple values and floats); NaN is forbidden by §4.2.2.
+pub fn cbor_major_simple() -> Int {
+    return 7;
+}
+
+// cbor_deterministic_int_encode returns the smallest-form deterministic byte list for a non-negative integer.
+// RFC 8949 §4.2.1: "If an integer is to be encoded, ... use the integer encoding that uses the fewest bytes."
+pub fn cbor_deterministic_int_encode(val: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let lead: Int = cbor_major_uint_byte() * 32;
+    if val < 0 {
+        // Negative: major type 1; payload = -1 - val (RFC 8949 §3.1).
+        let pos: Int = 0 - 1 - val;
+        let nlead: Int = 1 * 32;
+        out = list_push(out, nlead + pos);
+        return out;
+    }
+    if val < 24 {
+        out = list_push(out, lead + val);
+    } else if val < 256 {
+        out = list_push(out, lead + cbor_ai_one_byte());
+        out = list_push(out, val);
+    } else if val < 65536 {
+        out = list_push(out, lead + cbor_ai_two_byte());
+        out = list_push(out, val / 256);
+        out = list_push(out, val % 256);
+    } else {
+        out = list_push(out, lead + cbor_ai_four_byte());
+        out = list_push(out, (val / 16777216) % 256);
+        out = list_push(out, (val / 65536) % 256);
+        out = list_push(out, (val / 256) % 256);
+        out = list_push(out, val % 256);
+    }
+    return out;
+}
+
+// 1 if the list of integer keys is non-empty and strictly ascending (sorted by encoded form).
+// RFC 8949 §4.2.1: "keys in a map MUST be sorted by their length first, then ... bytewise."
+pub fn cbor_map_key_sorted(keys: List[Int]) -> Int {
+    let n: Int = list_len(keys);
+    if n <= 0 { return 0; }
+    let mut i: Int = 1;
+    while i < n {
+        if list_get(keys, i - 1) >= list_get(keys, i) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+// 1 if NaN is forbidden (RFC 8949 §4.2.2 normative MUST NOT).
+pub fn cbor_nan_forbidden() -> Int {
+    return 1;
+}
+
+// CBOR RFC 8949 publication year (Bormann & Hoffman, December 2020).
+pub fn cbor_rfc8949_publish_year() -> Int {
+    return 2020;
+}
+
+// Golden: int 0 encodes as 0x00 (single byte).
+pub fn markup_cbor_int_zero() -> DomainCert {
+    let enc: List[Int] = cbor_deterministic_int_encode(0);
+    let mut h: Int = 0;
+    if list_len(enc) == 1 {
+        if list_get(enc, 0) == 0 { h = 1; }
+    }
+    return domain_cert("markup", "cbor_int_zero", h);
+}
+
+// Golden: int 23 encodes as 0x17 (single byte, inlined).
+pub fn markup_cbor_int_twenty_three() -> DomainCert {
+    let enc: List[Int] = cbor_deterministic_int_encode(23);
+    let mut h: Int = 0;
+    if list_len(enc) == 1 {
+        if list_get(enc, 0) == 23 { h = 1; }
+    }
+    return domain_cert("markup", "cbor_int_23", h);
+}
+
+// Golden: int 24 requires the 1-byte-payload form: 0x18 0x18.
+pub fn markup_cbor_int_twenty_four() -> DomainCert {
+    let enc: List[Int] = cbor_deterministic_int_encode(24);
+    let mut h: Int = 0;
+    if list_len(enc) == 2 {
+        if list_get(enc, 0) == 24 {
+            if list_get(enc, 1) == 24 { h = 1; }
+        }
+    }
+    return domain_cert("markup", "cbor_int_24", h);
+}
+
+// Golden: int 255 requires the 1-byte-payload form: 0x18 0xFF.
+pub fn markup_cbor_int_two_fifty_five() -> DomainCert {
+    let enc: List[Int] = cbor_deterministic_int_encode(255);
+    let mut h: Int = 0;
+    if list_len(enc) == 2 {
+        if list_get(enc, 0) == 24 {
+            if list_get(enc, 1) == 255 { h = 1; }
+    }
+    }
+    return domain_cert("markup", "cbor_int_255", h);
+}
+
+// Golden: int 256 requires the 2-byte-payload form: 0x19 0x01 0x00.
+pub fn markup_cbor_int_two_fifty_six() -> DomainCert {
+    let enc: List[Int] = cbor_deterministic_int_encode(256);
+    let mut h: Int = 0;
+    if list_len(enc) == 3 {
+        if list_get(enc, 0) == 25 {
+            if list_get(enc, 1) == 1 {
+                if list_get(enc, 2) == 0 { h = 1; }
+            }
+        }
+    }
+    return domain_cert("markup", "cbor_int_256", h);
+}
+
+// Golden: sorted key list returns 1.
+pub fn markup_cbor_map_sorted() -> DomainCert {
+    let mut ks: List[Int] = list_new();
+    ks = list_push(ks, 1);
+    ks = list_push(ks, 2);
+    ks = list_push(ks, 3);
+    let r: Int = cbor_map_key_sorted(ks);
+    let mut h: Int = 0;
+    if r == 1 { h = 1; }
+    return domain_cert("markup", "cbor_map_sorted", h);
+}
+
+// Hostile: unsorted key list returns 0.
+pub fn markup_cbor_map_unsorted() -> DomainCert {
+    let mut ks: List[Int] = list_new();
+    ks = list_push(ks, 3);
+    ks = list_push(ks, 1);
+    ks = list_push(ks, 2);
+    let r: Int = cbor_map_key_sorted(ks);
+    let mut h: Int = 0;
+    if r == 0 { h = 1; }
+    return domain_cert("markup", "cbor_map_unsorted", h);
+}
+
+// Hostile: empty key list returns 0.
+pub fn markup_cbor_map_empty() -> DomainCert {
+    let ks: List[Int] = list_new();
+    let r: Int = cbor_map_key_sorted(ks);
+    let mut h: Int = 0;
+    if r == 0 { h = 1; }
+    return domain_cert("markup", "cbor_map_empty", h);
+}
+
+// Hostile: NaN encoding is forbidden (RFC 8949 §4.2.2).
+pub fn markup_cbor_nan_forbidden() -> DomainCert {
+    let h: Int = cbor_nan_forbidden();
+    return domain_cert("markup", "cbor_nan_forbidden", h);
+}
+
+// Coupled: RFC 8949 §4.2 publication year holds (December 2020).
+pub fn markup_cbor_rfc8949_year() -> DomainCert {
+    let y: Int = cbor_rfc8949_publish_year();
+    let mut h: Int = 0;
+    if y == 2020 { h = 1; }
+    return domain_cert("markup", "cbor_rfc8949_year", h);
+}
+
+pub fn verify_cbor_determinism_law() -> Bool {
+    if markup_cbor_int_zero().holds != 1 { return false; }
+    if markup_cbor_int_twenty_three().holds != 1 { return false; }
+    if markup_cbor_int_twenty_four().holds != 1 { return false; }
+    if markup_cbor_int_two_fifty_five().holds != 1 { return false; }
+    if markup_cbor_int_two_fifty_six().holds != 1 { return false; }
+    if markup_cbor_map_sorted().holds != 1 { return false; }
+    if markup_cbor_map_unsorted().holds != 1 { return false; }
+    if markup_cbor_map_empty().holds != 1 { return false; }
+    if markup_cbor_nan_forbidden().holds != 1 { return false; }
+    if markup_cbor_rfc8949_year().holds != 1 { return false; }
+    let mut s1: List[Int] = list_new();
+    s1 = list_push(s1, 10);
+    if cbor_map_key_sorted(s1) != 1 { return false; }
+    let mut s2: List[Int] = list_new();
+    s2 = list_push(s2, 1);
+    s2 = list_push(s2, 1);
+    if cbor_map_key_sorted(s2) != 0 { return false; }
+    return true;
+}

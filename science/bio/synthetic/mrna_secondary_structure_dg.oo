@@ -1,0 +1,112 @@
+// # 5' UTR mRNA Secondary Structure & Free Energy (dG)
+//
+// Logline: Calculates mRNA stem-loop hairpin Gibbs free energy and predicts ribosomal accessibility inhibition.
+//
+// Setup: Nearest-neighbor thermodynamic model calculating base-pairing stability and translation initiation inhibition.
+//
+// Beats:
+//   1. Define RnaBasePair, HairpinStructure, and StructureStabilityResult data structures.
+//   2. Compute nearest-neighbor stacking free energies (GC, AU, GU wobble pairs) and loop initiation penalties.
+//   3. Predict translation initiation blockage ratio based on Delta-G of structure covering the RBS.
+
+type RnaBasePair = struct {
+    pos_5p: Int,
+    pos_3p: Int,
+    pair_type: String, // "GC", "AU", "GU"
+    stacking_dg_kcal: Float
+};
+
+type HairpinStructure = struct {
+    stem_length_bp: Int,
+    loop_length_nt: Int,
+    gc_count: Int,
+    au_count: Int,
+    gu_count: Int
+};
+
+type StructureStabilityResult = struct {
+    dg_folding_kcal_per_mol: Float,
+    is_stable: Bool,
+    translation_inhibition_fraction: Float,
+    melting_temp_celsius: Float
+};
+
+pub fn mrna_calc_stacking_energy(p1: String, p2: String) -> Float {
+    // Nearest-neighbor stacking parameters at 37 C (kcal/mol)
+    if p1 == "GC" && p2 == "GC" { return -3.3; }
+    if p1 == "GC" && p2 == "CG" { return -2.4; }
+    if p1 == "AU" && p2 == "AU" { return -0.9; }
+    if p1 == "AU" && p2 == "UA" { return -1.1; }
+    if p1 == "GC" && p2 == "AU" { return -2.2; }
+    if p1 == "AU" && p2 == "GC" { return -2.1; }
+    if p1 == "GU" || p2 == "GU" { return -0.5; }
+    return -1.5;
+}
+
+pub fn mrna_calc_hairpin_loop_penalty(loop_len: Int) -> Float {
+    if loop_len == 3 { return 5.4; }
+    if loop_len == 4 { return 5.6; }
+    if loop_len == 5 { return 5.7; }
+    if loop_len == 6 { return 5.8; }
+    if loop_len == 7 { return 6.0; }
+    if loop_len == 8 { return 6.1; }
+    return 6.5 + (((loop_len - mrna_secondary_structure_dg_to_f(8))) * 0.3);
+}
+
+pub fn mrna_evaluate_hairpin(hp: HairpinStructure) -> StructureStabilityResult {
+    let gc_f: Float = mrna_secondary_structure_dg_to_f(hp.gc_count);    let au_f: Float = mrna_secondary_structure_dg_to_f(hp.au_count);    let gu_f: Float = mrna_secondary_structure_dg_to_f(hp.gu_count);
+    // Stem stacking energy approximation
+    let stem_dg: Float = (gc_f * -2.8) + (au_f * -1.2) + (gu_f * -0.5);    let loop_dg: Float = mrna_calc_hairpin_loop_penalty(hp.loop_length_nt);
+    let total_dg: Float = stem_dg + loop_dg;    let stable: Float = total_dg < -3.0;
+    // If structure is very stable (Delta-G < -10 kcal/mol), ribosome cannot easily melt it
+    let inhib: Float = if total_dg < -12.0 {        0.95
+    } else if total_dg < -6.0 {
+        0.65
+    } else if total_dg < -2.0 {
+        0.25
+    } else {
+        0.05
+    };
+
+    // Approximate Tm: Tm ~ 37.0 + (-total_dg * 4.5)
+    let tm: Float = 37.0 + (if total_dg < 0.0 { -total_dg * 4.5 } else { 0.0 });
+    return StructureStabilityResult {
+        dg_folding_kcal_per_mol: total_dg,
+        is_stable: stable,
+        translation_inhibition_fraction: inhib,
+        melting_temp_celsius: tm
+    };
+}
+
+
+fn mrna_secondary_structure_dg_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

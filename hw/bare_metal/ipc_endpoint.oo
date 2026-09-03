@@ -1,0 +1,98 @@
+// # Synchronous Rendezvous IPC Endpoints
+//
+// Logline: Zero-copy synchronous message transfer, sender/receiver wait queues, and thread rendezvous state machine.
+//
+// Setup: Declared capability: None. Pure mathematical state machine for synchronous capability-gated communication.
+//
+// Beats:
+//   1. Declare IPC message header and endpoint descriptor structures.
+//   2. Implement endpoint initialization and queue state management.
+//   3. Implement synchronous send, receive, and rendezvous handshake.
+//   4. Validate endpoint idle and blocked state transitions.
+
+type IpcMsgHeader = struct {
+    label: Int,
+    length_bytes: Int,
+    badge: Int,
+    is_blocking: Bool
+};
+
+type IpcEndpoint = struct {
+    endpoint_id: Int,
+    state: Int,
+    send_queue_count: Int,
+    recv_queue_count: Int,
+    message_count: Int
+};
+
+pub fn ipc_msg_header_new(lbl: Int, len: Int, b: Int) -> IpcMsgHeader {
+    let safe_lbl: Int = if lbl < 0 { 0 } else { lbl };
+    let safe_len: Int = if len < 0 { 0 } else { len };
+    return IpcMsgHeader {
+        label: safe_lbl,
+        length_bytes: safe_len,
+        badge: b,
+        is_blocking: true
+    };
+}
+
+pub fn ipc_endpoint_new(id: Int) -> IpcEndpoint {
+    let safe_id: Int = if id < 0 { 0 } else { id };
+    return IpcEndpoint {
+        endpoint_id: safe_id,
+        state: 0,
+        send_queue_count: 0,
+        recv_queue_count: 0,
+        message_count: 0
+    };
+}
+
+pub fn ipc_send_enqueue(ep: IpcEndpoint, sender_tcb: Int) -> IpcEndpoint {
+    let r_cnt: Int = ep.recv_queue_count;
+    if r_cnt > 0 {
+        let new_r: Int = r_cnt - 1;
+        let new_state: Int = if new_r == 0 { 0 } else { 2 };
+        return IpcEndpoint {
+            endpoint_id: ep.endpoint_id,
+            state: new_state,
+            send_queue_count: ep.send_queue_count,
+            recv_queue_count: new_r,
+            message_count: ep.message_count + 1
+        };
+    }
+    return IpcEndpoint {
+        endpoint_id: ep.endpoint_id,
+        state: 1,
+        send_queue_count: ep.send_queue_count + 1,
+        recv_queue_count: ep.recv_queue_count,
+        message_count: ep.message_count
+    };
+}
+
+pub fn ipc_recv_enqueue(ep: IpcEndpoint, receiver_tcb: Int) -> IpcEndpoint {
+    let s_cnt: Int = ep.send_queue_count;
+    if s_cnt > 0 {
+        let new_s: Int = s_cnt - 1;
+        let new_state: Int = if new_s == 0 { 0 } else { 1 };
+        return IpcEndpoint {
+            endpoint_id: ep.endpoint_id,
+            state: new_state,
+            send_queue_count: new_s,
+            recv_queue_count: ep.recv_queue_count,
+            message_count: ep.message_count + 1
+        };
+    }
+    return IpcEndpoint {
+        endpoint_id: ep.endpoint_id,
+        state: 2,
+        send_queue_count: ep.send_queue_count,
+        recv_queue_count: ep.recv_queue_count + 1,
+        message_count: ep.message_count
+    };
+}
+
+pub fn ipc_is_idle(ep: IpcEndpoint) -> Bool {
+    let s_cnt: Int = ep.send_queue_count;
+    let r_cnt: Int = ep.recv_queue_count;
+    return (s_cnt == 0) && (r_cnt == 0);
+}

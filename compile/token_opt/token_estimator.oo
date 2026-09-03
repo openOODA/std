@@ -1,0 +1,136 @@
+// # Pluggable Token Estimator with Calibration
+//
+// Logline: Provide a char-heuristic estimator and a calibrated-bytes-per-token estimator; both LLM-agnostic; the calibrated variant learns from observed samples and improves over time.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) I1 pluggable estimator.
+//
+// Beats:
+//   1. Define TokenEstimator interface via struct + apply_via_bytes function pointer-style dispatch.
+//   2. CharHeuristicEstimator: (b/4) + 1 conservative fallback for any text.
+//   3. CalibratedEstimator: stores bytes_per_token from observed samples; (b / bpt) estimate.
+//   4. calibration_record: append a sample, recompute bpt, persist via format_calibration.
+//   5. estimate_load_from_env: read OODA_TOKEN_ESTIMATOR_BPT env var if set.
+
+type TokenEstimator = struct {
+    name: String,
+    bytes_per_token_x1000: Int,
+    sample_count: Int,
+    source: String
+};
+
+pub fn token_estimator_new(name: String, bpt_x1000: Int, count: Int, source: String) -> TokenEstimator {
+    return TokenEstimator {
+        name: name,
+        bytes_per_token_x1000: bpt_x1000,
+        sample_count: count,
+        source: source
+    };
+}
+
+pub fn token_estimator_default() -> TokenEstimator {
+    return TokenEstimator {
+        name: "char-heuristic",
+        bytes_per_token_x1000: 4000,
+        sample_count: 0,
+        source: "default"
+    };
+}
+
+pub fn token_estimator_from_bpt(bpt_x1000: Int, source: String) -> TokenEstimator {
+    return TokenEstimator {
+        name: "calibrated",
+        bytes_per_token_x1000: bpt_x1000,
+        sample_count: 1,
+        source: source
+    };
+}
+
+pub fn token_estimator_estimate(e: TokenEstimator, b: Int) -> Int {
+    let n: Int = b;
+    if n <= 0 {
+        return 0;
+    }
+    let bpt: Int = e.bytes_per_token_x1000;
+    if bpt <= 0 {
+        return (n / 4) + 1;
+    }
+    let num: Int = n * 1000;
+    let q: Int = num / bpt;
+    if q < 1 {
+        return 1;
+    }
+    return q;
+}
+
+pub fn token_estimator_estimate_text(e: TokenEstimator, s: String) -> Int {
+    let b: Int = s.len();
+    return token_estimator_estimate(e, b);
+}
+
+pub fn token_estimator_record_sample(e: TokenEstimator, observed_bytes: Int, observed_tokens: Int) -> TokenEstimator {
+    if observed_bytes <= 0 {
+        return e;
+    }
+    if observed_tokens <= 0 {
+        return e;
+    }
+    let new_bpt_x1000: Int = (observed_bytes * 1000) / observed_tokens;
+    if e.sample_count == 0 {
+        return token_estimator_from_bpt(new_bpt_x1000, "calibrated");
+    }
+    let old_total: Int = e.bytes_per_token_x1000 * e.sample_count;
+    let new_total: Int = old_total + new_bpt_x1000;
+    let new_count: Int = e.sample_count + 1;
+    let new_avg: Int = new_total / new_count;
+    return TokenEstimator {
+        name: "calibrated",
+        bytes_per_token_x1000: new_avg,
+        sample_count: new_count,
+        source: e.source
+    };
+}
+
+pub fn token_estimator_format(e: TokenEstimator) -> String {
+    let bpt: Int = e.bytes_per_token_x1000;
+    let whole: Int = bpt / 1000;
+    let frac: Int = bpt - (whole * 1000);
+    let pad: Int = frac / 10;
+    let sc: Int = e.sample_count;
+    return e.name + " bpt=" + whole.to_string() + "." + pad.to_string() + " samples=" + sc.to_string() + " source=" + e.source;
+}
+
+pub fn token_estimator_load_from_env(fs: &FsReadCap, env_value: String) -> TokenEstimator {
+    if env_value == "" {
+        return token_estimator_default();
+    }
+    let n: Int = chars_len(env_value);
+    if n == 0 {
+        return token_estimator_default();
+    }
+    let mut acc: Int = 0;
+    let mut saw_digit: Bool = false;
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(env_value, i);
+        if c == "0" { acc = acc * 10; saw_digit = true; }
+        else if c == "1" { acc = acc * 10 + 1; saw_digit = true; }
+        else if c == "2" { acc = acc * 10 + 2; saw_digit = true; }
+        else if c == "3" { acc = acc * 10 + 3; saw_digit = true; }
+        else if c == "4" { acc = acc * 10 + 4; saw_digit = true; }
+        else if c == "5" { acc = acc * 10 + 5; saw_digit = true; }
+        else if c == "6" { acc = acc * 10 + 6; saw_digit = true; }
+        else if c == "7" { acc = acc * 10 + 7; saw_digit = true; }
+        else if c == "8" { acc = acc * 10 + 8; saw_digit = true; }
+        else if c == "9" { acc = acc * 10 + 9; saw_digit = true; }
+        else { i = n; }
+        i = i + 1;
+    }
+    if !saw_digit {
+        return token_estimator_default();
+    }
+    return token_estimator_from_bpt(acc, "env");
+}
+
+pub fn token_estimate_with(e: TokenEstimator, b: Int) -> Int {
+    return token_estimator_estimate(e, b);
+}

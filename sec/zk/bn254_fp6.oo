@@ -1,0 +1,136 @@
+// # BN254 Sextic Extension Field (F_p6) Arithmetic
+//
+// Logline: Implements sextic extension field F_p6 = F_p2[v]/(v^3-xi) arithmetic with non-residue xi = 9 + u.
+//
+// Setup: F_p6 extension arithmetic over quadratic extension elements with cubic non-residue reduction.
+//
+// Beats:
+//   1. Represent F_p6 elements as trinomial c0 + c1*v + c2*v^2 with F_p2 coordinates.
+//   2. Compute extension addition, subtraction, and polynomial multiplication.
+//   3. Compute scalar scaling and multiplication by non-residue v.
+//   4. Implement equality and zero/identity constant initializers.
+
+import "./bn254_fp2.oo";
+
+type Bn254Fp6 = struct {
+    c0: Bn254Fp2,
+    c1: Bn254Fp2,
+    c2: Bn254Fp2
+};
+
+pub fn bn254_fp6_zero() -> Bn254Fp6 {
+    return Bn254Fp6 {
+        c0: bn254_fp2_zero(),
+        c1: bn254_fp2_zero(),
+        c2: bn254_fp2_zero()
+    };
+}
+
+pub fn bn254_fp6_one() -> Bn254Fp6 {
+    return Bn254Fp6 {
+        c0: bn254_fp2_one(),
+        c1: bn254_fp2_zero(),
+        c2: bn254_fp2_zero()
+    };
+}
+
+pub fn bn254_fp6_new(c0: Bn254Fp2, c1: Bn254Fp2, c2: Bn254Fp2) -> Bn254Fp6 {
+    return Bn254Fp6 {
+        c0: c0,
+        c1: c1,
+        c2: c2
+    };
+}
+
+pub fn bn254_fp6_add(a: Bn254Fp6, b: Bn254Fp6) -> Bn254Fp6 {
+    return Bn254Fp6 {
+        c0: bn254_fp2_add(a.c0, b.c0),
+        c1: bn254_fp2_add(a.c1, b.c1),
+        c2: bn254_fp2_add(a.c2, b.c2)
+    };
+}
+
+pub fn bn254_fp6_sub(a: Bn254Fp6, b: Bn254Fp6) -> Bn254Fp6 {
+    return Bn254Fp6 {
+        c0: bn254_fp2_sub(a.c0, b.c0),
+        c1: bn254_fp2_sub(a.c1, b.c1),
+        c2: bn254_fp2_sub(a.c2, b.c2)
+    };
+}
+
+pub fn bn254_fp6_mul(a: Bn254Fp6, b: Bn254Fp6) -> Bn254Fp6 {
+    let a0b0: Bn254Fp2 = bn254_fp2_mul(a.c0, b.c0);
+    let a1b1: Bn254Fp2 = bn254_fp2_mul(a.c1, b.c1);
+    let a2b2: Bn254Fp2 = bn254_fp2_mul(a.c2, b.c2);
+
+    let a1b2: Bn254Fp2 = bn254_fp2_mul(a.c1, b.c2);
+    let a2b1: Bn254Fp2 = bn254_fp2_mul(a.c2, b.c1);
+    let sum_12: Bn254Fp2 = bn254_fp2_add(a1b2, a2b1);
+    let nonres_12: Bn254Fp2 = bn254_fp2_mul_nonres(sum_12);
+    let c0: Bn254Fp2 = bn254_fp2_add(a0b0, nonres_12);
+
+    let a0b1: Bn254Fp2 = bn254_fp2_mul(a.c0, b.c1);
+    let a1b0: Bn254Fp2 = bn254_fp2_mul(a.c1, b.c0);
+    let nonres_22: Bn254Fp2 = bn254_fp2_mul_nonres(a2b2);
+    let c1: Bn254Fp2 = bn254_fp2_add(bn254_fp2_add(a0b1, a1b0), nonres_22);
+
+    let a0b2: Bn254Fp2 = bn254_fp2_mul(a.c0, b.c2);
+    let a2b0: Bn254Fp2 = bn254_fp2_mul(a.c2, b.c0);
+    let c2: Bn254Fp2 = bn254_fp2_add(bn254_fp2_add(a0b2, a2b0), a1b1);
+
+    return Bn254Fp6 {
+        c0: c0,
+        c1: c1,
+        c2: c2
+    };
+}
+
+pub fn bn254_fp6_mul_nonres(a: Bn254Fp6) -> Bn254Fp6 {
+    let nonres_c2: Bn254Fp2 = bn254_fp2_mul_nonres(a.c2);
+    return Bn254Fp6 {
+        c0: nonres_c2,
+        c1: a.c0,
+        c2: a.c1
+    };
+}
+
+pub fn bn254_fp6_equal(a: Bn254Fp6, b: Bn254Fp6) -> Bool {
+    return bn254_fp2_equal(a.c0, b.c0) &&
+           bn254_fp2_equal(a.c1, b.c1) &&
+           bn254_fp2_equal(a.c2, b.c2);
+}
+
+pub fn bn254_fp6_inv(a: Bn254Fp6) -> Bn254Fp6 {
+    if bn254_fp6_equal(a, bn254_fp6_zero()) {
+        return bn254_fp6_zero();
+    }
+    let a0: Bn254Fp2 = a.c0;
+    let a1: Bn254Fp2 = a.c1;
+    let a2: Bn254Fp2 = a.c2;
+
+    let a0_sq: Bn254Fp2 = bn254_fp2_mul(a0, a0);
+    let a1_sq: Bn254Fp2 = bn254_fp2_mul(a1, a1);
+    let a2_sq: Bn254Fp2 = bn254_fp2_mul(a2, a2);
+
+    let a1a2: Bn254Fp2 = bn254_fp2_mul_nonres(bn254_fp2_mul(a1, a2));
+    let s0: Bn254Fp2 = bn254_fp2_sub(a0_sq, a1a2);
+
+    let xi_a2_sq: Bn254Fp2 = bn254_fp2_mul_nonres(a2_sq);
+    let a0a1: Bn254Fp2 = bn254_fp2_mul(a0, a1);
+    let s1: Bn254Fp2 = bn254_fp2_sub(xi_a2_sq, a0a1);
+
+    let a0a2: Bn254Fp2 = bn254_fp2_mul(a0, a2);
+    let s2: Bn254Fp2 = bn254_fp2_sub(a1_sq, a0a2);
+
+    let term0: Bn254Fp2 = bn254_fp2_mul(a0, s0);
+    let term1: Bn254Fp2 = bn254_fp2_mul_nonres(bn254_fp2_mul(a2, s1));
+    let term2: Bn254Fp2 = bn254_fp2_mul_nonres(bn254_fp2_mul(a1, s2));
+    let norm: Bn254Fp2 = bn254_fp2_add(bn254_fp2_add(term0, term1), term2);
+    let inv_norm: Bn254Fp2 = bn254_fp2_inv(norm);
+
+    return Bn254Fp6 {
+        c0: bn254_fp2_mul(s0, inv_norm),
+        c1: bn254_fp2_mul(s1, inv_norm),
+        c2: bn254_fp2_mul(s2, inv_norm)
+    };
+}

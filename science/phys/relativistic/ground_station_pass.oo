@@ -1,0 +1,78 @@
+// # Ground Station Visibility & Pass Geometry
+//
+// Logline: Calculates satellite-to-ground station elevation angle, azimuth, slant range, and Doppler shift.
+//
+// Setup: Pure geometric and topocentric satellite visibility tracking from Earth surface stations.
+//
+// Beats:
+//   1. Minimum tracking elevation angle threshold query.
+//   2. Calculate topocentric elevation and azimuth angles from SEZ coordinate vector.
+//   3. Compute line-of-sight slant range distance.
+//   4. Calculate Doppler frequency shift for communications tracking.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astrodynamics_ground_station_pass() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn min_elev_deg() -> Int {
+    return 5;
+}
+
+pub fn min_elevation_deg() -> Int {
+    return 5;
+}
+
+pub fn ground_pass_atan(x: Float) -> Float {
+    if x == 0.0 { return 0.0; }
+    let pi_over_2: Float = 1.5707963267948966;
+    let mut u: Float = x;
+    let mut sign: Float = 1.0;
+    if u < 0.0 {
+        u = 0.0 - u;
+        sign = -1.0;
+    }
+    let mut invert: Bool = false;
+    if u > 1.0 {
+        u = 1.0 / u;
+        invert = true;
+    }
+    let u2: Float = u * u;
+    let u3: Float = u2 * u;
+    let u5: Float = u3 * u2;
+    let u7: Float = u5 * u2;
+    let mut res: Float = u - (u3 * 0.3333333333333333) + (u5 * 0.2) - (u7 * 0.14285714285714285);
+    if invert {
+        res = pi_over_2 - res;
+    }
+    return sign * res;
+}
+
+pub fn ground_pass_slant_range(dx: Float, dy: Float, dz: Float) -> Float {
+    return sqrt((dx * dx) + (dy * dy) + (dz * dz));
+}
+
+/// Computes topocentric elevation angle in radians given South-East-Zenith (SEZ) coordinates.
+pub fn ground_pass_elevation(s_south: Float, e_east: Float, z_zenith: Float) -> Float {
+    let ground_dist: Float = sqrt((s_south * s_south) + (e_east * e_east));
+    if ground_dist <= 0.0000001 {
+        return 1.5707963267948966; // 90 deg zenith
+    }
+    return ground_pass_atan(z_zenith / ground_dist);
+}
+
+/// Computes Doppler frequency shift Delta_f = f0 * (v_los / c) in Hz.
+pub fn ground_pass_doppler_shift(
+    f0_hz: Float,
+    range_rate_m_s: Float
+) -> Float {
+    let speed_of_light: Float = 299792458.0;
+    return (0.0 - f0_hz) * (range_rate_m_s / speed_of_light);
+}
+
+/// Checks if satellite is visible above minimum elevation angle (radians).
+pub fn ground_station_is_visible(
+    elevation_rad: Float,
+    min_elev_deg: Float
+) -> Bool {
+    let pi: Float = circ_pi_std_phys_astrodynamics_ground_station_pass();
+    let min_elev_rad: Float = (min_elev_deg * pi) / 180.0;
+    return elevation_rad >= min_elev_rad;
+}

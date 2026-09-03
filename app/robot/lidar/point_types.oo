@@ -1,0 +1,64 @@
+// # LiDAR point types
+//
+// Logline: LiDAR point cloud representations and range measurements.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// Implementation: direct structural value definitions.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_robot_lidar_point_types() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type LidarPoint = struct {
+    x: Int,
+    y: Int,
+    z: Int
+};
+
+pub fn point_types_probe() -> Int {
+    return 1;
+}
+
+pub fn lidar_point_new(x: Int, y: Int, z: Int) -> LidarPoint {
+    return LidarPoint { x: x, y: y, z: z };
+}
+
+pub fn lidar_point_x(p: LidarPoint) -> Int {
+    return p.x;
+}
+
+type Point3D = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type PointXYZI = struct {
+    x: Float,
+    y: Float,
+    z: Float,
+    intensity: Float
+};
+
+pub fn point3d_new(x: Float, y: Float, z: Float) -> Point3D {
+    return Point3D { x: x, y: y, z: z };
+}
+
+pub fn point3d_range(p: Point3D) -> Float {
+    return sqrt((p.x * p.x) + (p.y * p.y) + (p.z * p.z));
+}
+
+pub fn lidar_circ_pi_std_robot_lidar_point_types() -> Float {
+    return circ_pi_std_robot_lidar_point_types();
+}
+
+pub fn lidar_math_abs(val: Float) -> Float {
+    if val < 0.0 {
+        return 0.0 - val;
+    }
+    return val;
+}

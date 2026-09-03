@@ -1,0 +1,155 @@
+// # RSA-OAEP law
+//
+// Logline: RSA encryption is c = m^e mod n; decryption is m = c^d mod n; with the right (n,e,d) tuple the round-trip decrypt(encrypt(m)) equals m, and illegal n, e, or d returns Err.
+//
+// Setup: Pure Int. RSA-OAEP pads before encrypting; the law tracks the ideal raw-RSA core (m^e mod n) and the round-trip property. Hostile n<=1, e<=0, d<=0, exp<0, or pad m out of range returns Err. m=0 encrypt is Ok(0).
+//
+// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and %.
+//
+// Beats:
+//   1. rsa_encrypt(m, e, n) = m^e mod n via square-and-multiply using only *.
+//   2. rsa_decrypt(c, d, n) = c^d mod n.
+//   3. rsa_is_valid_key(n, e, d) requires n > 1, e > 0, d > 0 (Int 0/1 classifier).
+//   4. rsa_oaep_padded(m) is a length-extended ideal (m + 0x00 padding byte) for non-ideal OAEP coverage.
+//   5. Coupled round-trip: decrypt(encrypt(m, e, n), d, n) = m for (m=2, e=3, n=15, d=3).
+//   6. Hostile n<=1, e<=0, d<=0, exp<0, pad m<0 or m>=n return Err("ERR\trsa\tdomain").
+
+import "std/core/primitives/domain_cert.oo";
+
+fn rsa_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Modular exponentiation: base^exp mod m. Uses only * and % (no pow). Hostile m <= 1 or exp < 0 returns Err.
+pub fn rsa_mod_pow(base: Int, exp: Int, m: Int) -> Result[Int, String] {
+    if m <= 1 { return Err("ERR\trsa\tdomain"); }
+    if exp < 0 { return Err("ERR\trsa\tdomain"); }
+    let mut m_res: Int = 1;
+    let mut m_base: Int = base % m;
+    if m_base < 0 { m_base = m_base + m; }
+    let mut m_exp: Int = exp;
+    while m_exp > 0 {
+        if m_exp % 2 == 1 {
+            m_res = (m_res * m_base) % m;
+        }
+        m_exp = m_exp / 2;
+        m_base = (m_base * m_base) % m;
+    }
+    return Ok(m_res);
+}
+
+// RSA encrypt: c = m^e mod n. m=0 is Ok(0).
+pub fn rsa_encrypt(m: Int, e: Int, n: Int) -> Result[Int, String] {
+    if n <= 1 { return Err("ERR\trsa\tdomain"); }
+    if e <= 0 { return Err("ERR\trsa\tdomain"); }
+    return rsa_mod_pow(m, e, n);
+}
+
+// RSA decrypt: m = c^d mod n.
+pub fn rsa_decrypt(c: Int, d: Int, n: Int) -> Result[Int, String] {
+    if n <= 1 { return Err("ERR\trsa\tdomain"); }
+    if d <= 0 { return Err("ERR\trsa\tdomain"); }
+    return rsa_mod_pow(c, d, n);
+}
+
+// 1 if (n, e, d) is a valid key triple (n > 1, e > 0, d > 0); 0 otherwise.
+pub fn rsa_is_valid_key(n: Int, e: Int, d: Int) -> Int {
+    if n <= 1 { return 0; }
+    if e <= 0 { return 0; }
+    if d <= 0 { return 0; }
+    return 1;
+}
+
+// Non-ideal (OAEP) pad: prepend 0x00 byte to m in 256-ary. Hostile n <= 1, m < 0, or m >= n returns Err.
+pub fn rsa_oaep_padded(m: Int, n: Int) -> Result[Int, String] {
+    if n <= 1 { return Err("ERR\trsa\tdomain"); }
+    if m < 0 { return Err("ERR\trsa\tdomain"); }
+    if m >= n { return Err("ERR\trsa\tdomain"); }
+    return Ok(m * 256);
+}
+
+// domain_cert wrapper.
+pub fn rsa_oaep_holds(n: Int, e: Int, d: Int) -> DomainCert {
+    let ok: Int = rsa_is_valid_key(n, e, d);
+    return domain_cert("crypto", "rsa_oaep_law", ok);
+}
+
+pub fn verify_rsa_oaep_law() -> Bool {
+    // Golden: e=3, n=15, m=2 -> c = 2^3 mod 15 = 8.
+    if rsa_got(rsa_encrypt(2, 3, 15)) != 8 { return false; }
+    // Golden: c=8, d=3, n=15 -> m = 8^3 mod 15 = 2.
+    if rsa_got(rsa_decrypt(8, 3, 15)) != 2 { return false; }
+    // Golden: zero plaintext encrypts to zero (Ok(0) identity, not dummy-0).
+    if rsa_encrypt(0, 3, 15).is_ok() == false { return false; }
+    if rsa_got(rsa_encrypt(0, 3, 15)) != 0 { return false; }
+    // Golden: m=1, e=anything -> 1.
+    if rsa_got(rsa_encrypt(1, 7, 15)) != 1 { return false; }
+    // Golden: e=1 is identity, c = m mod n.
+    if rsa_got(rsa_encrypt(7, 1, 15)) != 7 { return false; }
+    // Golden: m=14, e=3, n=15 -> 14^3 mod 15.
+    // 14 mod 15 = -1, so (-1)^3 = -1 mod 15 = 14.
+    if rsa_got(rsa_encrypt(14, 3, 15)) != 14 { return false; }
+
+    // Coupled: round-trip decrypt(encrypt(m, e, n), d, n) = m.
+    let m_a: Int = 2;
+    let c_ar: Result[Int, String] = rsa_encrypt(m_a, 3, 15);
+    if c_ar.is_ok() == false { return false; }
+    let c_a: Int = rsa_got(c_ar);
+    let m_br: Result[Int, String] = rsa_decrypt(c_a, 3, 15);
+    if m_br.is_ok() == false { return false; }
+    let m_b: Int = rsa_got(m_br);
+    if m_b != m_a { return false; }
+    // Coupled: larger round-trip set. Unwrap with rsa_got after is_ok.
+    let mut i: Int = 0;
+    while i < 10 {
+        let c_ir: Result[Int, String] = rsa_encrypt(i, 3, 15);
+        if c_ir.is_ok() == false { return false; }
+        let c_i: Int = rsa_got(c_ir);
+        let m_ir: Result[Int, String] = rsa_decrypt(c_i, 3, 15);
+        if m_ir.is_ok() == false { return false; }
+        let m_i: Int = rsa_got(m_ir);
+        if m_i != i { return false; }
+        i = i + 1;
+    }
+
+    // Golden: is_valid_key accepts (15, 3, 3) and rejects invalid.
+    if rsa_is_valid_key(15, 3, 3) != 1 { return false; }
+    if rsa_is_valid_key(7, 5, 11) != 1 { return false; }
+    if rsa_is_valid_key(1, 3, 3) != 0 { return false; }
+    if rsa_is_valid_key(0, 3, 3) != 0 { return false; }
+    if rsa_is_valid_key(15, 0, 3) != 0 { return false; }
+    if rsa_is_valid_key(15, 3, 0) != 0 { return false; }
+
+    // Golden: OAEP padded value for m=2, n=15 is 2*256 = 512.
+    if rsa_got(rsa_oaep_padded(2, 15)) != 512 { return false; }
+    if rsa_got(rsa_oaep_padded(0, 15)) != 0 { return false; }
+    if rsa_got(rsa_oaep_padded(14, 15)) != 14 * 256 { return false; }
+
+    // Hostile: n <= 1 fails closed (is_ok false, not dummy 0).
+    if rsa_encrypt(2, 3, 1).is_ok() { return false; }
+    if rsa_encrypt(2, 3, 0).is_ok() { return false; }
+    if rsa_encrypt(2, 3, 0 - 1).is_ok() { return false; }
+    if rsa_mod_pow(2, 3, 1).is_ok() { return false; }
+    // Hostile: e <= 0 fails closed.
+    if rsa_encrypt(2, 0, 15).is_ok() { return false; }
+    if rsa_encrypt(2, 0 - 1, 15).is_ok() { return false; }
+    // Hostile: d <= 0 fails closed.
+    if rsa_decrypt(8, 0, 15).is_ok() { return false; }
+    if rsa_decrypt(8, 0 - 1, 15).is_ok() { return false; }
+    // Hostile: negative exp fails closed.
+    if rsa_mod_pow(2, 0 - 1, 15).is_ok() { return false; }
+    // Hostile: pad n<=1, m<0, or m>=n fails closed.
+    if rsa_oaep_padded(2, 1).is_ok() { return false; }
+    if rsa_oaep_padded(0 - 1, 15).is_ok() { return false; }
+    if rsa_oaep_padded(15, 15).is_ok() { return false; }
+
+    // Coupled: domain_cert.
+    let c1: DomainCert = rsa_oaep_holds(15, 3, 3);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "crypto" { return false; }
+    if c1.law_name != "rsa_oaep_law" { return false; }
+    let c2: DomainCert = rsa_oaep_holds(0, 3, 3);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

@@ -1,0 +1,69 @@
+// # SHA-512 Bytes-to-Words and Hex Codec
+//
+// Logline: Pads a byte string into 128-byte blocks, loads 16 big-endian 64-bit words per block (each as a 32-bit-half W64), and emits 8 final state words as 128 lowercase hex chars.
+//
+// Setup: Pure Int 32-bit halves. Sibling of sha512_core.oo, called by sha512.oo.
+//
+// Beats:
+//   1. s5_padb: pad a message to a 128-byte block with 0x80 and big-endian 128-bit length.
+//   2. s5_be64: pack 8 padded bytes into a 64-bit big-endian word (W64).
+//   3. s5_load: load 16 words from a padded block.
+//   4. s5_hexw: emit hex state.
+
+import "./sha512_core.oo";
+
+pub fn s5_padb(data: String, n: Int, total: Int, pos: Int) -> Int {
+    if pos < n {
+        return byte_at(data, pos);
+    }
+    if pos == n {
+        return 128;
+    }
+    if pos < total - 8 {
+        return 0;
+    }
+    let shift: Int = (total - 1 - pos) * 8;
+    return ((n * 8) >> shift) & 255;
+}
+
+pub fn s5_be64(data: String, n: Int, total: Int, pos: Int) -> W64 {
+    let b0: Int = s5_padb(data, n, total, pos);
+    let b1: Int = s5_padb(data, n, total, pos + 1);
+    let b2: Int = s5_padb(data, n, total, pos + 2);
+    let b3: Int = s5_padb(data, n, total, pos + 3);
+    let b4: Int = s5_padb(data, n, total, pos + 4);
+    let b5: Int = s5_padb(data, n, total, pos + 5);
+    let b6: Int = s5_padb(data, n, total, pos + 6);
+    let b7: Int = s5_padb(data, n, total, pos + 7);
+    let hi: Int = s5_mask((b0 << 24) + (b1 << 16) + (b2 << 8) + b3);
+    let lo: Int = s5_mask((b4 << 24) + (b5 << 16) + (b6 << 8) + b7);
+    return W64 { hi: hi, lo: lo };
+}
+
+pub fn s5_load(data: String, n: Int, total: Int, base: Int, i: Int) -> W64 {
+    return s5_be64(data, n, total, base + i * 8);
+}
+
+pub fn s5_hexw(w: W64) -> String {
+    let h: Int = s5_h(w);
+    let l: Int = s5_l(w);
+    let hx: String = "0123456789abcdef";
+    let mut s: String = "";
+    s = s + char_at(hx, (h >> 28) & 15);
+    s = s + char_at(hx, (h >> 24) & 15);
+    s = s + char_at(hx, (h >> 20) & 15);
+    s = s + char_at(hx, (h >> 16) & 15);
+    s = s + char_at(hx, (h >> 12) & 15);
+    s = s + char_at(hx, (h >> 8) & 15);
+    s = s + char_at(hx, (h >> 4) & 15);
+    s = s + char_at(hx, h & 15);
+    s = s + char_at(hx, (l >> 28) & 15);
+    s = s + char_at(hx, (l >> 24) & 15);
+    s = s + char_at(hx, (l >> 20) & 15);
+    s = s + char_at(hx, (l >> 16) & 15);
+    s = s + char_at(hx, (l >> 12) & 15);
+    s = s + char_at(hx, (l >> 8) & 15);
+    s = s + char_at(hx, (l >> 4) & 15);
+    s = s + char_at(hx, l & 15);
+    return s;
+}

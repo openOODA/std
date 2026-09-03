@@ -1,0 +1,186 @@
+// # Log Structured Record Theory
+//
+// Logline: A structured log record is a key=value line ending in '\n'; appending a record grows the file by exactly the record size, and when the file exceeds max_size the active file is renamed to ".1" and a new file starts.
+//
+// Setup: Pure String/Int. Records are ASCII "key=value\n" with non-empty key and value and exactly one '=' separator. Out-of-shape records (empty, missing '=', empty key, empty value, missing '\n') fail closed (size 0, valid 0). Negative sizes or zero max_size fail closed.
+//
+// Beats:
+//   1. log_record_size returns the byte length of a record; "k=v\n" -> 4.
+//   2. log_record_key and log_record_value split on '=' and strip the trailing '\n'.
+//   3. log_record_valid is 1 iff exactly one '=' and non-empty key and value and trailing '\n'.
+//   4. log_append_size (closed) is previous_size + record_size.
+//   5. log_rotation_needed (coupled) is 1 iff file_size > max_size; suffix ".1" is appended on rotate.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/primitives/str.oo";
+
+// Byte length of the record (the trailing '\n' is part of the record).
+pub fn log_record_size(rec: String) -> Int {
+    return str_len(rec);
+}
+
+// Substring before the first '='. Missing '=' returns "".
+pub fn log_record_key(rec: String) -> String {
+    let eq_idx: Int = str_index_of(rec, "=");
+    if eq_idx < 0 { return ""; }
+    return str_sub(rec, 0, eq_idx);
+}
+
+// Substring between '=' and the trailing '\n' (the '\n' is stripped).
+// Missing '=' or '\n' returns "".
+pub fn log_record_value(rec: String) -> String {
+    let n: Int = str_len(rec);
+    if n < 3 { return ""; }
+    let eq_idx: Int = str_index_of(rec, "=");
+    if eq_idx < 0 { return ""; }
+    let last: String = char_at(rec, n - 1);
+    if last != "\n" { return ""; }
+    return str_sub(rec, eq_idx + 1, n - 1);
+}
+
+// 1 iff the record is a well-formed "key=value\n" with non-empty key and value.
+pub fn log_record_valid(rec: String) -> Int {
+    let n: Int = str_len(rec);
+    if n < 4 { return 0; }
+    let eq_idx: Int = str_index_of(rec, "=");
+    if eq_idx < 0 { return 0; }
+    if eq_idx == 0 { return 0; }
+    if eq_idx >= n - 2 { return 0; }
+    let last: String = char_at(rec, n - 1);
+    if last != "\n" { return 0; }
+    return 1;
+}
+
+fn lgs_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Closed: new_size = previous_size + record_size. Negative sizes return Err. Zero record is Ok(previous).
+pub fn log_append_size(previous_size: Int, record_size: Int) -> Result[Int, String] {
+    if previous_size < 0 { return Err("ERR\tlgs\tdomain"); }
+    if record_size < 0 { return Err("ERR\tlgs\tdomain"); }
+    if record_size == 0 { return Ok(previous_size); }
+    return Ok(previous_size + record_size);
+}
+
+// Coupled: 1 iff file_size strictly exceeds max_size; 0 otherwise.
+pub fn log_rotation_needed(file_size: Int, max_size: Int) -> Int {
+    if file_size < 0 { return 0; }
+    if max_size < 1 { return 0; }
+    if file_size > max_size { return 1; }
+    return 0;
+}
+
+// The rotation suffix appended to the active file name (".1").
+pub fn log_rotation_suffix() -> String {
+    return ".1";
+}
+
+// The rotated file name for a given active name (e.g. "app.log" -> "app.log.1").
+pub fn log_rotation_renamed(name: String) -> String {
+    return name + log_rotation_suffix();
+}
+
+// Certificate that bundles the closed (parse + append) and coupled (rotation) sides.
+pub fn log_structured_holds(
+    rec: String,
+    previous_size: Int,
+    record_size: Int,
+    max_size: Int
+) -> DomainCert {
+    let mut holds: Int = 0;
+    let valid: Int = log_record_valid(rec);
+    if valid == 1 {
+        let nsr: Result[Int, String] = log_append_size(previous_size, record_size);
+        if nsr.is_ok() == false {
+            return domain_cert("diag", "log_structured", 0);
+        }
+        let new_size: Int = lgs_got(nsr);
+        if new_size >= previous_size {
+            let rot: Int = log_rotation_needed(new_size, max_size);
+            if rot == 0 {
+                holds = 1;
+            } else {
+                let suf: String = log_rotation_suffix();
+                if suf == ".1" { holds = 1; }
+            }
+        }
+    }
+    return domain_cert("diag", "log_structured", holds);
+}
+
+pub fn verify_log_structured_theory() -> Bool {
+    // Golden: "k=v\n" -> size 4, key "k", value "v", valid 1.
+    if log_record_size("k=v\n") != 4 { return false; }
+    if log_record_key("k=v\n") != "k" { return false; }
+    if log_record_value("k=v\n") != "v" { return false; }
+    if log_record_valid("k=v\n") != 1 { return false; }
+    // Golden: longer record "name=alice\n" -> size 11, key "name", value "alice".
+    if log_record_size("name=alice\n") != 11 { return false; }
+    if log_record_key("name=alice\n") != "name" { return false; }
+    if log_record_value("name=alice\n") != "alice" { return false; }
+    if log_record_valid("name=alice\n") != 1 { return false; }
+    // Golden: 100 records of size 4 appended to an empty file total 400.
+    let mut sz: Int = 0;
+    let mut i: Int = 0;
+    while i < 100 {
+        sz = lgs_got(log_append_size(sz, 4));
+        i = i + 1;
+    }
+    if sz != 400 { return false; }
+    // Golden: 100 records of size 7 total 700.
+    let mut sz2: Int = 0;
+    let mut j: Int = 0;
+    while j < 100 {
+        sz2 = lgs_got(log_append_size(sz2, 7));
+        j = j + 1;
+    }
+    if sz2 != 700 { return false; }
+    // Hostile: empty record fails closed.
+    if log_record_size("") != 0 { return false; }
+    if log_record_valid("") != 0 { return false; }
+    if log_record_key("") != "" { return false; }
+    if log_record_value("") != "" { return false; }
+    // Hostile: missing '=' fails closed.
+    if log_record_valid("novalue\n") != 0 { return false; }
+    if log_record_key("novalue\n") != "" { return false; }
+    // Hostile: empty key fails closed.
+    if log_record_valid("=v\n") != 0 { return false; }
+    // Hostile: empty value fails closed.
+    if log_record_valid("k=\n") != 0 { return false; }
+    // Hostile: missing trailing '\n' fails closed.
+    if log_record_valid("k=v") != 0 { return false; }
+    // Hostile: too short fails closed.
+    if log_record_valid("k=\n") != 0 { return false; }
+    // Hostile: negative record or previous size returns Err.
+    if log_append_size(10, 0 - 1).is_ok() { return false; }
+    if log_append_size(0 - 1, 5).is_ok() { return false; }
+    // Identity: empty file + zero record is Ok(0). Zero record is no-op.
+    let zapp: Result[Int, String] = log_append_size(0, 0);
+    if zapp.is_ok() == false { return false; }
+    if lgs_got(zapp) != 0 { return false; }
+    if lgs_got(log_append_size(10, 0)) != 10 { return false; }
+    // Coupled: rotation when file strictly exceeds max_size.
+    if log_rotation_needed(401, 400) != 1 { return false; }
+    if log_rotation_needed(400, 400) != 0 { return false; }
+    if log_rotation_needed(399, 400) != 0 { return false; }
+    if log_rotation_needed(0, 400) != 0 { return false; }
+    if log_rotation_needed(0 - 1, 400) != 0 { return false; }
+    if log_rotation_needed(100, 0) != 0 { return false; }
+    if log_rotation_needed(100, 0 - 1) != 0 { return false; }
+    // Coupled: rotated name is "<name>.1".
+    if log_rotation_suffix() != ".1" { return false; }
+    if log_rotation_renamed("app.log") != "app.log.1" { return false; }
+    // Certificate: closed side holds for a valid record.
+    let c1: DomainCert = log_structured_holds("k=v\n", 0, 4, 400);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "diag" { return false; }
+    if c1.law_name != "log_structured" { return false; }
+    // Certificate: closed side rejects a malformed record.
+    let c2: DomainCert = log_structured_holds("", 0, 4, 400);
+    if c2.holds != 0 { return false; }
+    // Certificate: coupled side holds even when rotation triggers.
+    let c3: DomainCert = log_structured_holds("k=v\n", 500, 4, 400);
+    if c3.holds != 1 { return false; }
+    return true;
+}

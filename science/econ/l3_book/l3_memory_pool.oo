@@ -1,0 +1,70 @@
+// # Level 3 Zero-Churn Slab Memory Allocator Arena
+//
+// Logline: Manages pre-allocated static order slab memory arenas and free-list recycling under capability security.
+//
+// Setup: Requires &AllocCap capability token to initialize fixed-capacity static slabs.
+//
+// Beats:
+//   1. Pre-allocate contiguous order slab arrays and free-list index buffers.
+//   2. Allocate order slots in O(1) time without runtime heap allocations.
+//   3. Recycle freed order slots back to the free-list for zero garbage collection jitter.
+
+import "./l3_types.oo";
+
+pub fn l3_pool_init(alloc: &AllocCap, capacity: Int) -> List[Int] {
+    let mut free_list: List[Int] = list_new();
+    let mut j: Int = 0;
+    while j < capacity {
+        free_list = list_push(free_list, j);
+        j = j + 1;
+    }
+    return free_list;
+}
+
+pub fn l3_pool_alloc_zeros(alloc: &AllocCap, capacity: Int) -> List[Int] {
+    let mut lst: List[Int] = list_new();
+    let mut j: Int = 0;
+    while j < capacity {
+        lst = list_push(lst, 0);
+        j = j + 1;
+    }
+    return lst;
+}
+
+pub fn l3_pool_alloc_neg_ones(alloc: &AllocCap, capacity: Int) -> List[Int] {
+    let mut lst: List[Int] = list_new();
+    let neg_one: Int = 0 - 1;
+    let mut j: Int = 0;
+    while j < capacity {
+        lst = list_push(lst, neg_one);
+        j = j + 1;
+    }
+    return lst;
+}
+
+pub fn l3_pool_alloc(free_slots: List[Int]) -> Result[Int, String] {
+    let n: Int = list_len(free_slots);
+    if n <= 0 {
+        return Err("MemoryPoolExhausted");
+    }
+    let slot: Int = list_get(free_slots, n - 1);
+    return Ok(slot);
+}
+
+pub fn l3_pool_pop(free_slots: List[Int]) -> List[Int] {
+    let n: Int = list_len(free_slots);
+    if n <= 0 {
+        return free_slots;
+    }
+    let mut updated: List[Int] = list_new();
+    let mut j: Int = 0;
+    while j < n - 1 {
+        updated = list_push(updated, list_get(free_slots, j));
+        j = j + 1;
+    }
+    return updated;
+}
+
+pub fn l3_pool_recycle(free_slots: List[Int], slot: Int) -> List[Int] {
+    return list_push(free_slots, slot);
+}

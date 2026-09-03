@@ -1,0 +1,46 @@
+// # Argon2 Password Hashing Specification
+//
+// Logline: Memory-hard Argon2 password hashing and verification structures.
+//
+// Setup: Memory-hard KDF requiring Argon2Config parameters.
+//
+// Beats:
+//   1. argon2_hash: compute Argon2id password hash.
+//   2. argon2_verify: verify password against Argon2 hash.
+//   3. fail-closed: returns error status when primitives unconfigured.
+//   4. Argon2Config: carry t_cost, m_cost, parallelism, and version.
+
+type Argon2Config = struct {
+    t_cost: Int,
+    m_cost: Int,
+    parallelism: Int,
+    version: Int
+};
+
+// Memory-hard password hashing.
+//
+// FAIL-CLOSED: returns -1 unconditionally. Argon2id requires a vetted
+// memory-hard backend (e.g., libargon2 via FFI) that the openOODA
+// compiler does not provide. Returning 0 (success) without performing
+// the KDF would let any caller believe a "hash" of 0 is a real
+// Argon2id digest — that is a fail-open trap, not a stub.
+pub fn argon2_hash(
+    _config: &Argon2Config,
+    _password: &String,
+    _salt: &String
+) -> Int {
+    return 0 - 1;
+}
+
+// Verify a password against an Argon2 hash.
+//
+// FAIL-CLOSED: returns -1 unconditionally. Same reason as argon2_hash:
+// the compiler has no real Argon2 backend, so returning 0 (verified)
+// for any non-empty hash would silently accept forged passwords.
+pub fn argon2_verify(
+    _config: &Argon2Config,
+    _hash: &String,
+    _password: &String
+) -> Int {
+    return 0 - 1;
+}

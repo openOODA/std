@@ -1,0 +1,28 @@
+// # Proofs Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard proofs domain library. Re-exports the formal_proofs and proof_verifiers sub-hubs. This domain is purely proof-theoretic infrastructure (return Int 0/1 for "holds"); no FS, net, or env required.
+//
+//   proofs/formal_proofs/    <- natural deduction, Curry-Howard, HoTT univalence, Lean 4 metaprogramming, Iris, compactness
+//   proofs/proof_verifiers/  <- CDCL SAT, SAT/CNF, MaxSAT, SMT combination, SMT decision, kernel checker
+//
+// Setup: Imports the two sub-hubs. No caps required for proof-theoretic verifiers; they return Int 0/1 to indicate "holds" or "fails".
+//
+// Beats:
+//   1. Re-export the formal_proofs surface as proofs_mod_formal_*.
+//   2. Re-export the proof_verifiers surface as proofs_mod_verifier_*.
+//   3. Document the private siblings that external callers must NOT import directly: _kat, _literature_kat files.
+
+import "formal_proofs/ANCHOR.oo";
+import "proof_verifiers/ANCHOR.oo";
+
+// Public proofs version: proofs_mod_version_*
+pub fn proofs_mod_version() -> String { return "proofs/0.1.0"; }
+
+// Public proofs subdir inventory: proofs_mod_*
+pub fn proofs_mod_subdir_count() -> Int { return 2; }
+pub fn proofs_mod_subdir_list() -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, "formal_proofs");
+    out = list_push(out, "proof_verifiers");
+    return out;
+}

@@ -1,0 +1,69 @@
+// # Virtual page offset law
+//
+// Logline: Offset within a 4 KiB page equals addr bitwise-and (page_size minus 1).
+//
+// Setup: Pure Int. Page size is caller-supplied so the identity holds for any pow2 page.
+//
+// Beats:
+//   1. offset = addr & (page_size - 1) when page_size is a positive power of two.
+//   2. pfn    = addr / page_size when page_size is positive.
+//   3. Non-pow2 or non-positive page_size fails closed to 0.
+import "std/core/primitives/domain_cert.oo";
+
+pub fn hw_is_pow2(n: Int) -> Int {
+    if n <= 0 {
+        return 0;
+    }
+    if (n & (n - 1)) == 0 {
+        return 1;
+    }
+    return 0;
+}
+
+fn hwp_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn hw_page_offset(addr: Int, page_size: Int) -> Result[Int, String] {
+    let ok: Int = hw_is_pow2(page_size);
+    if ok == 0 { return Err("ERR\thwp\tdomain"); }
+    if addr < 0 { return Err("ERR\thwp\tdomain"); }
+    return Ok(addr & (page_size - 1));
+}
+
+pub fn hw_page_pfn(addr: Int, page_size: Int) -> Result[Int, String] {
+    let ok: Int = hw_is_pow2(page_size);
+    if ok == 0 { return Err("ERR\thwp\tdomain"); }
+    if addr < 0 { return Err("ERR\thwp\tdomain"); }
+    return Ok(addr / page_size);
+}
+
+pub fn verify_page_offset_law() -> Bool {
+    let off1: Int = hwp_got(hw_page_offset(4660, 4096));
+    if off1 != 564 {
+        return false;
+    }
+    let pfn1: Int = hwp_got(hw_page_pfn(4660, 4096));
+    if pfn1 != 1 {
+        return false;
+    }
+    let zoff: Result[Int, String] = hw_page_offset(4096, 4096);
+    if zoff.is_ok() == false { return false; }
+    if hwp_got(zoff) != 0 {
+        return false;
+    }
+    if hwp_got(hw_page_pfn(4096, 4096)) != 1 {
+        return false;
+    }
+    if hw_page_offset(7, 0).is_ok() { return false; }
+    if hw_page_offset(7, 3).is_ok() { return false; }
+    return true;
+}
+
+// Domain certificate: 1 if the page offset law holds across all golden and hostile cases.
+pub fn page_offset_law_holds() -> DomainCert {
+    if verify_page_offset_law() {
+        return domain_cert("hw", "page_offset_law", 1);
+    }
+    return domain_cert("hw", "page_offset_law", 0);
+}

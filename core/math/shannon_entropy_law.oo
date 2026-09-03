@@ -1,0 +1,44 @@
+// # Shannon entropy laws
+//
+// Logline: H >= 0. Empty distribution is H=0. Uniform two-outcome H is ln(2).
+//
+// Setup: Imports std/math/information/shannon_entropy.oo. Holds 1 or 0.
+//
+// Beats:
+//   1. shannon_entropy never returns a negative Ok value.
+//   2. Empty list entropy is Ok(0).
+//   3. max_entropy(n<=1) is 0.
+
+import "std/core/math/information/shannon_entropy.oo";
+import "std/core/primitives/domain_cert.oo";
+
+pub fn math_shannon_nonneg_law(probs: List[Float]) -> DomainCert {
+    let hr: Result[Float, String] = shannon_entropy(probs);
+    let mut h: Int = 0;
+    match hr {
+        Ok(h_s) => { if h_s >= 0.0 { h = 1; } },
+        Err(_)  => { h = 0; }
+    }
+    return domain_cert("math", "shannon_nonneg", h);
+}
+
+pub fn math_shannon_empty_zero_law() -> DomainCert {
+    let empty: List[Float] = list_new();
+    let hr: Result[Float, String] = shannon_entropy(empty);
+    let mut h: Int = 0;
+    match hr {
+        Ok(h_s) => { if h_s == 0.0 { h = 1; } },
+        Err(_)  => { h = 0; }
+    }
+    return domain_cert("math", "shannon_empty_zero", h);
+}
+
+pub fn math_shannon_max_small_n_law() -> DomainCert {
+    let mut h: Int = 0;
+    if max_entropy(0) == 0.0 {
+        if max_entropy(1) == 0.0 {
+            h = 1;
+        }
+    }
+    return domain_cert("math", "shannon_max_n_le_1", h);
+}

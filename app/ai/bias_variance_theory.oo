@@ -1,0 +1,79 @@
+// # Bias-Variance Decomposition Theory
+//
+// Logline: Expected prediction error decomposes into bias^2, variance, and irreducible noise.
+//
+// Setup: Pure Int. Sum = bias_sq + variance + noise. Negative components return Err. (0,0,0) is Ok(0). Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Total error: bias_sq + variance + noise. Illegal negatives are Err.
+//   2. Bias indicator: 1 if bias_sq > variance (underfit regime).
+//   3. Variance indicator: 1 if variance > bias_sq (overfit regime).
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+
+fn bv_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Total expected error: bias_sq + variance + noise. Negative components return Err.
+pub fn bv_total_error(bias_sq: Int, variance: Int, noise: Int) -> Result[Int, String] {
+    if bias_sq < 0 { return Err("ERR\tbv\tbias"); }
+    if variance < 0 { return Err("ERR\tbv\tvar"); }
+    if noise < 0 { return Err("ERR\tbv\tnoise"); }
+    return Ok(bias_sq + variance + noise);
+}
+
+// Underfit indicator: 1 if bias_sq > variance. Equal returns 0.
+pub fn bv_is_underfit(bias_sq: Int, variance: Int) -> Int {
+    if bias_sq < 0 { return 0; }
+    if variance < 0 { return 0; }
+    if bias_sq > variance { return 1; }
+    return 0;
+}
+
+// Overfit indicator: 1 if variance > bias_sq. Equal returns 0.
+pub fn bv_is_overfit(bias_sq: Int, variance: Int) -> Int {
+    if bias_sq < 0 { return 0; }
+    if variance < 0 { return 0; }
+    if variance > bias_sq { return 1; }
+    return 0;
+}
+
+// Sweet spot: 1 if bias_sq and variance are both nonzero and within factor of 2 of each other.
+pub fn bv_sweet_spot(bias_sq: Int, variance: Int) -> Int {
+    if bias_sq <= 0 { return 0; }
+    if variance <= 0 { return 0; }
+    if bias_sq > variance * 2 { return 0; }
+    if variance > bias_sq * 2 { return 0; }
+    return 1;
+}
+
+// KAT and hostile cases for the bias-variance theory.
+pub fn verify_bias_variance_theory() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    if bv_got(bv_total_error(4, 9, 1)) != 14 { return false; }
+    let z: Result[Int, String] = bv_total_error(0, 0, 0);
+    if z.is_ok() == false { return false; }
+    if bv_got(z) != 0 { return false; }
+    if bv_got(bv_total_error(100, 0, 0)) != 100 { return false; }
+    if bv_total_error(0 - 1, 5, 1).is_ok() { return false; }
+    if bv_total_error(5, 0 - 1, 1).is_ok() { return false; }
+    if bv_total_error(5, 5, 0 - 1).is_ok() { return false; }
+    if bv_is_underfit(10, 5) != 1 { return false; }
+    if bv_is_underfit(5, 10) != 0 { return false; }
+    if bv_is_underfit(5, 5) != 0 { return false; }
+    if bv_is_underfit(0 - 1, 5) != 0 { return false; }
+    if bv_is_overfit(5, 10) != 1 { return false; }
+    if bv_is_overfit(10, 5) != 0 { return false; }
+    if bv_is_overfit(5, 5) != 0 { return false; }
+    if bv_is_overfit(5, 0 - 1) != 0 { return false; }
+    if bv_sweet_spot(10, 10) != 1 { return false; }
+    if bv_sweet_spot(10, 20) != 1 { return false; }
+    if bv_sweet_spot(11, 5) != 0 { return false; }
+    if bv_sweet_spot(10, 30) != 0 { return false; }
+    if bv_sweet_spot(0, 10) != 0 { return false; }
+    if bv_sweet_spot(10, 0) != 0 { return false; }
+    return true;
+}

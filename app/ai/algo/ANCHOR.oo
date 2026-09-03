@@ -1,0 +1,49 @@
+// # AI Algo Submodule Hub -- Zero-Drag
+//
+// Logline: Re-exports pure CS algorithms: probabilistic data structures (HyperLogLog, Bloom, Cuckoo, Count-Min, Quotient, MinHash, TopK, t-digest, Misra-Gries), complex network generators (Erdos-Renyi, Watts-Strogatz, Barabasi-Albert, Stochastic Block, HRG), and graph theory (centrality, community, layout, similarity, connectivity). Split from the prior std/ai/graph_networks/ tree in Phase 3.5: pure CS algorithms live here, network routing protocols moved to std/net/protocol/routing/.
+//
+// Setup: Domain module under std/app/ai/algo. Pure compute, no caps.
+//
+// Beats:
+//   1. Probabilistic data structures: hyperloglog_*, bloom_filter_*, cuckoo_filter_*, count_min_*, quotient_filter_*, minhash_*, topk_*, tdigest_*, misra_gries_*, flajolet_martin_*, hyperanf_*.
+//   2. Complex network generators: erdos_renyi_*, watts_strogatz_*, barabasi_albert_*, stochastic_block_*, hierarchical_random_*.
+//   3. Graph theory: brandes_*, closeness_*, eigenvector_*, girvan_newman_*, label_propagation_*, core_periphery_*, triadic_*, modularity_*, simrank_*, fruchterman_*, kamada_*, tarjan_*, graph_degree_*.
+//   4. Cross-cutting facade: graph_networks (re-exports all CS algorithms + all net/protocol/routing/* files for backward-compat consumers).
+//   5. Stubs: graph_networks_stubs (fail-closed guards for native FFI).
+
+import "./barabasi_albert_preferential.oo";
+import "./bloom_filter_counting.oo";
+import "./brandes_betweenness_centrality.oo";
+import "./closeness_harmonic_centrality.oo";
+import "./core_periphery_detection.oo";
+import "./count_min_sketch_heavy.oo";
+import "./cuckoo_filter_probabilistic.oo";
+import "./eigenvector_katz_centrality.oo";
+import "./erdos_renyi_random_graph.oo";
+import "./flajolet_martin_distinct.oo";
+import "./fruchterman_reingold_layout.oo";
+import "./girvan_newman_clustering.oo";
+import "./graph_degree_assortativity.oo";
+import "./graph_networks.oo";
+import "./graph_networks_stubs.oo";
+import "./hierarchical_random_graph.oo";
+import "./hyperanf_graph_diameter.oo";
+import "./hyperloglog_cardinality.oo";
+import "./hyperloglog_plus_plus.oo";
+import "./kamada_kawai_layout.oo";
+import "./label_propagation_community.oo";
+import "./minhash_lsh_index.oo";
+import "./misra_gries_frequency.oo";
+import "./modularity_matrix_optimization.oo";
+import "./quotient_filter_compact.oo";
+import "./simrank_similarity.oo";
+import "./stochastic_block_model.oo";
+import "./tarjan_bridges_articulation.oo";
+import "./tdigest_streaming_quantile.oo";
+import "./topk_heavy_hitters.oo";
+import "./triadic_closure_clustering.oo";
+import "./watts_strogatz_smallworld.oo";
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _stubs files (e.g. graph_networks_stubs)
+// External callers must import this ANCHOR.oo and use the ai_algo_mod_* surface.

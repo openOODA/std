@@ -1,0 +1,87 @@
+// # Universal Physical Constants
+//
+// Logline: NIST CODATA 2022 fundamental physical and cosmological constants.
+//
+// Setup: Provides exact and recommended physical constants in SI base units.
+//
+// Beats:
+//   1. Define PhysicalConstants struct.
+//   2. Provide standard CODATA 2022 values.
+//   3. Compute fine structure constant and Planck scales.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_principles_constants() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type PhysicalConstants = struct {
+    speed_of_light: Float,
+    planck_constant: Float,
+    planck_reduced: Float,
+    gravitational_constant: Float,
+    boltzmann_constant: Float,
+    elementary_charge: Float,
+    avogadro_number: Float,
+    vacuum_permittivity: Float,
+    vacuum_permeability: Float,
+    stefan_boltzmann: Float
+};
+
+pub fn constants_codata_2022() -> PhysicalConstants {
+    return PhysicalConstants {
+        speed_of_light: 299792458.0,
+        planck_constant: 0.000000000000000000000000000000000662607015,
+        planck_reduced: 0.0000000000000000000000000000000001054571817,
+        gravitational_constant: 0.000000000066743,
+        boltzmann_constant: 0.00000000000000000000001380649,
+        elementary_charge: 0.0000000000000000001602176634,
+        avogadro_number: 602214076000000000000000.0,
+        vacuum_permittivity: 0.0000000000088541878128,
+        vacuum_permeability: 0.00000125663706212,
+        stefan_boltzmann: 0.00000005670374419
+    };
+}
+
+pub fn constants_boltzmann() -> Float {
+    let c: PhysicalConstants = constants_codata_2022();
+    return c.boltzmann_constant;
+}
+
+pub fn constants_fine_structure() -> Float {
+    let c: Float = 299792458.0;
+    let hbar: Float = 0.0000000000000000000000000000000001054571817;
+    let e: Float = 0.0000000000000000001602176634;
+    let eps0: Float = 0.0000000000088541878128;
+    let num: Float = e * e;
+    let den: Float = 4.0 * circ_pi_std_principles_constants() * eps0 * hbar * c;
+    return num / den;
+}
+
+pub fn constants_planck_mass() -> Float {
+    let hbar: Float = 0.0000000000000000000000000000000001054571817;
+    let c: Float = 299792458.0;
+    let g: Float = 0.000000000066743;
+    let val: Float = (hbar * c) / g;
+    let mut guess: Float = 0.00000002176434;
+    if val > 0.0 {
+        guess = 0.5 * (guess + (val / guess));
+        guess = 0.5 * (guess + (val / guess));
+    }
+    return guess;
+}
+
+pub fn constants_planck_length() -> Float {
+    let hbar: Float = 0.0000000000000000000000000000000001054571817;
+    let c: Float = 299792458.0;
+    let g: Float = 0.000000000066743;
+    let val: Float = (hbar * g) / (c * c * c);
+    let mut guess: Float = 0.00000000000000000000000000000000001616255;
+    if val > 0.0 {
+        guess = 0.5 * (guess + (val / guess));
+        guess = 0.5 * (guess + (val / guess));
+    }
+    return guess;
+}
+
+pub fn constants_planck_time() -> Float {
+    let l_p: Float = constants_planck_length();
+    let c: Float = 299792458.0;
+    return l_p / c;
+}

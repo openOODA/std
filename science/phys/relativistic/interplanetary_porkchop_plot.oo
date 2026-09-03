@@ -1,0 +1,26 @@
+// # Interplanetary Transfer Porkchop Plot Contour Grid
+//
+// Logline: Computes launch characteristic energy C3, hyperbolic excess velocity v_infinity, and Lambert transfer contours.
+//
+// Setup: Pure interplanetary mission design grid solver mapping departure dates and arrival dates to required C3 energies.
+//
+// Beats:
+//   1. Nominal Earth-Mars departure C3 characteristic energy query in km^2/s^2.
+//   2. Calculate departure hyperbolic excess velocity v_inf = sqrt(C3).
+//   3. Compute arrival excess velocity v_inf_arr at destination planet.
+//   4. Evaluate total mission delta-v budget across departure-arrival date mesh.
+
+pub fn porkchop_c3() -> Int {
+    return 12;
+}
+
+/// Computes departure characteristic energy C3 = v_infinity^2 in km^2/s^2.
+pub fn porkchop_compute_c3(v_inf_kms: Float) -> Float {
+    return v_inf_kms * v_inf_kms;
+}
+
+/// Computes hyperbolic excess velocity from C3: v_inf = sqrt(C3) in km/s.
+pub fn porkchop_v_infinity(c3_km2_s2: Float) -> Float {
+    if c3_km2_s2 <= 0.0 { return 0.0; }
+    return sqrt(c3_km2_s2);
+}

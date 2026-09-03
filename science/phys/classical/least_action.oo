@@ -1,0 +1,25 @@
+// # Principle of Least Action
+//
+// Logline: Hamilton's variational stationary action principle delta S = 0.
+//
+// Setup: Integrates Lagrangian L = T - V across paths and computes path action.
+//
+// Beats:
+//   1. PathPoint structure.
+//   2. Particle Lagrangian evaluation.
+//   3. Stationary action validation.
+
+type PathPoint = struct {
+    time: Float,
+    position: Float,
+    velocity: Float
+};
+
+pub fn lagrangian_particle(mass: Float, velocity: Float, potential_energy: Float) -> Float {
+    let kinetic: Float = 0.5 * mass * velocity * velocity;
+    return kinetic - potential_energy;
+}
+
+pub fn is_stationary_action(s_true_path: Float, s_perturbed_path: Float) -> Bool {
+    return s_true_path <= s_perturbed_path + 0.0000001;
+}

@@ -1,0 +1,79 @@
+// # Okun's Law
+//
+// Logline: A 1% rise in cyclical unemployment above the natural rate is associated with about 2% loss in GDP vs potential.
+//
+// Setup: Pure Int percentages. Okun's coefficient is a tunable multiplier. Hosts econ_invariants.oo stem.
+//   Negative unemployment, natural rate, or coef return Err. coef==0 is Err for gap. u==natural is Ok(0).
+//
+// Beats:
+//   1. GDP gap = -okun_coef * (unemployment - natural_rate).
+//   2. Output ratio = 1 + gdp_gap / 100.
+//   3. Required growth to close the gap.
+//   4. Hosts econ_invariants.oo stem for cross-law correlation.
+
+import "std/science/econ/econ_invariants.oo";
+
+fn ok_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Default Okun coefficient (commonly ~2 in US data).
+pub fn okun_default_coef() -> Int {
+    return 2;
+}
+
+// GDP gap in percent: gap = -coef * (u - u_natural). Out-of-range u, natural, or coef return Err.
+pub fn okun_gdp_gap(unemployment_pct: Int, natural_rate_pct: Int, coef: Int) -> Result[Int, String] {
+    if unemployment_pct < 0 { return Err("ERR\tokun\tu"); }
+    if natural_rate_pct < 0 { return Err("ERR\tokun\tnat"); }
+    if coef < 0 { return Err("ERR\tokun\tcoef"); }
+    if coef == 0 { return Err("ERR\tokun\tcoef"); }
+    let diff: Int = unemployment_pct - natural_rate_pct;
+    return Ok(0 - (coef * diff));
+}
+
+// Output ratio (in percent of potential): 100 + gdp_gap. Wraps gap; illegal inputs return Err.
+pub fn okun_output_ratio(unemployment_pct: Int, natural_rate_pct: Int, coef: Int) -> Result[Int, String] {
+    let gapr: Result[Int, String] = okun_gdp_gap(unemployment_pct, natural_rate_pct, coef);
+    if gapr.is_ok() == false { return Err("ERR\tokun\tgap"); }
+    return Ok(100 + ok_got(gapr));
+}
+
+// Required growth (pp) to close unemployment gap: (u - u_natural) * coef.
+pub fn okun_required_growth(unemployment_pct: Int, natural_rate_pct: Int, coef: Int) -> Result[Int, String] {
+    if unemployment_pct < 0 { return Err("ERR\tokun\tu"); }
+    if natural_rate_pct < 0 { return Err("ERR\tokun\tnat"); }
+    if coef < 0 { return Err("ERR\tokun\tcoef"); }
+    let diff: Int = unemployment_pct - natural_rate_pct;
+    if diff <= 0 { return Ok(0); }
+    return Ok(diff * coef);
+}
+
+// KAT and hostile cases for Okun's law.
+pub fn verify_okuns_law() -> Bool {
+    let econ_inv_ok: Int = econ_qty_ok(1);
+    if econ_inv_ok != 1 { return false; }
+    if okun_default_coef() != 2 { return false; }
+    if ok_got(okun_gdp_gap(7, 5, 2)) != 0 - 4 { return false; }
+    if okun_gdp_gap(5, 5, 2).is_ok() == false { return false; }
+    if ok_got(okun_gdp_gap(5, 5, 2)) != 0 { return false; }
+    if ok_got(okun_gdp_gap(4, 5, 2)) != 2 { return false; }
+    if ok_got(okun_gdp_gap(8, 5, 3)) != 0 - 9 { return false; }
+    if ok_got(okun_output_ratio(7, 5, 2)) != 96 { return false; }
+    if ok_got(okun_output_ratio(5, 5, 2)) != 100 { return false; }
+    if ok_got(okun_output_ratio(4, 5, 2)) != 102 { return false; }
+    if ok_got(okun_required_growth(7, 5, 2)) != 4 { return false; }
+    if okun_required_growth(5, 5, 2).is_ok() == false { return false; }
+    if ok_got(okun_required_growth(5, 5, 2)) != 0 { return false; }
+    if ok_got(okun_required_growth(4, 5, 2)) != 0 { return false; }
+    if okun_gdp_gap(0 - 1, 5, 2).is_ok() { return false; }
+    if okun_gdp_gap(5, 0 - 1, 2).is_ok() { return false; }
+    if okun_gdp_gap(5, 5, 0).is_ok() { return false; }
+    if okun_gdp_gap(5, 5, 0 - 1).is_ok() { return false; }
+    if okun_output_ratio(0 - 1, 5, 2).is_ok() { return false; }
+    if okun_output_ratio(5, 5, 0).is_ok() { return false; }
+    if okun_required_growth(0 - 1, 5, 2).is_ok() { return false; }
+    if okun_required_growth(5, 0 - 1, 2).is_ok() { return false; }
+    if okun_required_growth(5, 5, 0 - 1).is_ok() { return false; }
+    return true;
+}

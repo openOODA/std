@@ -1,0 +1,53 @@
+// # IPv4/IPv6 Parsing and CIDR Subnet Matching (Spec API)
+//
+// Logline: Pure string-only IPv4 and IPv6 address parsing plus CIDR prefix subnet containment for both families. This is the full Result[Struct, String] spec API.
+//
+// Setup: Pure module. Octets and groups ride Int lists. IPv6 supports the "::" shorthand. The canonical "to_string" form expands all eight groups as 0..ffff hex. Kept in a sibling file so fixtures that import the parent module avoid the C emit Result[Struct, String] redefinition bug.
+//
+// Beats:
+//   1. Parse "a.b.c.d" into a four-octet Ipv4 and reject out-of-range octets.
+//   2. Parse an IPv6 string with optional "::" shorthand and leading zeros.
+//   3. Parse CIDR strings "addr/n" with prefix in 0..32 or 0..128.
+
+import "std/core/primitives/result.oo";
+import "std/net/ip_cidr.oo";
+
+pub fn ipv4_parse(s: String) -> Result[Ipv4, String] {
+    if chars_len(s) == 0 { return Err("ipv4_parse: empty"); }
+    let oct: List[Int] = cidr_split4(s);
+    if list_len(oct) != 4 { return Err("ipv4_parse: malformed"); }
+    return Ok(Ipv4 { octets: oct });
+}
+
+pub fn ipv6_parse(s: String) -> Result[Ipv6, String] {
+    if chars_len(s) == 0 { return Err("ipv6_parse: empty"); }
+    let gs: List[Int] = cidr_v6expand(s);
+    if list_len(gs) != 8 { return Err("ipv6_parse: bad"); }
+    return Ok(Ipv6 { groups: gs });
+}
+
+pub fn cidr4_parse(s: String) -> Result[Cidr4, String] {
+    let n: Int = chars_len(s);
+    if n == 0 { return Err("cidr4_parse: empty"); }
+    let slash: Int = str_index_of(s, "/");
+    if slash <= 0 { return Err("cidr4_parse: missing /"); }
+    let prefix: Int = cidr_uint(str_slice(s, slash + 1, n));
+    if prefix < 0 { return Err("cidr4_parse: bad prefix"); }
+    if prefix > 32 { return Err("cidr4_parse: prefix out of range"); }
+    let oct: List[Int] = cidr_split4(str_slice(s, 0, slash));
+    if list_len(oct) != 4 { return Err("cidr4_parse: bad ip"); }
+    return Ok(Cidr4 { addr: Ipv4 { octets: oct }, prefix: prefix });
+}
+
+pub fn cidr6_parse(s: String) -> Result[Cidr6, String] {
+    let n: Int = chars_len(s);
+    if n == 0 { return Err("cidr6_parse: empty"); }
+    let slash: Int = str_index_of(s, "/");
+    if slash <= 0 { return Err("cidr6_parse: missing /"); }
+    let prefix: Int = cidr_uint(str_slice(s, slash + 1, n));
+    if prefix < 0 { return Err("cidr6_parse: bad prefix"); }
+    if prefix > 128 { return Err("cidr6_parse: prefix out of range"); }
+    let gs: List[Int] = cidr_v6expand(str_slice(s, 0, slash));
+    if list_len(gs) != 8 { return Err("cidr6_parse: bad ipv6"); }
+    return Ok(Cidr6 { addr: Ipv6 { groups: gs }, prefix: prefix });
+}

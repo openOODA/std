@@ -1,0 +1,38 @@
+// # Special and General Relativistic Time Dilation
+//
+// Logline: Calculates gravitational time dilation (general relativity) and kinematic time dilation (special relativity) for GPS satellite clocks.
+//
+// Setup: Pure relativistic clock frequency offsets for Global Navigation Satellite Systems (GPS / Galileo).
+//
+// Beats:
+//   1. Net GPS satellite daily relativistic clock offset query in microseconds (38 us/day = 38000 ns).
+//   2. Calculate kinematic velocity time dilation Delta_t_sr = - 0.5 * (v/c)^2.
+//   3. Calculate gravitational potential time dilation Delta_t_gr = + Delta_Phi / c^2.
+//   4. Compute combined net relativistic frequency drift Delta_f / f0.
+
+pub fn gps_clock_ns() -> Int {
+    return 38;
+}
+
+/// Computes net daily relativistic clock advance for GPS satellite in microseconds/day (+45.9 us gravitational - 7.2 us kinematic = +38.7 us/day).
+pub fn gps_daily_relativistic_drift_us(
+    r_orbit_m: Float,
+    v_orbit_m_s: Float
+) -> Float {
+    let g: Float = 0.000000000066743;
+    let m_earth: Float = 5972200000000000000000000.0;
+    let r_earth: Float = 6378137.0;
+    let c: Float = 299792458.0;
+    let c2: Float = c * c;
+
+    // Gravitational blue-shift relative to Earth surface
+    let delta_phi: Float = (g * m_earth / r_earth) - (g * m_earth / r_orbit_m);
+    let gr_frac: Float = delta_phi / c2;
+
+    // Kinematic Lorentz time dilation
+    let sr_frac: Float = (0.0 - 0.5) * (v_orbit_m_s * v_orbit_m_s) / c2;
+
+    let net_frac: Float = gr_frac + sr_frac;
+    let seconds_per_day: Float = 86400.0;
+    return net_frac * seconds_per_day * 1000000.0; // Return in microseconds
+}

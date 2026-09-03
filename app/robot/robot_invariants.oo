@@ -1,0 +1,34 @@
+// # Robot joint-angle product invariants
+//
+// Logline: Joint angle must lie in [-pi, pi]; values outside fail closed.
+//
+// Setup: Pure Float checks. Pi bound is circ_pi_std_robot_robot_invariants().
+//
+// Beats:
+//   1. robot_joint_ok(10.0) returns 0.
+//   2. robot_joint_ok(0.0) returns 1.
+//   3. robot_joint_cert boxes the law into DomainCert.holds.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_robot_robot_invariants() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+// Joint angle outside [-pi, pi] is invalid.
+pub fn robot_joint_ok(angle: Float) -> Int {
+    let pi: Float = circ_pi_std_robot_robot_invariants();
+    let lo: Float = 0.0 - pi;
+    if angle < lo {
+        return 0;
+    }
+    if angle > pi {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn robot_joint_cert(angle: Float) -> DomainCert {
+    return DomainCert {
+        domain: "robot",
+        law_name: "joint_in_pi",
+        holds: robot_joint_ok(angle)
+    };
+}

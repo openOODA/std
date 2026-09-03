@@ -1,0 +1,22 @@
+// # Prompt Filter Int-Floor Engine Shim
+//
+// Logline: standardized Int-floor engine wrapper around prompt_filter_types for init and deterministic work.
+//
+// Setup: Imports prompt_filter_types.oo. CWD must be ooda/.
+//
+// Beats:
+//   1. prompt_filter_engine_init: forward prompt_policy_new.
+//   2. prompt_filter_engine_work: forward prompt_policy_block.
+//
+// residual: standardize; companion types live in prompt_filter_types.
+
+import "std/sec/ai/prompt_filter_types.oo";
+
+pub fn prompt_filter_engine_init(min_confidence: Int, block_threshold: Int, fail_closed: Int) -> PromptPolicy {
+    return prompt_policy_new(min_confidence, block_threshold, fail_closed);
+}
+
+pub fn prompt_filter_engine_work(min_confidence: Int, block_threshold: Int, fail_closed: Int) -> Int {
+    let p: PromptPolicy = prompt_policy_new(min_confidence, block_threshold, fail_closed);
+    return prompt_policy_block(p);
+}

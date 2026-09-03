@@ -1,0 +1,33 @@
+// # Domain certificate (holds is 1 or 0)
+//
+// Logline: Build one DomainCert for one named law in one std domain. holds is 1 or 0 only.
+//
+// Setup: Pure. No FS, net, or env. Any holds value other than 1 is stored as 0.
+//
+// Beats:
+//   1. DomainCert has domain, law_name, and holds.
+//   2. domain_cert(domain, law_name, holds) returns that record.
+//   3. cert_holds reads the holds field.
+
+type DomainCert = struct {
+    domain: String,
+    law_name: String,
+    holds: Int
+};
+
+// holds is 1 or 0 only. Other values fail closed to 0.
+pub fn domain_cert(domain: String, law_name: String, holds: Int) -> DomainCert {
+    let mut h: Int = 0;
+    if holds == 1 {
+        h = 1;
+    }
+    return DomainCert {
+        domain: domain,
+        law_name: law_name,
+        holds: h
+    };
+}
+
+pub fn cert_holds(c: DomainCert) -> Int {
+    return c.holds;
+}

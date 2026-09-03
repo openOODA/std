@@ -1,0 +1,20 @@
+// # Fuzz Int Multi Fail
+//
+// Logline: Standard library verification and domain capabilities for Fuzz Int Multi Fail.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+fn multi_bad(x: Int, y: Int) -> Int {
+    requires x >= 0;
+    requires y >= 0;
+    ensures result == x + y;
+    return x + y + 1;
+}
+
+pub fn verify_fuzz_int_multi_fail() -> Bool {
+    return true;
+}

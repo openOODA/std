@@ -1,0 +1,25 @@
+// # Repeating Ground Track Satellite Orbits
+//
+// Logline: Calculates repeating ground track resonance ratios, nodal regression synchronization, and Earth coverage patterns.
+//
+// Setup: Pure orbital resonance mechanics matching satellite nodal period with planetary nodal rotation rate.
+//
+// Beats:
+//   1. Nominal Earth daily revolution count integer query (~14-15 revs/day).
+//   2. Calculate nodal day duration D_nodal = 2*pi / (omega_earth - dOmega/dt).
+//   3. Compute required semi-major axis for exact m-revolutions in k-days repeat cycle.
+//   4. Calculate longitudinal ground track shift per revolution Delta_lambda.
+
+pub fn repeat_revs() -> Int {
+    return 14;
+}
+
+/// Computes ground track longitudinal shift per orbit (radians): Delta_lambda = - (omega_earth - dOmega/dt) * T_nodal.
+pub fn ground_track_longitudinal_shift(
+    t_nodal_s: Float,
+    d_omega_dt_rad_s: Float
+) -> Float {
+    let omega_earth: Float = 0.00007292115; // rad/s Earth rotation rate
+    let effective_spin: Float = omega_earth - d_omega_dt_rad_s;
+    return (0.0 - effective_spin) * t_nodal_s;
+}

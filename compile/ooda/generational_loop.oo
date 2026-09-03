@@ -1,0 +1,191 @@
+// # Generational OODA State Transition Tensor
+//
+// Logline: Formalize mathematical state transitions and reflex encapsulation across Gen 1 through Gen 6 computing tiers.
+//
+// Setup: Pure state transition tensor with zero ambient authority.
+//
+// Beats:
+//   1. Classify execution stratum across Gen 1 (Silicon) through Gen 6 (Sovereign Swarms).
+//   2. Evaluate autonomic reflex encapsulation and latency thresholds.
+//   3. Compute discrete generational state transition tensor step.
+//   4. Validate monotonic capability attenuation across tier boundaries.
+//   5. Verify OODA cycle turnaround against threat latency budget.
+
+type GenTierInfo = struct {
+    tier_id: Int,
+    is_autonomic: Bool,
+    max_latency_ns: Int,
+    reflex_efficiency: Float
+};
+
+type GenLoopState = struct {
+    current_tier: Int,
+    tensor_state: Float,
+    caps_mask: Int,
+    total_ooda_latency_us: Float,
+    is_stable: Bool
+};
+
+pub fn gen_silicon() -> Int { return 1; }
+pub fn gen_compiler() -> Int { return 2; }
+pub fn gen_runtime() -> Int { return 3; }
+pub fn gen_types() -> Int { return 4; }
+pub fn gen_swarms() -> Int { return 5; }
+pub fn gen_sovereign() -> Int { return 6; }
+
+pub fn gen_int_to_float(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 5 { return 5.0; }
+    if n == 6 { return 6.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = 0.0 - 1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + (d_f * mult);
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}
+
+// Autonomic Reflex Stratum: Gen 1 through Gen 4 are deterministic unconscious reflexes
+pub fn is_autonomic_reflex_stratum(tier: Int) -> Bool {
+    if tier >= 1 && tier <= 4 {
+        return true;
+    }
+    return false;
+}
+
+// Maximum allowable reflex latency in nanoseconds for each generational tier
+pub fn max_reflex_latency_ns(tier: Int) -> Int {
+    if tier == 1 {
+        return 10;
+    }
+    if tier == 2 {
+        return 1000;
+    }
+    if tier == 3 {
+        return 10000;
+    }
+    if tier == 4 {
+        return 100000;
+    }
+    if tier == 5 {
+        return 10000000;
+    }
+    if tier == 6 {
+        return 100000000;
+    }
+    return 0;
+}
+
+// Contract Function: Generational state transition based on reflex latency bounds
+pub fn generational_state_transition(current_gen: Int, reflex_lat_ns: Int) -> Int {
+    if current_gen < 1 || current_gen > 6 {
+        return 1;
+    }
+    let max_lat: Int = max_reflex_latency_ns(current_gen);
+    if reflex_lat_ns > max_lat {
+        // Latency threshold breached: cannot promote, retain current tier
+        return current_gen;
+    }
+    // Latency invariant satisfied: promote to next tier if below Gen 6
+    if current_gen < 6 {
+        return current_gen + 1;
+    }
+    return 6;
+}
+
+// Discrete State Transition Tensor Step: S_{k+1} = T * S_k + B * U_k
+pub fn compute_tensor_step(state: Float, control_input: Float, t_gain: Float, b_gain: Float) -> Float {
+    let t_term: Float = t_gain * state;
+    let b_term: Float = b_gain * control_input;
+    return t_term + b_term;
+}
+
+// Monotonic Capability Attenuation: Cap_child is subset of Cap_parent
+pub fn verify_capability_attenuation(parent_caps: Int, child_caps: Int) -> Bool {
+    // Child cannot possess any capability bit not held by parent: (child & ~parent) == 0
+    let parent_bits: Int = parent_caps;
+    let child_bits: Int = child_caps;
+    let not_parent: Int = 0 - (parent_bits + 1);
+    let escalated_bits: Int = child_bits & not_parent;
+    if escalated_bits == 0 {
+        return true;
+    }
+    return false;
+}
+
+// OODA Loop Threat Latency Budget: tau_obs + tau_orient + tau_decide + tau_act < threat_budget
+pub fn verify_ooda_cycle_budget(tau_obs_us: Float, tau_orient_us: Float, tau_decide_us: Float, tau_act_us: Float, threat_budget_us: Float) -> Bool {
+    let total_lat: Float = tau_obs_us + tau_orient_us + tau_decide_us + tau_act_us;
+    if total_lat < threat_budget_us {
+        return true;
+    }
+    return false;
+}
+
+// Query tier information metadata
+pub fn get_tier_info(tier: Int) -> GenTierInfo {
+    let mut valid_tier: Int = tier;
+    if valid_tier < 1 {
+        valid_tier = 1;
+    }
+    if valid_tier > 6 {
+        valid_tier = 6;
+    }
+    let autonomic: Bool = is_autonomic_reflex_stratum(valid_tier);
+    let max_lat: Int = max_reflex_latency_ns(valid_tier);
+    let tier_f: Float = gen_int_to_float(valid_tier);
+    let efficiency: Float = 1.0 - (tier_f * 0.05);
+    return GenTierInfo {
+        tier_id: valid_tier,
+        is_autonomic: autonomic,
+        max_latency_ns: max_lat,
+        reflex_efficiency: efficiency
+    };
+}
+
+// Execute a single discrete generational OODA loop step
+pub fn step_generational_loop(state: GenLoopState, control_u: Float, t_gain: Float, b_gain: Float, step_lat_ns: Int, next_caps_mask: Int, threat_budget_us: Float) -> GenLoopState {
+    let cur_tier: Int = state.current_tier;
+    let cur_s: Float = state.tensor_state;
+    let cur_caps: Int = state.caps_mask;
+    let cur_lat: Float = state.total_ooda_latency_us;
+
+    let next_tier: Int = generational_state_transition(cur_tier, step_lat_ns);
+    let next_s: Float = compute_tensor_step(cur_s, control_u, t_gain, b_gain);
+    let caps_valid: Bool = verify_capability_attenuation(cur_caps, next_caps_mask);
+    let q_lat: Float = cur_lat * 0.25;
+    let loop_valid: Bool = verify_ooda_cycle_budget(q_lat, q_lat, q_lat, q_lat, threat_budget_us);
+    let stable: Bool = caps_valid && loop_valid;
+
+    let final_caps: Int = if caps_valid { next_caps_mask } else { cur_caps };
+
+    return GenLoopState {
+        current_tier: next_tier,
+        tensor_state: next_s,
+        caps_mask: final_caps,
+        total_ooda_latency_us: cur_lat,
+        is_stable: stable
+    };
+}

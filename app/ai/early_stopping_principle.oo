@@ -1,0 +1,125 @@
+// # Early Stopping Principle
+//
+// Logline: Stop training when the validation loss stops decreasing; the patience parameter controls how many stale steps trigger the stop.
+//
+// Setup: Pure Float/Int. patience >= 1. Empty-history best_loss is Err. Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Should-stop witness: 1 if no improvement in the last `patience` steps.
+//   2. Best-validation tracker: best loss seen so far.
+//   3. Coupled with bias-variance: stop at minimum of test error curve.
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+
+fn es_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Should-stop witness: 1 if no improvement in the last `patience` steps.
+// History is a list of validation losses in chronological order.
+// patience < 1 returns 0; empty history returns 0.
+pub fn es_should_stop(history: List[Float], patience: Int) -> Int {
+    if patience < 1 { return 0; }
+    let n: Int = list_len(history);
+    if n <= 0 { return 0; }
+    if n <= patience { return 0; }
+    let br: Result[Float, String] = es_best_loss(history);
+    match br {
+        Ok(best) => {
+            let lookback: Int = n - patience;
+            let mut i: Int = lookback;
+            while i < n {
+                let v: Float = list_get(history, i);
+                let mut diff: Float = v - best;
+                if diff < 0.0 { diff = 0.0 - diff; }
+                if diff > 0.0001 { return 0; }
+                i = i + 1;
+            }
+            return 1;
+        },
+        Err(_) => { return 0; }
+    }
+}
+
+// Best loss seen so far (minimum). Empty history is undefined.
+pub fn es_best_loss(history: List[Float]) -> Result[Float, String] {
+    let n: Int = list_len(history);
+    if n <= 0 { return Err("ERR\tes\tdomain"); }
+    let mut best: Float = list_get(history, 0);
+    let mut i: Int = 1;
+    while i < n {
+        let v: Float = list_get(history, i);
+        if v < best { best = v; }
+        i = i + 1;
+    }
+    return Ok(best);
+}
+
+fn es_igot(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Index of the minimum in the history (0-based). Empty is Err. First-element min is Ok(0).
+pub fn es_argmin(history: List[Float]) -> Result[Int, String] {
+    let n: Int = list_len(history);
+    if n <= 0 { return Err("ERR\tes\tdomain"); }
+    let mut best_idx: Int = 0;
+    let mut best_val: Float = list_get(history, 0);
+    let mut i: Int = 1;
+    while i < n {
+        let v: Float = list_get(history, i);
+        if v < best_val {
+            best_val = v;
+            best_idx = i;
+        }
+        i = i + 1;
+    }
+    return Ok(best_idx);
+}
+
+// KAT and hostile cases for the early-stopping principle.
+pub fn verify_early_stopping_principle() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    let mut hist: List[Float] = list_new();
+    hist = list_push(hist, 0.5);
+    hist = list_push(hist, 0.4);
+    hist = list_push(hist, 0.4);
+    hist = list_push(hist, 0.4);
+    if es_should_stop(hist, 3) != 1 { return false; }
+    let mut hist2: List[Float] = list_new();
+    hist2 = list_push(hist2, 0.5);
+    hist2 = list_push(hist2, 0.4);
+    hist2 = list_push(hist2, 0.3);
+    if es_should_stop(hist2, 3) != 0 { return false; }
+    let mut hist3: List[Float] = list_new();
+    hist3 = list_push(hist3, 0.5);
+    hist3 = list_push(hist3, 0.5);
+    hist3 = list_push(hist3, 0.5);
+    hist3 = list_push(hist3, 0.5);
+    if es_should_stop(hist3, 3) != 1 { return false; }
+    if es_should_stop(hist, 0) != 0 { return false; }
+    if es_should_stop(hist, 0 - 1) != 0 { return false; }
+    let mut empty: List[Float] = list_new();
+    if es_should_stop(empty, 3) != 0 { return false; }
+    let best_h: Float = es_got(es_best_loss(hist));
+    if best_h > 0.4 { return false; }
+    if best_h < 0.4 { return false; }
+    if es_best_loss(empty).is_ok() { return false; }
+    let mut test_curve: List[Float] = list_new();
+    test_curve = list_push(test_curve, 0.5);
+    test_curve = list_push(test_curve, 0.4);
+    test_curve = list_push(test_curve, 0.3);
+    test_curve = list_push(test_curve, 0.35);
+    test_curve = list_push(test_curve, 0.5);
+    if es_igot(es_argmin(test_curve)) != 2 { return false; }
+    let mut first_min: List[Float] = list_new();
+    first_min = list_push(first_min, 0.1);
+    first_min = list_push(first_min, 0.2);
+    let zidx: Result[Int, String] = es_argmin(first_min);
+    if zidx.is_ok() == false { return false; }
+    if es_igot(zidx) != 0 { return false; }
+    if es_argmin(empty).is_ok() { return false; }
+    return true;
+}

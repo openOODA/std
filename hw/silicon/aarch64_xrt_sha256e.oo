@@ -1,0 +1,69 @@
+// # AArch64 SHA-256 Block Driver
+//
+// Logline: Initializes H, fills W[64] per block, runs rounds, and packs the digest.
+//
+// Setup: Heap H is eight 8-byte slots; W is 64 slots. K is packed big-endian bytes.
+//
+// Beats:
+//   1. Store the FIPS IV into H.
+//   2. Load W[0..15] as BE32 and extend W[16..63].
+//   3. Copy H into work, BL __sha_rounds, add work back into H.
+//   4. Pack H into 32 big-endian bytes for hex.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_sha256f.oo";
+
+fn a64rt_sha_iv(x0: A64X, h: Int, v: Int) -> A64X {
+    let mut x: A64X = a64x_movimm(x0, 0, v);
+    return a64x_emit(x, arm64_word_str(0, h, 0));
+}
+
+pub fn a64rt_sha256e(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_compress");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 48));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_str(1, 31, 8));
+    x = a64x_emit(x, arm64_word_str(2, 31, 16));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_movz(1, 64, 0));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 1));
+    x = a64x_emit(x, arm64_word_str(0, 31, 24));
+    x = a64x_movimm(x, 0, 1779033703);
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 24));
+    x = a64x_emit(x, arm64_word_str(0, 1, 0));
+    x = a64x_movimm(x, 0, 3144134277);
+    x = a64x_emit(x, arm64_word_str(0, 1, 8));
+    x = a64x_movimm(x, 0, 1013904242);
+    x = a64x_emit(x, arm64_word_str(0, 1, 16));
+    x = a64x_movimm(x, 0, 2773480762);
+    x = a64x_emit(x, arm64_word_str(0, 1, 24));
+    x = a64x_movimm(x, 0, 1359893119);
+    x = a64x_emit(x, arm64_word_str(0, 1, 32));
+    x = a64x_movimm(x, 0, 2600822924);
+    x = a64x_emit(x, arm64_word_str(0, 1, 40));
+    x = a64x_movimm(x, 0, 528734635);
+    x = a64x_emit(x, arm64_word_str(0, 1, 48));
+    x = a64x_movimm(x, 0, 1541459225);
+    x = a64x_emit(x, arm64_word_str(0, 1, 56));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_movz(1, 512, 0));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 1));
+    x = a64x_emit(x, arm64_word_str(0, 31, 32));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 8));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 16));
+    x = a64x_emit(x, arm64_word_ldr(3, 31, 24));
+    x = a64x_emit(x, arm64_word_ldr(4, 31, 32));
+    x = a64x_bl(x, "__sha_blocks");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 24));
+    x = a64x_bl(x, "__sha_pack");
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 48));
+    r = a64rt_setx(r, a64rt_epi(x));
+    return a64rt_sha256f(r);
+}

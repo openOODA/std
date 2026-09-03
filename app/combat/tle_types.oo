@@ -1,0 +1,101 @@
+// # NORAD Two-Line Element (TLE) Data Types
+//
+// Logline: Defines structured types representing NORAD Two-Line Element sets and decoded orbital parameters.
+//
+// Setup: Pure .oo standard library module for satellite ephemerides representation.
+//
+// Beats:
+//   1. Define TLELine1 and TLELine2 individual line records.
+//   2. Define unified TLEData structure holding converted physical quantities in standard units.
+//   3. Provide constructors and field accessors for astrodynamic propagators.
+
+type TLELine1 = struct {
+    satellite_number: Int,
+    classification: String,
+    int_designator: String,
+    epoch_year: Int,
+    epoch_day: Float,
+    mean_motion_dot: Float,
+    mean_motion_ddot: Float,
+    bstar: Float,
+    element_set_number: Int,
+    checksum: Int
+};
+
+type TLELine2 = struct {
+    satellite_number: Int,
+    inclination_deg: Float,
+    raan_deg: Float,
+    eccentricity: Float,
+    arg_of_perigee_deg: Float,
+    mean_anomaly_deg: Float,
+    mean_motion_revs_day: Float,
+    rev_number: Int,
+    checksum: Int
+};
+
+type TLEData = struct {
+    satellite_number: Int,
+    classification: String,
+    int_designator: String,
+    epoch_year: Int,
+    epoch_day: Float,
+    bstar: Float,
+    inclination_deg: Float,
+    inclination_rad: Float,
+    raan_deg: Float,
+    raan_rad: Float,
+    eccentricity: Float,
+    arg_of_perigee_deg: Float,
+    arg_of_perigee_rad: Float,
+    mean_anomaly_deg: Float,
+    mean_anomaly_rad: Float,
+    mean_motion_revs_per_day: Float,
+    mean_motion_rad_per_min: Float,
+    rev_number_at_epoch: Int,
+    semi_major_axis_km: Float
+};
+
+pub fn tle_data_new(
+    sat_num: Int,
+    classification: String,
+    designator: String,
+    year: Int,
+    day: Float,
+    bstar: Float,
+    inc_deg: Float,
+    inc_rad: Float,
+    raan_deg: Float,
+    raan_rad: Float,
+    ecc: Float,
+    argp_deg: Float,
+    argp_rad: Float,
+    m_deg: Float,
+    m_rad: Float,
+    n_revs: Float,
+    n_rad_min: Float,
+    rev_num: Int,
+    a_km: Float
+) -> TLEData {
+    return TLEData {
+        satellite_number: sat_num,
+        classification: classification,
+        int_designator: designator,
+        epoch_year: year,
+        epoch_day: day,
+        bstar: bstar,
+        inclination_deg: inc_deg,
+        inclination_rad: inc_rad,
+        raan_deg: raan_deg,
+        raan_rad: raan_rad,
+        eccentricity: ecc,
+        arg_of_perigee_deg: argp_deg,
+        arg_of_perigee_rad: argp_rad,
+        mean_anomaly_deg: m_deg,
+        mean_anomaly_rad: m_rad,
+        mean_motion_revs_per_day: n_revs,
+        mean_motion_rad_per_min: n_rad_min,
+        rev_number_at_epoch: rev_num,
+        semi_major_axis_km: a_km
+    };
+}

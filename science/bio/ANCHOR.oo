@@ -1,0 +1,104 @@
+// # Bio Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard bio (biology) domain library. Re-exports a stable bio_mod_* surface for the most-used public API (cell, growth, population, dna, genetics, phylogeny, protein, SMILES, homeostasis, central-dogma, Hodgkin-Huxley). Private siblings (laws, theories, principles, invariants, KATs, stubs) remain non-public.
+//
+// Setup: Imports private bio siblings; no caps required for pure biological computation. Simulators (cell_agent, evolution) may take SimCap at the call site.
+//
+// Beats:
+//   1. Re-export the cell, cell_growth, cell_pop, and cell_types surface as bio_mod_cell_*, bio_mod_growth_*, bio_mod_pop_*.
+//   2. Re-export the dna, genetics, and phylo surface as bio_mod_dna_*, bio_mod_genetics_*, bio_mod_phylo_*, bio_mod_distance_*.
+//   3. Re-export the protein, smiles, and homeostasis surface as bio_mod_protein_*, bio_mod_smiles_*, bio_mod_homeo_*.
+//   4. Re-export the central_dogma and Hodgkin-Huxley theoretical surface as bio_mod_central_*, bio_mod_hh_*.
+//   5. Document the private siblings (laws, theories, principles, invariants, KATs, stubs).
+
+import "cell.oo";
+import "cell_growth.oo";
+import "cell_pop.oo";
+import "cell_types.oo";
+import "cell_agent.oo";
+import "dna.oo";
+import "genetics.oo";
+import "phylo.oo";
+import "phylo_ops.oo";
+import "phylo_engine.oo";
+import "protein.oo";
+import "protein_ops.oo";
+import "smiles.oo";
+import "smiles_parse.oo";
+import "smiles_engine.oo";
+import "homeostasis.oo";
+import "central_dogma_theory.oo";
+import "hodgkin_huxley_theory.oo";
+
+// Public cell surface: bio_mod_cell_*
+pub fn bio_mod_cell_agent_create(id: Int, cell_type: String, viability: Float, atp: Float) -> AgentCell { return cell_agent_create(id, cell_type, viability, atp); }
+pub fn bio_mod_cell_agent_alive(c: AgentCell) -> Bool { return cell_agent_alive(c); }
+
+// Public growth surface: bio_mod_growth_*
+pub fn bio_mod_growth_rate_new(doubling_time: Float, lag_phase: Float, max_density: Float, death_rate: Float) -> GrowthRate { return growth_rate_new(doubling_time, lag_phase, max_density, death_rate); }
+pub fn bio_mod_growth_rate_default() -> GrowthRate { return growth_rate_default(); }
+pub fn bio_mod_growth_rate_is_optimal(rate: GrowthRate) -> Bool { return growth_rate_is_optimal(rate); }
+pub fn bio_mod_growth_rate_effective(rate: GrowthRate, current_density: Float) -> Float { return growth_rate_effective_rate(rate, current_density); }
+
+// Public cell population surface: bio_mod_pop_*
+pub fn bio_mod_population_new(initial_count: Int) -> CellPopulation { return cell_population_new(initial_count); }
+pub fn bio_mod_population_size(pop: CellPopulation) -> Int { return cell_population_size(pop); }
+pub fn bio_mod_population_density(pop: CellPopulation, volume_ml: Float) -> Float { return cell_population_density(pop, volume_ml); }
+pub fn bio_mod_population_environment(ph: Float, temp: Float, glucose: Float, o2: Float) -> CellEnvironment { return cell_environment_new(ph, temp, glucose, o2); }
+
+// Public DNA surface: bio_mod_dna_*
+pub fn bio_mod_dna_sequence_new(id: Int, seq_n: Int, gc_pct: Int, qual: Int) -> DnaSequence { return dna_sequence_new(id, seq_n, gc_pct, qual); }
+pub fn bio_mod_dna_sequence_valid(seq: DnaSequence) -> Int { return dna_sequence_valid(seq); }
+pub fn bio_mod_dna_sequence_n(seq: DnaSequence) -> Int { return dna_sequence_n(seq); }
+pub fn bio_mod_dna_sequence_gc_content(seq: DnaSequence) -> Int { return dna_sequence_gc_content(seq); }
+
+// Public genetics surface: bio_mod_genetics_*
+pub fn bio_mod_dna_is_valid(seq: String) -> Bool { return dna_is_valid(seq); }
+pub fn bio_mod_dna_complement_base(base: String) -> String { return dna_complement_base(base); }
+pub fn bio_mod_dna_reverse_complement(seq: String) -> String { return dna_reverse_complement(seq); }
+pub fn bio_mod_dna_to_rna(seq: String) -> String { return dna_to_rna(seq); }
+
+// Public phylo surface: bio_mod_phylo_*
+pub fn bio_mod_taxon_new(id: Int, name: String, accession: String, taxonomy_id: Int) -> Taxon { return taxon_new(id, name, accession, taxonomy_id); }
+pub fn bio_mod_taxon_set_outgroup(taxon: Taxon, is_out: Bool) { return taxon_set_outgroup(taxon, is_out); }
+pub fn bio_mod_taxon_is_outgroup(taxon: Taxon) -> Bool { return taxon_is_outgroup(taxon); }
+
+// Public distance matrix surface: bio_mod_distance_*
+pub fn bio_mod_distance_matrix_new(n_taxa: Int, model: String) -> DistanceMatrix { return distance_matrix_new(n_taxa, model); }
+pub fn bio_mod_distance_matrix_add_taxon(mat: DistanceMatrix, name: String) { return distance_matrix_add_taxon(mat, name); }
+pub fn bio_mod_distance_matrix_set(mat: DistanceMatrix, i: Int, j: Int, dist: Float) { return distance_matrix_set(mat, i, j, dist); }
+pub fn bio_mod_distance_matrix_get(mat: DistanceMatrix, i: Int, j: Int) -> Float { return distance_matrix_get(mat, i, j); }
+
+// Public protein surface: bio_mod_protein_*
+pub fn bio_mod_backbone_atoms(n: Point3D, ca: Point3D, c: Point3D, o: Point3D, h: Point3D) -> BackboneAtoms { return backbone_atoms_new(n, ca, c, o, h); }
+pub fn bio_mod_point3d_new(x: Int, y: Int, z: Int) -> Point3D { return point3d_new(x, y, z); }
+pub fn bio_mod_point3d_dist_sq(p1: Point3D, p2: Point3D) -> Int { return point3d_dist_sq(p1, p2); }
+pub fn bio_mod_point3d_sqrt_approx(n: Int) -> Int { return point3d_sqrt_approx(n); }
+
+// Public SMILES surface: bio_mod_smiles_*
+pub fn bio_mod_smiles_parse(smiles_str: String) -> SmilesMolecule { return smiles_molecule_parse(smiles_str); }
+
+// Public homeostasis surface: bio_mod_homeo_*
+pub fn bio_mod_homeo_new(setpoint: Float, margin: Float) -> Homeostat { return homeo_new(setpoint, margin); }
+pub fn bio_mod_homeo_regulate(h: Homeostat, current_val: Float) -> Float { return homeo_regulate(h, current_val); }
+pub fn bio_mod_homeo_is_balanced(h: Homeostat, current_val: Float) -> Bool { return homeo_is_balanced(h, current_val); }
+pub fn bio_mod_homeo_trigger_immune_quarantine(h: Homeostat) -> Homeostat { return homeo_trigger_immune_quarantine(h); }
+
+// Public central-dogma surface: bio_mod_central_*
+pub fn bio_mod_central_dna_is_valid(seq: String) -> Int { return central_dna_is_valid(seq); }
+pub fn bio_mod_central_rna_is_valid(seq: String) -> Int { return central_rna_is_valid(seq); }
+pub fn bio_mod_central_transcribe(dna_seq: String) -> String { return central_transcribe(dna_seq); }
+pub fn bio_mod_central_reverse_transcribe(rna_seq: String) -> String { return central_reverse_transcribe(rna_seq); }
+
+// Public Hodgkin-Huxley surface: bio_mod_hh_*
+pub fn bio_mod_hh_ionic_current(v: Float, m: Float, h: Float, n: Float, gna: Float, gk: Float, gl: Float, ena: Float, ek: Float, el: Float) -> Float { return hh_ionic_current(v, m, h, n, gna, gk, gl, ena, ek, el); }
+pub fn bio_mod_hh_dv_dt(v: Float, m: Float, h: Float, n: Float, gna: Float, gk: Float, gl: Float, ena: Float, ek: Float, el: Float, i_ext: Float, c_m: Float) -> Float { return hh_dv_dt(v, m, h, n, gna, gk, gl, ena, ek, el, i_ext, c_m); }
+pub fn bio_mod_hh_resting_stable(v: Float, threshold: Float) -> Int { return hh_resting_stable(v, threshold); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. beer_lambert_law.oo, chargaff_law.oo, eigen_quasispecies_law.oo, hardy_weinberg_law.oo, mendel_segregation_law.oo, phylogenetic_distance_law.oo)
+//   _theory files (e.g. central_dogma_theory.oo, coalescent_kingman_theory.oo, hodgkin_huxley_theory.oo, michaelis_menten_theory.oo, natural_selection_theory.oo)
+//   _principle files (e.g. haldane_principle.oo, hamiltons_rule_principle.oo, homeostasis_principle.oo, watson_crick_principle.oo)
+//   _invariants files (e.g. bio_invariants.oo)
+//   _kat files (e.g. genetics_kat.oo)
+//   _stubs files (e.g. cell_stubs.oo, phylo_stubs.oo, protein_stubs.oo, smiles_stubs.oo)

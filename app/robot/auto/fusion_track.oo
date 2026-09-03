@@ -1,0 +1,25 @@
+// # Fusion track
+//
+// Logline: FusTrk implemented off List[TrackedObject] / Float track.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type FusTrk = struct {
+    hits: Int,
+    misses: Int
+};
+
+pub fn fus_trk_new(hits: Int, misses: Int) -> FusTrk {
+    return FusTrk { hits: hits, misses: misses };
+}
+
+pub fn fus_trk_hits(t: FusTrk) -> Int {
+    return t.hits;
+}

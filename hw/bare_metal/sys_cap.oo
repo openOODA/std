@@ -1,0 +1,28 @@
+// # Fail-closed syscall capability gate
+//
+// Logline: Grants a Linux x86_64 syscall number only when the capability tag is 1.
+//
+// Setup: Pure integer gate. Tag 1 is granted. Tag 0 is deny. This file never emits a syscall.
+//
+// Beats:
+//   1. Report whether tag 1 is granted.
+//   2. Return the syscall number only when granted, else 0.
+//   3. Document sys_read=0, sys_write=1, sys_mmap=9, sys_exit=60.
+
+// Linux x86_64: sys_read=0, sys_write=1, sys_mmap=9, sys_exit=60.
+// tag == 1 means granted. Any other tag is deny.
+
+pub fn bare_sys_cap_ok(tag: Int) -> Int {
+    if tag == 1 {
+        return 1;
+    }
+    return 0;
+}
+
+// Fail-closed: never allow a syscall number when tag is not 1 (including tag == 0).
+pub fn bare_sys_require(tag: Int, sysno: Int) -> Int {
+    if tag != 1 {
+        return 0;
+    }
+    return sysno;
+}

@@ -1,0 +1,80 @@
+// # Eyring transition state theory
+//
+// Logline: TST rate constant k = (k_B T / h) * exp(-Delta G / (R T)). Non-physical T or Delta G return Err.
+//
+// Setup: Pure Float. k_B, h, R are physical constants supplied by the caller; the identity is unit-agnostic.
+//
+// Beats:
+//   1. Pre-exponential prefactor kappa = k_B T / h scales linearly with T.
+//   2. Eyring k(T) = kappa * exp(-Delta G / (R T)) when T > 0 and Delta G >= 0.
+//   3. Activation enthalpy is Delta H^# = Delta G^# + T * Delta S^#.
+//   4. Hostile T <= 0, negative Delta G, or unphysical constants return Err.
+
+fn ts_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn ts_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn tst_prefactor(temp_k: Float, k_b_jk: Float, h_js: Float) -> Result[Float, String] {
+    if temp_k <= 0.0 { return Err("ERR\ttst\tt"); }
+    if k_b_jk <= 0.0 { return Err("ERR\ttst\tkb"); }
+    if h_js <= 0.0 { return Err("ERR\ttst\th"); }
+    return Ok((k_b_jk * temp_k) / h_js);
+}
+
+pub fn tst_rate_constant(
+    delta_g_jmol: Float,
+    temp_k: Float,
+    k_b_jk: Float,
+    h_js: Float,
+    r_jmolk: Float
+) -> Result[Float, String] {
+    if delta_g_jmol < 0.0 { return Err("ERR\ttst\tdg"); }
+    if r_jmolk <= 0.0 { return Err("ERR\ttst\tr"); }
+    let kr: Result[Float, String] = tst_prefactor(temp_k, k_b_jk, h_js);
+    match kr {
+        Ok(kappa) => {
+            let exp_arg: Float = (0.0 - delta_g_jmol) / (r_jmolk * temp_k);
+            if exp_arg < (0.0 - 700.0) { return Ok(0.0); }
+            return Ok(kappa * exp(exp_arg));
+        },
+        Err(e)    => { return Err(e); }
+    }
+}
+
+pub fn tst_activation_enthalpy(
+    delta_g_jmol: Float,
+    temp_k: Float,
+    delta_s_jmolk: Float
+) -> Result[Float, String] {
+    if temp_k <= 0.0 { return Err("ERR\ttst\tt"); }
+    return Ok(delta_g_jmol + (temp_k * delta_s_jmolk));
+}
+
+pub fn verify_transition_state_theory() -> Bool {
+    let k_b: Float = 0.00000000000000000000001380649;
+    let h: Float = 0.000000000000000000000000000000000662607015;
+    let r: Float = 8.314462618;
+    let k: Float = ts_got(tst_prefactor(298.15, k_b, h));
+    if k < 6200000000000.0 { return false; }
+    if k > 6500000000000.0 { return false; }
+    let k_hi_g: Float = ts_got(tst_rate_constant(100000.0, 298.15, k_b, h, r));
+    if k_hi_g <= 0.0 { return false; }
+    let k_zero_g: Float = ts_got(tst_rate_constant(0.0, 298.15, k_b, h, r));
+    let rel_tol: Float = 0.00001 * k;
+    if ts_eabs(k_zero_g - k) > rel_tol { return false; }
+    let h_act: Float = ts_got(tst_activation_enthalpy(50000.0, 300.0, 10.0));
+    if ts_eabs(h_act - 53000.0) > 0.0000001 { return false; }
+    let k_300: Float = ts_got(tst_rate_constant(50000.0, 300.0, k_b, h, r));
+    let k_400: Float = ts_got(tst_rate_constant(50000.0, 400.0, k_b, h, r));
+    if k_400 <= k_300 { return false; }
+    if tst_rate_constant(0.0 - 1.0, 298.15, k_b, h, r).is_ok() { return false; }
+    if tst_rate_constant(1000.0, 0.0, k_b, h, r).is_ok() { return false; }
+    if tst_prefactor(0.0, k_b, h).is_ok() { return false; }
+    if tst_activation_enthalpy(1000.0, 0.0, 5.0).is_ok() { return false; }
+    return true;
+}

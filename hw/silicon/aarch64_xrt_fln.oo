@@ -1,0 +1,112 @@
+// # AArch64 Software Ln And Pow
+//
+// Logline: Emits ln as IEEE exponent extract plus atanh series, and pow as exp(e*ln(base)).
+//
+// Setup: No libm. Mantissa is forced into [1, 2) then w=(y-1)/(y+1). Reuses exp.
+//
+// Beats:
+//   1. Reject x<=0 with -20.0 so later exp underflows rather than NaN.
+//   2. Reconstruct ln(m*2^e) as series(w)+e*ln2.
+//   3. pow(base, e) is exp(e * ln(base)) on the same GPRs.
+//   4. Alias math_ln and math_pow onto those bodies.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_encode_fp.oo";
+import "std/hw/silicon/aarch64_regs.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt_fexp.oo";
+
+fn a64rt_ln_body(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_cmp_reg(0, 31));
+    let ble: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 0));
+    x = a64rt_bits(x, 0, 0 - 4609434218613702656);
+    let jmp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let body: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, ble, arm64_word_b_cond(arm64_cond_gt(), body - ble)));
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_movz(2, 52, 0));
+    x = a64x_emit(x, arm64_word_lsr_reg(10, 9, 2));
+    x = a64x_emit(x, arm64_word_movz(2, 2047, 0));
+    x = a64x_emit(x, arm64_word_and_reg(10, 10, 2));
+    x = a64x_emit(x, arm64_word_movz(2, 1023, 0));
+    x = a64x_emit(x, arm64_word_sub_reg(10, 10, 2));
+    x = a64rt_bits(x, 11, 4503599627370495);
+    x = a64x_emit(x, arm64_word_and_reg(11, 9, 11));
+    x = a64rt_bits(x, 12, 4607182418800017408);
+    x = a64x_emit(x, arm64_word_orr_reg(11, 11, 12));
+    x = a64rt_tod(x, 0, 11);
+    x = a64rt_tod(x, 1, 12);
+    x = a64x_emit(x, arm64_word_fsub_d(2, 0, 1));
+    x = a64x_emit(x, arm64_word_fadd_d(3, 0, 1));
+    x = a64x_emit(x, arm64_word_fdiv_d(0, 2, 3));
+    x = a64rt_tox(x, 14, 0);
+    x = a64x_emit(x, arm64_word_fmul_d(1, 0, 0));
+    x = a64rt_tox(x, 11, 1);
+    x = a64x_emit(x, arm64_word_mov_reg(13, 14));
+    x = a64x_emit(x, arm64_word_mov_reg(12, 14));
+    x = a64x_emit(x, arm64_word_movz(15, 3, 0));
+    let lp: Int = list_len(x.p.words);
+    x = a64rt_tod(x, 0, 12);
+    x = a64rt_tod(x, 1, 11);
+    x = a64x_emit(x, arm64_word_fmul_d(0, 0, 1));
+    x = a64rt_tox(x, 12, 0);
+    x = a64x_emit(x, arm64_word_scvtf_d_x(1, 15));
+    x = a64x_emit(x, arm64_word_fdiv_d(0, 0, 1));
+    x = a64rt_tod(x, 1, 13);
+    x = a64x_emit(x, arm64_word_fadd_d(0, 1, 0));
+    x = a64rt_tox(x, 13, 0);
+    x = a64x_emit(x, arm64_word_add_imm(15, 15, 2));
+    x = a64x_emit(x, arm64_word_movz(2, 19, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(15, 2));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_lt(), lp - list_len(x.p.words)));
+    x = a64rt_tod(x, 0, 13);
+    x = a64x_emit(x, arm64_word_fadd_d(0, 0, 0));
+    x = a64x_emit(x, arm64_word_scvtf_d_x(1, 10));
+    x = a64rt_bits(x, 2, 4604418534313441775);
+    x = a64rt_tod(x, 2, 2);
+    x = a64x_emit(x, arm64_word_fmul_d(1, 1, 2));
+    x = a64x_emit(x, arm64_word_fadd_d(0, 0, 1));
+    x = a64rt_tox(x, 0, 0);
+    let end: Int = list_len(x.p.words);
+    return a64x_set_words(x, a64_wset(x.p.words, jmp, arm64_word_b(end - jmp)));
+}
+
+pub fn a64rt_ln(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "ln");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64rt_ln_body(x);
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "math_ln");
+    x = a64rt_prol(r.x);
+    x = a64rt_ln_body(x);
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_pow_body(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_sub_imm(31, 31, 16));
+    x = a64x_emit(x, arm64_word_str(1, 31, 0));
+    x = a64x_bl(x, "ln");
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 0));
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 16));
+    x = a64rt_tod(x, 0, 0);
+    x = a64rt_tod(x, 1, 1);
+    x = a64x_emit(x, arm64_word_fmul_d(0, 0, 1));
+    x = a64rt_tox(x, 0, 0);
+    return a64x_bl(x, "exp");
+}
+
+pub fn a64rt_pow(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "pow");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64rt_pow_body(x);
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "math_pow");
+    x = a64rt_prol(r.x);
+    x = a64rt_pow_body(x);
+    return a64rt_setx(r, a64rt_epi(x));
+}

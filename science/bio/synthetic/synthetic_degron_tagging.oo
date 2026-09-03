@@ -1,0 +1,74 @@
+// # Synthetic Protease Degron Tagging & Half-Life Tuning
+//
+// Logline: Models ssrA/ClpXP and auxin-inducible degron kinetics, protease saturation, and tunable protein half-life.
+//
+// Setup: Proteolytic degradation kinetics (Michaelis-Menten protease model) controlling transient protein dynamics and circuit reset times.
+//
+// Beats:
+//   1. Define DegronTagParams, ProteolysisState, and DegronPerformanceResult data structures.
+//   2. Compute ClpXP protease saturation kinetics under competing tagged protein substrate load.
+//   3. Predict customized protein half-life (t_1/2 from 2 min to 60+ min) and steady-state accumulation.
+
+type DegronTagParams = struct {
+    tag_sequence: String, // e.g. "AANDENYALAA" (fast) vs "AANDENYAASV" (slow)
+    k_m_degron_u_m: Float,
+    v_max_protease_u_m_per_min: Float,
+    dilution_growth_rate_per_min: Float
+};
+
+type ProteolysisState = struct {
+    tagged_protein_conc_u_m: Float,
+    competing_proteome_load_u_m: Float,
+    auxin_inducer_u_m: Float
+};
+
+type DegronPerformanceResult = struct {
+    proteolysis_rate_u_m_per_min: Float,
+    effective_half_life_min: Float,
+    degradation_rate_constant_k_deg: Float,
+    is_protease_saturated: Bool
+};
+
+pub fn degron_calc_velocity(
+    p_conc: Float,
+    comp_load: Float,
+    p: DegronTagParams,
+) -> Float {
+    if p_conc <= 0.0001 { return 0.0; }
+    // Competitive protease load: app_Km = Km * (1 + Load / K_comp)
+    let factor: Float = 1.0 + (comp_load / 10.0);    let app_km: Float = p.k_m_degron_u_m * factor;
+    return (p.v_max_protease_u_m_per_min * p_conc) / (app_km + p_conc);
+}
+
+pub fn degron_evaluate_turnover(
+    p: DegronTagParams,
+    st: ProteolysisState,
+) -> DegronPerformanceResult {
+    let rate: Float = degron_calc_velocity(st.tagged_protein_conc_u_m, st.competing_proteome_load_u_m, p);
+    let mut k_deg: Int = p.v_max_protease_u_m_per_min / p.k_m_degron_u_m;
+
+    if st.tagged_protein_conc_u_m > 0.001 {
+
+        k_deg = rate / st.tagged_protein_conc_u_m;
+
+    }
+
+    let total_loss_k: Int = k_deg + p.dilution_growth_rate_per_min;    let mut t_half: Float = 9999.0;
+
+    if total_loss_k > 0.0001 {
+
+        t_half = 0.693147 / total_loss_k;
+
+    }
+    let saturated: Float = st.tagged_protein_conc_u_m > (p.k_m_degron_u_m * 2.0);
+    return DegronPerformanceResult {
+        proteolysis_rate_u_m_per_min: rate,
+        effective_half_life_min: t_half,
+        degradation_rate_constant_k_deg: k_deg,
+        is_protease_saturated: saturated
+    };
+}
+
+pub fn synthetic_degron_tagging_probe() -> Int {
+    return 0;
+}

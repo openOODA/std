@@ -1,0 +1,140 @@
+// # Bounded control principle (actuator saturation)
+//
+// Logline: Control input u is clipped to [u_min, u_max] and a saturation flag is reported when clipping is active.
+//
+// Setup: Pure Float. u_min <= u_max, both real. Reversed bounds (u_min > u_max) fail closed to 0 with flag 1.
+//
+// Beats:
+//   1. bounded_control_clip returns a record with the clipped value and a flag (1 = clipped, 0 = not clipped).
+//   2. Inside-band u returns u and flag 0.
+//   3. Above u_max clips to u_max with flag 1; below u_min clips to u_min with flag 1.
+//   4. Hostile u_min >= u_max fails closed to a zero record with flag 1.
+//   5. bounded_control_principle_cert reports DomainCert holds=1 only when the clip respects the band.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Result of a clipping operation: the clipped value and a flag.
+pub type ClipResult = struct {
+    value: Float,
+    flag: Int
+};
+
+fn bcr_got(r: Result[ClipResult, String]) -> ClipResult {
+    match r { Ok(v) => { return v; }, Err(_) => { return ClipResult { value: 0.0 - 1.0, flag: 0 - 1 }; } }
+}
+
+fn bc_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// bounded_control_clip(u, u_min, u_max):
+//   - If u_min > u_max: return { value: 0.0, flag: 1 } (fail closed).
+//   - If u > u_max: clip to u_max, flag 1.
+//   - If u < u_min: clip to u_min, flag 1.
+//   - Otherwise: return u, flag 0.
+pub fn bounded_control_clip(u: Float, u_min: Float, u_max: Float) -> Result[ClipResult, String] {
+    if u_min > u_max { return Err("ERR\tbcr\tdomain"); }
+    if u > u_max {
+        return Ok(ClipResult { value: u_max, flag: 1 });
+    }
+    if u < u_min {
+        return Ok(ClipResult { value: u_min, flag: 1 });
+    }
+    return Ok(ClipResult { value: u, flag: 0 });
+}
+
+// DomainCert: holds 1 only when u_min <= u_max and the clipped value lies
+// in [u_min, u_max] within a small tolerance. Otherwise holds 0.
+pub fn bounded_control_principle_cert(
+    u: Float, u_min: Float, u_max: Float
+) -> DomainCert {
+    if u_min > u_max {
+        return domain_cert("robot", "bounded_control_principle", 0);
+    }
+    let rr: Result[ClipResult, String] = bounded_control_clip(u, u_min, u_max);
+    if rr.is_ok() == false { return domain_cert("robot", "bounded_control_principle", 0); }
+    let r: ClipResult = bcr_got(rr);
+    let tol: Float = 0.0000001;
+    if r.value < u_min - tol { return domain_cert("robot", "bounded_control_principle", 0); }
+    if r.value > u_max + tol { return domain_cert("robot", "bounded_control_principle", 0); }
+    if r.flag != 0 && r.flag != 1 { return domain_cert("robot", "bounded_control_principle", 0); }
+    return domain_cert("robot", "bounded_control_principle", 1);
+}
+
+pub fn verify_bounded_control_principle() -> Bool {
+    let tol: Float = 0.0000001;
+
+    // Golden: u=5 in [-10, 10] -> 5, flag 0.
+    let r0: ClipResult = bcr_got(bounded_control_clip(5.0, 0.0 - 10.0, 10.0));
+    let mut d: Float = r0.value - 5.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+    if r0.flag != 0 { return false; }
+
+    // Golden: u=15 in [-10, 10] -> 10, flag 1.
+    let r1: ClipResult = bcr_got(bounded_control_clip(15.0, 0.0 - 10.0, 10.0));
+    d = r1.value - 10.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+    if r1.flag != 1 { return false; }
+
+    // Golden: u=-15 in [-10, 10] -> -10, flag 1.
+    let r2: ClipResult = bcr_got(bounded_control_clip(0.0 - 15.0, 0.0 - 10.0, 10.0));
+    d = r2.value - (0.0 - 10.0);
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+    if r2.flag != 1 { return false; }
+
+    // Boundary: u = u_max exactly -> value = u_max, flag 0.
+    let r3: ClipResult = bcr_got(bounded_control_clip(10.0, 0.0 - 10.0, 10.0));
+    d = r3.value - 10.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+    if r3.flag != 0 { return false; }
+
+    // Boundary: u = u_min exactly -> value = u_min, flag 0.
+    let r4: ClipResult = bcr_got(bounded_control_clip(0.0 - 10.0, 0.0 - 10.0, 10.0));
+    d = r4.value - (0.0 - 10.0);
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+    if r4.flag != 0 { return false; }
+
+    // Just above u_max -> clipped.
+    let r5: ClipResult = bcr_got(bounded_control_clip(10.0001, 0.0 - 10.0, 10.0));
+    if r5.flag != 1 { return false; }
+    d = r5.value - 10.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+
+    // Degenerate: u_min == u_max (a single-point band) clips to that point.
+    let r6: ClipResult = bcr_got(bounded_control_clip(5.0, 3.0, 3.0));
+    d = r6.value - 3.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+    if r6.flag != 1 { return false; }
+
+    if bounded_control_clip(5.0, 10.0, 0.0 - 10.0).is_ok() { return false; }
+
+    // Hostile: u_min == u_max with input below band: still produces single point.
+    let rb2: ClipResult = bcr_got(bounded_control_clip(0.0, 5.0, 5.0));
+    d = rb2.value - 5.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol { return false; }
+    if rb2.flag != 1 { return false; }
+
+    // DomainCert: well-formed band holds 1.
+    let c1: DomainCert = bounded_control_principle_cert(5.0, 0.0 - 10.0, 10.0);
+    if cert_holds(c1) != 1 { return false; }
+
+    // DomainCert: well-formed band with out-of-band input still holds 1 because
+    // the clip keeps the output inside the band.
+    let c2: DomainCert = bounded_control_principle_cert(100.0, 0.0 - 10.0, 10.0);
+    if cert_holds(c2) != 1 { return false; }
+
+    // DomainCert: reversed band holds 0.
+    let c3: DomainCert = bounded_control_principle_cert(5.0, 10.0, 0.0 - 10.0);
+    if cert_holds(c3) != 0 { return false; }
+
+    return true;
+}

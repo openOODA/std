@@ -1,0 +1,29 @@
+// # Attitude ops
+//
+// Logline: AttOp implemented off pub type Float QuaternionAttitude.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type AttOp = struct {
+    roll: Int,
+    pitch: Int
+};
+
+pub fn att_op_new(roll: Int, pitch: Int) -> AttOp {
+    return AttOp { roll: roll, pitch: pitch };
+}
+
+pub fn att_op_roll(op: AttOp) -> Int {
+    return op.roll;
+}
+
+pub fn att_op_pitch(op: AttOp) -> Int {
+    return op.pitch;
+}

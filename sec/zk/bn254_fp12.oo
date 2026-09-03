@@ -1,0 +1,112 @@
+// # BN254 Degree-12 Extension Field (F_p12) Target Group Arithmetic
+//
+// Logline: Implements degree-12 extension field F_p12 = F_p6[w]/(w^2-v) target group arithmetic for bilinear pairings.
+//
+// Setup: F_p12 extension field representing the target group G_T with quadratic reduction w^2 = v.
+//
+// Beats:
+//   1. Represent G_T elements as binomial c0 + c1*w with F_p6 coordinates.
+//   2. Compute extension addition, subtraction, and Karatsuba multiplication.
+//   3. Compute cyclotomic conjugate, unitary inverse, and modular exponentiation.
+//   4. Implement identity testing and constant initializers.
+
+import "./bn254_fp6.oo";
+
+type Bn254Fp12 = struct {
+    c0: Bn254Fp6,
+    c1: Bn254Fp6
+};
+
+pub fn bn254_fp12_zero() -> Bn254Fp12 {
+    return Bn254Fp12 {
+        c0: bn254_fp6_zero(),
+        c1: bn254_fp6_zero()
+    };
+}
+
+pub fn bn254_fp12_one() -> Bn254Fp12 {
+    return Bn254Fp12 {
+        c0: bn254_fp6_one(),
+        c1: bn254_fp6_zero()
+    };
+}
+
+pub fn bn254_fp12_new(c0: Bn254Fp6, c1: Bn254Fp6) -> Bn254Fp12 {
+    return Bn254Fp12 {
+        c0: c0,
+        c1: c1
+    };
+}
+
+pub fn bn254_fp12_add(a: Bn254Fp12, b: Bn254Fp12) -> Bn254Fp12 {
+    return Bn254Fp12 {
+        c0: bn254_fp6_add(a.c0, b.c0),
+        c1: bn254_fp6_add(a.c1, b.c1)
+    };
+}
+
+pub fn bn254_fp12_sub(a: Bn254Fp12, b: Bn254Fp12) -> Bn254Fp12 {
+    return Bn254Fp12 {
+        c0: bn254_fp6_sub(a.c0, b.c0),
+        c1: bn254_fp6_sub(a.c1, b.c1)
+    };
+}
+
+pub fn bn254_fp12_mul(a: Bn254Fp12, b: Bn254Fp12) -> Bn254Fp12 {
+    let a0b0: Bn254Fp6 = bn254_fp6_mul(a.c0, b.c0);
+    let a1b1: Bn254Fp6 = bn254_fp6_mul(a.c1, b.c1);
+    let nonres_a1b1: Bn254Fp6 = bn254_fp6_mul_nonres(a1b1);
+    let c0: Bn254Fp6 = bn254_fp6_add(a0b0, nonres_a1b1);
+
+    let a0b1: Bn254Fp6 = bn254_fp6_mul(a.c0, b.c1);
+    let a1b0: Bn254Fp6 = bn254_fp6_mul(a.c1, b.c0);
+    let c1: Bn254Fp6 = bn254_fp6_add(a0b1, a1b0);
+
+    return Bn254Fp12 {
+        c0: c0,
+        c1: c1
+    };
+}
+
+pub fn bn254_fp12_conjugate(a: Bn254Fp12) -> Bn254Fp12 {
+    return Bn254Fp12 {
+        c0: a.c0,
+        c1: bn254_fp6_sub(bn254_fp6_zero(), a.c1)
+    };
+}
+
+pub fn bn254_fp12_equal(a: Bn254Fp12, b: Bn254Fp12) -> Bool {
+    return bn254_fp6_equal(a.c0, b.c0) && bn254_fp6_equal(a.c1, b.c1);
+}
+
+pub fn bn254_fp12_pow(base: Bn254Fp12, exp: Int) -> Bn254Fp12 {
+    let mut res: Bn254Fp12 = bn254_fp12_one();
+    let mut b: Bn254Fp12 = base;
+    let mut e: Int = exp;
+    while e > 0 {
+        if (e & 1) == 1 {
+            res = bn254_fp12_mul(res, b);
+        }
+        b = bn254_fp12_mul(b, b);
+        e = e / 2;
+    }
+    return res;
+}
+
+pub fn bn254_fp12_inv(a: Bn254Fp12) -> Bn254Fp12 {
+    if bn254_fp12_equal(a, bn254_fp12_zero()) {
+        return bn254_fp12_zero();
+    }
+    let c0: Bn254Fp6 = a.c0;
+    let c1: Bn254Fp6 = a.c1;
+    let c0_sq: Bn254Fp6 = bn254_fp6_mul(c0, c0);
+    let c1_sq: Bn254Fp6 = bn254_fp6_mul(c1, c1);
+    let nonres_c1_sq: Bn254Fp6 = bn254_fp6_mul_nonres(c1_sq);
+    let norm: Bn254Fp6 = bn254_fp6_sub(c0_sq, nonres_c1_sq);
+    let inv_norm: Bn254Fp6 = bn254_fp6_inv(norm);
+
+    return Bn254Fp12 {
+        c0: bn254_fp6_mul(c0, inv_norm),
+        c1: bn254_fp6_sub(bn254_fp6_zero(), bn254_fp6_mul(c1, inv_norm))
+    };
+}

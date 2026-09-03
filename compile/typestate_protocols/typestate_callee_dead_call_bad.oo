@@ -1,0 +1,25 @@
+// # Typestate Callee Dead Call Bad
+//
+// Logline: Standard library verification and domain capabilities for Typestate Callee Dead Call Bad.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+fn open_sock() -> Int { return 1; }
+fn actually(s: Int) { let x = s; }
+
+fn wrap(s: Int) {
+    if false {
+        actually(s);
+        return;
+    }
+}
+
+pub fn verify_typestate_callee_dead_call_bad() -> Bool {
+    let s = open_sock();
+    wrap(s);
+    return true;
+}

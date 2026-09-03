@@ -1,0 +1,21 @@
+// # Net host connectability law
+//
+// Logline: An empty host is not connectable. example.com is connectable.
+//
+// Setup: Pure. Imports domain_cert.oo. net_host_ok("") holds 0.
+//
+// Beats:
+//   1. Empty host fails closed.
+//   2. net_host_ok("example.com") holds 1.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub fn net_host_ok(host: String) -> DomainCert {
+    if host == "" {
+        return domain_cert("net", "host_ok", 0);
+    }
+    if chars_len(host) == 0 {
+        return domain_cert("net", "host_ok", 0);
+    }
+    return domain_cert("net", "host_ok", 1);
+}

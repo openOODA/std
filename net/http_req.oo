@@ -1,0 +1,172 @@
+// # HTTP/1.1 Request Builder and Serializer
+//
+// Logline: Pure HTTP/1.1 request struct with case-insensitive header lookup and CRLF wire serialization.
+//
+// Setup: Pure module. Headers ride parallel List[String] arrays (names and values). Case-insensitive lookup scans by lowercased name.
+//
+// Beats:
+//   1. Define HttpRequest struct with method, target, version, headers, values, and body.
+//   2. Construct a request with default version HTTP/1.1 and empty header list.
+//   3. Set or replace a header by name and serialize the request to wire form.
+//   4. Look up a header value with case-insensitive matching and preserve order on serialization.
+
+type HttpRequest = struct {
+    method: String,
+    target: String,
+    version: String,
+    headers: List[String],
+    values: List[String],
+    body: String
+};
+
+fn http_req_list_set_str(l: List[String], idx: Int, v: String) -> List[String] {
+    let n: Int = list_len(l);
+    let mut out: List[String] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx {
+            out = list_push(out, v);
+        } else {
+            out = list_push(out, list_get(l, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn http_req_to_lower_byte(b: Int) -> String {
+    let abc: String = "abcdefghijklmnopqrstuvwxyz";
+    if b < 65 { return ""; }
+    if b > 90 { return ""; }
+    return char_at(abc, b - 65);
+}
+
+fn http_req_lower(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        let b: Int = byte_at(s, i);
+        let lc: String = http_req_to_lower_byte(b);
+        if chars_len(lc) > 0 {
+            out = out + lc;
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn http_req_name_eq(a: String, b: String) -> Bool {
+    let la: String = http_req_lower(a);
+    let lb: String = http_req_lower(b);
+    return la == lb;
+}
+
+pub fn http_req_new(method: String, target: String) -> HttpRequest {
+    let mut hs: List[String] = list_new();
+    let mut vs: List[String] = list_new();
+    return HttpRequest {
+        method: method,
+        target: target,
+        version: "HTTP/1.1",
+        headers: hs,
+        values: vs,
+        body: ""
+    };
+}
+
+pub fn http_req_set_header(req: HttpRequest, name: String, value: String) -> HttpRequest {
+    let m: String = req.method;
+    let t: String = req.target;
+    let v: String = req.version;
+    let hs: List[String] = req.headers;
+    let vs: List[String] = req.values;
+    let b: String = req.body;
+    let n: Int = list_len(hs);
+    let mut i: Int = 0;
+    let mut found: Int = 0 - 1;
+    while i < n {
+        if http_req_name_eq(list_get(hs, i), name) {
+            found = i;
+            break;
+        }
+        i = i + 1;
+    }
+    if found >= 0 {
+        let mut new_vs: List[String] = http_req_list_set_str(vs, found, value);
+        return HttpRequest {
+            method: m,
+            target: t,
+            version: v,
+            headers: hs,
+            values: new_vs,
+            body: b
+        };
+    }
+    let mut new_hs: List[String] = hs;
+    let mut new_vv: List[String] = vs;
+    new_hs = list_push(new_hs, name);
+    new_vv = list_push(new_vv, value);
+    return HttpRequest {
+        method: m,
+        target: t,
+        version: v,
+        headers: new_hs,
+        values: new_vv,
+        body: b
+    };
+}
+
+pub fn http_req_set_body(req: HttpRequest, body: String) -> HttpRequest {
+    return HttpRequest {
+        method: req.method,
+        target: req.target,
+        version: req.version,
+        headers: req.headers,
+        values: req.values,
+        body: body
+    };
+}
+
+pub fn http_req_get_header(req: HttpRequest, name: String) -> Result[String, String] {
+    let hs: List[String] = req.headers;
+    let vs: List[String] = req.values;
+    let n: Int = list_len(hs);
+    let mut i: Int = 0;
+    while i < n {
+        if http_req_name_eq(list_get(hs, i), name) {
+            if i < list_len(vs) {
+                return Ok(list_get(vs, i));
+            }
+            return Ok("");
+        }
+        i = i + 1;
+    }
+    return Err("http_req: header not found");
+}
+
+pub fn http_req_serialize(req: HttpRequest) -> String {
+    let m: String = req.method;
+    let t: String = req.target;
+    let v: String = req.version;
+    let hs: List[String] = req.headers;
+    let vs: List[String] = req.values;
+    let b: String = req.body;
+    let mut out: String = m + " " + t + " " + v + "\r\n";
+    let n: Int = list_len(hs);
+    let mut i: Int = 0;
+    while i < n {
+        let nm: String = list_get(hs, i);
+        let vl: String = if i < list_len(vs) { list_get(vs, i) } else { "" };
+        out = out + nm + ": " + vl + "\r\n";
+        i = i + 1;
+    }
+    out = out + "\r\n";
+    if chars_len(b) > 0 {
+        out = out + b;
+    }
+    return out;
+}

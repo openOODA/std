@@ -1,0 +1,62 @@
+// # Collections Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard collections domain library. Re-exports a stable collections_mod_* surface for the most-used public API (Vec, Queue, Stack, Deque, HashMap, HashSet, List, LinkedList, BitSet, BloomFilter, SkipList, Trie, RingBuffer). Private siblings (theory, law, principle, invariant, KAT, advanced tree internals) remain non-public.
+//
+// Setup: Imports private collections siblings; no caps required for pure functions. Concurrent data structures take ThreadCap at the call site.
+//
+// Beats:
+//   1. Re-export the catalog and Vec surface as collections_mod_catalog_* and collections_mod_vec_*.
+//   2. Re-export the Queue, Stack, and Deque surface as collections_mod_queue_*, collections_mod_stack_*, collections_mod_deque_*.
+//   3. Re-export the HashMap and HashSet surface as collections_mod_map_* and collections_mod_set_*.
+//   4. Re-export the LinkedList, BitSet, and RingBuffer surface as collections_mod_list_*, collections_mod_bitset_*, collections_mod_ring_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _literature_kat, and advanced tree internals.
+
+import "collections.oo";
+import "vec.oo";
+import "queue.oo";
+import "stack.oo";
+import "deque.oo";
+import "hash_map.oo";
+import "hash_set.oo";
+import "linked_list.oo";
+import "bitset.oo";
+import "ring_buffer_int.oo";
+
+// Public catalog surface: collections_mod_catalog_*
+pub fn collections_mod_catalog_count() -> Int { return collections_count(); }
+pub fn collections_mod_catalog_is_available(name: String) -> Bool { return collections_is_available(name); }
+
+// Public Vec surface: collections_mod_vec_*
+pub fn collections_mod_vec_new() -> Vec { return vec_new(); }
+pub fn collections_mod_vec_len(v: Vec) -> Int { return vec_len(v); }
+pub fn collections_mod_vec_is_empty(v: Vec) -> Bool { return vec_is_empty(v); }
+
+// Public Queue surface: collections_mod_queue_*
+pub fn collections_mod_queue_new() -> Queue { return queue_new(); }
+pub fn collections_mod_queue_len(q: Queue) -> Int { return queue_len(q); }
+pub fn collections_mod_queue_is_empty(q: Queue) -> Bool { return queue_is_empty(q); }
+
+// Public Stack surface: collections_mod_stack_*
+pub fn collections_mod_stack_new() -> Stack { return stack_new(); }
+pub fn collections_mod_stack_len(s: Stack) -> Int { return stack_len(s); }
+pub fn collections_mod_stack_is_empty(s: Stack) -> Bool { return stack_is_empty(s); }
+
+// Public Deque surface: collections_mod_deque_*
+pub fn collections_mod_deque_new() -> Deque { return deque_new(); }
+
+// Public HashMap surface: collections_mod_map_*
+pub fn collections_mod_map_new() -> IntMap { return hash_map_new(); }
+pub fn collections_mod_map_len(m: IntMap) -> Int { return hash_map_len(m); }
+pub fn collections_mod_map_is_empty(m: IntMap) -> Bool { return hash_map_is_empty(m); }
+
+// Public HashSet surface: collections_mod_set_*
+pub fn collections_mod_set_new() -> HashSet { return hash_set_new(); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. collections_set_idempotent_law.oo, collections_vec_push_law.oo, concurrent_map_law.oo, finger_tree_split_law.oo)
+//   _theory files (e.g. hamt_complexity_theory.oo, heap_invariant_theory.oo, persistent_balanced_tree_principle.oo, iter_deterministic_principle.oo)
+//   _principle files
+//   _invariants files (e.g. collections_invariants.oo)
+//   _kat files (e.g. collections_kat.oo, literature_kat.oo)
+//   Advanced tree internals (e.g. btree_map.oo, btree_set.oo, avl_tree.oo, red_black_tree.oo, splay_tree.oo, treap.oo, skiplist_concurrent.oo, skiplist_concurrent_mut.oo, skip_list.oo, skip_list_map.oo, btree_map_kv.oo, persistent_vector.oo, hamt.oo, hash_map_kv.oo, hash_map_lru.oo, robin_hood_hashmap.oo, swiss_map.oo, flat_hash_map.oo, flat_hash_set.oo, interval_tree.oo, fibonacci_heap.oo, binary_heap.oo, max_heap.oo, min_heap.oo, min_max_heap.oo, heap_dary.oo, priority_queue.oo, order_statistic_tree.oo, disjoint_set.oo, pairing_heap.oo, radix_tree.oo, trie.oo, trie_compact.oo, trie_radix.oo, roaring_bitmap.oo, count_min_sketch.oo, bloom_filter.oo, cuckoo_filter.oo, lru_cache.oo, lfu_cache.oo, lru_ttl_cache.oo, generational_arena.oo, ring_buffer_pow2.oo, ring_deque.oo, array_ring.oo, small_vec.oo, sparse_set.oo, bit_array.oo, bit_set.oo, vec_extend.oo, vec_grow.oo, queue_blocking.oo, stack_extend.oo, deque_blocking.oo, linked_list_doubly.oo, arena_allocator.oo, linear_arena.oo, concurrent_hashmap.oo, bit_packed_array.oo, bit_packed_vec.oo, unmanaged_list.oo, binary_search.oo, flat_map.oo, matrix_banded.oo, matrix_dense.oo, scatter_gather.oo, scatter_gather_vec.oo, stream_chain.oo, stream_filter.oo, stream_map.oo, stream_skip.oo, stream_take.oo, stream_tee.oo, stream_zip.oo, stream_fold.oo, stream_collect.oo, stream_pipe.oo, stream_partition.oo, stream_window.oo)
+// External callers must import this mod.oo and use the collections_mod_* surface.

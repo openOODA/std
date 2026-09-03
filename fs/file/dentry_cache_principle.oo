@@ -1,0 +1,80 @@
+// # Dentry Cache Principle
+//
+// Logline: A dentry cache resolves roughly 80% of lookups without disk access; hit rate is hits / total.
+//
+// Setup: Pure Int. hits <= total. Returns the rate scaled to parts per 100,000 (so 0.8 = 80000). total=0 fails closed to 0.
+//
+// Beats:
+//   1. fs_cache_hit_rate returns hits * 100000 / total.
+//   2. fs_cache_miss_rate returns (total - hits) * 100000 / total.
+//   3. fs_cache_avg_lookup_time returns (hits * t_hit + miss * t_miss) / total, coupled to hit rate.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn dch_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn fs_cache_hit_rate(hits: Int, total: Int) -> Result[Int, String] {
+    if hits < 0 { return Err("ERR\tdch\tdomain"); }
+    if total <= 0 { return Err("ERR\tdch\tdomain"); }
+    if hits > total { return Err("ERR\tdch\tdomain"); }
+    return Ok((hits * 100000) / total);
+}
+
+pub fn fs_cache_miss_rate(hits: Int, total: Int) -> Result[Int, String] {
+    if hits < 0 { return Err("ERR\tdch\tdomain"); }
+    if total <= 0 { return Err("ERR\tdch\tdomain"); }
+    if hits > total { return Err("ERR\tdch\tdomain"); }
+    return Ok(((total - hits) * 100000) / total);
+}
+
+pub fn fs_cache_avg_lookup_time(hits: Int, total: Int, t_hit: Int, t_miss: Int) -> Result[Int, String] {
+    if total <= 0 { return Err("ERR\tdch\tdomain"); }
+    if hits < 0 { return Err("ERR\tdch\tdomain"); }
+    if hits > total { return Err("ERR\tdch\tdomain"); }
+    let misses: Int = total - hits;
+    return Ok((hits * t_hit + misses * t_miss) / total);
+}
+
+pub fn fs_dentry_cache_principle(hits: Int, total: Int) -> DomainCert {
+    let mut h: Int = 0;
+    if total > 0 {
+        if hits >= 0 {
+            if hits <= total {
+                h = 1;
+            }
+        }
+    }
+    return domain_cert("fs", "dentry_cache", h);
+}
+
+pub fn verify_dentry_cache_principle() -> Bool {
+    // Golden: hits=80, total=100 yields rate 80000 (0.8 * 100000).
+    if dch_got(fs_cache_hit_rate(80, 100)) != 80000 { return false; }
+    let zhit: Result[Int, String] = fs_cache_hit_rate(0, 100);
+    if zhit.is_ok() == false { return false; }
+    if dch_got(zhit) != 0 { return false; }
+    if dch_got(fs_cache_hit_rate(100, 100)) != 100000 { return false; }
+    if dch_got(fs_cache_hit_rate(50, 100)) != 50000 { return false; }
+    if dch_got(fs_cache_hit_rate(8, 10)) != 80000 { return false; }
+    if fs_cache_hit_rate(0, 0).is_ok() { return false; }
+    if fs_cache_hit_rate(50, 0).is_ok() { return false; }
+    if fs_cache_hit_rate(5, 0 - 10).is_ok() { return false; }
+    if fs_cache_hit_rate(110, 100).is_ok() { return false; }
+    if fs_cache_hit_rate(0 - 1, 100).is_ok() { return false; }
+    if dch_got(fs_cache_miss_rate(80, 100)) != 20000 { return false; }
+    if dch_got(fs_cache_miss_rate(0, 100)) != 100000 { return false; }
+    if dch_got(fs_cache_miss_rate(100, 100)) != 0 { return false; }
+    if fs_cache_miss_rate(0, 0).is_ok() { return false; }
+    if fs_cache_miss_rate(110, 100).is_ok() { return false; }
+    if dch_got(fs_cache_avg_lookup_time(80, 100, 1, 100)) != 20 { return false; }
+    if dch_got(fs_cache_avg_lookup_time(100, 100, 5, 1000)) != 5 { return false; }
+    if dch_got(fs_cache_avg_lookup_time(0, 100, 5, 1000)) != 1000 { return false; }
+    if fs_cache_avg_lookup_time(50, 0, 1, 100).is_ok() { return false; }
+    // DomainCert holds matches the Int law.
+    if fs_dentry_cache_principle(80, 100).holds != 1 { return false; }
+    if fs_dentry_cache_principle(0, 0).holds != 0 { return false; }
+    if fs_dentry_cache_principle(110, 100).holds != 0 { return false; }
+    return true;
+}

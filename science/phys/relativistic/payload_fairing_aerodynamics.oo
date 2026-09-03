@@ -1,0 +1,31 @@
+// # Payload Fairing Supersonic Aerodynamics & Jettison
+//
+// Logline: Calculates supersonic wave drag, aerodynamic heating, and pneumatic fairing separation jettison velocity.
+//
+// Setup: Pure supersonic aero-thermodynamics and spring/pneumatic fairing half-shell separation dynamics.
+//
+// Beats:
+//   1. Supersonic wave drag coefficient query (Cd * 10 = 1 for slender ogive nose cone).
+//   2. Calculate von Karman / Sears-Haack supersonic wave drag.
+//   3. Compute free-molecular heat flux trigger for fairing jettison (q_flux < 1135 W/m^2).
+//   4. Calculate pneumatic push-rod jettison clearance velocity.
+
+pub fn fairing_cd() -> Int {
+    return 1;
+}
+
+/// Checks if free-molecular aero-thermal heat flux has dropped below safe payload jettison threshold (1135 W/m^2).
+pub fn fairing_jettison_safe(
+    free_molecular_heat_flux_w_m2: Float
+) -> Bool {
+    return free_molecular_heat_flux_w_m2 < 1135.0;
+}
+
+/// Computes fairing half-shell spring separation velocity: v_sep = sqrt(2 * E_spring / m_shell).
+pub fn fairing_separation_velocity(
+    spring_energy_joules: Float,
+    fairing_half_mass_kg: Float
+) -> Float {
+    if fairing_half_mass_kg <= 0.0001 { return 0.0; }
+    return sqrt((2.0 * spring_energy_joules) / fairing_half_mass_kg);
+}

@@ -1,0 +1,111 @@
+// # ZFS RAID-Z Principle
+//
+// Logline: A RAID-Z stripe of n disks with k data disks uses (n-k) parity disks of stripe_size each; RAID-Z1, Z2, Z3 use 1, 2, 3 parity disks.
+//
+// Setup: Pure Int. n_disks, k_data, and stripe_size are non-negative. k_data must be in [1, n_disks]; otherwise the call fails closed. stripe_size is the ZFS zvol ashift-derived default of 128 KiB. Source: Bonwick 2005 (USENIX ;login:).
+//
+// Beats:
+//   1. zfs_raid_z_space returns (n_disks - k_data) * stripe_size.
+//   2. zfs_raid_z_parity returns 1, 2, or 3 for levels 1, 2, 3.
+//   3. zfs_raid_z_capacity returns the data capacity (k_data * stripe_size).
+//   4. zfs_raid_z_principle returns a DomainCert whose holds is 1 iff the level is in {1,2,3}.
+//
+// Source: Jeff Bonwick. "RAID-Z." ;login: The USENIX Magazine 30, 3 (Summer 2005), pages 9-13. // ZFS 2004+ (OpenZFS is the 2013+ open-source fork)
+
+import "std/core/primitives/domain_cert.oo";
+
+fn zrp_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// zfs_raid_z_space returns the parity-space consumed by a RAID-Z stripe of
+// n disks holding k data disks, with each segment of stripe_size bytes.
+// Formula: (n - k) * stripe_size. // ZFS 2004+ (Bonwick 2005, Sec 2)
+pub fn zfs_raid_z_space(n_disks: Int, k_data: Int, stripe_size: Int) -> Result[Int, String] {
+    if n_disks < 0 { return Err("ERR\tzrp\tdomain"); }
+    if k_data < 0 { return Err("ERR\tzrp\tdomain"); }
+    if stripe_size < 0 { return Err("ERR\tzrp\tdomain"); }
+    if n_disks == 0 { return Err("ERR\tzrp\tdomain"); }
+    if k_data == 0 { return Err("ERR\tzrp\tdomain"); }
+    if k_data > n_disks { return Err("ERR\tzrp\tdomain"); }
+    return Ok((n_disks - k_data) * stripe_size);
+}
+
+// zfs_raid_z_parity returns the number of parity disks for the requested
+// RAID-Z level. Level 1 is single-parity, 2 is double, 3 is triple.
+// Other levels fail closed to 0. // ZFS 2004+ (Bonwick 2005, Sec 2)
+pub fn zfs_raid_z_parity(level: Int) -> Int {
+    if level == 1 { return 1; }
+    if level == 2 { return 2; }
+    if level == 3 { return 3; }
+    return 0;
+}
+
+// zfs_raid_z_capacity returns the user data capacity per stripe, which is
+// k_data * stripe_size. // ZFS 2004+ (Bonwick 2005, Sec 2)
+pub fn zfs_raid_z_capacity(k_data: Int, stripe_size: Int) -> Result[Int, String] {
+    if k_data < 0 { return Err("ERR\tzrp\tdomain"); }
+    if stripe_size < 0 { return Err("ERR\tzrp\tdomain"); }
+    return Ok(k_data * stripe_size);
+}
+
+// zfs_raid_z_stripe_size_default returns the ZFS default of 128 KiB
+// (2^17 bytes), matching zvol with ashift=17. // ZFS 2004+ (OpenZFS docs)
+pub fn zfs_raid_z_stripe_size_default() -> Int {
+    return 131072;
+}
+
+// zfs_raid_z_principle returns a DomainCert whose holds is 1 iff the level
+// is a valid RAID-Z level. // ZFS 2004+
+pub fn zfs_raid_z_principle(level: Int) -> DomainCert {
+    let mut h: Int = 0;
+    if level == 1 { h = 1; }
+    if level == 2 { h = 1; }
+    if level == 3 { h = 1; }
+    return domain_cert("fs", "zfs_raid_z", h);
+}
+
+pub fn verify_zfs_raid_z_principle() -> Bool {
+    // Golden: n=5, k=3, stripe=128KB -> (5-3)*128KB = 2*131072 = 262144.
+    if zrp_got(zfs_raid_z_space(5, 3, 131072)) != 262144 { return false; }
+    // Golden: 5-3=2 parity disks at 128 KiB each.
+    if zrp_got(zfs_raid_z_space(5, 3, 131072)) != 2 * 131072 { return false; }
+    // Golden: k=n (no parity) returns 0 space.
+    if zrp_got(zfs_raid_z_space(3, 3, 131072)) != 0 { return false; }
+    // Golden: k=1, n=4 -> 3*stripe_size.
+    if zrp_got(zfs_raid_z_space(4, 1, 131072)) != 3 * 131072 { return false; }
+    // Hostile: k_data > n_disks fails closed.
+    if zfs_raid_z_space(3, 5, 131072).is_ok() { return false; }
+    // Hostile: zero k_data fails closed.
+    if zfs_raid_z_space(5, 0, 131072).is_ok() { return false; }
+    // Hostile: zero n_disks fails closed.
+    if zfs_raid_z_space(0, 0, 131072).is_ok() { return false; }
+    // Hostile: negative n_disks fails closed.
+    if zfs_raid_z_space(0 - 1, 1, 131072).is_ok() { return false; }
+    // Hostile: negative stripe_size fails closed.
+    if zfs_raid_z_space(5, 3, 0 - 1).is_ok() { return false; }
+    // Golden: parity level 1 -> 1, 2 -> 2, 3 -> 3.
+    if zfs_raid_z_parity(1) != 1 { return false; }
+    if zfs_raid_z_parity(2) != 2 { return false; }
+    if zfs_raid_z_parity(3) != 3 { return false; }
+    // Hostile: level 0 / 4 / negative fails closed.
+    if zfs_raid_z_parity(0) != 0 { return false; }
+    if zfs_raid_z_parity(4) != 0 { return false; }
+    if zfs_raid_z_parity(0 - 1) != 0 { return false; }
+    // Golden: capacity is k_data * stripe_size.
+    if zrp_got(zfs_raid_z_capacity(3, 131072)) != 3 * 131072 { return false; }
+    if zrp_got(zfs_raid_z_capacity(1, 131072)) != 131072 { return false; }
+    if zfs_raid_z_capacity(0 - 1, 131072).is_ok() { return false; }
+    if zfs_raid_z_capacity(3, 0 - 1).is_ok() { return false; }
+    // Golden: default stripe size is 128 KiB.
+    if zfs_raid_z_stripe_size_default() != 131072 { return false; }
+    // Coupled: RAID-Z2 parity = 2.
+    if zfs_raid_z_parity(2) != 2 { return false; }
+    // DomainCert holds matches the parity law.
+    if zfs_raid_z_principle(1).holds != 1 { return false; }
+    if zfs_raid_z_principle(2).holds != 1 { return false; }
+    if zfs_raid_z_principle(3).holds != 1 { return false; }
+    if zfs_raid_z_principle(0).holds != 0 { return false; }
+    if zfs_raid_z_principle(4).holds != 0 { return false; }
+    return true;
+}

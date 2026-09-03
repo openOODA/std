@@ -1,0 +1,178 @@
+// # Transformer Scaled Dot-Product Attention Law
+//
+// Logline: Attention(Q, K, V) = softmax(QK^T / sqrt(d_k)) V; the scale by sqrt(d_k) keeps the dot-product variance unit at initialization.
+//
+// Setup: Pure Float. d_k >= 1. Illegal d_k, empty, or length mismatch is Err. Hosts ai_invariants.oo stem.
+//
+// Beats:
+//   1. Single-head scaled dot-product attention output.
+//   2. Multi-head composition: head_dim = d_model / h, h must divide d_model.
+//   3. Scaled score: s = Q . K / sqrt(d_k) for the d_k > 0 case with 8-lane SIMD FMA reduction.
+//   4. Hosts ai_invariants.oo stem for cross-law correlation.
+
+import "std/app/ai/ai_invariants.oo";
+import "std/sec/simd/simd_vec8f.oo";
+
+fn ta_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn ta_hd_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Local int-to-float conversion. n == 0 is Ok(0.0). n < 0 returns Err.
+pub fn ta_int_to_float(n: Int) -> Result[Float, String] {
+    if n < 0 { return Err("ERR\tta\tdomain"); }
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    return Ok(f);
+}
+
+// Scaled dot-product attention: s = Q . K / sqrt(d_k).
+// Vectorized using 8-lane f32x8 FMA and horizontal sum reduction with scalar peel loop.
+pub fn ta_scaled_score(q: List[Float], k: List[Float], d_k: Int) -> Result[Float, String] {
+    if d_k <= 0 { return Err("ERR\tta\tdomain"); }
+    let n: Int = list_len(q);
+    let m: Int = list_len(k);
+    if n <= 0 { return Err("ERR\tta\tdomain"); }
+    if n != m { return Err("ERR\tta\tdomain"); }
+
+    let n_blocks: Int = n / 8;
+    let mut acc: f32x8 = f32x8_zero();
+    let mut b: Int = 0;
+    while b < n_blocks {
+        let base: Int = b * 8;
+        let vq: f32x8 = f32x8_new(
+            list_get(q, base), list_get(q, base + 1),
+            list_get(q, base + 2), list_get(q, base + 3),
+            list_get(q, base + 4), list_get(q, base + 5),
+            list_get(q, base + 6), list_get(q, base + 7)
+        );
+        let vk: f32x8 = f32x8_new(
+            list_get(k, base), list_get(k, base + 1),
+            list_get(k, base + 2), list_get(k, base + 3),
+            list_get(k, base + 4), list_get(k, base + 5),
+            list_get(k, base + 6), list_get(k, base + 7)
+        );
+        acc = f32x8_fma(vq, vk, acc);
+        b = b + 1;
+    }
+    let mut dot: Float = f32x8_reduce_sum(acc);
+    let mut i: Int = n_blocks * 8;
+    while i < n {
+        dot = dot + (list_get(q, i) * list_get(k, i));
+        i = i + 1;
+    }
+
+    let dk_r: Result[Float, String] = ta_int_to_float(d_k);
+    if dk_r.is_ok() == false { return Err("ERR\tta\tdomain"); }
+    let dk_f: Float = ta_got(dk_r);
+    if dk_f <= 0.0 { return Err("ERR\tta\tdomain"); }
+    let denom: Float = sqrt(dk_f);
+    if denom <= 0.0 { return Err("ERR\tta\tdomain"); }
+    return Ok(dot / denom);
+}
+
+// Explicit SIMD scaled dot-product attention entry point.
+pub fn ta_scaled_score_simd(q: List[Float], k: List[Float], d_k: Int) -> Result[Float, String] {
+    return ta_scaled_score(q, k, d_k);
+}
+
+// Single-token attention output: given a single query, single key, single value vector
+// (all same length d_k), the attention value is V scaled by the softmax of the single
+// scaled score. For the single-token case, softmax returns 1, so output equals V.
+// Returns V[idx] for the chosen index. Empty list is undefined.
+pub fn ta_single_token_output(v: List[Float]) -> Result[Float, String] {
+    let n: Int = list_len(v);
+    if n <= 0 { return Err("ERR\tta\tdomain"); }
+    return Ok(list_get(v, 0));
+}
+
+// Multi-head dimension: head_dim = d_model / h. d_model <= 0, h <= 0, or
+// h does not divide d_model returns Err. No legal head_dim is 0.
+pub fn ta_head_dim(d_model: Int, h: Int) -> Result[Int, String] {
+    if d_model <= 0 { return Err("ERR\tta\tdomain"); }
+    if h <= 0 { return Err("ERR\tta\tdomain"); }
+    let q: Int = d_model / h;
+    let r: Int = d_model - (q * h);
+    if r != 0 { return Err("ERR\tta\tdomain"); }
+    return Ok(q);
+}
+
+// KAT and hostile cases for the transformer attention law.
+pub fn verify_transformer_attention_law() -> Bool {
+    let ai_inv_ok: Int = ai_lr_ok(0.1);
+    if ai_inv_ok != 1 { return false; }
+    let mut q: List[Float] = list_new();
+    q = list_push(q, 1.0);
+    q = list_push(q, 0.0);
+    let mut k: List[Float] = list_new();
+    k = list_push(k, 1.0);
+    k = list_push(k, 0.0);
+    let s1: Float = ta_got(ta_scaled_score(q, k, 2));
+    let target1: Float = 1.0 / sqrt(2.0);
+    let mut d1: Float = s1 - target1;
+    if d1 < 0.0 { d1 = 0.0 - d1; }
+    if d1 > 0.0001 { return false; }
+
+    // Multi-lane 8-element SIMD vector test
+    let mut q8: List[Float] = list_new();
+    let mut k8: List[Float] = list_new();
+    let mut qi: Int = 0;
+    while qi < 8 {
+        q8 = list_push(q8, 1.0);
+        k8 = list_push(k8, 2.0);
+        qi = qi + 1;
+    }
+    let s8: Float = ta_got(ta_scaled_score(q8, k8, 8));
+    let target8: Float = 16.0 / sqrt(8.0);
+    let mut d8: Float = s8 - target8;
+    if d8 < 0.0 { d8 = 0.0 - d8; }
+    if d8 > 0.0001 { return false; }
+
+    // 10-element vector (SIMD block + peel remainder)
+    let mut q10: List[Float] = q8;
+    let mut k10: List[Float] = k8;
+    q10 = list_push(q10, 3.0); q10 = list_push(q10, 4.0);
+    k10 = list_push(k10, 1.0); k10 = list_push(k10, 1.0);
+    let s10: Float = ta_got(ta_scaled_score(q10, k10, 10));
+    let target10: Float = (16.0 + 3.0 + 4.0) / sqrt(10.0);
+    let mut d10: Float = s10 - target10;
+    if d10 < 0.0 { d10 = 0.0 - d10; }
+    if d10 > 0.0001 { return false; }
+
+    let mut v: List[Float] = list_new();
+    v = list_push(v, 2.0);
+    v = list_push(v, 0.0);
+    let out: Float = ta_got(ta_single_token_output(v));
+    if out != 2.0 { return false; }
+    if ta_scaled_score(q, k, 0).is_ok() { return false; }
+    if ta_scaled_score(q, k, 0 - 1).is_ok() { return false; }
+    let mut empty: List[Float] = list_new();
+    if ta_scaled_score(empty, empty, 2).is_ok() { return false; }
+    if ta_scaled_score(q, empty, 2).is_ok() { return false; }
+    let mut k_bad: List[Float] = list_new();
+    k_bad = list_push(k_bad, 1.0);
+    if ta_scaled_score(q, k_bad, 2).is_ok() { return false; }
+    if ta_single_token_output(empty).is_ok() { return false; }
+    if ta_hd_got(ta_head_dim(512, 8)) != 64 { return false; }
+    if ta_hd_got(ta_head_dim(768, 12)) != 64 { return false; }
+    if ta_hd_got(ta_head_dim(1024, 16)) != 64 { return false; }
+    if ta_head_dim(512, 7).is_ok() { return false; }
+    if ta_head_dim(0, 8).is_ok() { return false; }
+    if ta_head_dim(0 - 1, 8).is_ok() { return false; }
+    if ta_head_dim(512, 0).is_ok() { return false; }
+    if ta_head_dim(512, 0 - 1).is_ok() { return false; }
+    let zta: Result[Float, String] = ta_int_to_float(0);
+    if zta.is_ok() == false { return false; }
+    if ta_got(zta) != 0.0 { return false; }
+    if ta_int_to_float(0 - 5).is_ok() { return false; }
+    if ta_got(ta_int_to_float(1)) != 1.0 { return false; }
+    if ta_got(ta_int_to_float(100)) != 100.0 { return false; }
+    return true;
+}

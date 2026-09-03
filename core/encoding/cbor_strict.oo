@@ -1,0 +1,142 @@
+// # Canonical CBOR codec (safe API)
+//
+// Logline: Encodes and decodes RFC 8949 definite CBOR integers, byte strings, text, arrays, and maps in shortest form, returning ByteOut or status; tree-shaped CborValue decoding lives in cbor_strict_tree.oo.
+//
+// Setup: Pure. Bytes are List[Int] 0..255. Encoder returns ByteOut; ByteOut decoder returns ByteOut; status projection returns Result[Int, String]. Tree decoder in cbor_strict_tree.oo returns Result[CborValue, String].
+//
+// Beats:
+//   1. Write a major-type header with the shortest additional-info argument.
+//   2. Encode unsigned and negative integers and definite-length text/byte strings.
+//   3. Wrap concatenated child items as arrays and maps.
+//   4. ByteOut decode to verify shortest-integer form.
+
+import "std/core/primitives/byte_out.oo";
+import "std/core/encoding/cbor_strict_dec.oo";
+
+fn cbor_head(major: Int, n: Int) -> List[Int] {
+    let mt: Int = major * 32;
+    let mut o: List[Int] = list_new();
+    if n < 24 { o = list_push(o, mt + n); return o; }
+    if n < 256 { o = list_push(o, mt + 24); o = list_push(o, n & 255); return o; }
+    if n < 65536 { o = list_push(o, mt + 25); o = list_push(o, (n >> 8) & 255); o = list_push(o, n & 255); return o; }
+    o = list_push(o, mt + 26);
+    o = list_push(o, (n >> 24) & 255);
+    o = list_push(o, (n >> 16) & 255);
+    o = list_push(o, (n >> 8) & 255);
+    o = list_push(o, n & 255);
+    return o;
+}
+
+fn cbor_cat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut o: List[Int] = a;
+    let mut i: Int = 0;
+    while i < list_len(b) {
+        o = list_push(o, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return o;
+}
+
+pub fn cbor_strict_encode_int(v: Int) -> ByteOut {
+    if v >= 0 { return byte_out_ok(cbor_head(0, v)); }
+    let arg: Int = 0 - 1 - v;
+    if arg < 0 { return byte_out_err("ERR\tcbor_strict_encode_int\tunderflow"); }
+    let h: List[Int] = cbor_head(0, arg);
+    let mut o: List[Int] = list_new();
+    o = list_push(o, (list_get(h, 0) & 31) + 32);
+    o = cbor_cat(o, cbor_d_slice(h, 1, list_len(h)));
+    return byte_out_ok(o);
+}
+
+pub fn cbor_strict_encode_bstr(b: List[Int]) -> ByteOut {
+    let mut i: Int = 0;
+    while i < list_len(b) {
+        let x: Int = list_get(b, i);
+        if x < 0 { return byte_out_err("ERR\tcbor_strict_encode_bstr\tbyte_oob"); }
+        if x > 255 { return byte_out_err("ERR\tcbor_strict_encode_bstr\tbyte_oob"); }
+        i = i + 1;
+    }
+    let mut o: List[Int] = cbor_head(2, list_len(b));
+    o = cbor_cat(o, b);
+    return byte_out_ok(o);
+}
+
+pub fn cbor_strict_encode_tstr(b: List[Int]) -> ByteOut {
+    let r: ByteOut = cbor_strict_encode_bstr(b);
+    if r.flag < 1 { return r; }
+    let mut o: List[Int] = list_new();
+    o = list_push(o, (list_get(r.bytes, 0) & 31) + 96);
+    o = cbor_cat(o, cbor_d_slice(r.bytes, 1, list_len(r.bytes)));
+    return byte_out_ok(o);
+}
+
+pub fn cbor_strict_encode_array_n(n: Int, kids: List[Int]) -> ByteOut {
+    if n < 0 { return byte_out_err("ERR\tcbor_strict_encode_array_n\tnegative_size"); }
+    let mut o: List[Int] = cbor_head(4, n);
+    o = cbor_cat(o, kids);
+    return byte_out_ok(o);
+}
+
+pub fn cbor_strict_encode_map_n(n: Int, kids: List[Int]) -> ByteOut {
+    if n < 0 { return byte_out_err("ERR\tcbor_strict_encode_map_n\tnegative_size"); }
+    let mut o: List[Int] = cbor_head(5, n);
+    o = cbor_cat(o, kids);
+    return byte_out_ok(o);
+}
+
+pub fn cbor_strict_cat(a: List[Int], b: List[Int]) -> List[Int] { return cbor_cat(a, b); }
+pub fn cbor_strict_decode(buf: List[Int]) -> ByteOut { return cbor_strict_dec_parse(buf); }
+pub fn cbor_strict_decode_stat(buf: List[Int]) -> Result[Int, String] { return byte_out_stat(cbor_strict_dec_parse(buf)); }
+pub fn cbor_strict_stat(o: ByteOut) -> Result[Int, String] { return byte_out_stat(o); }
+pub fn cbor_major_uint() -> Int { return 0; }
+pub fn cbor_major_negint() -> Int { return 32; }
+pub fn cbor_major_bytestr() -> Int { return 64; }
+pub fn cbor_major_textstr() -> Int { return 96; }
+pub fn cbor_major_array() -> Int { return 128; }
+pub fn cbor_major_map() -> Int { return 160; }
+pub fn cbor_major_simple() -> Int { return 224; }
+
+pub fn cbor_encode_uint_bytes(v: Int) -> List[Int] {
+    if v < 0 { return list_new(); }
+    return cbor_head(0, v);
+}
+
+type CborValue = struct {
+    kind: Int,
+    num: Int,
+    bytes: List[Int],
+    children: List[Int]
+};
+
+pub fn cbor_kind_uint() -> Int { return 0; }
+pub fn cbor_kind_nint() -> Int { return 1; }
+pub fn cbor_kind_bytes() -> Int { return 2; }
+pub fn cbor_kind_text() -> Int { return 3; }
+pub fn cbor_kind_array() -> Int { return 4; }
+pub fn cbor_kind_map() -> Int { return 5; }
+
+pub fn cbor_kind_name(k: Int) -> String {
+    if k == 0 { return "uint"; }
+    if k == 1 { return "nint"; }
+    if k == 2 { return "bytes"; }
+    if k == 3 { return "text"; }
+    if k == 4 { return "array"; }
+    return "map";
+}
+
+pub fn cbor_kind(v: CborValue) -> Int { return v.kind; }
+pub fn cbor_num(v: CborValue) -> Int { return v.num; }
+pub fn cbor_bytes(v: CborValue) -> List[Int] { return v.bytes; }
+pub fn cbor_children(v: CborValue) -> List[Int] { return v.children; }
+
+// Slice helper used by encoders and tree decoder. Public so the tree file
+// can call it without re-declaring.
+pub fn cbor_d_slice(buf: List[Int], start: Int, end: Int) -> List[Int] {
+    let mut o: List[Int] = list_new();
+    let mut i: Int = start;
+    while i < end {
+        o = list_push(o, list_get(buf, i) & 255);
+        i = i + 1;
+    }
+    return o;
+}

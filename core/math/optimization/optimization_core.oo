@@ -1,0 +1,232 @@
+// # Optimization Theory: Gradient Methods, Convexity, and KKT Conditions
+//
+// Logline: Provide gradient descent, Newton iteration, bisection root finding, convexity detection, and Karush-Kuhn-Tucker first-order optimality checks for one-dimensional scalar problems.
+//
+// Setup: Pure math module. No capability required. The function is supplied as a Quadratic struct {a, b, c} representing a*x^2 + b*x + c; higher-degree polynomials are out of scope.
+//
+// Beats:
+//   1. gradient_descent_step returns the single update x - lr times the gradient.
+//   2. gradient_descent iterates a Quadratic to its stationary point and stops when the step falls below a tolerance.
+//   3. is_convex_quadratic returns true when the second coefficient a is positive.
+//   4. gradient_descent_quadratic_min minimizes a*x*x + b*x + c by gradient descent.
+//   5. lagrange_multiplier_minimize returns the stationary point of the Lagrangian f plus lambda times the constraint.
+//   6. kkt_check_optimality returns true when the gradient plus lambda times the constraint gradient is near zero.
+//   7. newton_step_1d returns the one-dimensional Newton update x minus f prime divided by f double prime.
+//   8. bisection_root finds a root of a monotonic Quadratic on a closed interval.
+//   9. is_safe_learning_rate returns true when the learning rate is below two divided by a; false prevents divergence.
+//
+// residual: Constrained optimization is restricted to equality constraints of the form g equals constant; inequality KKT slackness is out of scope.
+
+// Quadratic polynomial a*x*x + b*x + c. The struct simulates a callable function for the no-first-class-function language.
+type Quadratic = struct {
+    a: Float,
+    b: Float,
+    c: Float
+};
+
+// Evaluate the quadratic at x.
+pub fn quad_eval(q: Quadratic, x: Float) -> Float {
+    return q.a * x * x + q.b * x + q.c;
+}
+
+// First derivative 2*a*x + b evaluated at x.
+pub fn quad_prime(q: Quadratic, x: Float) -> Float {
+    return 2.0 * q.a * x + q.b;
+}
+
+// Second derivative constant 2*a, independent of x.
+pub fn quad_double_prime(q: Quadratic) -> Float {
+    return 2.0 * q.a;
+}
+
+// Single gradient descent step: x_{n+1} = x_n - lr times the gradient.
+pub fn gradient_descent_step(x: Float, grad_x: Float, lr: Float) -> Float {
+    return x - lr * grad_x;
+}
+
+// Approximate-zero predicate with tolerance, used by the convergence checks.
+pub fn approx_zero_opt(x: Float, tol: Float) -> Bool {
+    if x < 0.0 {
+        if (0.0 - x) < tol {
+            return true;
+        }
+    } else {
+        if x < tol {
+            return true;
+        }
+    }
+    return false;
+}
+
+// True when the learning rate is in the stable range 0 less than lr less than 2 divided by a. False protects against divergence.
+pub fn is_safe_learning_rate(a: Float, lr: Float) -> Bool {
+    if a <= 0.0 {
+        return false;
+    }
+    if lr <= 0.0 {
+        return false;
+    }
+    let two_a: Float = 2.0 * a;
+    if lr < two_a {
+        return true;
+    }
+    return false;
+}
+
+// Gradient descent on a Quadratic starting at x0, learning rate lr, up to n_iters iterations, stopping when the step size falls below tol. Fails closed to x0 on invalid input.
+pub fn gradient_descent(q: Quadratic, x0: Float, lr: Float, n_iters: Int, tol: Float) -> Float {
+    if n_iters <= 0 {
+        return x0;
+    }
+    if tol < 0.0 {
+        return x0;
+    }
+    if is_safe_learning_rate(q.a, lr) == false {
+        return x0;
+    }
+    let mut x: Float = x0;
+    let mut k: Int = 0;
+    while k < n_iters {
+        let grad: Float = quad_prime(q, x);
+        let next: Float = gradient_descent_step(x, grad, lr);
+        let diff: Float = next - x;
+        if approx_zero_opt(diff, tol) {
+            return next;
+        }
+        x = next;
+        k = k + 1;
+    }
+    return x;
+}
+
+// True when gradient descent converged to a fixed point; false when learning rate is unsafe or the residual is large.
+pub fn gradient_descent_converged(q: Quadratic, x0: Float, lr: Float, n_iters: Int, tol: Float) -> Bool {
+    if is_safe_learning_rate(q.a, lr) == false {
+        return false;
+    }
+    let x_final: Float = gradient_descent(q, x0, lr, n_iters, tol);
+    let grad_final: Float = quad_prime(q, x_final);
+    if approx_zero_opt(grad_final, tol) {
+        return true;
+    }
+    return false;
+}
+
+// True when the second coefficient a is strictly positive; a positive a implies a convex quadratic bowl.
+pub fn is_convex_quadratic(a: Float) -> Bool {
+    if a > 0.0 {
+        return true;
+    }
+    return false;
+}
+
+// Minimize a*x*x + b*x + c by gradient descent. Returns the final iterate.
+pub fn gradient_descent_quadratic_min(a: Float, b: Float, c: Float, x0: Float, lr: Float, n_iters: Int) -> Float {
+    let q: Quadratic = Quadratic { a: a, b: b, c: c };
+    return gradient_descent(q, x0, lr, n_iters, 0.0001);
+}
+
+// Stationary point of the Lagrangian for f equals a*x*x plus b*x subject to an equality constraint. With constraint gradient equal to 1, the condition 2*a*x plus b plus lambda equals 0 yields x equals minus the sum b plus lambda divided by 2*a. Returns zero when a is zero (fail-closed).
+pub fn lagrange_multiplier_minimize(a: Float, b: Float, lam: Float) -> Float {
+    if a == 0.0 {
+        return 0.0;
+    }
+    let numerator: Float = 0.0 - b - lam;
+    let denom: Float = 2.0 * a;
+    return numerator / denom;
+}
+
+// Karush-Kuhn-Tucker first-order optimality: gradient f at x_star plus lambda times gradient g at x_star must be near zero. Returns true when the residual is below the tolerance.
+pub fn kkt_check_optimality(a: Float, b: Float, x_star: Float, lam: Float) -> Bool {
+    if a == 0.0 {
+        return false;
+    }
+    let grad_f: Float = 2.0 * a * x_star + b;
+    let residual: Float = grad_f + lam;
+    if approx_zero_opt(residual, 0.0001) {
+        return true;
+    }
+    return false;
+}
+
+// One-dimensional Newton step: x minus f prime divided by f double prime. Returns x unchanged when f double prime is zero (fail-closed).
+pub fn newton_step_1d(x: Float, f_x: Float, f_prime_x: Float, f_double_prime_x: Float) -> Float {
+    if f_double_prime_x == 0.0 {
+        return x;
+    }
+    return x - f_prime_x / f_double_prime_x;
+}
+
+// Newton iteration on a Quadratic starting at x0 for up to n_iters iterations, stopping when the step is below tol. Quadratic Newton converges in one step when a is nonzero.
+pub fn newton_quadratic(q: Quadratic, x0: Float, n_iters: Int, tol: Float) -> Float {
+    if n_iters <= 0 {
+        return x0;
+    }
+    if tol < 0.0 {
+        return x0;
+    }
+    if q.a == 0.0 {
+        return x0;
+    }
+    let mut x: Float = x0;
+    let mut k: Int = 0;
+    while k < n_iters {
+        let fx: Float = quad_eval(q, x);
+        let fpx: Float = quad_prime(q, x);
+        let fppx: Float = quad_double_prime(q);
+        let next: Float = newton_step_1d(x, fx, fpx, fppx);
+        let diff: Float = next - x;
+        if approx_zero_opt(diff, tol) {
+            return next;
+        }
+        x = next;
+        k = k + 1;
+    }
+    return x;
+}
+
+// Bisection root finder for a monotonic Quadratic on the closed interval lo, hi. Returns minus one when the interval has no sign change or when the input is invalid (fail-closed).
+pub fn bisection_root(q: Quadratic, lo: Float, hi: Float, tol: Float, max_iter: Int) -> Float {
+    let sentinel: Float = 0.0 - 1.0;
+    if max_iter <= 0 {
+        return sentinel;
+    }
+    if tol < 0.0 {
+        return sentinel;
+    }
+    let f_lo: Float = quad_eval(q, lo);
+    let f_hi: Float = quad_eval(q, hi);
+    if f_lo == 0.0 {
+        return lo;
+    }
+    if f_hi == 0.0 {
+        return hi;
+    }
+    let lo_neg: Bool = f_lo < 0.0;
+    let hi_neg: Bool = f_hi < 0.0;
+    if lo_neg == hi_neg {
+        return sentinel;
+    }
+    let mut a: Float = lo;
+    let mut b: Float = hi;
+    let mut k: Int = 0;
+    while k < max_iter {
+        let diff: Float = b - a;
+        if approx_zero_opt(diff, tol) {
+            return (a + b) / 2.0;
+        }
+        let mid: Float = (a + b) / 2.0;
+        let f_mid: Float = quad_eval(q, mid);
+        if f_mid == 0.0 {
+            return mid;
+        }
+        let mid_neg: Bool = f_mid < 0.0;
+        if mid_neg == lo_neg {
+            a = mid;
+        } else {
+            b = mid;
+        }
+        k = k + 1;
+    }
+    return (a + b) / 2.0;
+}

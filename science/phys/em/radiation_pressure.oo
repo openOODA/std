@@ -1,0 +1,103 @@
+// # Electromagnetic Radiation Pressure and Solar Sail Dynamics
+//
+// Logline: Calculates photon momentum transfer pressure, oblique surface forces, and solar sail propulsion metrics.
+//
+// Setup: Evaluates P_rad = (I / c) * (1 + R) * cos^2(theta) for absorbing and reflecting media.
+//
+// Beats:
+//   1. Normal and oblique radiation pressure calculations.
+//   2. Net mechanical force on exposed surface areas.
+//   3. Solar photon flux scaling across astronomical distances.
+//   4. Solar sail propulsion thrust and acceleration kinematics.
+
+type RadiationPressureState = struct {
+    intensity_w_per_m2: Float,
+    reflectance: Float,
+    incidence_angle_rad: Float,
+    pressure_pa: Float,
+    force_newtons: Float
+};
+
+// Speed of light c in m/s
+pub fn radiation_speed_of_light() -> Float {
+    return 299792458.0;
+}
+
+// Solar irradiance constant at 1 AU (W/m^2) (~1361.0 W/m^2)
+pub fn solar_constant_1au() -> Float {
+    return 1361.0;
+}
+
+// Compute normal incidence radiation pressure: P = (I / c) * (1 + R) (Pascals)
+pub fn radiation_pressure(poynting_mag: Float, reflectivity: Float) -> Float {
+    if poynting_mag <= 0.0 { return 0.0; }
+    let mut r: Float = reflectivity;
+    if r < 0.0 { r = 0.0; }
+    if r > 1.0 { r = 1.0; }
+    let c: Float = radiation_speed_of_light();
+    return (poynting_mag / c) * (1.0 + r);
+}
+
+// Compute oblique incidence radiation pressure: P = (I / c) * (1 + R) * cos^2(theta) (Pascals)
+pub fn radiation_pressure_oblique(intensity: Float, reflectance: Float, angle_rad: Float) -> Float {
+    if intensity <= 0.0 { return 0.0; }
+    let mut r: Float = reflectance;
+    if r < 0.0 { r = 0.0; }
+    if r > 1.0 { r = 1.0; }
+    let cos_t: Float = cos(angle_rad);
+    if cos_t <= 0.0 { return 0.0; }
+    let c: Float = radiation_speed_of_light();
+    let p_norm: Float = (intensity / c) * (1.0 + r);
+    return p_norm * (cos_t * cos_t);
+}
+
+// Compute normal mechanical force F = P * A (Newtons)
+pub fn radiation_force(pressure_pa: Float, area_m2: Float) -> Float {
+    if pressure_pa <= 0.0 || area_m2 <= 0.0 { return 0.0; }
+    return pressure_pa * area_m2;
+}
+
+// Evaluate complete radiation pressure state
+pub fn radiation_pressure_eval(intensity: Float, reflectance: Float, angle_rad: Float, area_m2: Float) -> RadiationPressureState {
+    if intensity <= 0.0 || area_m2 <= 0.0 {
+        return RadiationPressureState {
+            intensity_w_per_m2: intensity,
+            reflectance: reflectance,
+            incidence_angle_rad: angle_rad,
+            pressure_pa: 0.0,
+            force_newtons: 0.0
+        };
+    }
+    let p: Float = radiation_pressure_oblique(intensity, reflectance, angle_rad);
+    let f: Float = radiation_force(p, area_m2);
+    return RadiationPressureState {
+        intensity_w_per_m2: intensity,
+        reflectance: reflectance,
+        incidence_angle_rad: angle_rad,
+        pressure_pa: p,
+        force_newtons: f
+    };
+}
+
+// Compute solar photon flux at distance r (in Astronomical Units AU)
+pub fn solar_flux_at_distance(distance_au: Float) -> Float {
+    if distance_au <= 0.0 { return 0.0; }
+    let i0: Float = solar_constant_1au();
+    let r_sq: Float = distance_au * distance_au;
+    return i0 / r_sq;
+}
+
+// Compute normal solar sail thrust at distance r (Newtons)
+pub fn solar_sail_thrust(sail_area_m2: Float, reflectance: Float, distance_au: Float) -> Float {
+    if sail_area_m2 <= 0.0 || distance_au <= 0.0 { return 0.0; }
+    let flux: Float = solar_flux_at_distance(distance_au);
+    let p: Float = radiation_pressure(flux, reflectance);
+    return p * sail_area_m2;
+}
+
+// Compute solar sail acceleration: a = F / m (m/s^2)
+pub fn solar_sail_acceleration(sail_area_m2: Float, reflectance: Float, distance_au: Float, craft_mass_kg: Float) -> Float {
+    if craft_mass_kg <= 0.0 { return 0.0; }
+    let f: Float = solar_sail_thrust(sail_area_m2, reflectance, distance_au);
+    return f / craft_mass_kg;
+}

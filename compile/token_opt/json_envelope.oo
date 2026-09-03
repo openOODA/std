@@ -1,0 +1,131 @@
+// # Versioned JSON Envelope for LLM-Native Token Output
+//
+// Logline: Wrap every token subcommand output in a stable, versioned JSON envelope that LLM agents can parse without breaking on field additions.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) LLM-facing output layer.
+//
+// Beats:
+//   1. Define EnvelopeHeader and Envelope structures.
+//   2. Wrap a result body in the canonical envelope.
+//   3. Escape JSON strings safely (quotes, backslashes, control chars).
+//   4. Emit a deterministic newline-terminated JSON record.
+
+type EnvelopeHeader = struct {
+    schema_version: String,
+    command: String,
+    session_id: String,
+    timestamp_ms: Int,
+    exit_code: Int
+};
+
+type Envelope = struct {
+    header: EnvelopeHeader,
+    body: String
+};
+
+pub fn envelope_header_new(
+    cmd: String,
+    sid: String,
+    ts: Int,
+    rc: Int
+) -> EnvelopeHeader {
+    return EnvelopeHeader {
+        schema_version: "1.0",
+        command: cmd,
+        session_id: sid,
+        timestamp_ms: ts,
+        exit_code: rc
+    };
+}
+
+pub fn envelope_wrap(
+    cmd: String,
+    sid: String,
+    ts: Int,
+    body: String
+) -> String {
+    let header: EnvelopeHeader = envelope_header_new(cmd, sid, ts, 0);
+    let mut out: String = "{\"schema_version\":\"";
+    out = out + header.schema_version;
+    out = out + "\",\"command\":\"";
+    out = out + header.command;
+    out = out + "\",\"session_id\":\"";
+    out = out + header.session_id;
+    let ts_ms: Int = header.timestamp_ms;
+    let rc: Int = header.exit_code;
+    out = out + "\",\"timestamp_ms\":";
+    out = out + ts_ms.to_string();
+    out = out + ",\"exit_code\":";
+    out = out + rc.to_string();
+    out = out + ",\"data\":";
+    out = out + body;
+    out = out + "}\n";
+    return out;
+}
+
+pub fn envelope_wrap_error(
+    cmd: String,
+    sid: String,
+    ts: Int,
+    err: String
+) -> String {
+    let mut body: String = "{\"ok\":false,\"error\":\"";
+    body = body + json_escape(err);
+    body = body + "\"}";
+    return envelope_wrap(cmd, sid, ts, body);
+}
+
+pub fn json_escape(s: String) -> String {
+    let n: Int = s.len();
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "\"" {
+            out = out + "\\\"";
+        } else if c == "\\" {
+            out = out + "\\\\";
+        } else if c == "\n" {
+            out = out + "\\n";
+        } else if c == "\r" {
+            out = out + "\\r";
+        } else if c == "\t" {
+            out = out + "\\t";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn json_str(s: String) -> String {
+    return "\"" + json_escape(s) + "\"";
+}
+
+pub fn json_int(n: Int) -> String {
+    return n.to_string();
+}
+
+pub fn json_bool(b: Bool) -> String {
+    if b {
+        return "true";
+    }
+    return "false";
+}
+
+pub fn json_pair_str(key: String, val_str: String) -> String {
+    return "\"" + key + "\":" + json_str(val_str);
+}
+
+pub fn json_pair_int(key: String, val_int: Int) -> String {
+    return "\"" + key + "\":" + val_int.to_string();
+}
+
+pub fn json_pair_bool(key: String, val_bool: Bool) -> String {
+    let mut sval: String = "false";
+    if val_bool {
+        sval = "true";
+    }
+    return "\"" + key + "\":" + sval;
+}

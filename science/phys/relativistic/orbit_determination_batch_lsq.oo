@@ -1,0 +1,26 @@
+// # Batch Least-Squares Orbit Determination (OD)
+//
+// Logline: Solves non-linear batch weighted least-squares normal equations for orbital epoch state estimation.
+//
+// Setup: Pure statistical orbit determination processing range, range-rate, and angle observations.
+//
+// Beats:
+//   1. Nominal batch observation count threshold query (12 observations).
+//   2. Form normal equations (H^T * W * H) * delta_x = H^T * W * residual.
+//   3. Compute weighted root-mean-square (RMS) observation residuals.
+//   4. Evaluate convergence criterion and state update step.
+
+pub fn od_lsq_obs() -> Int {
+    return 12;
+}
+
+/// Computes weighted sum of squared residuals: J = sum(w_i * r_i^2).
+pub fn od_weighted_residual_sum(r1: Float, w1: Float, r2: Float, w2: Float, r3: Float, w3: Float) -> Float {
+    return (w1 * r1 * r1) + (w2 * r2 * r2) + (w3 * r3 * r3);
+}
+
+/// Computes root-mean-square (RMS) observation residual.
+pub fn od_compute_rms(res_sum_sq: Float, count: Float) -> Float {
+    if count <= 0.0 { return 0.0; }
+    return sqrt(res_sum_sq / count);
+}

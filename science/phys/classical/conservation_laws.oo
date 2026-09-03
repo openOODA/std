@@ -1,0 +1,98 @@
+// # Physical Conservation Principles
+//
+// Logline: Invariant conservation of energy, linear/angular momentum, and charge.
+//
+// Setup: Fails closed if closed-system delta exceeds floating tolerance.
+//
+// Beats:
+//   1. Vector3D representation.
+//   2. Conservation checks for Energy, Momentum, Angular Momentum, Charge.
+//   3. Unified state verification.
+
+type Vector3D = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type StateSnapshot = struct {
+    total_energy_joules: Float,
+    total_momentum: Vector3D,
+    total_angular_momentum: Vector3D,
+    total_charge_coulombs: Float
+};
+
+fn abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn vec3_diff_mag(a: Vector3D, b: Vector3D) -> Float {
+    let dx: Float = a.x - b.x;
+    let dy: Float = a.y - b.y;
+    let dz: Float = a.z - b.z;
+    let sum: Float = (dx * dx) + (dy * dy) + (dz * dz);
+    let mut guess: Float = 1.0;
+    if sum > 0.0 {
+        guess = 0.5 * (guess + (sum / guess));
+        guess = 0.5 * (guess + (sum / guess));
+        guess = 0.5 * (guess + (sum / guess));
+    }
+    return guess;
+}
+
+pub fn conservation_check_energy(e_initial: Float, e_final: Float, tolerance: Float) -> Bool {
+    let diff: Float = abs_val(e_final - e_initial);
+    return diff <= tolerance;
+}
+
+pub fn conservation_check_momentum(
+    p_initial: Vector3D,
+    p_final: Vector3D,
+    tolerance: Float
+) -> Bool {
+    let mag: Float = vec3_diff_mag(p_initial, p_final);
+    return mag <= tolerance;
+}
+
+pub fn conservation_check_angular_momentum(
+    l_initial: Vector3D,
+    l_final: Vector3D,
+    tolerance: Float
+) -> Bool {
+    let mag: Float = vec3_diff_mag(l_initial, l_final);
+    return mag <= tolerance;
+}
+
+pub fn conservation_check_charge(q_initial: Float, q_final: Float, tolerance: Float) -> Bool {
+    let diff: Float = abs_val(q_final - q_initial);
+    return diff <= tolerance;
+}
+
+pub fn conservation_verify_laws(
+    initial: StateSnapshot,
+    final_state: StateSnapshot,
+    tol: Float
+) -> Bool {
+    let e_ok: Bool = conservation_check_energy(
+        initial.total_energy_joules,
+        final_state.total_energy_joules,
+        tol
+    );
+    let p_ok: Bool = conservation_check_momentum(
+        initial.total_momentum,
+        final_state.total_momentum,
+        tol
+    );
+    let l_ok: Bool = conservation_check_angular_momentum(
+        initial.total_angular_momentum,
+        final_state.total_angular_momentum,
+        tol
+    );
+    let q_ok: Bool = conservation_check_charge(
+        initial.total_charge_coulombs,
+        final_state.total_charge_coulombs,
+        tol
+    );
+    return e_ok && p_ok && l_ok && q_ok;
+}

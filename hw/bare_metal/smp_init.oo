@@ -1,0 +1,115 @@
+// # Symmetric Multiprocessing Hardware Startup & IPI
+//
+// Logline: Multi-core topology initialization, x86_64 INIT-SIPI-SIPI, ARM64 PSCI CPU_ON, and RISC-V OpenSBI HSM wakeup.
+//
+// Setup: Declared capability: None. Direct multi-processor wakeup coordination, core topology, and inter-processor interrupt routing.
+//
+// Beats:
+//   1. Declare SMP topology, core status descriptors, and IPI command structures.
+//   2. Implement x86_64 APIC INIT-SIPI sequence generator.
+//   3. Implement ARM64 PSCI CPU_ON and RISC-V OpenSBI HSM startup blocks.
+//   4. Implement core online tracking and IPI delivery verification.
+
+type CoreDescriptor = struct {
+    core_id: Int,
+    apic_or_hart_id: Int,
+    is_bsp: Bool,
+    is_online: Bool,
+    stack_top_addr: Int
+};
+
+type SmpManager = struct {
+    bsp_id: Int,
+    total_cores: Int,
+    online_count: Int,
+    online_mask: Int,
+    trampoline_page: Int
+};
+
+type PsciCpuOnRequest = struct {
+    function_id: Int,
+    target_cpu: Int,
+    entry_point: Int,
+    context_id: Int
+};
+
+type SbiHsmStartRequest = struct {
+    extension_id: Int,
+    hart_id: Int,
+    start_addr: Int,
+    opaque_val: Int
+};
+
+pub fn smp_manager_init(total: Int, tramp_page: Int) -> SmpManager {
+    let safe_total: Int = if total < 1 { 1 } else { total };
+    let safe_tramp: Int = if tramp_page < 0 { 32768 } else { tramp_page };
+    return SmpManager {
+        bsp_id: 0,
+        total_cores: safe_total,
+        online_count: 1,
+        online_mask: 1,
+        trampoline_page: safe_tramp
+    };
+}
+
+pub fn smp_core_desc_new(cid: Int, hw_id: Int, is_boot_core: Bool, stack: Int) -> CoreDescriptor {
+    let safe_cid: Int = if cid < 0 { 0 } else { cid };
+    let safe_hw: Int = if hw_id < 0 { 0 } else { hw_id };
+    return CoreDescriptor {
+        core_id: safe_cid,
+        apic_or_hart_id: safe_hw,
+        is_bsp: is_boot_core,
+        is_online: is_boot_core,
+        stack_top_addr: stack
+    };
+}
+
+pub fn smp_build_x86_sipi(tramp_page: Int) -> Int {
+    let page_vec: Int = (tramp_page / 4096) % 256;
+    let sipi_cmd: Int = 804352 + page_vec;
+    return sipi_cmd;
+}
+
+pub fn smp_build_psci_cpu_on(target_core: Int, entry: Int) -> PsciCpuOnRequest {
+    return PsciCpuOnRequest {
+        function_id: 3288334339,
+        target_cpu: target_core,
+        entry_point: entry,
+        context_id: 0
+    };
+}
+
+pub fn smp_build_sbi_hsm_start(hart: Int, start: Int) -> SbiHsmStartRequest {
+    return SbiHsmStartRequest {
+        extension_id: 4739917,
+        hart_id: hart,
+        start_addr: start,
+        opaque_val: 0
+    };
+}
+
+pub fn smp_mark_core_online(mgr: SmpManager, core_id: Int) -> SmpManager {
+    let mut mask: Int = mgr.online_mask;
+    let mut bit_val: Int = 1;
+    let mut i: Int = 0;
+    while i < core_id {
+        bit_val = bit_val * 2;
+        i = i + 1;
+    }
+    let already_online: Bool = ((mask / bit_val) % 2) == 1;
+    let new_count: Int = if already_online { mgr.online_count } else { mgr.online_count + 1 };
+    let new_mask: Int = if already_online { mask } else { mask + bit_val };
+    return SmpManager {
+        bsp_id: mgr.bsp_id,
+        total_cores: mgr.total_cores,
+        online_count: new_count,
+        online_mask: new_mask,
+        trampoline_page: mgr.trampoline_page
+    };
+}
+
+pub fn smp_is_all_online(mgr: SmpManager) -> Bool {
+    let on: Int = mgr.online_count;
+    let tot: Int = mgr.total_cores;
+    return on >= tot;
+}

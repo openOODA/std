@@ -1,0 +1,99 @@
+// # Base32 Theory
+//
+// Logline: Base32 packs 5 bytes into 8 alphabet chars; encode+decode is closed under round-trip.
+//
+// Setup: Pure. Imports domain_cert.oo and std/encoding/base32.oo. RFC 4648 alphabet A-Z 2-7 =. Negative sizes return Err. encode_size(0) is Ok(0).
+//
+// Beats:
+//   1. base32_encoded_size returns 8 * ceil(raw_bytes / 5).
+//   2. base32_decode_succeeds holds iff base32_decode returns Ok for a valid Base32 string.
+//   3. base32_round_trip_holds holds iff decode(encode(s)) equals s for a known-good input.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/encoding/base32.oo";
+import "std/core/primitives/result.oo";
+import "std/core/primitives/str.oo";
+
+fn b32_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn base32_encoded_size(raw_bytes: Int) -> Result[Int, String] {
+    if raw_bytes < 0 { return Err("ERR\tb32\tdomain"); }
+    let groups: Int = (raw_bytes + 4) / 5;
+    return Ok(groups * 8);
+}
+
+pub fn base32_5byte_to_8char() -> Int {
+    return 8;
+}
+
+pub fn base32_decode_succeeds(s: String) -> Int {
+    if chars_len(s) == 0 {
+        return 0;
+    }
+    let r: Result[String, String] = base32_decode(s);
+    let ok: Bool = res_is_ok(r);
+    if ok {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn base32_round_trip_holds(s: String) -> Int {
+    if chars_len(s) == 0 {
+        return 0;
+    }
+    let enc: String = base32_encode(s);
+    let r: Result[String, String] = base32_decode(enc);
+    match r {
+        Ok(dec) => {
+            if dec == s {
+                return 1;
+            }
+            return 0;
+        }
+        Err(_) => {
+            return 0;
+        }
+    }
+}
+
+pub fn base32_theory(s: String) -> DomainCert {
+    return domain_cert("encoding", "base32_theory", base32_round_trip_holds(s));
+}
+
+pub fn verify_base32_theory() -> Bool {
+    // Golden: 5 bytes encode to 8 chars.
+    if b32_got(base32_encoded_size(5)) != 8 { return false; }
+    // Identity: 0 bytes encode to Ok(0) chars.
+    let zenc: Result[Int, String] = base32_encoded_size(0);
+    if zenc.is_ok() == false { return false; }
+    if b32_got(zenc) != 0 { return false; }
+    // Golden: 10 bytes encode to 16 chars.
+    if b32_got(base32_encoded_size(10)) != 16 { return false; }
+    // Golden: 11 bytes encode to 24 chars (next full block).
+    if b32_got(base32_encoded_size(11)) != 24 { return false; }
+    // Golden: 1 byte encodes to 8 chars (pad block).
+    if b32_got(base32_encoded_size(1)) != 8 { return false; }
+    // Hostile: negative bytes returns Err.
+    if base32_encoded_size(0 - 1).is_ok() { return false; }
+    // Golden: 5-byte ratio constant holds.
+    if base32_5byte_to_8char() != 8 { return false; }
+    // Golden: well-formed Base32 decodes.
+    if base32_decode_succeeds("NBSWY3DP") != 1 { return false; }
+    if base32_decode_succeeds("NBSWY3DPEB3W64TMMQ======") != 1 { return false; }
+    // Hostile: non-base32 input fails closed.
+    if base32_decode_succeeds("!!!!") != 0 { return false; }
+    if base32_decode_succeeds("") != 0 { return false; }
+    // Coupled: encode then decode of "hello" returns "hello".
+    if base32_round_trip_holds("hello") != 1 { return false; }
+    // Coupled: encode then decode of "hello world" returns "hello world".
+    if base32_round_trip_holds("hello world") != 1 { return false; }
+    // Coupled: encode then decode of empty string is degenerate (rejected).
+    if base32_round_trip_holds("") != 0 { return false; }
+    // DomainCert holds matches the Int law.
+    if base32_theory("hello").holds != 1 { return false; }
+    if base32_theory("").holds != 0 { return false; }
+    return true;
+}

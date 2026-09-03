@@ -1,0 +1,20 @@
+// # Libfloor Tls
+//
+// Logline: Standard library verification and domain capabilities for Libfloor Tls.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_libfloor_tls() -> Bool {
+    // Host that usually fails resolve/connect → Err still after NetCap require.
+    let r: Result[String, String] = tls_connect(net, "example.invalid", 443);
+    if r.is_ok() {
+        println("tls-unexpected-ok");
+    } else {
+        println("tls-residual-ok");
+    }
+    return true;
+}

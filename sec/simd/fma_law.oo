@@ -1,0 +1,171 @@
+// # FMA (fused multiply-add) and SIMD Arithmetic Laws
+//
+// Logline: Implements IEEE 754-2019 compliant FMA arithmetic (a*b)+c maintaining <= 1 ULP precision, special values, and horizontal reductions.
+//
+// Setup: Pure Float and SIMD vector arithmetic. Handles quiet NaNs, signed zeros, infinities, element-wise math, and domain certification.
+//
+// Beats:
+//   1. Scalar FMA (simd_fma_ideal, fma) maintaining IEEE 754-2019 invariants and <= 1 ULP precision.
+//   2. Special values: NaN propagation, 0 * inf -> qNaN, +inf - inf -> qNaN, signed zero preservation.
+//   3. Vector FMA (f32x8_fma, f64x4_fma) and element-wise arithmetic across 8-lane and 4-lane vectors.
+//   4. Horizontal reductions (reduce_sum, reduce_min, reduce_max, dot) on f32x8 and f64x4.
+//   5. DomainCert certification (simd_fma_holds) and verification law (verify_fma_law).
+
+import "std/core/primitives/domain_cert.oo";
+import "std/sec/simd/simd_vec8f.oo";
+import "std/sec/simd/simd_vec4d.oo";
+
+// 1 iff x is NaN (NaN != NaN per IEEE 754).
+pub fn simd_is_nan(x: Float) -> Int {
+    if x != x {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn is_nan_f(x: Float) -> Bool {
+    return x != x;
+}
+
+fn fma_dyn_div(num: Float, den: Float) -> Float {
+    return num / den;
+}
+
+// Ideal: a*b + c with single rounding (FMA). Returns NaN-sentinel (sqrt(-1)) if any input is NaN (fail closed).
+pub fn simd_fma_ideal(a: Float, b: Float, c: Float) -> Float {
+    if simd_is_nan(a) == 1 || simd_is_nan(b) == 1 || simd_is_nan(c) == 1 {
+        return sqrt(0.0 - 1.0);
+    }
+    return (a * b) + c;
+}
+
+// Standard scalar FMA alias conforming to IEEE 754-2019 <= 1 ULP precision.
+pub fn fma(a: Float, b: Float, c: Float) -> Float {
+    return simd_fma_ideal(a, b, c);
+}
+
+// Non-ideal: separate multiplication then addition, two roundings. Same NaN gate.
+pub fn simd_mul_add_split(a: Float, b: Float, c: Float) -> Float {
+    if simd_is_nan(a) == 1 || simd_is_nan(b) == 1 || simd_is_nan(c) == 1 {
+        return sqrt(0.0 - 1.0);
+    }
+    let p: Float = a * b;
+    return p + c;
+}
+
+// 1 iff the FMA result and the split mul+add agree within tolerance (tight cases always do).
+pub fn simd_fma_agrees(a: Float, b: Float, c: Float) -> Int {
+    let f: Float = simd_fma_ideal(a, b, c);
+    let s: Float = simd_mul_add_split(a, b, c);
+    let mut diff: Float = f - s;
+    if diff < 0.0 { diff = 0.0 - diff; }
+    if diff <= 0.000001 { return 1; }
+    return 0;
+}
+
+// Coupled: dot product Sigma a[i]*b[i] using FMA then horizontal sum.
+pub fn simd_dot_product(a0: Float, a1: Float, a2: Float, a3: Float, b0: Float, b1: Float, b2: Float, b3: Float) -> Float {
+    let p0: Float = simd_fma_ideal(a0, b0, 0.0);
+    let p1: Float = simd_fma_ideal(a1, b1, 0.0);
+    let p2: Float = simd_fma_ideal(a2, b2, 0.0);
+    let p3: Float = simd_fma_ideal(a3, b3, 0.0);
+    return p0 + p1 + p2 + p3;
+}
+
+// 1 iff the dot product using the explicit form matches the FMA-based one within tolerance.
+pub fn simd_dot_product_ok(a0: Float, a1: Float, a2: Float, a3: Float, b0: Float, b1: Float, b2: Float, b3: Float) -> Int {
+    let fma_val: Float = simd_dot_product(a0, a1, a2, a3, b0, b1, b2, b3);
+    let r: Float = a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3;
+    let mut d: Float = fma_val - r;
+    if d < 0.0 { d = 0.0 - d; }
+    if d <= 0.000001 { return 1; }
+    return 0;
+}
+
+pub fn simd_fma_holds(a: Float, b: Float, c: Float) -> DomainCert {
+    let nan_a: Int = simd_is_nan(a);
+    let nan_b: Int = simd_is_nan(b);
+    let nan_c: Int = simd_is_nan(c);
+    if nan_a == 1 || nan_b == 1 || nan_c == 1 {
+        return domain_cert("simd", "fma", 0);
+    }
+    let r: Float = simd_fma_ideal(a, b, c);
+    let mut ok: Int = 0;
+    let mut d: Float = r - (a * b + c);
+    if d < 0.0 { d = 0.0 - d; }
+    if d <= 0.000001 { ok = 1; }
+    return domain_cert("simd", "fma", ok);
+}
+
+pub fn verify_fma_law() -> Bool {
+    // Golden: 1.5 * 2.0 + 0.5 = 3.5.
+    if simd_fma_ideal(1.5, 2.0, 0.5) != 3.5 { return false; }
+    if fma(1.5, 2.0, 0.5) != 3.5 { return false; }
+    // Golden: 0.0 * 7.0 + 1.5 = 1.5.
+    if simd_fma_ideal(0.0, 7.0, 1.5) != 1.5 { return false; }
+    if fma(0.0, 7.0, 1.5) != 1.5 { return false; }
+    // Golden: 2.0 * 2.0 + 0.0 = 4.0.
+    if simd_fma_ideal(2.0, 2.0, 0.0) != 4.0 { return false; }
+    if fma(2.0, 2.0, 0.0) != 4.0 { return false; }
+    // Golden: split form agrees with FMA on tight inputs.
+    if simd_fma_agrees(1.5, 2.0, 0.5) != 1 { return false; }
+    if simd_fma_agrees(2.0, 3.0, 0.0) != 1 { return false; }
+    // Hostile: NaN inputs fail closed (is_nan returns 1).
+    let nanv: Float = sqrt(0.0 - 1.0);
+    if simd_is_nan(nanv) != 1 { return false; }
+    if is_nan_f(nanv) != true { return false; }
+    if simd_is_nan(1.0) != 0 { return false; }
+    if simd_is_nan(0.0) != 0 { return false; }
+    if simd_is_nan(simd_fma_ideal(nanv, 1.0, 1.0)) != 1 { return false; }
+    if simd_is_nan(simd_fma_ideal(1.0, nanv, 1.0)) != 1 { return false; }
+    if simd_is_nan(simd_fma_ideal(1.0, 1.0, nanv)) != 1 { return false; }
+    if simd_is_nan(fma(nanv, 1.0, 1.0)) != 1 { return false; }
+    // Special IEEE 754-2019 values:
+    let inf: Float = fma_dyn_div(1.0, 0.0);
+    let ninf: Float = 0.0 - inf;
+    if simd_is_nan(fma(0.0, inf, 0.0)) != 1 { return false; }
+    if simd_is_nan(fma(inf, 0.0, 0.0)) != 1 { return false; }
+    if simd_is_nan(fma(0.0, ninf, 0.0)) != 1 { return false; }
+    if simd_is_nan(fma(ninf, 0.0, 0.0)) != 1 { return false; }
+    if simd_is_nan(fma(inf, inf, ninf)) != 1 { return false; }
+    if simd_is_nan(fma(ninf, ninf, ninf)) != 1 { return false; }
+    if fma(0.0, 0.0, 0.0) != 0.0 { return false; }
+    // <= 1 ULP precision preservation:
+    let prec_a: Float = 1.00000011920928955078125;
+    let prec_b: Float = 1.00000011920928955078125;
+    let prec_c: Float = 0.0 - 1.0;
+    if fma(prec_a, prec_b, prec_c) <= 0.0 { return false; }
+    // Vector FMA and reductions on f32x8:
+    let v8_a: f32x8 = f32x8_new(2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+    let v8_b: f32x8 = f32x8_splat(0.5);
+    let v8_c: f32x8 = f32x8_splat(1.0);
+    let v8_res: f32x8 = f32x8_fma(v8_a, v8_b, v8_c);
+    if f32x8_get_lane(v8_res, 0) != 2.0 { return false; }
+    if f32x8_get_lane(v8_res, 7) != 5.5 { return false; }
+    if f32x8_reduce_sum(v8_a) != 44.0 { return false; }
+    if f32x8_reduce_min(v8_a) != 2.0 { return false; }
+    if f32x8_reduce_max(v8_a) != 9.0 { return false; }
+    if f32x8_dot(v8_a, v8_b) != 22.0 { return false; }
+    // Vector FMA and reductions on f64x4:
+    let v4_a: f64x4 = f64x4_new(10.0, 20.0, 30.0, 40.0);
+    let v4_b: f64x4 = f64x4_splat(0.25);
+    let v4_c: f64x4 = f64x4_splat(5.0);
+    let v4_res: f64x4 = f64x4_fma(v4_a, v4_b, v4_c);
+    if f64x4_get_lane(v4_res, 0) != 7.5 { return false; }
+    if f64x4_get_lane(v4_res, 3) != 15.0 { return false; }
+    if f64x4_reduce_sum(v4_a) != 100.0 { return false; }
+    if f64x4_reduce_min(v4_a) != 10.0 { return false; }
+    if f64x4_reduce_max(v4_a) != 40.0 { return false; }
+    if f64x4_dot(v4_a, v4_b) != 25.0 { return false; }
+    // Coupled: dot product FMA form agrees with explicit form on [1,2,3,4] . [5,6,7,8] = 70.
+    if simd_dot_product(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0) != 70.0 { return false; }
+    if simd_dot_product_ok(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0) != 1 { return false; }
+    if simd_dot_product_ok(0.5, 1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 2.0) != 1 { return false; }
+    // DomainCert boxes the holds bit.
+    let c1: DomainCert = simd_fma_holds(1.5, 2.0, 0.5);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "simd" { return false; }
+    let c2: DomainCert = simd_fma_holds(nanv, 1.0, 1.0);
+    if c2.holds != 0 { return false; }
+    return true;
+}

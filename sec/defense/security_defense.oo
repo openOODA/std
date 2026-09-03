@@ -1,0 +1,97 @@
+// # Active Defense, Sandboxing & Binary Hardening Facade
+//
+// Logline: Unified entry point facade re-exporting Sandboxing, Exploit Mitigation, Binary Diversity, Anti-Tamper, Active Defense, and Cryptographic Memory Security.
+//
+// Setup: Pure module shim importing all 49 companion security defense submodules.
+//
+// Beats:
+//   1. Import Sandboxing, Exploit Mitigation, Binary Hardening, Anti-Analysis, Monitoring, and Memory Security modules.
+//   2. Re-export typed public shim markers for the openOODA Security Defense subsystems.
+//   3. Maintain unified entry points for openOODA Active Defense and High-Assurance consumers.
+
+import "std/sec/defense/landlock_policy_compiler.oo";
+import "std/sec/defense/seccomp_bpf_filter_generator.oo";
+import "std/sec/defense/seccomp_notify_interceptor.oo";
+import "std/sec/defense/namespace_sandbox_manager.oo";
+import "std/sec/defense/chroot_jail_isolator.oo";
+import "std/sec/defense/capability_delegation_audit.oo";
+import "std/sec/defense/memory_sanitizer_redzone.oo";
+import "std/sec/defense/shadow_stack_validator.oo";
+import "std/sec/defense/stack_canary_guard.oo";
+import "std/sec/defense/cfi_forward_edge_guard.oo";
+import "std/sec/defense/cfi_backward_edge_guard.oo";
+import "std/sec/defense/aslr_entropy_verifier.oo";
+import "std/sec/defense/dep_nx_enforcer.oo";
+import "std/sec/defense/heap_allocator_guard.oo";
+import "std/sec/defense/pointer_authentication_pac.oo";
+import "std/sec/defense/safe_stack_splitter.oo";
+import "std/sec/defense/basic_block_permutator.oo";
+import "std/sec/defense/instruction_substitutor.oo";
+import "std/sec/defense/dead_code_emitter.oo";
+import "std/sec/control/opaque_predicate_builder.oo";
+import "std/sec/control/control_flow_flattening.oo";
+import "std/sec/defense/string_literal_encryptor.oo";
+import "std/sec/defense/import_table_hash_resolver.oo";
+import "std/sec/defense/symbol_stripper_mangler.oo";
+import "std/sec/defense/register_allocator_randomizer.oo";
+import "std/sec/defense/rop_gadget_destroyer.oo";
+import "std/sec/defense/anti_debug_ptrace_probe.oo";
+import "std/sec/defense/anti_tamper_crc_verifier.oo";
+import "std/sec/defense/code_integrity_hmac_checker.oo";
+import "std/sec/defense/hardware_breakpoint_detector.oo";
+import "std/sec/defense/timing_anomaly_detector.oo";
+import "std/sec/defense/vm_environment_detector.oo";
+import "std/sec/defense/self_healing_code_engine.oo";
+import "std/sec/defense/decoy_function_trap.oo";
+import "std/sec/defense/kernel_ebpf_monitor.oo";
+import "std/sec/defense/audit_event_stream.oo";
+import "std/sec/defense/network_canary_tripwire.oo";
+import "std/sec/defense/process_memory_scanner.oo";
+import "std/sec/defense/file_integrity_watcher.oo";
+import "std/sec/defense/threat_response_orchestrator.oo";
+import "std/sec/defense/deception_mesh_coordinator.oo";
+import "std/sec/defense/covert_channel_detector.oo";
+import "std/sec/defense/constant_time_memcmp.oo";
+import "std/sec/defense/memory_zero_on_free.oo";
+import "std/sec/defense/secure_key_storage_enclave.oo";
+import "std/sec/defense/side_channel_jitter_injector.oo";
+import "std/sec/defense/entropy_source_health_monitor.oo";
+import "std/sec/defense/secure_zeroization_verifier.oo";
+import "std/sec/defense/security_defense_stubs.oo";
+
+pub fn security_defense_version() -> String {
+    return "1.0.0";
+}
+
+pub fn security_defense_module_count() -> Int {
+    return 50;
+}
+
+pub fn security_defense_landlock_ruleset_default() -> LandlockRuleset {
+    return landlock_ruleset_new(3);
+}
+
+pub fn security_defense_seccomp_filter_default() -> SeccompFilter {
+    let def_act: SeccompAction = seccomp_action_kill();
+    return seccomp_filter_new(3221225534, def_act); // AUDIT_ARCH_X86_64
+}
+
+pub fn security_defense_sandbox_profile_default() -> SandboxProfile {
+    return sandbox_profile_rootless_default("default_sandbox");
+}
+
+pub fn security_defense_shadow_stack_default() -> ShadowStack {
+    return shadow_stack_new(1024);
+}
+
+pub fn security_defense_forward_cfi_default() -> ForwardCfiTable {
+    return forward_cfi_table_new("TABLE_DEFAULT");
+}
+
+pub fn security_defense_backward_cfi_default() -> BackwardCfiContext {
+    return backward_cfi_context_new("CTX_DEFAULT");
+}
+
+pub fn security_defense_test_fixture() -> MockDefenseFixture {
+    return mock_defense_fixture_default();
+}

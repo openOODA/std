@@ -1,0 +1,76 @@
+// # I/O Zero-Copy Principle
+//
+// Logline: sendfile(), splice(), and copy_file_range() avoid a user-space buffer copy, so the I/O path stays in-kernel; plain read()+write() does not.
+//
+// Setup: Pure Int. Method name is a known string identifier. Unknown or empty method fails closed to 0. Hosts io_invariants.oo stem.
+//
+// Beats:
+//   1. zero_copy_used("sendfile") returns 1; "splice" and "copy_file_range" also return 1.
+//   2. zero_copy_used("read+write") returns 0; other user-space copies also return 0.
+//   3. Unknown or empty method returns 0 (fail closed).
+
+import "std/core/io/io_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// Zero-copy method codes: 1 sendfile, 2 splice, 3 copy_file_range, 0 unknown.
+pub fn zc_method_sendfile() -> Int {
+    return 1;
+}
+
+pub fn zc_method_splice() -> Int {
+    return 2;
+}
+
+pub fn zc_method_copy_file_range() -> Int {
+    return 3;
+}
+
+// Map a method name to its code. Unknown returns 0.
+pub fn zc_method_code(method: String) -> Int {
+    if method == "sendfile" { return zc_method_sendfile(); }
+    if method == "splice" { return zc_method_splice(); }
+    if method == "copy_file_range" { return zc_method_copy_file_range(); }
+    return 0;
+}
+
+// 1 if the method avoids a user-space buffer copy, else 0. Empty or unknown fails closed.
+pub fn zc_zero_copy_used(method: String) -> Int {
+    if method == "" { return 0; }
+    let code: Int = zc_method_code(method);
+    if code == 0 { return 0; }
+    return 1;
+}
+
+// Domain certificate: 1 when the named method is a known zero-copy method.
+pub fn zc_holds(method: String) -> DomainCert {
+    let inv_ok: Bool = io_path_ok("zc").holds == 1;
+    if inv_ok == false { return domain_cert("io", "zero_copy_principle", 0); }
+    let used: Int = zc_zero_copy_used(method);
+    if used == 1 { return domain_cert("io", "zero_copy_principle", 1); }
+    return domain_cert("io", "zero_copy_principle", 0);
+}
+
+// KAT and hostile cases for the I/O zero-copy principle.
+pub fn verify_io_zero_copy_principle() -> Bool {
+    if zc_holds("sendfile").holds != 1 { return false; }
+    if zc_holds("splice").holds != 1 { return false; }
+    if zc_holds("copy_file_range").holds != 1 { return false; }
+    if zc_holds("read+write").holds != 0 { return false; }
+    if zc_holds("read").holds != 0 { return false; }
+    if zc_holds("write").holds != 0 { return false; }
+    if zc_holds("mmap+write").holds != 0 { return false; }
+    if zc_holds("").holds != 0 { return false; }
+    if zc_zero_copy_used("sendfile") != 1 { return false; }
+    if zc_zero_copy_used("splice") != 1 { return false; }
+    if zc_zero_copy_used("copy_file_range") != 1 { return false; }
+    if zc_zero_copy_used("read+write") != 0 { return false; }
+    if zc_zero_copy_used("") != 0 { return false; }
+    if zc_zero_copy_used("send_file") != 0 { return false; }
+    if zc_zero_copy_used("SENDfile") != 0 { return false; }
+    if zc_method_code("sendfile") != 1 { return false; }
+    if zc_method_code("splice") != 2 { return false; }
+    if zc_method_code("copy_file_range") != 3 { return false; }
+    if zc_method_code("unknown") != 0 { return false; }
+    if zc_method_code("") != 0 { return false; }
+    return true;
+}

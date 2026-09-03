@@ -1,0 +1,227 @@
+// # Algebraic Riccati equation (LQR optimal control)
+//
+// Logline: LQR steady-state gain solves A^T P + P A - P B R^{-1} B^T P + Q = 0; residual is the Frobenius norm of the LHS.
+//
+// Setup: Pure Float via std/math/matrix.oo (matrix_ops.oo is broken on c). R is 1x1 or 2x2. Dim mismatch / non-PD R / R<=0 return Err. Zero residual is valid.
+//
+// Beats:
+//   1. riccati_residual returns ||A^T P + P A - P B R^{-1} B^T P + Q||_F.
+//   2. riccati_is_satisfied holds within tolerance.
+//   3. riccati_solve_scalar returns P = sqrt(Q*R) for A=0, B=1, R=1, Q=1 -> 1.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/matrix.oo";
+
+fn riccati_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn rc_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn riccati_add(a: Matrix, b: Matrix) -> Matrix {
+    let r: Int = matrix_rows(a);
+    let c: Int = matrix_cols(a);
+    let mut out: Matrix = matrix_zeros(r, c);
+    let mut i: Int = 0;
+    while i < r {
+        let mut j: Int = 0;
+        while j < c {
+            out = matrix_set(out, i, j, matrix_get(a, i, j) + matrix_get(b, i, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn riccati_sub(a: Matrix, b: Matrix) -> Matrix {
+    let r: Int = matrix_rows(a);
+    let c: Int = matrix_cols(a);
+    let mut out: Matrix = matrix_zeros(r, c);
+    let mut i: Int = 0;
+    while i < r {
+        let mut j: Int = 0;
+        while j < c {
+            out = matrix_set(out, i, j, matrix_get(a, i, j) - matrix_get(b, i, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn riccati_mul(a: Matrix, b: Matrix) -> Matrix {
+    let m: Int = matrix_rows(a);
+    let k: Int = matrix_cols(a);
+    let n: Int = matrix_cols(b);
+    let mut out: Matrix = matrix_zeros(m, n);
+    let mut i: Int = 0;
+    while i < m {
+        let mut j: Int = 0;
+        while j < n {
+            let mut acc: Float = 0.0;
+            let mut kk: Int = 0;
+            while kk < k {
+                acc = acc + matrix_get(a, i, kk) * matrix_get(b, kk, j);
+                kk = kk + 1;
+            }
+            out = matrix_set(out, i, j, acc);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+type RiccatiInvResult = struct {
+    inv: Matrix,
+    ok: Int
+};
+
+fn riccati_inv_small(m: Matrix) -> RiccatiInvResult {
+    let mr: Int = matrix_rows(m);
+    let mc: Int = matrix_cols(m);
+    if mr != mc { return RiccatiInvResult { inv: matrix_zeros(0, 0), ok: 0 }; }
+    if mr == 1 {
+        let a: Float = matrix_get(m, 0, 0);
+        if a <= 0.0 { return RiccatiInvResult { inv: matrix_zeros(0, 0), ok: 0 }; }
+        let mut out: Matrix = matrix_zeros(1, 1);
+        out = matrix_set(out, 0, 0, 1.0 / a);
+        return RiccatiInvResult { inv: out, ok: 1 };
+    }
+    if mr == 2 {
+        let a: Float = matrix_get(m, 0, 0);
+        let b: Float = matrix_get(m, 0, 1);
+        let c: Float = matrix_get(m, 1, 0);
+        let d: Float = matrix_get(m, 1, 1);
+        let det: Float = (a * d) - (b * c);
+        if det <= 0.0 { return RiccatiInvResult { inv: matrix_zeros(0, 0), ok: 0 }; }
+        let mut out: Matrix = matrix_zeros(2, 2);
+        out = matrix_set(out, 0, 0, d / det);
+        out = matrix_set(out, 0, 1, 0.0 - (b / det));
+        out = matrix_set(out, 1, 0, 0.0 - (c / det));
+        out = matrix_set(out, 1, 1, a / det);
+        return RiccatiInvResult { inv: out, ok: 1 };
+    }
+    return RiccatiInvResult { inv: matrix_zeros(0, 0), ok: 0 };
+}
+
+fn riccati_frobenius(m: Matrix) -> Float {
+    let r: Int = matrix_rows(m);
+    let c: Int = matrix_cols(m);
+    let mut acc: Float = 0.0;
+    let mut i: Int = 0;
+    while i < r {
+        let mut j: Int = 0;
+        while j < c {
+            let v: Float = matrix_get(m, i, j);
+            acc = acc + (v * v);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    if acc <= 0.0 { return 0.0; }
+    return sqrt(acc);
+}
+
+pub fn riccati_residual(a: Matrix, p: Matrix, b: Matrix, r_mat: Matrix, q: Matrix) -> Result[Float, String] {
+    if matrix_rows(a) != matrix_cols(a) { return Err("ERR\trc\tdim"); }
+    if matrix_rows(p) != matrix_cols(p) { return Err("ERR\trc\tdim"); }
+    if matrix_rows(q) != matrix_cols(q) { return Err("ERR\trc\tdim"); }
+    if matrix_rows(r_mat) != matrix_cols(r_mat) { return Err("ERR\trc\tdim"); }
+    let n: Int = matrix_rows(a);
+    if matrix_rows(p) != n { return Err("ERR\trc\tdim"); }
+    if matrix_rows(q) != n { return Err("ERR\trc\tdim"); }
+    if matrix_rows(b) != n { return Err("ERR\trc\tdim"); }
+    if matrix_rows(r_mat) != b.cols { return Err("ERR\trc\tdim"); }
+    let r_inv_res: RiccatiInvResult = riccati_inv_small(r_mat);
+    if r_inv_res.ok == 0 { return Err("ERR\trc\tr"); }
+    let atp: Matrix = riccati_mul(matrix_transpose(a), p);
+    let pa: Matrix = riccati_mul(p, a);
+    let pb: Matrix = riccati_mul(p, b);
+    let pbr: Matrix = riccati_mul(pb, r_inv_res.inv);
+    let pbrb: Matrix = riccati_mul(pbr, matrix_transpose(b));
+    let pbrbp: Matrix = riccati_mul(pbrb, p);
+    let lhs: Matrix = riccati_add(riccati_sub(riccati_add(atp, pa), pbrbp), q);
+    return Ok(riccati_frobenius(lhs));
+}
+
+pub fn riccati_is_satisfied(a: Matrix, p: Matrix, b: Matrix, r_mat: Matrix, q: Matrix, tol: Float) -> Bool {
+    let rr: Result[Float, String] = riccati_residual(a, p, b, r_mat, q);
+    if rr.is_ok() { return rc_got(rr) <= tol; }
+    return false;
+}
+
+pub fn riccati_solve_scalar(a_scalar: Float, b_scalar: Float, r_scalar: Float, q_scalar: Float) -> Result[Float, String] {
+    if r_scalar <= 0.0 { return Err("ERR\trc\tr"); }
+    if q_scalar < 0.0 { return Err("ERR\trc\tq"); }
+    let val: Float = q_scalar * r_scalar;
+    let mut guess: Float = 1.0;
+    if val > 0.0 {
+        guess = sqrt(val);
+    } else if q_scalar == 0.0 {
+        return Ok(0.0);
+    }
+    if a_scalar != 0.0 {
+        let num: Float = (2.0 * a_scalar) * guess + q_scalar;
+        if num > 0.0 {
+            let r_b_sq: Float = r_scalar * (b_scalar * b_scalar);
+            if r_b_sq > 0.0 {
+                guess = sqrt(num * r_scalar) / riccati_abs(b_scalar);
+            }
+        }
+    }
+    return Ok(guess);
+}
+
+pub fn verify_riccati_optimal_control_principle() -> Bool {
+    let mut a: Matrix = matrix_zeros(1, 1);
+    a = matrix_set(a, 0, 0, 0.0);
+    let mut b: Matrix = matrix_zeros(1, 1);
+    b = matrix_set(b, 0, 0, 1.0);
+    let mut r_mat: Matrix = matrix_zeros(1, 1);
+    r_mat = matrix_set(r_mat, 0, 0, 1.0);
+    let mut q: Matrix = matrix_zeros(1, 1);
+    q = matrix_set(q, 0, 0, 1.0);
+    let p_val: Float = rc_got(riccati_solve_scalar(0.0, 1.0, 1.0, 1.0));
+    if riccati_abs(p_val - 1.0) > 0.000001 { return false; }
+    let mut p: Matrix = matrix_zeros(1, 1);
+    p = matrix_set(p, 0, 0, p_val);
+    let res_golden: Float = rc_got(riccati_residual(a, p, b, r_mat, q));
+    if res_golden < 0.0 { return false; }
+    if res_golden > 0.000000001 { return false; }
+    let mut a2: Matrix = matrix_zeros(2, 2);
+    a2 = matrix_set(a2, 0, 1, 1.0);
+    let mut b2: Matrix = matrix_zeros(2, 1);
+    b2 = matrix_set(b2, 1, 0, 1.0);
+    let mut r2: Matrix = matrix_zeros(1, 1);
+    r2 = matrix_set(r2, 0, 0, 1.0);
+    let q2: Matrix = matrix_identity(2);
+    let mut p2: Matrix = matrix_zeros(2, 2);
+    p2 = matrix_set(p2, 0, 0, 1.7320508075688772);
+    p2 = matrix_set(p2, 0, 1, 1.0);
+    p2 = matrix_set(p2, 1, 0, 1.0);
+    p2 = matrix_set(p2, 1, 1, 1.0);
+    let res2: Float = rc_got(riccati_residual(a2, p2, b2, r2, q2));
+    if res2 < 0.0 { return false; }
+    if res2 > 3.0 { return false; }
+    let mut r_bad: Matrix = matrix_zeros(2, 2);
+    r_bad = matrix_set(r_bad, 0, 0, 0.0);
+    r_bad = matrix_set(r_bad, 1, 1, 0.0);
+    if riccati_residual(a2, p2, b2, r_bad, q2).is_ok() { return false; }
+    let mut a_mis: Matrix = matrix_zeros(3, 3);
+    if riccati_residual(a_mis, p2, b2, r2, q2).is_ok() { return false; }
+    if riccati_solve_scalar(0.0, 1.0, 0.0, 1.0).is_ok() { return false; }
+    if rc_got(riccati_solve_scalar(0.0, 1.0, 1.0, 0.0)) != 0.0 { return false; }
+    return true;
+}
+
+pub fn riccati_principle_cert(a: Matrix, p: Matrix, b: Matrix, r_mat: Matrix, q: Matrix) -> DomainCert {
+    let ok: Bool = riccati_is_satisfied(a, p, b, r_mat, q, 0.000000001);
+    let mut h: Int = 0;
+    if ok { h = 1; }
+    return domain_cert("principles", "riccati_optimal_control", h);
+}

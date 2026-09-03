@@ -1,0 +1,52 @@
+// # Tar ustar magic offset law
+//
+// Logline: The ustar magic string sits at offset 257 in a POSIX.1-1988 tar header.
+//
+// Setup: Pure Int. The magic offset is fixed by POSIX.1-1988 (ustar).
+//
+// Beats:
+//   1. archive_tar_magic_offset() returns 257.
+//   2. archive_tar_magic_ok(257) holds.
+//   3. Any other offset fails closed.
+
+pub fn archive_tar_magic_offset() -> Int {
+    return 257;
+}
+
+pub fn archive_tar_magic_ok(offset: Int) -> Int {
+    let want: Int = archive_tar_magic_offset();
+    if offset == want {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_archive_tar_magic_law() -> Bool {
+    // golden: 257 is the canonical ustar magic offset.
+    if archive_tar_magic_offset() != 257 {
+        return false;
+    }
+    if archive_tar_magic_ok(257) != 1 {
+        return false;
+    }
+    // hostile: any other offset is not the ustar magic.
+    if archive_tar_magic_ok(0) != 0 {
+        return false;
+    }
+    if archive_tar_magic_ok(100) != 0 {
+        return false;
+    }
+    if archive_tar_magic_ok(256) != 0 {
+        return false;
+    }
+    if archive_tar_magic_ok(258) != 0 {
+        return false;
+    }
+    if archive_tar_magic_ok(512) != 0 {
+        return false;
+    }
+    if archive_tar_magic_ok(-1) != 0 {
+        return false;
+    }
+    return true;
+}

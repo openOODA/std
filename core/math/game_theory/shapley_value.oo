@@ -1,0 +1,196 @@
+// # Exact Shapley Value Marginal Credit Assignment
+//
+// Logline: Compute the Shapley value for cooperative games with n players (n <= 8) by enumerating all permutations and averaging marginal contributions.
+//
+// Setup: Pure combinatorics. v: List[Float] is the characteristic function: v[mask] gives the value of the coalition whose bitmask is mask.
+//
+// Beats:
+//   1. shapley_value_n returns the Shapley value for a given number of players.
+//   2. marginal_contribution(player, perm, k) extracts the contribution of a player at position k in a permutation.
+//   3. Exact factorial up to 8: 8! = 40320, fits in Int and is enumerated fully.
+//   4. shapley_sum_invariant verifies the efficiency axiom: sum of all Shapley values equals v(all) - v(none).
+//
+// residual: n is bounded to <= 8 because the permutation count grows as n!; coalition v[mask] is bounded to mask in [0, 2^n).
+
+pub fn factorial(n: Int) -> Int {
+    if n <= 1 {
+        return 1;
+    }
+    let mut acc: Int = 1;
+    let mut i: Int = 2;
+    while i <= n {
+        acc = acc * i;
+        i = i + 1;
+    }
+    return acc;
+}
+
+// Generate the n! permutations of {0, 1, ..., n-1} one at a time via next_permutation.
+// Starts with sorted order. Returns true while there is a next permutation.
+pub fn next_permutation(p: List[Int]) -> List[Int] {
+    let n: Int = list_len(p);
+    if n <= 1 {
+        return p;
+    }
+    let mut i: Int = n - 2;
+    while i >= 0 {
+        if list_get(p, i) < list_get(p, i + 1) {
+            let mut j: Int = n - 1;
+            while list_get(p, j) <= list_get(p, i) {
+                j = j - 1;
+            }
+            let mut out: List[Int] = list_new();
+            let mut k: Int = 0;
+            while k < n {
+                if k == i {
+                    out = list_push(out, list_get(p, j));
+                } else {
+                    if k == j {
+                        out = list_push(out, list_get(p, i));
+                    } else {
+                        out = list_push(out, list_get(p, k));
+                    }
+                }
+                k = k + 1;
+            }
+            let mut l: Int = n - 1;
+            let mut rev: List[Int] = list_new();
+            k = 0;
+            while k < n {
+                if k < i + 1 {
+                    rev = list_push(rev, list_get(out, k));
+                } else {
+                    rev = list_push(rev, list_get(out, l));
+                    l = l - 1;
+                }
+                k = k + 1;
+            }
+            return rev;
+        }
+        i = i - 1;
+    }
+    return p;
+}
+
+// Bitmask of the first k+1 elements of the permutation (treating p as the order players join).
+pub fn coalition_mask(p: List[Int], k: Int) -> Int {
+    let mut mask: Int = 0;
+    let mut i: Int = 0;
+    while i <= k {
+        let player: Int = list_get(p, i);
+        mask = mask + pow2_int(player);
+        i = i + 1;
+    }
+    return mask;
+}
+
+pub fn pow2_int(n: Int) -> Int {
+    if n <= 0 {
+        return 1;
+    }
+    let mut acc: Int = 1;
+    let mut i: Int = 0;
+    while i < n {
+        acc = acc * 2;
+        i = i + 1;
+    }
+    return acc;
+}
+
+// Shapley value: phi_i = (1/n!) * sum over permutations pi of [v(S_pi(i-1) U {i}) - v(S_pi(i-1))]
+// Returns a Float list of length n.
+pub fn shapley_values(n: Int, v: List[Float]) -> List[Float] {
+    let mut values: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        values = list_push(values, 0.0);
+        i = i + 1;
+    }
+    let total: Int = factorial(n);
+    if total <= 0 {
+        return values;
+    }
+    let mut perm: List[Int] = list_new();
+    i = 0;
+    while i < n {
+        perm = list_push(perm, i);
+        i = i + 1;
+    }
+    let mut perm_count: Int = 0;
+    while perm_count < total {
+        let mut k: Int = 0;
+        while k < n {
+            let player: Int = list_get(perm, k);
+            let mut prev_mask: Int = 0;
+            if k > 0 {
+                prev_mask = coalition_mask(perm, k - 1);
+            }
+            let with_player: Int = prev_mask + pow2_int(player);
+            let v_prev: Float = lookup_v(v, prev_mask);
+            let v_with: Float = lookup_v(v, with_player);
+            let mut contrib: Float = v_with - v_prev;
+            let mut updated: List[Float] = list_new();
+            let mut u: Int = 0;
+            while u < n {
+                if u == player {
+                    let cur: Float = list_get(values, u);
+                    updated = list_push(updated, cur + contrib);
+                } else {
+                    updated = list_push(updated, list_get(values, u));
+                }
+                u = u + 1;
+            }
+            values = updated;
+            k = k + 1;
+        }
+        perm_count = perm_count + 1;
+        if perm_count < total {
+            perm = next_permutation(perm);
+        }
+    }
+    let total_f: Float = 1.0 * (total);
+    let mut final_values: List[Float] = list_new();
+    i = 0;
+    while i < n {
+        let s: Float = list_get(values, i);
+        final_values = list_push(final_values, s / total_f);
+        i = i + 1;
+    }
+    return final_values;
+}
+
+pub fn lookup_v(v: List[Float], mask: Int) -> Float {
+    let n: Int = list_len(v);
+    if mask < 0 {
+        return 0.0;
+    }
+    if mask >= n {
+        return 0.0;
+    }
+    return list_get(v, mask);
+}
+
+// Efficiency axiom: sum_i phi_i = v(all) - v(none).
+pub fn shapley_sum_invariant(n: Int, v: List[Float]) -> Bool {
+    let vals: List[Float] = shapley_values(n, v);
+    let mut sum: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        sum = sum + list_get(vals, i);
+        i = i + 1;
+    }
+    let all_mask: Int = pow2_int(n) - 1;
+    let v_all: Float = lookup_v(v, all_mask);
+    let diff: Float = sum - v_all;
+    if diff < 0.0 {
+        let pos: Float = 0.0 - diff;
+        if pos > 0.0001 {
+            return false;
+        }
+    } else {
+        if diff > 0.0001 {
+            return false;
+        }
+    }
+    return true;
+}

@@ -1,0 +1,178 @@
+// # Session type principle
+//
+// Logline: A session protocol is a sequence of dyadic send (!) and receive (?) prefixes; the dual flips every send to receive and every receive to send, and a well-formed session has only valid prefix kinds.
+//
+// Setup: Pure Int. kind: 0=end, 1=send (!), 2=receive (?). payload: 0=Int, 1=Bool, 2=Unit. Out-of-range kinds fail closed (0).
+//
+// Beats:
+//   1. session_type_dual flips every kind: !A → ?A, ?A → !A, end → end.
+//   2. session_type_well_formed returns 1 iff every kind is in {1,2} or the list is empty (end).
+//   3. Coupled: session channels are linear — exactly one use, hence duality must match exactly.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Session type step kinds. // Honda 1993, "Types for Dyadic Interaction", ESOP 1993, LNCS 668, p. 509-523.
+pub fn session_kind_end() -> Int { return 0; }
+pub fn session_kind_send() -> Int { return 1; }
+pub fn session_kind_recv() -> Int { return 2; }
+
+// Payload kinds.
+pub fn session_payload_int() -> Int { return 0; }
+pub fn session_payload_bool() -> Int { return 1; }
+pub fn session_payload_unit() -> Int { return 2; }
+
+type SessionType = struct {
+    kinds: List[Int],     // sequence of step kinds
+    payloads: List[Int]   // sequence of step payloads
+};
+
+pub fn session_type_empty() -> SessionType {
+    return SessionType { kinds: list_new(), payloads: list_new() };
+}
+
+pub fn session_type_step(prot: SessionType, kind: Int, payload: Int) -> SessionType {
+    let mut k: Int = session_kind_end();
+    if kind == session_kind_send() { k = session_kind_send(); }
+    if kind == session_kind_recv() { k = session_kind_recv(); }
+    let mut p: Int = session_payload_int();
+    if payload == session_payload_int() { p = session_payload_int(); }
+    if payload == session_payload_bool() { p = session_payload_bool(); }
+    if payload == session_payload_unit() { p = session_payload_unit(); }
+    let new_kinds: List[Int] = list_push(prot.kinds, k);
+    let new_pays: List[Int] = list_push(prot.payloads, p);
+    return SessionType { kinds: new_kinds, payloads: new_pays };
+}
+
+// session_type_dual: flip every kind (!A → ?A, ?A → !A, end → end). // Honda 1993, p. 511, Def. of duality.
+pub fn session_type_dual(prot: SessionType) -> SessionType {
+    let n: Int = list_len(prot.kinds);
+    let mut out: SessionType = session_type_empty();
+    let mut i: Int = 0;
+    while i < n {
+        let k: Int = list_get(prot.kinds, i);
+        let p: Int = list_get(prot.payloads, i);
+        let mut dk: Int = k;
+        if k == session_kind_send() { dk = session_kind_recv(); }
+        if k == session_kind_recv() { dk = session_kind_send(); }
+        out = session_type_step(out, dk, p);
+        i = i + 1;
+    }
+    return out;
+}
+
+// session_type_well_formed: 1 iff every step kind is in {1,2}, or the type is empty (end). // Honda 1993, p. 512, syntax.
+pub fn session_type_well_formed(prot: SessionType) -> Int {
+    let n: Int = list_len(prot.kinds);
+    if n == 0 { return 1; }
+    let mut i: Int = 0;
+    while i < n {
+        let k: Int = list_get(prot.kinds, i);
+        let is_send: Int = k == session_kind_send();
+        let is_recv: Int = k == session_kind_recv();
+        if is_send != 1 {
+            if is_recv != 1 {
+                return 0;
+            }
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+// session_type_is_dual: 1 iff d is the exact dual of p (kinds flipped, payloads preserved, lengths equal). // Honda 1993, p. 511.
+pub fn session_type_is_dual(p: SessionType, d: SessionType) -> Int {
+    let pn: Int = list_len(p.kinds);
+    let dn: Int = list_len(d.kinds);
+    if pn != dn { return 0; }
+    let mut i: Int = 0;
+    while i < pn {
+        let pk: Int = list_get(p.kinds, i);
+        let dk: Int = list_get(d.kinds, i);
+        let pp: Int = list_get(p.payloads, i);
+        let dp: Int = list_get(d.payloads, i);
+        if pp != dp { return 0; }
+        if pk == session_kind_send() {
+            if dk != session_kind_recv() { return 0; }
+        }
+        if pk == session_kind_recv() {
+            if dk != session_kind_send() { return 0; }
+        }
+        if pk == session_kind_end() {
+            if dk != session_kind_end() { return 0; }
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+pub fn session_type_dual_holds(p: SessionType, d: SessionType) -> DomainCert {
+    let ok: Int = session_type_is_dual(p, d);
+    return domain_cert("actor", "session_type_dual", ok);
+}
+
+pub fn session_type_well_formed_holds(prot: SessionType) -> DomainCert {
+    let ok: Int = session_type_well_formed(prot);
+    return domain_cert("actor", "session_type_well_formed", ok);
+}
+
+pub fn verify_session_type_principle() -> Bool {
+    // golden: !Int.?Bool dual is ?Int.!Bool
+    let mut s: SessionType = session_type_empty();
+    s = session_type_step(s, session_kind_send(), session_payload_int());
+    s = session_type_step(s, session_kind_recv(), session_payload_bool());
+    let d: SessionType = session_type_dual(s);
+    if session_type_is_dual(s, d) != 1 { return false; }
+    // check exact construction
+    let dn: Int = list_len(d.kinds);
+    if dn != 2 { return false; }
+    let dk0: Int = list_get(d.kinds, 0);
+    let dk1: Int = list_get(d.kinds, 1);
+    if dk0 != session_kind_recv() { return false; }
+    if dk1 != session_kind_send() { return false; }
+    let dp0: Int = list_get(d.payloads, 0);
+    let dp1: Int = list_get(d.payloads, 1);
+    if dp0 != session_payload_int() { return false; }
+    if dp1 != session_payload_bool() { return false; }
+    // well-formed: empty is end, valid
+    let e: SessionType = session_type_empty();
+    if session_type_well_formed(e) != 1 { return false; }
+    if session_type_well_formed(s) != 1 { return false; }
+    // hostile: well-formed rejects an end-in-the-middle protocol
+    let mut bad: SessionType = session_type_empty();
+    bad = session_type_step(bad, session_kind_send(), session_payload_int());
+    bad = session_type_step(bad, session_kind_end(), session_payload_unit());
+    if session_type_well_formed(bad) != 0 { return false; }
+    // hostile: mismatched dual
+    let mut m: SessionType = session_type_empty();
+    m = session_type_step(m, session_kind_send(), session_payload_int());
+    let mut m_bad: SessionType = session_type_empty();
+    m_bad = session_type_step(m_bad, session_kind_send(), session_payload_int());
+    if session_type_is_dual(m, m_bad) != 0 { return false; }
+    // length mismatch
+    let mut longer: SessionType = session_type_empty();
+    longer = session_type_step(longer, session_kind_recv(), session_payload_int());
+    longer = session_type_step(longer, session_kind_send(), session_payload_bool());
+    let m_n: Int = list_len(m.kinds);
+    let longer_n: Int = list_len(longer.kinds);
+    if m_n == longer_n { return false; }  // sanity: m has 1 step, longer has 2
+    if session_type_is_dual(m, longer) != 0 { return false; }
+    // payload mismatch
+    let mut pay: SessionType = session_type_empty();
+    pay = session_type_step(pay, session_kind_recv(), session_payload_bool());
+    if session_type_is_dual(m, pay) != 0 { return false; }
+    // coupled: linear channels — a session type is consumed exactly once, duality must hold stepwise.
+    // Domain cert
+    let c1: DomainCert = session_type_dual_holds(s, d);
+    if c1.holds != 1 { return false; }
+    let c1d: String = c1.domain;
+    if c1d != "actor" { return false; }
+    let c1n: String = c1.law_name;
+    if c1n != "session_type_dual" { return false; }
+    let c2: DomainCert = session_type_dual_holds(m, m_bad);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = session_type_well_formed_holds(s);
+    if c3.holds != 1 { return false; }
+    let c4: DomainCert = session_type_well_formed_holds(bad);
+    if c4.holds != 0 { return false; }
+    return true;
+}

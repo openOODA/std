@@ -1,0 +1,191 @@
+// # Peterson locks theory
+//
+// Logline: Peterson's two-process algorithm guarantees mutual exclusion: each process raises its own flag, yields the turn to the other, and only enters the critical section when the other flag is down or the turn is its own; the N-thread filter lock generalizes the idea via per-thread level arrays.
+//
+// Setup: Pure Int flags and a turn variable. No FS, net, env, or thread. The state machine is a closed transition system.
+//
+// Beats:
+//   1. Two flags and one turn encode the entry protocol; turn is 0 or 1.
+//   2. can_enter(i) holds iff the other flag is down or the turn equals i.
+//   3. The two-step set (flag=true then turn=other) preserves the mutual-exclusion invariant.
+//   4. Coupled: filter lock with N threads uses a levels array of length N-1 per thread.
+
+import "std/core/primitives/domain_cert.oo";
+
+type PetersonState = struct {
+    flag0: Int,
+    flag1: Int,
+    turn: Int,
+    in_critical: Int
+};
+
+pub fn peterson_new() -> PetersonState {
+    return PetersonState { flag0: 0, flag1: 0, turn: 0, in_critical: 0 };
+}
+
+fn peterson_can_enter(s: PetersonState, i: Int) -> Bool {
+    if i == 0 {
+        if s.flag1 == 1 {
+            if s.turn == 1 {
+                return false;
+            }
+        }
+        return true;
+    }
+    if s.flag0 == 1 {
+        if s.turn == 0 {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn peterson_set_flag(s: PetersonState, i: Int, v: Int) -> PetersonState {
+    let mut f0: Int = s.flag0;
+    let mut f1: Int = s.flag1;
+    if i == 0 { f0 = v; } else { f1 = v; }
+    return PetersonState { flag0: f0, flag1: f1, turn: s.turn, in_critical: s.in_critical };
+}
+
+pub fn peterson_set_turn(s: PetersonState, t: Int) -> PetersonState {
+    return PetersonState { flag0: s.flag0, flag1: s.flag1, turn: t, in_critical: s.in_critical };
+}
+
+pub fn peterson_enter(s: PetersonState, i: Int) -> PetersonState {
+    if peterson_can_enter(s, i) == false {
+        return PetersonState { flag0: s.flag0, flag1: s.flag1, turn: s.turn, in_critical: 0 - 1 };
+    }
+    return PetersonState { flag0: s.flag0, flag1: s.flag1, turn: s.turn, in_critical: i + 1 };
+}
+
+pub fn peterson_exit(s: PetersonState, i: Int) -> PetersonState {
+    let mut f0: Int = s.flag0;
+    let mut f1: Int = s.flag1;
+    if i == 0 { f0 = 0; } else { f1 = 0; }
+    return PetersonState { flag0: f0, flag1: f1, turn: s.turn, in_critical: 0 };
+}
+
+pub fn peterson_mutex_holds(s: PetersonState) -> DomainCert {
+    if s.in_critical == 1 {
+        if s.flag0 == 1 {
+            return domain_cert("sync", "peterson_mutex", 1);
+        }
+        return domain_cert("sync", "peterson_mutex", 0);
+    }
+    if s.in_critical == 2 {
+        if s.flag1 == 1 {
+            return domain_cert("sync", "peterson_mutex", 1);
+        }
+        return domain_cert("sync", "peterson_mutex", 0);
+    }
+    return domain_cert("sync", "peterson_mutex", 1);
+}
+
+pub fn peterson_p0_in_crit_holds() -> DomainCert {
+    let s0: PetersonState = peterson_new();
+    let s1: PetersonState = peterson_set_flag(s0, 0, 1);
+    let s2: PetersonState = peterson_set_turn(s1, 1);
+    let s3: PetersonState = peterson_set_flag(s2, 1, 1);
+    let s4: PetersonState = peterson_set_turn(s3, 0);
+    let s5: PetersonState = peterson_enter(s4, 0);
+    return peterson_mutex_holds(s5);
+}
+
+// Coupled: N-thread filter lock. levels is a per-thread array of length n-1.
+type FilterState = struct {
+    levels: List[Int],
+    n: Int
+};
+
+pub fn filter_new(n: Int) -> FilterState {
+    let mut sz: Int = n * n;
+    if sz < 0 { sz = 0; }
+    let mut lv: List[Int] = list_new();
+    let mut k: Int = 0;
+    while k < sz {
+        lv = list_push(lv, 0);
+        k = k + 1;
+    }
+    return FilterState { levels: lv, n: n };
+}
+
+fn filter_level(s: FilterState, tid: Int, lvl: Int) -> Int {
+    return list_get(s.levels, tid * s.n + lvl);
+}
+
+fn filter_set_level(s: FilterState, tid: Int, lvl: Int, v: Int) -> List[Int] {
+    let n: Int = s.n;
+    let sz: Int = list_len(s.levels);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < sz {
+        if i == tid * n + lvl {
+            out = list_push(out, v);
+        } else {
+            out = list_push(out, list_get(s.levels, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn filter_mutex_holds(s: FilterState) -> DomainCert {
+    let n: Int = s.n;
+    if n < 2 {
+        return domain_cert("sync", "filter_mutex", 0);
+    }
+    let max_lvl: Int = n - 1;
+    let mut i: Int = 0;
+    while i < n {
+        let mut j: Int = 0;
+        while j < n {
+            if i == j {
+                j = j + 1;
+            } else {
+                let li: Int = filter_level(s, i, max_lvl);
+                let lj: Int = filter_level(s, j, max_lvl);
+                if li == max_lvl {
+                    if lj == max_lvl {
+                        return domain_cert("sync", "filter_mutex", 0);
+                    }
+                }
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return domain_cert("sync", "filter_mutex", 1);
+}
+
+pub fn verify_peterson_locks_theory() -> Bool {
+    let s0: PetersonState = peterson_new();
+    let s1: PetersonState = peterson_set_flag(s0, 0, 1);
+    let s2: PetersonState = peterson_set_turn(s1, 1);
+    let s3: PetersonState = peterson_set_flag(s2, 1, 1);
+    let s4: PetersonState = peterson_set_turn(s3, 0);
+    let s5: PetersonState = peterson_enter(s4, 0);
+    if s5.flag0 != 1 { return false; }
+    if s4.turn != 0 { return false; }
+    if s5.in_critical != 1 { return false; }
+    if s3.flag1 != 1 { return false; }
+    if peterson_can_enter(s4, 0) == false { return false; }
+    if peterson_mutex_holds(s5).holds != 1 { return false; }
+    let h0: PetersonState = peterson_new();
+    let h1: PetersonState = peterson_set_flag(h0, 0, 1);
+    let h2: PetersonState = peterson_set_turn(h1, 0);
+    let h3: PetersonState = peterson_enter(h2, 0);
+    if h3.in_critical != 1 { return false; }
+    let h4: PetersonState = peterson_exit(h3, 0);
+    if h4.in_critical != 0 { return false; }
+    if h4.flag0 != 0 { return false; }
+    if peterson_can_enter(h0, 0) == false { return false; }
+    if peterson_can_enter(h0, 1) == false { return false; }
+    let f0: FilterState = filter_new(3);
+    let lv0: List[Int] = filter_set_level(f0, 0, 2, 2);
+    let f1: FilterState = FilterState { levels: lv0, n: f0.n };
+    if filter_mutex_holds(f1).holds != 1 { return false; }
+    let lv1: List[Int] = filter_set_level(f1, 1, 2, 2);
+    let f2: FilterState = FilterState { levels: lv1, n: f1.n };
+    if filter_mutex_holds(f2).holds != 0 { return false; }
+    return true;
+}

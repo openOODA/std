@@ -1,0 +1,19 @@
+// # List Set Olist Fail
+//
+// Logline: Standard library verification and domain capabilities for List Set Olist Fail.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+// leftover: list_set on List[Node] stays ERR llvm_emit
+struct Node { id: Int }
+pub fn verify_list_set_olist_fail() -> Bool {
+    let mut xs: List[Node] = list_new();
+    let n: Node = Node { id: 1 };
+    xs = list_push(xs, n);
+    xs = list_set(xs, 0, n);
+    return true;
+}

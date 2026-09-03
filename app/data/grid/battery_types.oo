@@ -1,0 +1,28 @@
+// # Battery types
+//
+// Logline: BatteryBank destubbed off nested schedule lists.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] destubbed.
+
+type BatteryBank = struct {
+    cycle_count: Int,
+    status: Int
+};
+
+pub fn battery_bank_new(cycle_count: Int, status: Int) -> BatteryBank {
+    return BatteryBank {
+        cycle_count: cycle_count,
+        status: status
+    };
+}
+
+pub fn battery_bank_cycles(b: BatteryBank) -> Int {
+    return b.cycle_count;
+}

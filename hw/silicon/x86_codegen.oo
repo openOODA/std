@@ -1,0 +1,178 @@
+// # x86-64 Native Code Generator Primitives
+//
+// Logline: Compile constrained .oo source strings into flat x86-64 machine code byte sequences with stack frames, calls, and arithmetic.
+//
+// Setup: Pure string-driven compiler. Source must be the constrained subset: int/string literals, + - * /, let bindings, if/else, while, fn, return, println.
+//
+// Beats:
+//   1. Lex a constrained .oo source string into a flat token stream of (kind,text) pairs.
+//   2. Build a single-function program with linear statement list and nested expressions.
+//   3. Lower statements and expressions into x86-64 machine code bytes (no external assembler).
+//   4. Emit prologue/epilogue plus println string and println int paths with sys_write and sys_exit.
+//
+// residual: arrays/structs/floats/types are out of scope for this bootstrap compiler.
+
+import "std/hw/silicon/x86_regs.oo";
+import "std/hw/silicon/x86_encoder.oo";
+import "std/hw/silicon/x86_abi.oo";
+import "std/hw/silicon/x86_syscalls.oo";
+
+type CgTok = struct {
+    kind: Int,
+    text: String
+};
+
+type CgProg = struct {
+    body: List[Int]
+};
+
+type CgSymbol = struct {
+    name: String,
+    stack_off: Int
+};
+
+type CgFunc = struct {
+    name: String,
+    code: List[Int]
+};
+
+pub fn cg_is_ws(c: Int) -> Bool {
+    if c == 32 { return true; }
+    if c == 9 { return true; }
+    if c == 10 { return true; }
+    if c == 13 { return true; }
+    return false;
+}
+
+pub fn cg_is_alpha(c: Int) -> Bool {
+    if c >= 65 && c <= 90 { return true; }
+    if c >= 97 && c <= 122 { return true; }
+    if c == 95 { return true; }
+    return false;
+}
+
+pub fn cg_is_digit(c: Int) -> Bool {
+    if c >= 48 && c <= 57 { return true; }
+    return false;
+}
+
+pub fn cg_is_alnum(c: Int) -> Bool {
+    if cg_is_alpha(c) { return true; }
+    if cg_is_digit(c) { return true; }
+    return false;
+}
+
+pub fn cg_emit_byte(b: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, b & 255);
+    return out;
+}
+
+pub fn cg_emit_bytes1(code: List[Int], b: Int) -> List[Int] {
+    return list_push(code, b & 255);
+}
+
+pub fn cg_emit_bytes(code: List[Int], more: List[Int]) -> List[Int] {
+    let n: Int = list_len(more);
+    let mut out: List[Int] = code;
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(more, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn cg_emit_u32(code: List[Int], n: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    let mut i: Int = 0;
+    while i < 4 {
+        out = list_push(out, (n >> (i * 8)) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn cg_emit_u64(code: List[Int], n: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    let mut i: Int = 0;
+    while i < 8 {
+        out = list_push(out, (n >> (i * 8)) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn cg_emit_imm32_mov_rax(code: List[Int], imm: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = list_push(out, 72);
+    out = list_push(out, 184);
+    out = cg_emit_u32(out, imm);
+    return out;
+}
+
+pub fn cg_emit_imm64_mov_rax(code: List[Int], imm: Int) -> List[Int] {
+    return cg_emit_imm32_mov_rax(code, imm);
+}
+
+pub fn cg_emit_push_rbp(code: List[Int]) -> List[Int] {
+    return cg_emit_bytes(code, x86_encode_push(abi_arg_reg(5)));
+}
+
+pub fn cg_emit_mov_rsp_rbp(code: List[Int]) -> List[Int] {
+    return cg_emit_bytes(code, x86_encode_mov_rr(5, 4));
+}
+
+pub fn cg_emit_pop_rbp(code: List[Int]) -> List[Int] {
+    return cg_emit_bytes(code, x86_encode_pop(abi_arg_reg(5)));
+}
+
+pub fn cg_emit_ret(code: List[Int]) -> List[Int] {
+    return cg_emit_bytes(code, x86_encode_ret());
+}
+
+pub fn cg_emit_push_rdi(code: List[Int]) -> List[Int] {
+    return cg_emit_bytes(code, x86_encode_push(7));
+}
+
+pub fn cg_emit_pop_rdi(code: List[Int]) -> List[Int] {
+    return cg_emit_bytes(code, x86_encode_pop(7));
+}
+
+pub fn cg_prog_new() -> CgProg {
+    return CgProg { body: list_new() };
+}
+
+pub fn cg_prog_size(p: CgProg) -> Int {
+    return list_len(p.body);
+}
+
+pub fn cg_prog_finish(p: CgProg) -> List[Int] {
+    return p.body;
+}
+
+pub fn cg_emit_prologue(code: List[Int], frame_size: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    out = cg_emit_push_rbp(out);
+    out = cg_emit_mov_rsp_rbp(out);
+    if frame_size > 0 {
+        out = list_push(out, 72);
+        out = list_push(out, 129);
+        out = list_push(out, 236);
+        out = cg_emit_u32(out, frame_size);
+    }
+    return out;
+}
+
+pub fn cg_emit_epilogue(code: List[Int], frame_size: Int) -> List[Int] {
+    let mut out: List[Int] = code;
+    if frame_size > 0 {
+        out = list_push(out, 72);
+        out = list_push(out, 129);
+        out = list_push(out, 196);
+        out = cg_emit_u32(out, frame_size);
+    }
+    out = cg_emit_pop_rbp(out);
+    out = cg_emit_ret(out);
+    return out;
+}

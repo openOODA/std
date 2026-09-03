@@ -1,0 +1,22 @@
+// # Fuzz Int Multi Add
+//
+// Logline: Standard library verification and domain capabilities for Fuzz Int Multi Add.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+fn multi_add(x: Int, y: Int) -> Int {
+    requires x >= 0;
+    requires y >= 0;
+    ensures result == x + y;
+    ensures result >= x;
+    ensures result >= y;
+    return x + y;
+}
+
+pub fn verify_fuzz_int_multi_add() -> Bool {
+    return true;
+}

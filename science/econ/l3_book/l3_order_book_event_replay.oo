@@ -1,0 +1,103 @@
+// # Level 3 Order Book Event Replay Engine
+//
+// Logline: Replays historical ITCH 5.0 packet streams with timestamp pacing, tick-by-tick stepping, and book audit verification.
+//
+// Setup: Backtesting, simulation, and regulatory compliance replay engine for granular L3 event streams.
+//
+// Beats:
+//   1. Define ReplayConfig, ReplayStatus, and ReplayEvent structures.
+//   2. Step through sequential ITCH messages with configurable speed multiplier.
+//   3. Compute replay progress metrics and audit checkpoints.
+
+type ReplayConfig = struct {
+    start_timestamp_ns: Int,
+    end_timestamp_ns: Int,
+    speed_multiplier: Float,
+    is_realtime_paced: Bool,
+    symbol_filter: String
+};
+
+type ReplayStatus = struct {
+    current_timestamp_ns: Int,
+    events_replayed: Int,
+    bytes_replayed: Int,
+    is_completed: Bool,
+    is_paused: Bool
+};
+
+type ReplayEvent = struct {
+    sequence_number: Int,
+    timestamp_ns: Int,
+    msg_type: String,
+    stock: String,
+    payload_size: Int
+};
+
+pub fn replay_config_new(
+    start_ts: Int,
+    end_ts: Int,
+    speed: Float,
+    realtime: Bool,
+    symbol: String
+) -> ReplayConfig {
+    return ReplayConfig {
+        start_timestamp_ns: start_ts,
+        end_timestamp_ns: end_ts,
+        speed_multiplier: speed,
+        is_realtime_paced: realtime,
+        symbol_filter: symbol
+    };
+}
+
+pub fn replay_status_new(start_ts: Int) -> ReplayStatus {
+    return ReplayStatus {
+        current_timestamp_ns: start_ts,
+        events_replayed: 0,
+        bytes_replayed: 0,
+        is_completed: false,
+        is_paused: false
+    };
+}
+
+pub fn replay_event_new(
+    seq: Int,
+    ts: Int,
+    mtype: String,
+    stock: String,
+    size: Int
+) -> ReplayEvent {
+    return ReplayEvent {
+        sequence_number: seq,
+        timestamp_ns: ts,
+        msg_type: mtype,
+        stock: stock,
+        payload_size: size
+    };
+}
+
+pub fn replay_step(
+    status: ReplayStatus,
+    config: ReplayConfig,
+    event: ReplayEvent
+) -> ReplayStatus {
+    let mut s: ReplayStatus = status;
+    if s.is_paused || s.is_completed {
+        return s;
+    }
+
+    let filter: String = config.symbol_filter;
+    let st: String = event.stock;
+    if filter != "" && filter != st {
+        return s;
+    }
+
+    if event.timestamp_ns > config.end_timestamp_ns && config.end_timestamp_ns > 0 {
+        s.is_completed = true;
+        return s;
+    }
+
+    s.current_timestamp_ns = event.timestamp_ns;
+    s.events_replayed = s.events_replayed + 1;
+    s.bytes_replayed = s.bytes_replayed + event.payload_size;
+    return s;
+}

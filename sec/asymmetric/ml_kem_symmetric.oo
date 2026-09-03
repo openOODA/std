@@ -1,0 +1,153 @@
+// # FIPS 203 ML-KEM Symmetric Primitives & Sponge Subsystem
+//
+// Logline: Implements Keccak-f[1600] sponges, SHAKE128/256 XOFs, and G/H/J hash derivations for ML-KEM.
+//
+// Setup: FIPS 202 Keccak-p[1600, 24] sponge with domain padding over List[Int] byte buffers.
+//
+// Beats:
+//   1. Sponge state absorption and multi-block permutation on 1600-bit state.
+//   2. Squeeze variable-length byte streams from SHAKE128 and SHAKE256 XOFs.
+//   3. Implement SHA3-256 (H) and SHA3-512 (G) fixed-digest functions.
+//   4. Implement PRF, J, and XOF domain-separated generators.
+
+import "std/sec/hash/sha3_types.oo";
+import "std/sec/hash/sha3_64.oo";
+import "std/sec/hash/sha3_state.oo";
+import "std/sec/hash/sha3_state_set.oo";
+import "std/sec/hash/sha3_round.oo";
+
+pub fn keccak_permute(s: KSt) -> KSt {
+    return k_f(s);
+}
+
+pub fn keccak_sponge_run(input: List[Int], rate_bytes: Int, domain: Int, out_len: Int) -> List[Int] {
+    let in_len: Int = list_len(input);
+    let total: Int = ((in_len / rate_bytes) + 1) * rate_bytes;
+    let mut s: KSt = k_empty();
+    let lanes: Int = rate_bytes / 8;
+    let mut pos: Int = 0;
+
+    while pos < total {
+        let mut i: Int = 0;
+        while i < lanes {
+            let offset: Int = pos + i * 8;
+            let mut b0: Int = 0;
+            let mut b1: Int = 0;
+            let mut b2: Int = 0;
+            let mut b3: Int = 0;
+            let mut b4: Int = 0;
+            let mut b5: Int = 0;
+            let mut b6: Int = 0;
+            let mut b7: Int = 0;
+
+            let mut bi: Int = 0;
+            while bi < 8 {
+                let p: Int = offset + bi;
+                let mut v: Int = 0;
+                if p < in_len {
+                    v = list_get(input, p);
+                } else if p == in_len {
+                    v = domain;
+                }
+                if p == (total - 1) {
+                    v = v | 128;
+                }
+                if bi == 0 { b0 = v; }
+                if bi == 1 { b1 = v; }
+                if bi == 2 { b2 = v; }
+                if bi == 3 { b3 = v; }
+                if bi == 4 { b4 = v; }
+                if bi == 5 { b5 = v; }
+                if bi == 6 { b6 = v; }
+                if bi == 7 { b7 = v; }
+                bi = bi + 1;
+            }
+
+            let lo: Int = b0 + (b1 << 8) + (b2 << 16) + (b3 << 24);
+            let hi: Int = b4 + (b5 << 8) + (b6 << 16) + (b7 << 24);
+            let cur_lane: K64 = k_get(s, i);
+            let updated: K64 = K64 {
+                hi: k_xor(cur_lane.hi, hi),
+                lo: k_xor(cur_lane.lo, lo)
+            };
+            s = k_set(s, i, updated);
+            i = i + 1;
+        }
+
+        s = k_f(s);
+        pos = pos + rate_bytes;
+    }
+
+    let mut out: List[Int] = list_new();
+    let mut squeezed: Int = 0;
+    while squeezed < out_len {
+        let lane_idx: Int = (squeezed / 8) % lanes;
+        let lane_w: K64 = k_get(s, lane_idx);
+        let byte_in_lane: Int = squeezed % 8;
+        let mut b: Int = 0;
+        if byte_in_lane < 4 {
+            b = (lane_w.lo >> (byte_in_lane * 8)) & 255;
+        } else {
+            b = (lane_w.hi >> ((byte_in_lane - 4) * 8)) & 255;
+        }
+        out = list_push(out, b);
+        squeezed = squeezed + 1;
+        if (squeezed % rate_bytes == 0) && (squeezed < out_len) {
+            s = k_f(s);
+        }
+    }
+    return out;
+}
+
+pub fn ml_kem_shake128(input: List[Int], out_len: Int) -> List[Int] {
+    return keccak_sponge_run(input, 168, 31, out_len);
+}
+
+pub fn ml_kem_shake256(input: List[Int], out_len: Int) -> List[Int] {
+    return keccak_sponge_run(input, 136, 31, out_len);
+}
+
+pub fn ml_kem_sha3_256(input: List[Int]) -> List[Int] {
+    return keccak_sponge_run(input, 136, 6, 32);
+}
+
+pub fn ml_kem_sha3_512(input: List[Int]) -> List[Int] {
+    return keccak_sponge_run(input, 72, 6, 64);
+}
+
+pub fn ml_kem_hash_h(msg: List[Int]) -> List[Int] {
+    return ml_kem_sha3_256(msg);
+}
+
+pub fn ml_kem_hash_g(msg: List[Int]) -> List[Int] {
+    return ml_kem_sha3_512(msg);
+}
+
+pub fn ml_kem_hash_j(msg: List[Int]) -> List[Int] {
+    return ml_kem_shake256(msg, 32);
+}
+
+pub fn ml_kem_prf(eta: Int, s: List[Int], b: Int) -> List[Int] {
+    let mut in_bytes: List[Int] = list_new();
+    let n: Int = list_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        in_bytes = list_push(in_bytes, list_get(s, i));
+        i = i + 1;
+    }
+    in_bytes = list_push(in_bytes, b & 255);
+    return ml_kem_shake256(in_bytes, 64 * eta);
+}
+
+pub fn ml_kem_xof(rho: List[Int], i: Int, j: Int, out_len: Int) -> List[Int] {
+    let mut in_bytes: List[Int] = list_new();
+    let n: Int = list_len(rho);
+    let mut idx: Int = 0;
+    while idx < n {
+        in_bytes = list_push(in_bytes, list_get(rho, idx));
+        idx = idx + 1;
+    }
+    in_bytes = list_push(in_bytes, j & 255);
+    in_bytes = list_push(in_bytes, i & 255);
+    return ml_kem_shake128(in_bytes, out_len);
+}

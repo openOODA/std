@@ -1,0 +1,106 @@
+// # AArch64 File Size Channel Fetch And Digits
+//
+// Logline: Emits file_size, channel_new/send/recv, fetch Err, and parse_int_digits.
+//
+// Setup: Follows a64rt_host. fstatat st_size is at offset 48. Channel is a single Ok("ch:0") slot.
+//
+// Beats:
+//   1. file_size and oo_file_size load st_size after a successful fstatat.
+//   2. channel_new returns Ok("ch:0"); send is Ok empty; recv is Err empty.
+//   3. fetch returns Err with an ERR tab message.
+//   4. parse_int_digits returns the Ok payload or 0.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_host3.oo";
+
+fn a64rt_fsize(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "file_size");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 128));
+    x = a64x_emit(x, arm64_word_movz(0, 100, 0));
+    x = a64x_emit(x, arm64_word_neg(0, 0));
+    x = a64x_emit(x, arm64_word_add_imm(2, 31, 0));
+    x = a64x_emit(x, arm64_word_movz(3, 0, 0));
+    x = a64x_emit(x, arm64_word_movz(8, 79, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    let bbad: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 48));
+    let jok: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let no: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    let endp: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, bbad, arm64_word_b_cond(arm64_cond_ne(), no - bbad)));
+    x = a64x_set_words(x, a64_wset(x.p.words, jok, arm64_word_b(endp - jok)));
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 128));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "oo_file_size");
+    x = a64rt_prol(r.x);
+    x = a64x_bl(x, "file_size");
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_ch(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "channel_new");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_intern(x, "ch:0");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "channel_send");
+    x = a64rt_prol(r.x);
+    x = a64x_intern(x, "");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "channel_recv");
+    x = a64rt_prol(r.x);
+    x = a64x_intern(x, "channel_recv: empty");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_host2(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fsize(r0);
+    r = a64rt_ch(r);
+    r = a64rt_fn(r, "fetch");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_intern(x, "ERR\tfetch\tunavailable");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    r = a64rt_setx(r, a64rt_epi(x));
+    if !a64rt_has(r, "parse_int_digits") {
+        r = a64rt_fn(r, "parse_int_digits");
+        x = a64rt_prol(r.x);
+        x = a64x_bl(x, "parse_int");
+        x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+        x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 3));
+        x = a64x_emit(x, arm64_word_mov_reg(0, 1));
+        x = a64x_emit(x, arm64_word_b(2));
+        x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+        r = a64rt_setx(r, a64rt_epi(x));
+    }
+    if !a64rt_has(r, "res_unwrap_or") {
+        r = a64rt_fn(r, "res_unwrap_or");
+        x = a64rt_prol(r.x);
+        x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+        x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 3));
+        x = a64x_emit(x, arm64_word_mov_reg(0, 1));
+        x = a64x_emit(x, arm64_word_b(2));
+        x = a64x_emit(x, arm64_word_mov_reg(0, 2));
+        r = a64rt_setx(r, a64rt_epi(x));
+    }
+    return a64rt_host3(r);
+}

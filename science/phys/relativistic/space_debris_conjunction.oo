@@ -1,0 +1,31 @@
+// # Space Debris Conjunction & Collision Probability
+//
+// Logline: Calculates closest approach miss distance, combined covariance ellipse, and 2D collision probability (Foster / Akella-Alfriend).
+//
+// Setup: Pure orbital conjunction assessment and collision avoidance maneuver planning (NASA CARA / ESA SDC).
+//
+// Beats:
+//   1. Nominal conjunction threshold miss distance query in meters (~250 m).
+//   2. Calculate Time of Closest Approach (TCA) and relative velocity magnitude.
+//   3. Project 3D error covariances into 2D B-plane encounter coordinate frame.
+//   4. Calculate 2D cumulative collision probability P_c over hard-body collision radius.
+
+pub fn conjunction_miss_m() -> Int {
+    return 250;
+}
+
+/// Computes relative miss distance at Time of Closest Approach (TCA): r_miss = sqrt(dx^2 + dy^2 + dz^2).
+pub fn conjunction_miss_distance(dx: Float, dy: Float, dz: Float) -> Float {
+    return sqrt((dx * dx) + (dy * dy) + (dz * dz));
+}
+
+/// Computes 2D peak collision probability for spherical hard-body radius R and isotropic covariance sigma.
+pub fn conjunction_max_collision_probability(
+    hard_body_radius_m: Float,
+    miss_distance_m: Float
+) -> Float {
+    if miss_distance_m <= hard_body_radius_m { return 1.0; }
+    let ratio: Float = hard_body_radius_m / miss_distance_m;
+    let e_const: Float = 2.718281828459045;
+    return (ratio * ratio) * (1.0 / sqrt(e_const));
+}

@@ -1,0 +1,30 @@
+// # Connect on both if arms
+//
+// Logline: Connect in both if arms so the join is Open and send is legal.
+//
+// Setup: Test fixture. Keep TYPESTATE directives and all code exact.
+//
+// Beats:
+//   1. Open into Closed.
+//   2. Connect in both arms.
+//   3. Send after the join.
+//
+// TYPESTATE: Sock Closed Open
+// TYPESTATE fn open_sock: -> Closed
+// TYPESTATE fn connect: Closed -> Open
+// TYPESTATE fn send: Open -> Open
+
+fn open_sock() -> Int { return 1; }
+fn connect(s: Int) { let x = s; }
+fn send(s: Int) { let x = s; }
+
+pub fn verify_typestate_if_join_ok() -> Bool {
+    let s = open_sock();
+    if true {
+        connect(s);
+    } else {
+        connect(s);
+    }
+    send(s);
+    return true;
+}

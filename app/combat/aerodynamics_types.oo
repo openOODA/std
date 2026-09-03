@@ -1,0 +1,119 @@
+// # Aerodynamics Int millimeter representations
+//
+// Logline: Dynamic pressure q = rho * v * v / 2000 (milli). implemented off pub type / Float.
+//
+// Setup: Vector3 milli. Wing AR = span*span / area.
+//
+// Beats:
+//   1. vector3_new / add.
+//   2. q_milli = rho_milli * v * v / 2000.
+//   3. aspect_ratio = span * span / area.
+
+type Vector3 = struct {
+    x: Int,
+    y: Int,
+    z: Int
+};
+
+type AeroCoefficients = struct {
+    cl: Float,
+    cd: Float,
+    cy: Float,
+    cm_roll: Float,
+    cm_pitch: Float,
+    cm_yaw: Float
+};
+
+type WingGeometry = struct {
+    span: Float,
+    area: Float,
+    chord: Float,
+    aspect_ratio: Float,
+    oswald_efficiency: Float
+};
+
+type DynamicPressure = struct {
+    q: Float,
+    density: Float,
+    velocity: Float
+};
+
+type ControlSurfaces = struct {
+    elevator: Float,
+    aileron: Float,
+    rudder: Float,
+    flaps: Float
+};
+
+type AirfoilState = struct {
+    thickness_ratio: Float,
+    camber: Float,
+    max_cl: Float,
+    stall_angle: Float,
+    cd0: Float
+};
+
+type FlightState = struct {
+    position: Vector3,
+    velocity_vec: Vector3,
+    alpha: Float,
+    beta: Float,
+    mach: Float,
+    airspeed: Float
+};
+
+type AtmosphereState = struct {
+    altitude: Float,
+    temperature: Float,
+    pressure: Float,
+    density: Float,
+    speed_of_sound: Float,
+    viscosity: Float
+};
+
+type AeroForces = struct {
+    lift: Float,
+    drag: Float,
+    side_force: Float,
+    total_force: Vector3
+};
+
+type AeroMoments = struct {
+    roll_moment: Float,
+    pitch_moment: Float,
+    yaw_moment: Float,
+    total_moment: Vector3
+};
+
+pub fn aero_vector3_new(x: Int, y: Int, z: Int) -> Vector3 {
+    return Vector3 { x: x, y: y, z: z };
+}
+
+pub fn aero_vector3_add(a: Vector3, b: Vector3) -> Vector3 {
+    let ax: Int = a.x;
+    let ay: Int = a.y;
+    let az: Int = a.z;
+    let bx: Int = b.x;
+    let by: Int = b.y;
+    let bz: Int = b.z;
+    return Vector3 { x: ax + bx, y: ay + by, z: az + bz };
+}
+
+pub fn aero_dynamic_pressure_milli(rho_milli: Int, velocity: Int) -> Int {
+    let rho: Int = rho_milli;
+    let v: Int = velocity;
+    let vv: Int = v * v;
+    let num: Int = rho * vv;
+    return num / 2000;
+}
+
+pub fn aero_aspect_ratio(span: Int, area: Int) -> Int {
+    let a: Int = area;
+    let zero: Int = 0;
+    let bad: Bool = a <= zero;
+    if bad {
+        return 0;
+    }
+    let s: Int = span;
+    return (s * s) / a;
+}

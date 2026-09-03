@@ -1,0 +1,29 @@
+// # Spacecraft Line-of-Sight Pointing Jitter Budget
+//
+// Logline: Calculates micro-vibration pointing jitter RMS (microradians), reaction wheel imbalance disturbances, and optical Line-of-Sight (LOS) error.
+//
+// Setup: Pure structural dynamics and attitude control jitter budget for space telescopes and optical communications (JWST / DSOC).
+//
+// Beats:
+//   1. Nominal pointing jitter RMS error query in microradians (5 urad).
+//   2. Calculate reaction wheel static and dynamic mass imbalance forces.
+//   3. Compute root-sum-square (RSS) combined pointing jitter across disturbance frequencies.
+//   4. Evaluate fine pointing mirror (FPM) closed-loop rejection bandwidth.
+
+pub fn jitter_urad() -> Int {
+    return 5;
+}
+
+/// Computes root-sum-square (RSS) combined jitter angle in microradians: sigma_total = sqrt(sum(sigma_i^2)).
+pub fn jitter_rss_combine(j1: Float, j2: Float, j3: Float) -> Float {
+    return sqrt((j1 * j1) + (j2 * j2) + (j3 * j3));
+}
+
+/// Computes reaction wheel dynamic imbalance torque: tau_imbalance = U_d * omega^2 (N*m).
+pub fn reaction_wheel_dynamic_imbalance_torque(
+    u_dynamic_g_cm2: Float,
+    wheel_speed_rad_s: Float
+) -> Float {
+    let u_kg_m2: Float = u_dynamic_g_cm2 * 0.0000001;
+    return u_kg_m2 * (wheel_speed_rad_s * wheel_speed_rad_s);
+}

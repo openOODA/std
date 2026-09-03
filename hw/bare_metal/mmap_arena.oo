@@ -1,0 +1,179 @@
+// # Anonymous mmap bump arena
+//
+// Logline: Emits a cap-gated x86_64 mmap sequence and bumps over the mapped length.
+//
+// Setup: Pure. SysCap tag 1 grants SYS_mmap=9. No GNU as or ld. No kernel call from this file.
+//
+// Beats:
+//   1. Publish page size and x86_64 mmap constants.
+//   2. Emit mmap with addr, length, PROT_RW, MAP_PRIVATE|ANON, fd, offset.
+//   3. Open only after a granted mmap emit; alloc fails closed when not mapped.
+//
+import "sys_cap.oo";
+import "std/core/primitives/byte_out.oo";
+
+type BareArena = struct {
+    base: Int,
+    cap: Int,
+    used: Int
+};
+
+pub fn bare_arena_page_size() -> Int {
+    return 4096;
+}
+
+pub fn bare_arena_new() -> BareArena {
+    return BareArena {
+        base: 0,
+        cap: 0,
+        used: 0
+    };
+}
+
+// x86_64 Linux SYS_mmap
+pub fn bare_arena_sys_mmap() -> Int {
+    return 9;
+}
+
+// x86_64 Linux SYS_munmap
+pub fn bare_arena_sys_munmap() -> Int {
+    return 11;
+}
+
+// PROT_READ | PROT_WRITE
+pub fn bare_arena_prot_rw() -> Int {
+    return 3;
+}
+
+// MAP_PRIVATE | MAP_ANONYMOUS (0x22)
+pub fn bare_arena_map_anon() -> Int {
+    return 34;
+}
+
+fn mmap_u8(b: List[Int], v: Int) -> List[Int] {
+    return list_push(b, v & 255);
+}
+
+fn mmap_i32(b: List[Int], v: Int) -> List[Int] {
+    let mut o: List[Int] = mmap_u8(b, v);
+    o = mmap_u8(o, v / 256);
+    o = mmap_u8(o, v / 65536);
+    return mmap_u8(o, v / 16777216);
+}
+
+fn mmap_eax(b: List[Int], v: Int) -> List[Int] {
+    return mmap_i32(mmap_u8(b, 184), v);
+}
+
+fn mmap_esi(b: List[Int], v: Int) -> List[Int] {
+    return mmap_i32(mmap_u8(b, 190), v);
+}
+
+fn mmap_edx(b: List[Int], v: Int) -> List[Int] {
+    return mmap_i32(mmap_u8(b, 186), v);
+}
+
+fn mmap_edi(b: List[Int], v: Int) -> List[Int] {
+    return mmap_i32(mmap_u8(b, 191), v);
+}
+
+fn mmap_sys(b: List[Int]) -> List[Int] {
+    return mmap_u8(mmap_u8(b, 15), 5);
+}
+
+// Bump used by n when the arena is mapped and used+n fits. Fail closed otherwise.
+pub fn bare_arena_alloc(a: BareArena, n: Int) -> BareArena {
+    if a.base == 0 {
+        return a;
+    }
+    if n <= 0 {
+        return a;
+    }
+    let next_used: Int = a.used + n;
+    if next_used > a.cap {
+        return a;
+    }
+    let r: BareArena = BareArena {
+        base: a.base,
+        cap: a.cap,
+        used: next_used
+    };
+    return r;
+}
+
+pub fn bare_arena_reset(a: BareArena) -> BareArena {
+    let r: BareArena = BareArena {
+        base: a.base,
+        cap: a.cap,
+        used: 0
+    };
+    return r;
+}
+
+pub fn bare_mmap_len(tag: Int, len: Int) -> ByteOut {
+    if bare_sys_require(tag, 9) == 0 {
+        return byte_out_err("bare_mmap: cap deny");
+    }
+    if len <= 0 {
+        return byte_out_err("bare_mmap: len");
+    }
+    let mut b: List[Int] = list_new();
+    b = mmap_eax(b, 9);
+    b = mmap_u8(b, 49);
+    b = mmap_u8(b, 255);
+    b = mmap_esi(b, len);
+    b = mmap_edx(b, 3);
+    b = mmap_u8(b, 65);
+    b = mmap_i32(mmap_u8(b, 186), 34);
+    b = mmap_u8(b, 65);
+    b = mmap_u8(b, 184);
+    b = mmap_u8(b, 255);
+    b = mmap_u8(b, 255);
+    b = mmap_u8(b, 255);
+    b = mmap_u8(b, 255);
+    b = mmap_u8(b, 69);
+    b = mmap_u8(b, 49);
+    b = mmap_u8(b, 201);
+    b = mmap_sys(b);
+    return byte_out_ok(b);
+}
+
+pub fn bare_mmap_code(tag: Int) -> ByteOut {
+    return bare_mmap_len(tag, 4096);
+}
+
+pub fn bare_munmap_len(tag: Int, len: Int) -> ByteOut {
+    if bare_sys_require(tag, 11) == 0 {
+        return byte_out_err("bare_munmap: cap deny");
+    }
+    if len <= 0 {
+        return byte_out_err("bare_munmap: len");
+    }
+    let mut b: List[Int] = list_new();
+    b = mmap_eax(b, 11);
+    b = mmap_edi(b, 4096);
+    b = mmap_esi(b, len);
+    b = mmap_sys(b);
+    return byte_out_ok(b);
+}
+
+pub fn bare_munmap_code(tag: Int) -> ByteOut {
+    return bare_munmap_len(tag, 4096);
+}
+
+pub fn bare_arena_open(tag: Int, pages: Int) -> BareArena {
+    if pages <= 0 {
+        return bare_arena_new();
+    }
+    let nbytes: Int = pages * 4096;
+    let code: ByteOut = bare_mmap_len(tag, nbytes);
+    if code.flag == 0 {
+        return bare_arena_new();
+    }
+    let r: BareArena = BareArena {
+        base: 4096,
+        cap: nbytes,
+        used: 0
+    };
+    return r;
+}

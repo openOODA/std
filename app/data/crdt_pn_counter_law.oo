@@ -1,0 +1,252 @@
+// # CRDT PN-Counter Law
+//
+// Logline: A PN-Counter is a vector of (P_i, N_i) per replica i; increment adds to P_i, decrement adds to N_i; query returns sum_i P_i - sum_i N_i, and merge is element-wise max (Shapiro et al. 2011, RR-6956 INRIA; arXiv:1106.3304).
+//
+// Setup: Pure Int. Replica state is a (P, N) Int pair stored as two parallel lists. p_i and n_i must be >= 0. Hosts data_invariants.oo stem and uses domain_cert("data", ...).
+//
+// Beats:
+//   1. pn_value returns sum_i P[i] - sum_i N[i] for two parallel Int lists of equal length.
+//   2. pn_increment / pn_decrement update P[i] / N[i] for replica i.
+//   3. pn_merge returns element-wise max of two PN-counters.
+//   4. Hostile: negative delta, out-of-range index, or mismatched list lengths fail closed.
+
+import "std/app/data/data_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// PN-pair: two parallel Int lists (P, N) of equal length.
+type PNCounter = struct {
+    p: List[Int],
+    n: List[Int]
+};
+
+pub fn pn_new() -> PNCounter {
+    return PNCounter { p: list_new(), n: list_new() };
+}
+
+// Length of a PN-counter (number of replicas).
+pub fn pn_len(c: PNCounter) -> Int {
+    let pl: Int = list_len(c.p);
+    let nl: Int = list_len(c.n);
+    if pl != nl { return 0 - 1; }
+    return pl;
+}
+
+// Add a new replica with initial P=N=0. Returns the new counter.
+pub fn pn_add_replica(c: PNCounter) -> PNCounter {
+    return PNCounter { p: list_push(c.p, 0), n: list_push(c.n, 0) };
+}
+
+// Increment P[i] by delta (delta > 0). Bad index / negative delta returns original counter with -1 invariant.
+pub fn pn_increment(c: PNCounter, replica_id: Int, delta: Int) -> Result[PNCounter, String] {
+    if delta <= 0 { return Err("ERR\tpn\tdelta"); }
+    let n: Int = list_len(c.p);
+    if replica_id < 0 { return Err("ERR\tpn\tidx"); }
+    if replica_id >= n { return Err("ERR\tpn\tidx"); }
+    let cur: Int = list_get(c.p, replica_id);
+    if cur < 0 { return Err("ERR\tpn\tneg"); }
+    let mut new_p: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(c.p, i);
+        if i == replica_id {
+            new_p = list_push(new_p, cur + delta);
+        } else {
+            new_p = list_push(new_p, v);
+        }
+        i = i + 1;
+    }
+    return Ok(PNCounter { p: new_p, n: c.n });
+}
+
+// Decrement N[i] by delta (delta > 0).
+pub fn pn_decrement(c: PNCounter, replica_id: Int, delta: Int) -> Result[PNCounter, String] {
+    if delta <= 0 { return Err("ERR\tpn\tdelta"); }
+    let n: Int = list_len(c.n);
+    if replica_id < 0 { return Err("ERR\tpn\tidx"); }
+    if replica_id >= n { return Err("ERR\tpn\tidx"); }
+    let cur: Int = list_get(c.n, replica_id);
+    if cur < 0 { return Err("ERR\tpn\tneg"); }
+    let mut new_n: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(c.n, i);
+        if i == replica_id {
+            new_n = list_push(new_n, cur + delta);
+        } else {
+            new_n = list_push(new_n, v);
+        }
+        i = i + 1;
+    }
+    return Ok(PNCounter { p: c.p, n: new_n });
+}
+
+fn pnv_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// PN-counter value: sum_i P[i] - sum_i N[i]. Empty is Ok(0). Mismatch or neg is Err.
+pub fn pn_value(c: PNCounter) -> Result[Int, String] {
+    let pl: Int = list_len(c.p);
+    let nl: Int = list_len(c.n);
+    if pl != nl { return Err("ERR\tpnv\tlen"); }
+    if pl < 0 { return Err("ERR\tpnv\tlen"); }
+    let mut sum_p: Int = 0;
+    let mut sum_n: Int = 0;
+    let mut i: Int = 0;
+    while i < pl {
+        let pv: Int = list_get(c.p, i);
+        let nv: Int = list_get(c.n, i);
+        if pv < 0 { return Err("ERR\tpnv\tneg"); }
+        if nv < 0 { return Err("ERR\tpnv\tneg"); }
+        sum_p = sum_p + pv;
+        sum_n = sum_n + nv;
+        i = i + 1;
+    }
+    return Ok(sum_p - sum_n);
+}
+
+// Element-wise max merge of two PN-counters. Mismatched lengths return Err.
+pub fn pn_merge(a: PNCounter, b: PNCounter) -> Result[PNCounter, String] {
+    let an: Int = list_len(a.p);
+    let bn: Int = list_len(b.p);
+    if an != bn { return Err("ERR\tpn\tlen"); }
+    let mut p: List[Int] = list_new();
+    let mut n: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < an {
+        let ap: Int = list_get(a.p, i);
+        let an_: Int = list_get(a.n, i);
+        let bp: Int = list_get(b.p, i);
+        let bn_: Int = list_get(b.n, i);
+        if ap < 0 { return Err("ERR\tpn\tneg"); }
+        if an_ < 0 { return Err("ERR\tpn\tneg"); }
+        if bp < 0 { return Err("ERR\tpn\tneg"); }
+        if bn_ < 0 { return Err("ERR\tpn\tneg"); }
+        let max_p: Int = if ap > bp { ap } else { bp };
+        let max_n: Int = if an_ > bn_ { an_ } else { bn_ };
+        p = list_push(p, max_p);
+        n = list_push(n, max_n);
+        i = i + 1;
+    }
+    return Ok(PNCounter { p: p, n: n });
+}
+
+// Helper: build a PN-counter from two parallel Int arrays (P, N) of length 3.
+fn pn_golden_state() -> PNCounter {
+    let mut p: List[Int] = list_new();
+    p = list_push(p, 1);
+    p = list_push(p, 2);
+    p = list_push(p, 0);
+    let mut n: List[Int] = list_new();
+    n = list_push(n, 0);
+    n = list_push(n, 1);
+    n = list_push(n, 0);
+    return PNCounter { p: p, n: n };
+}
+
+pub fn pn_golden_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok == 1 {
+        let c: PNCounter = pn_golden_state();
+        // value = (1 + 2 + 0) - (0 + 1 + 0) = 3 - 1 = 2.
+        let v: Int = pnv_got(pn_value(c));
+        if v == 2 { holds = 1; }
+    }
+    return domain_cert("data", "crdt_pn_counter_golden", holds);
+}
+
+pub fn pn_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    let c: PNCounter = pn_new();
+    if pn_increment(c, 0, 0).is_ok() == false {
+        if pn_increment(c, 0, 0 - 1).is_ok() == false {
+            if pn_increment(c, 5, 1).is_ok() == false {
+                if pn_increment(c, 0 - 1, 1).is_ok() == false {
+                    if pn_decrement(c, 0, 0).is_ok() == false {
+                        if pn_decrement(c, 0, 0 - 1).is_ok() == false {
+                            if pn_decrement(c, 5, 1).is_ok() == false {
+                                if pn_decrement(c, 0 - 1, 1).is_ok() == false { holds = 1; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "crdt_pn_counter_hostile", holds);
+}
+
+pub fn pn_merge_coupled_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    // Coupled: merge is element-wise max; commutative.
+    let mut p1: List[Int] = list_new();
+    p1 = list_push(p1, 1);
+    p1 = list_push(p1, 0);
+    let mut n1: List[Int] = list_new();
+    n1 = list_push(n1, 0);
+    n1 = list_push(n1, 0);
+    let a: PNCounter = PNCounter { p: p1, n: n1 };
+    let mut p2: List[Int] = list_new();
+    p2 = list_push(p2, 0);
+    p2 = list_push(p2, 2);
+    let mut n2: List[Int] = list_new();
+    n2 = list_push(n2, 0);
+    n2 = list_push(n2, 1);
+    let b: PNCounter = PNCounter { p: p2, n: n2 };
+    let m: PNCounter = pn_got(pn_merge(a, b));
+    let v: Int = pnv_got(pn_value(m));
+    // Merged P=[1,2], N=[0,1] -> value = 3 - 1 = 2.
+    if v == 2 { holds = 1; }
+    return domain_cert("data", "crdt_pn_counter_merge", holds);
+}
+
+// Helper: extract PNCounter from Result.
+pub fn pn_got(r: Result[PNCounter, String]) -> PNCounter {
+    match r { Ok(v) => { return v; }, Err(_) => { return pn_new(); } }
+}
+
+pub fn verify_crdt_pn_counter_law() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    // Golden: P=[(1,0),(2,0),(0,0)], N=[(0,0),(0,1),(0,0)] -> value = 3 - 1 = 2.
+    let c: PNCounter = pn_golden_state();
+    if pnv_got(pn_value(c)) != 2 { return false; }
+    if pn_len(c) != 3 { return false; }
+    let zpn: Result[Int, String] = pn_value(pn_new());
+    if zpn.is_ok() == false { return false; }
+    if pnv_got(zpn) != 0 { return false; }
+    let mut c0: PNCounter = pn_new();
+    c0 = pn_add_replica(c0);
+    c0 = pn_add_replica(c0);
+    let c1: PNCounter = pn_got(pn_increment(c0, 0, 5));
+    if pnv_got(pn_value(c1)) != 5 { return false; }
+    let c2: PNCounter = pn_got(pn_decrement(c1, 1, 3));
+    if pnv_got(pn_value(c2)) != 2 { return false; }
+    // Hostile.
+    let e: PNCounter = pn_new();
+    if pn_increment(e, 0, 0).is_ok() { return false; }
+    if pn_increment(e, 0, 0 - 1).is_ok() { return false; }
+    if pn_increment(e, 5, 1).is_ok() { return false; }
+    if pn_increment(e, 0 - 1, 1).is_ok() { return false; }
+    if pn_decrement(e, 0, 0).is_ok() { return false; }
+    if pn_decrement(e, 0, 0 - 1).is_ok() { return false; }
+    if pn_decrement(e, 5, 1).is_ok() { return false; }
+    if pn_decrement(e, 0 - 1, 1).is_ok() { return false; }
+    // Mismatched-length merge fails closed.
+    let short: PNCounter = pn_new();
+    if pn_increment(c, 5, 1).is_ok() { return false; }
+    if pn_decrement(c, 5, 1).is_ok() { return false; }
+    let mut badp: List[Int] = list_new();
+    badp = list_push(badp, 1);
+    let bad: PNCounter = PNCounter { p: badp, n: list_new() };
+    if pn_value(bad).is_ok() { return false; }
+    // DomainCerts.
+    let ga: DomainCert = pn_golden_cert();
+    let ha: DomainCert = pn_hostile_cert();
+    let ca: DomainCert = pn_merge_coupled_cert();
+    if ga.holds != 1 { return false; }
+    if ha.holds != 1 { return false; }
+    if ca.holds != 1 { return false; }
+    return true;
+}

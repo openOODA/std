@@ -1,0 +1,254 @@
+// # AESA & Pulse-Doppler Radar Physical Domain Laws
+//
+// Logline: Canonical physics models for 4th-root radar range, AESA electronic beam scan loss, and Doppler ground clutter notch filtering.
+//
+// Setup: Pure mathematical implementation conforming to IEEE radar standards with zero ambient authority and deterministic floating-point operations.
+//
+// Beats:
+//   1. Radar 4th-root range scaling equation across target RCS and transmitter power.
+//   2. AESA off-boresight electronic scan gain loss modeled by cos^1.5(theta).
+//   3. Pulse-Doppler velocity clutter notch gate filtering low-closure beam aspect returns.
+//   4. Pure target SNR and detection range calculation with deterministic verification.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_sensors_aesa_radar_laws() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type AesaRadarConfig = struct {
+    peak_power_w: Float,
+    reference_range_m: Float,
+    reference_rcs_m2: Float,
+    frequency_hz: Float,
+    beamwidth_deg: Float,
+    max_scan_angle_deg: Float
+};
+
+type RadarTargetReturn = struct {
+    detected: Bool,
+    range_m: Float,
+    snr_db: Float,
+    apparent_rcs_m2: Float,
+    in_clutter_notch: Bool
+};
+
+type NotchGateResult = struct {
+    is_notched: Bool,
+    doppler_closure_mps: Float,
+    aot_deg: Float
+};
+
+fn aesa_pi_val() -> Float { return circ_pi_std_phys_sensors_aesa_radar_laws(); }
+
+fn aesa_abs_val(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn aesa_clamp_val(val: Float, min_val: Float, max_val: Float) -> Float {
+    if val < min_val { return min_val; }
+    if val > max_val { return max_val; }
+    return val;
+}
+
+fn aesa_deg_to_rad(deg: Float) -> Float {
+    return deg * (aesa_pi_val() / 180.0);
+}
+
+pub fn fourth_root(val: Float) -> Float {
+    if val <= 0.000000000001 { return 0.0; }
+    return sqrt(sqrt(val));
+}
+
+pub fn aesa_fourth_root_range(
+    r0: Float,
+    sigma: Float,
+    sigma0: Float,
+    p: Float,
+    p0: Float
+) -> Float {
+    if r0 <= 0.0 || sigma <= 0.0 || p <= 0.0 { return 0.0; }
+    let mut ref_sigma: Float = sigma0;
+    if ref_sigma <= 0.0 { ref_sigma = 1.0; }
+    let mut ref_p: Float = p0;
+    if ref_p <= 0.0 { ref_p = 1.0; }
+    let rcs_ratio: Float = sigma / ref_sigma;
+    let power_ratio: Float = p / ref_p;
+    return r0 * fourth_root(rcs_ratio * power_ratio);
+}
+
+pub fn radar_fourth_root_range(
+    r0: Float,
+    sigma: Float,
+    sigma0: Float,
+    p: Float,
+    p0: Float
+) -> Float {
+    return aesa_fourth_root_range(r0, sigma, sigma0, p, p0);
+}
+
+pub fn aesa_scan_loss_factor(theta_deg: Float) -> Float {
+    let abs_theta: Float = aesa_abs_val(theta_deg);
+    if abs_theta >= 90.0 { return 0.0; }
+    let theta_rad: Float = aesa_deg_to_rad(abs_theta);
+    let cos_t: Float = cos(theta_rad);
+    if cos_t <= 0.0 { return 0.0; }
+    return cos_t * sqrt(cos_t);
+}
+
+pub fn aesa_scan_loss_gain(g0: Float, theta_deg: Float) -> Float {
+    if g0 <= 0.0 { return 0.0; }
+    return g0 * aesa_scan_loss_factor(theta_deg);
+}
+
+pub fn pulse_doppler_ground_clutter_notch(
+    delta_v: Float,
+    aot_deg: Float,
+    v_notch: Float
+) -> Bool {
+    let aot_norm: Float = aesa_abs_val(aot_deg);
+    let beam_offset: Float = aesa_abs_val(aot_norm - 90.0);
+    let in_beam_aspect: Bool = beam_offset <= 10.0;
+    let abs_dv: Float = aesa_abs_val(delta_v);
+    let in_velocity_notch: Bool = abs_dv <= v_notch;
+    return in_beam_aspect && in_velocity_notch;
+}
+
+pub fn radar_clutter_notch_filter(
+    delta_v: Float,
+    aot_deg: Float,
+    v_notch: Float
+) -> NotchGateResult {
+    let notched: Bool = pulse_doppler_ground_clutter_notch(delta_v, aot_deg, v_notch);
+    return NotchGateResult {
+        is_notched: notched,
+        doppler_closure_mps: delta_v,
+        aot_deg: aot_deg
+    };
+}
+
+pub fn pulse_doppler_closure(
+    radar_speed_mps: Float,
+    target_speed_mps: Float,
+    aspect_angle_deg: Float
+) -> Float {
+    let aspect_rad: Float = aesa_deg_to_rad(aspect_angle_deg);
+    return radar_speed_mps + (target_speed_mps * cos(aspect_rad));
+}
+
+pub fn radar_received_power(
+    peak_power_w: Float,
+    gain_linear: Float,
+    wavelength_m: Float,
+    sigma_m2: Float,
+    range_m: Float
+) -> Float {
+    if range_m <= 0.1 || wavelength_m <= 0.00001 || peak_power_w <= 0.0 { return 0.0; }
+    let pi_val: Float = aesa_pi_val();
+    let four_pi_cube: Float = (4.0 * pi_val) * (4.0 * pi_val) * (4.0 * pi_val);
+    let r2: Float = range_m * range_m;
+    let r4: Float = r2 * r2;
+    let numerator: Float = peak_power_w * (gain_linear * gain_linear) * (wavelength_m * wavelength_m) * sigma_m2;
+    let denominator: Float = four_pi_cube * r4;
+    if denominator <= 0.0 { return 0.0; }
+    return numerator / denominator;
+}
+
+pub fn aesa_calculate_detection_range(
+    cfg: AesaRadarConfig,
+    target_rcs_m2: Float,
+    off_boresight_deg: Float
+) -> Float {
+    let scan_loss: Float = aesa_scan_loss_factor(off_boresight_deg);
+    let effective_rcs: Float = target_rcs_m2 * scan_loss;
+    return aesa_fourth_root_range(
+        cfg.reference_range_m,
+        effective_rcs,
+        cfg.reference_rcs_m2,
+        cfg.peak_power_w,
+        cfg.peak_power_w
+    );
+}
+
+pub fn aesa_evaluate_target_snr(
+    cfg: AesaRadarConfig,
+    range_m: Float,
+    target_rcs_m2: Float,
+    off_boresight_deg: Float,
+    delta_v_mps: Float,
+    aot_deg: Float,
+    v_notch_mps: Float
+) -> RadarTargetReturn {
+    let in_notch: Bool = pulse_doppler_ground_clutter_notch(delta_v_mps, aot_deg, v_notch_mps);
+    let scan_factor: Float = aesa_scan_loss_factor(off_boresight_deg);
+    let apparent_rcs: Float = target_rcs_m2 * scan_factor;
+    let max_range: Float = aesa_calculate_detection_range(cfg, target_rcs_m2, off_boresight_deg);
+    let mut detected: Bool = false;
+    let mut snr: Float = 0.0 - 50.0;
+
+    if range_m > 0.1 && max_range > 0.1 {
+        let r_ratio: Float = max_range / range_m;
+        let p_ratio: Float = r_ratio * r_ratio * r_ratio * r_ratio;
+        if p_ratio > 0.000001 {
+            snr = 10.0 * (ln(p_ratio) / 2.302585092994046);
+        }
+        let snr_ok: Bool = snr >= 10.0;
+        let rng_ok: Bool = range_m <= max_range;
+        if rng_ok && !in_notch && snr_ok {
+            detected = true;
+        }
+    }
+
+    return RadarTargetReturn {
+        detected: detected,
+        range_m: range_m,
+        snr_db: snr,
+        apparent_rcs_m2: apparent_rcs,
+        in_clutter_notch: in_notch
+    };
+}
+
+pub fn verify_aesa_radar_laws() -> Bool {
+    let r0: Float = 100000.0;
+    let sigma0: Float = 1.0;
+    let p0: Float = 10000.0;
+
+    let r_std: Float = aesa_fourth_root_range(r0, 1.0, sigma0, p0, p0);
+    let diff_std: Float = aesa_abs_val(r_std - 100000.0);
+    if diff_std > 0.01 { return false; }
+
+    let r_stealth: Float = aesa_fourth_root_range(r0, 0.0001, sigma0, p0, p0);
+    let diff_stealth: Float = aesa_abs_val(r_stealth - 10000.0);
+    if diff_stealth > 0.01 { return false; }
+
+    let r_power: Float = aesa_fourth_root_range(r0, 1.0, sigma0, 160000.0, p0);
+    let diff_power: Float = aesa_abs_val(r_power - 200000.0);
+    if diff_power > 0.01 { return false; }
+
+    let g_center: Float = aesa_scan_loss_factor(0.0);
+    let diff_gc: Float = aesa_abs_val(g_center - 1.0);
+    if diff_gc > 0.0001 { return false; }
+
+    let g_60deg: Float = aesa_scan_loss_factor(60.0);
+    let expected_60: Float = 0.5 * sqrt(0.5);
+    let diff_g60: Float = aesa_abs_val(g_60deg - expected_60);
+    if diff_g60 > 0.0001 { return false; }
+
+    let g_90deg: Float = aesa_scan_loss_factor(90.0);
+    let diff_g90: Float = aesa_abs_val(g_90deg - 0.0);
+    if diff_g90 > 0.0001 { return false; }
+
+    let notched: Bool = pulse_doppler_ground_clutter_notch(5.0, 90.0, 20.0);
+    if !notched { return false; }
+
+    let unnotched_speed: Bool = pulse_doppler_ground_clutter_notch(100.0, 90.0, 20.0);
+    if unnotched_speed { return false; }
+
+    let unnotched_angle: Bool = pulse_doppler_ground_clutter_notch(5.0, 0.0, 20.0);
+    if unnotched_angle { return false; }
+
+    let notch_edge: Bool = pulse_doppler_ground_clutter_notch(15.0, 81.0, 20.0);
+    if !notch_edge { return false; }
+
+    let notch_outside: Bool = pulse_doppler_ground_clutter_notch(15.0, 78.0, 20.0);
+    if notch_outside { return false; }
+
+    return true;
+}

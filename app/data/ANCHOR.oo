@@ -1,0 +1,35 @@
+// # Data Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard data domain library. The data/ subdirectory is primarily a theoretical-foundation library: laws, theories, principles, and invariants for data correctness, ACID, BCNF, Codd's relational algebra, CRDTs, differential privacy, eventual consistency, Amdahl's law, Fano's inequality, locality, idempotence, and LSM-tree write amplification. The only public-API code is Amdahl's law (re-exported as data_mod_amdahls_*).
+//
+// Setup: No caps required. data/ is a pure-math library; no FS, net, or env.
+//
+// Beats:
+//   1. Re-export the Amdahl's law public surface as data_mod_amdahls_* (speedup, Gustafson, golden cert).
+//   2. Document the data correctness theory surface (ACID, BCNF, Codd, Fano) as private siblings.
+//   3. Document the distributed-systems theory surface (CRDT, eventual consistency, Dwork DP, locality) as private siblings.
+//   4. Document the systems-design theory surface (Amdahl, locality, idempotence, LSM, base, capability) as private siblings.
+//   5. Document the invariants and KATs as private siblings. External callers must not import _law, _theory, _principle, _invariants, _kat files directly.
+
+import "amdahls_law_data.oo";
+
+// Public Amdahl's law surface: data_mod_amdahls_*
+pub fn data_mod_amdahls_speedup(p_milli: Int, n_workers: Int) -> Int { return amdahls_data_speedup(p_milli, n_workers); }
+pub fn data_mod_amdahls_gustafson(p_milli: Int, n_workers: Int) -> Int { return amdahls_data_gustafson(p_milli, n_workers); }
+pub fn data_mod_amdahls_golden_cert() -> DomainCert { return amdahls_data_golden_cert(); }
+pub fn data_mod_amdahls_gustafson_coupled_cert() -> DomainCert { return amdahls_data_gustafson_coupled_cert(); }
+pub fn data_mod_amdahls_hostile_cert() -> DomainCert { return amdahls_data_hostile_cert(); }
+pub fn data_mod_amdahls_verify() -> Bool { return verify_amdahls_law_data(); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. acid_law.oo, bcnf_law.oo, codd_relational_law.oo, crdt_pn_counter_law.oo, fano_law.oo, inode_dirent_law.oo, journaling_law.oo)
+//   _theory files (e.g. bloom_filter_false_positive_theory.oo, cap_theory.oo, eventual_consistency_theory.oo, lsm_write_amplification_theory.oo)
+//   _principle files (e.g. base_principle.oo, crdt_convergence_principle.oo, dwork_epsilon_dp_principle.oo, idempotence_principle.oo, locality_principle.oo)
+//   _invariants files (e.g. data_invariants.oo)
+//   _kat files (e.g. data_systems_kat.oo)
+//
+// Note: data/ is a theoretical-foundation library. Most siblings are laws,
+// theories, and principles used to verify data-system correctness, not
+// public-API code. Callers needing the data correctness theory should
+// reference the certs via the <subdir>_mod_* surface; raw _law/_theory
+// imports are reserved for internal verification.

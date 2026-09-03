@@ -1,0 +1,205 @@
+// # Spacecraft 6-DOF Attitude Dynamics
+//
+// Logline: Integrate spacecraft 6-DOF rigid body kinematics, Euler angular momentum equations, and quaternion rate derivatives.
+//
+// Setup: Pure astrodynamics and GNC dynamics engine. Computes principal axis rotational acceleration and translational motion.
+//
+// Beats:
+//   1. Calculate Euler angular momentum accelerations from principal-axis inertia tensor and external torque.
+//   2. Compute kinematic quaternion rate derivatives from body angular rates.
+//   3. Integrate translational position and velocity under applied net forces.
+//   4. Execute 4th-order Runge-Kutta step advancing 6-DOF vehicle state.
+//   5. Expose rotational kinetic energy and angular momentum conservation evaluators.
+
+type GncVec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type GncQuat = struct {
+    w: Float,
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type InertiaDiag = struct {
+    ixx: Float,
+    iyy: Float,
+    izz: Float
+};
+
+type Spacecraft6Dof = struct {
+    px: Float, py: Float, pz: Float,
+    vx: Float, vy: Float, vz: Float,
+    qw: Float, qx: Float, qy: Float, qz: Float,
+    wx: Float, wy: Float, wz: Float,
+    mass: Float,
+    inertia: InertiaDiag
+};
+
+pub fn gnc_vec3_new(x: Float, y: Float, z: Float) -> GncVec3 {
+    return GncVec3 { x: x, y: y, z: z };
+}
+
+pub fn gnc_quat_new(w: Float, x: Float, y: Float, z: Float) -> GncQuat {
+    return GncQuat { w: w, x: x, y: y, z: z };
+}
+
+pub fn gnc_inertia_new(ixx: Float, iyy: Float, izz: Float) -> InertiaDiag {
+    return InertiaDiag { ixx: ixx, iyy: iyy, izz: izz };
+}
+
+pub fn gnc_quat_normalize(q: GncQuat) -> GncQuat {
+    let n2: Float = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+    if n2 <= 0.0000000001 {
+        return GncQuat { w: 1.0, x: 0.0, y: 0.0, z: 0.0 };
+    }
+    let inv: Float = 1.0 / sqrt(n2);
+    return GncQuat {
+        w: q.w * inv,
+        x: q.x * inv,
+        y: q.y * inv,
+        z: q.z * inv
+    };
+}
+
+pub fn euler_angular_accel(ixx: Float, iyy: Float, izz: Float, wx: Float, wy: Float, wz: Float, tx: Float, ty: Float, tz: Float) -> GncVec3 {
+    let ax: Float = if ixx > 0.000000001 { (tx - (izz - iyy) * wy * wz) / ixx } else { 0.0 };
+    let ay: Float = if iyy > 0.000000001 { (ty - (ixx - izz) * wz * wx) / iyy } else { 0.0 };
+    let az: Float = if izz > 0.000000001 { (tz - (iyy - ixx) * wx * wy) / izz } else { 0.0 };
+    return GncVec3 { x: ax, y: ay, z: az };
+}
+
+pub fn quat_derivative(qw: Float, qx: Float, qy: Float, qz: Float, wx: Float, wy: Float, wz: Float) -> GncQuat {
+    let dw: Float = 0.5 * (0.0 - (wx * qx + wy * qy + wz * qz));
+    let dx: Float = 0.5 * (wx * qw + wy * qz - wz * qy);
+    let dy: Float = 0.5 * (wy * qw + wz * qx - wx * qz);
+    let dz: Float = 0.5 * (wz * qw + wx * qy - wy * qx);
+    return GncQuat { w: dw, x: dx, y: dy, z: dz };
+}
+
+pub fn euler_angular_momentum_deriv(inertia_diag: List[Float], omega: List[Float], torque: List[Float]) -> List[Float] {
+    let li: Int = list_len(inertia_diag);
+    let lo: Int = list_len(omega);
+    let lt: Int = list_len(torque);
+    if li < 3 || lo < 3 || lt < 3 {
+        let mut def: List[Float] = list_new();
+        def = list_push(def, 0.0);
+        def = list_push(def, 0.0);
+        def = list_push(def, 0.0);
+        return def;
+    }
+    let ixx: Float = list_get(inertia_diag, 0);
+    let iyy: Float = list_get(inertia_diag, 1);
+    let izz: Float = list_get(inertia_diag, 2);
+    let wx: Float = list_get(omega, 0);
+    let wy: Float = list_get(omega, 1);
+    let wz: Float = list_get(omega, 2);
+    let tx: Float = list_get(torque, 0);
+    let ty: Float = list_get(torque, 1);
+    let tz: Float = list_get(torque, 2);
+    let acc: GncVec3 = euler_angular_accel(ixx, iyy, izz, wx, wy, wz, tx, ty, tz);
+    let mut out: List[Float] = list_new();
+    out = list_push(out, acc.x);
+    out = list_push(out, acc.y);
+    out = list_push(out, acc.z);
+    return out;
+}
+
+pub fn spacecraft_rotational_energy(sc: Spacecraft6Dof) -> Float {
+    let i: InertiaDiag = sc.inertia;
+    return 0.5 * (i.ixx * sc.wx * sc.wx + i.iyy * sc.wy * sc.wy + i.izz * sc.wz * sc.wz);
+}
+
+pub fn spacecraft_angular_momentum_mag(sc: Spacecraft6Dof) -> Float {
+    let i: InertiaDiag = sc.inertia;
+    let lx: Float = i.ixx * sc.wx;
+    let ly: Float = i.iyy * sc.wy;
+    let lz: Float = i.izz * sc.wz;
+    return sqrt(lx * lx + ly * ly + lz * lz);
+}
+
+pub fn spacecraft_6dof_step(sc: Spacecraft6Dof, force: GncVec3, torque: GncVec3, dt: Float) -> Spacecraft6Dof {
+    let m: Float = if sc.mass > 0.000001 { sc.mass } else { 1.0 };
+    let i: InertiaDiag = sc.inertia;
+    let ax: Float = force.x / m;
+    let ay: Float = force.y / m;
+    let az: Float = force.z / m;
+
+    let p_next_x: Float = sc.px + sc.vx * dt + 0.5 * ax * dt * dt;
+    let p_next_y: Float = sc.py + sc.vy * dt + 0.5 * ay * dt * dt;
+    let p_next_z: Float = sc.pz + sc.vz * dt + 0.5 * az * dt * dt;
+    let v_next_x: Float = sc.vx + ax * dt;
+    let v_next_y: Float = sc.vy + ay * dt;
+    let v_next_z: Float = sc.vz + az * dt;
+
+    let k1_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, sc.wx, sc.wy, sc.wz, torque.x, torque.y, torque.z);
+    let k1_q: GncQuat = quat_derivative(sc.qw, sc.qx, sc.qy, sc.qz, sc.wx, sc.wy, sc.wz);
+
+    let half_dt: Float = dt * 0.5;
+    let w_mid1_x: Float = sc.wx + k1_w.x * half_dt;
+    let w_mid1_y: Float = sc.wy + k1_w.y * half_dt;
+    let w_mid1_z: Float = sc.wz + k1_w.z * half_dt;
+    let raw_q1: GncQuat = GncQuat {
+        w: sc.qw + k1_q.w * half_dt,
+        x: sc.qx + k1_q.x * half_dt,
+        y: sc.qy + k1_q.y * half_dt,
+        z: sc.qz + k1_q.z * half_dt
+    };
+    let q_mid1: GncQuat = gnc_quat_normalize(raw_q1);
+
+    let k2_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, w_mid1_x, w_mid1_y, w_mid1_z, torque.x, torque.y, torque.z);
+    let k2_q: GncQuat = quat_derivative(q_mid1.w, q_mid1.x, q_mid1.y, q_mid1.z, w_mid1_x, w_mid1_y, w_mid1_z);
+
+    let w_mid2_x: Float = sc.wx + k2_w.x * half_dt;
+    let w_mid2_y: Float = sc.wy + k2_w.y * half_dt;
+    let w_mid2_z: Float = sc.wz + k2_w.z * half_dt;
+    let raw_q2: GncQuat = GncQuat {
+        w: sc.qw + k2_q.w * half_dt,
+        x: sc.qx + k2_q.x * half_dt,
+        y: sc.qy + k2_q.y * half_dt,
+        z: sc.qz + k2_q.z * half_dt
+    };
+    let q_mid2: GncQuat = gnc_quat_normalize(raw_q2);
+
+    let k3_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, w_mid2_x, w_mid2_y, w_mid2_z, torque.x, torque.y, torque.z);
+    let k3_q: GncQuat = quat_derivative(q_mid2.w, q_mid2.x, q_mid2.y, q_mid2.z, w_mid2_x, w_mid2_y, w_mid2_z);
+
+    let w_end_x: Float = sc.wx + k3_w.x * dt;
+    let w_end_y: Float = sc.wy + k3_w.y * dt;
+    let w_end_z: Float = sc.wz + k3_w.z * dt;
+    let raw_q3: GncQuat = GncQuat {
+        w: sc.qw + k3_q.w * dt,
+        x: sc.qx + k3_q.x * dt,
+        y: sc.qy + k3_q.y * dt,
+        z: sc.qz + k3_q.z * dt
+    };
+    let q_end: GncQuat = gnc_quat_normalize(raw_q3);
+
+    let k4_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, w_end_x, w_end_y, w_end_z, torque.x, torque.y, torque.z);
+    let k4_q: GncQuat = quat_derivative(q_end.w, q_end.x, q_end.y, q_end.z, w_end_x, w_end_y, w_end_z);
+
+    let inv6: Float = 0.16666666666666666;
+    let w_next_x: Float = sc.wx + dt * inv6 * (k1_w.x + 2.0 * k2_w.x + 2.0 * k3_w.x + k4_w.x);
+    let w_next_y: Float = sc.wy + dt * inv6 * (k1_w.y + 2.0 * k2_w.y + 2.0 * k3_w.y + k4_w.y);
+    let w_next_z: Float = sc.wz + dt * inv6 * (k1_w.z + 2.0 * k2_w.z + 2.0 * k3_w.z + k4_w.z);
+
+    let q_unnorm: GncQuat = GncQuat {
+        w: sc.qw + dt * inv6 * (k1_q.w + 2.0 * k2_q.w + 2.0 * k3_q.w + k4_q.w),
+        x: sc.qx + dt * inv6 * (k1_q.x + 2.0 * k2_q.x + 2.0 * k3_q.x + k4_q.x),
+        y: sc.qy + dt * inv6 * (k1_q.y + 2.0 * k2_q.y + 2.0 * k3_q.y + k4_q.y),
+        z: sc.qz + dt * inv6 * (k1_q.z + 2.0 * k2_q.z + 2.0 * k3_q.z + k4_q.z)
+    };
+    let q_next: GncQuat = gnc_quat_normalize(q_unnorm);
+
+    return Spacecraft6Dof {
+        px: p_next_x, py: p_next_y, pz: p_next_z,
+        vx: v_next_x, vy: v_next_y, vz: v_next_z,
+        qw: q_next.w, qx: q_next.x, qy: q_next.y, qz: q_next.z,
+        wx: w_next_x, wy: w_next_y, wz: w_next_z,
+        mass: m,
+        inertia: i
+    };
+}

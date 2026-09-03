@@ -1,0 +1,67 @@
+// # Thermodynamics, Landauer Limit, and Shannon Entropy
+//
+// Logline: Calculates thermodynamic erasure costs under Landauer's Principle and evaluates Shannon informational entropy.
+//
+// Setup: Pure floating-point algorithms modeling thermodynamic energy dissipation and information theoretic entropy.
+//
+// Beats:
+//   1. Landauer minimum energy per erased bit at temperature T (ΔQ = kB * T * ln(2)).
+//   2. Calculate thermodynamic dissipation for bulk memory buffer deallocations.
+//   3. Compute Shannon information entropy H(X) from probability distributions.
+//   4. Calculate entropy of byte buffers to measure randomness vs compressibility.
+
+import "std/core/principles/landauer_principle.oo";
+
+pub fn thermo_landauer_limit(temperature_kelvin: Float) -> Result[Float, String] {
+    return landauer_per_bit(temperature_kelvin);
+}
+
+pub fn thermo_erasure_energy(erased_bits: Int, temperature_kelvin: Float) -> Result[Float, String] {
+    return landauer_total(erased_bits, temperature_kelvin);
+}
+
+// Shannon entropy H(X) for binary choice with probability p of 1
+pub fn thermo_binary_entropy(prob_one: Float) -> Float {
+    if prob_one <= 0.0 || prob_one >= 1.0 {
+        return 0.0;
+    }
+    let p1: Float = prob_one;
+    let p0: Float = 1.0 - prob_one;
+    let ln2: Float = 0.6931471805599453;
+    let h1: Float = p1 * (ln(p1) / ln2);
+    let h0: Float = p0 * (ln(p0) / ln2);
+    return 0.0 - (h1 + h0);
+}
+
+// Estimate informational entropy per byte in a List[Int] buffer (0.0 to 8.0 bits/byte)
+pub fn thermo_buffer_entropy(buf: List[Int]) -> Float {
+    let n: Int = list_len(buf);
+    if n <= 1 { return 0.0; }
+    let mut counts: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        counts = list_push(counts, 0);
+        i = i + 1;
+    }
+    i = 0;
+    while i < n {
+        let b: Int = list_get(buf, i) & 255;
+        let c: Int = list_get(counts, b);
+        counts = list_set(counts, b, c + 1);
+        i = i + 1;
+    }
+    let total: Float = 1.0 * (n);
+    let ln2: Float = 0.6931471805599453;
+    let mut ent: Float = 0.0;
+    i = 0;
+    while i < 256 {
+        let cnt: Int = list_get(counts, i);
+        if cnt > 0 {
+            let p: Float = (1.0 * (cnt)) / total;
+            let term: Float = p * (ln(p) / ln2);
+            ent = ent - term;
+        }
+        i = i + 1;
+    }
+    return ent;
+}

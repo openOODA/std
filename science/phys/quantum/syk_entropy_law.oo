@@ -1,0 +1,113 @@
+// # Sachdev-Ye-Kitaev (SYK) low-T entropy & Lyapunov law
+//
+// Logline: Large-q SYK ground-state entropy S_0 = (N/q) ln 2, chaos bound lambda_L = 2*pi/beta at low T.
+//
+// Setup: Imports std/principles/constants.oo for k_B and std/core/domain_cert.oo. N, q are physical site count and interaction order.
+//
+// Beats:
+//   1. SYK_ground_entropy(N, q) = (N/q) * ln 2; N<1 or q<1 fails closed.
+//   2. SYK_lyapunov_low_T(beta) = 2*pi/beta saturates Maldacena-Shenker-Stanford chaos bound.
+//   3. DomainCert holds when N>=1, q>=1, and entropy is positive.
+//
+// References:
+//   - Sachdev 2010, Phys. Rev. Lett. 105, 151602 (arXiv:0912.3735).
+//   - Kitaev 2015 KITP talks "A simple model of quantum holography".
+//   - Maldacena-Stanford 2016, "Comments on the Sachdev-Ye-Kitaev model" (arXiv:1604.07818).
+//   - Maldacena-Shenker-Stanford 2016, JHEP 08 (2016) 106 (arXiv:1503.01409).
+
+import "std/core/principles/physical_constants.oo";
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_syk_entropy_law() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn syk_ln2() -> Float {
+    return 0.6931471805599453;
+}
+
+// SYK ground-state entropy S_0 = (N/q) * ln 2 in natural units (k_B=1).
+// Pure Float. Returns negative sentinel on hostile input.
+pub fn syk_ground_entropy(N: Float, q: Float) -> Float {
+    if N < 1.0 { return 0.0 - 1.0; }
+    if q < 1.0 { return 0.0 - 1.0; }
+    return (N / q) * syk_ln2();
+}
+
+// SYK chaos-bound Lyapunov exponent lambda_L = 2*pi/beta in low-T limit.
+// beta = 1/(k_B T) with k_B from CODATA 2022. T<=0 returns negative sentinel.
+pub fn syk_lyapunov_low_T(beta: Float) -> Float {
+    if beta <= 0.0 { return 0.0 - 1.0; }
+    let pi_val: Float = circ_pi_std_phys_syk_entropy_law();
+    return (2.0 * pi_val) / beta;
+}
+
+// Lyapunov from temperature T (Kelvin): lambda_L = 2*pi*k_B*T.
+pub fn syk_lyapunov_from_T(T: Float) -> Float {
+    if T <= 0.0 { return 0.0 - 1.0; }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let k: Float = pc.boltzmann_constant;
+    let pi_val: Float = circ_pi_std_phys_syk_entropy_law();
+    return 2.0 * pi_val * k * T;
+}
+
+// DomainCert holds=1 iff N>=1, q>=1, and S_0 > 0.
+pub fn phys_syk_entropy_law(N: Float, q: Float) -> DomainCert {
+    let s: Float = syk_ground_entropy(N, q);
+    let mut h: Int = 0;
+    if s > 0.0 {
+        h = 1;
+    }
+    return domain_cert("phys", "syk_entropy", h);
+}
+
+// Verify: golden (N=4,q=4 ln 2; N=2,q=2 (ln2)/2), hostile (N<1, q<1), chaos bound.
+pub fn verify_syk_entropy_law() -> Bool {
+    let ln2: Float = syk_ln2();
+    // Golden: N=4, q=4 -> S_0 = ln 2 within 0.001% (i.e. within |1e-5|*ln2).
+    let s44: Float = syk_ground_entropy(4.0, 4.0);
+    let mut d44: Float = s44 - ln2;
+    if d44 < 0.0 { d44 = 0.0 - d44; }
+    let b44: Float = ln2 * 0.00001;
+    if d44 > b44 { return false; }
+    // Golden: N=2, q=4 -> S_0 = (1/2) ln 2 within 0.001% (i.e. S_0 = (N/q)*ln 2 with N/q = 1/2).
+    let s24: Float = syk_ground_entropy(2.0, 4.0);
+    let want24: Float = 0.5 * ln2;
+    let mut d24: Float = s24 - want24;
+    if d24 < 0.0 { d24 = 0.0 - d24; }
+    let b24: Float = want24 * 0.00001;
+    if d24 > b24 { return false; }
+    // Golden: N=8, q=4 -> S_0 = 2 ln 2.
+    let s84: Float = syk_ground_entropy(8.0, 4.0);
+    let want84: Float = 2.0 * ln2;
+    let mut d84: Float = s84 - want84;
+    if d84 < 0.0 { d84 = 0.0 - d84; }
+    if d84 > 0.000001 { return false; }
+    // Hostile: N<1, q<1 fail closed.
+    if syk_ground_entropy(0.0, 4.0) >= 0.0 { return false; }
+    if syk_ground_entropy(4.0, 0.0) >= 0.0 { return false; }
+    if syk_ground_entropy(0.0 - 1.0, 4.0) >= 0.0 { return false; }
+    if syk_ground_entropy(4.0, 0.5) >= 0.0 { return false; }
+    // Coupled: Lyapunov at T=1 K.
+    let pi_val: Float = circ_pi_std_phys_syk_entropy_law();
+    let pc: PhysicalConstants = constants_codata_2022();
+    let k_b: Float = pc.boltzmann_constant;
+    let beta: Float = 1.0 / (k_b * 1.0);
+    let lam: Float = syk_lyapunov_low_T(beta);
+    let want_lam: Float = (2.0 * pi_val) / beta;
+    let mut dl: Float = lam - want_lam;
+    if dl < 0.0 { dl = 0.0 - dl; }
+    let tiny: Float = 0.0000000000000000000000000000010;
+    if dl > tiny { return false; }
+    // Hostile Lyapunov: T<=0 fails closed.
+    if syk_lyapunov_from_T(0.0) >= 0.0 { return false; }
+    if syk_lyapunov_from_T(0.0 - 1.0) >= 0.0 { return false; }
+    // DomainCert sanity.
+    if phys_syk_entropy_law(4.0, 4.0).holds != 1 { return false; }
+    if phys_syk_entropy_law(0.0, 4.0).holds != 0 { return false; }
+    if phys_syk_entropy_law(4.0, 0.0).holds != 0 { return false; }
+    return true;
+}

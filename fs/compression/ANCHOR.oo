@@ -1,0 +1,58 @@
+// # FS Compression Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fs/compression (compression primitives) subdir of the fs domain library. Re-exports a stable compression_mod_* surface for the most-used public API (Huffman tree, lz4 block, lz77 sliding, brotli stream, neural image compression). Private siblings (theories, laws, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private compression siblings; no caps required for pure byte-list compress/decompress. File-backed compression operations take FsReadCap / FsWriteCap at the call site.
+//
+// Beats:
+//   1. Re-export the Huffman tree surface (lengths, codes, encode, decode, freq) as compression_mod_huffman_*.
+//   2. Re-export the lz4 block and lz77 sliding surface as compression_mod_lz4_*, compression_mod_lz77_*.
+//   3. Re-export the brotli stream surface (prefix, window, flag, err) as compression_mod_brotli_*.
+//   4. Re-export the neural image compression v2 surface (psnr, mse, bpp) as compression_mod_neural_v2_*.
+//   5. Document the private siblings (theories, laws, principles, invariants, KATs).
+
+import "huffman_tree.oo";
+import "huffman_tree_codes.oo";
+import "huffman_tree_len.oo";
+import "lz4_block.oo";
+import "lz77_sliding.oo";
+import "brotli_stream.oo";
+import "neural_image_compression_v2.oo";
+
+// Public Huffman tree surface: compression_mod_huffman_*
+pub fn compression_mod_huffman_tree_lengths(src: List[Int]) -> List[Int] { return huffman_tree_lengths(src); }
+pub fn compression_mod_huffman_tree_encode(src: List[Int]) -> Result[List[Int], String] { return huffman_tree_encode(src); }
+pub fn compression_mod_huffman_tree_decode(pack: List[Int]) -> Result[List[Int], String] { return huffman_tree_decode(pack); }
+pub fn compression_mod_huffman_tree_codes(lens: List[Int]) -> List[Int] { return huffman_tree_codes(lens); }
+pub fn compression_mod_huffman_tree_kraft_ok(lens: List[Int]) -> Bool { return huffman_tree_kraft_ok(lens); }
+pub fn compression_mod_huffman_tree_prefix_free(lens: List[Int]) -> Bool { return huffman_tree_prefix_free(lens); }
+pub fn compression_mod_huffman_tree_freq(src: List[Int]) -> List[Int] { return huffman_tree_freq(src); }
+
+// Public lz4 block surface: compression_mod_lz4_*
+pub fn compression_mod_lz4_block_decode(buf: List[Int]) -> ByteOut { return lz4_block_decode(buf); }
+pub fn compression_mod_lz4_block_lits(src: List[Int]) -> ByteOut { return lz4_block_lits(src); }
+pub fn compression_mod_lz4_block_match(lits: List[Int], off: Int, mlen: Int) -> ByteOut { return lz4_block_match(lits, off, mlen); }
+
+// Public lz77 sliding surface: compression_mod_lz77_*
+pub fn compression_mod_lz77_sliding_compress(src: List[Int]) -> Result[List[Int], String] { return lz77_sliding_compress(src); }
+pub fn compression_mod_lz77_sliding_decompress(toks: List[Int]) -> Result[List[Int], String] { return lz77_sliding_decompress(toks); }
+
+// Public brotli stream surface: compression_mod_brotli_*
+pub fn compression_mod_brotli_stream_prefix(lens: List[Int], bits: List[Int]) -> BrOut { return brotli_stream_prefix(lens, bits); }
+pub fn compression_mod_brotli_stream_window(ring: List[Int], lit: Int, off: Int, mlen: Int) -> BrOut { return brotli_stream_window(ring, lit, off, mlen); }
+pub fn compression_mod_brotli_stream_flag(o: BrOut) -> Int { return brotli_stream_flag(o); }
+pub fn compression_mod_brotli_stream_err(o: BrOut) -> String { return brotli_stream_err(o); }
+
+// Public neural v2 surface: compression_mod_neural_v2_*
+pub fn compression_mod_neural_v2_psnr_max() -> Int { return neural_v2_psnr_max(); }
+pub fn compression_mod_neural_v2_mse_floor() -> Int { return neural_v2_mse_floor(); }
+pub fn compression_mod_neural_v2_bpp(rate_bits: Int, num_pixels: Int) -> Int { return neural_v2_bpp(rate_bits, num_pixels); }
+pub fn compression_mod_neural_v2_psnr_estimate(bpp_milli: Int) -> Int { return neural_v2_psnr_estimate(bpp_milli); }
+pub fn compression_mod_neural_v2_bpp_holds(rate_bits: Int, num_pixels: Int) -> DomainCert { return compression_neural_v2_bpp_holds(rate_bits, num_pixels); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. bwt_invertibility_via_lf_mapping_law.oo, lz77_match_length_law.oo, lzma_dict_law.oo)
+//   _theory files (e.g. arithmetic_coding_theory.oo, neural_image_compression_theory.oo)
+//   _principle files (e.g. ans_uniform_distribution_principle.oo, bwt_invertibility_principle.oo, huffman_prefix_free_principle.oo)
+//   _invariants files (e.g. compression_invariants.oo)
+//   _kat files (e.g. compression_kat.oo)

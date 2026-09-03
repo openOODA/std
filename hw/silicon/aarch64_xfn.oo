@@ -1,0 +1,189 @@
+// # AArch64 Function Header And Body Frame
+//
+// Logline: Parses fn headers with ProcessCap parameters and emits AAPCS64 prologue storing x0–x7.
+//
+// Setup: Uses xscan type eaters and encoder STP/SUB/STR. Locals start after saved args.
+//
+// Beats:
+//   1. Eat optional pub, fn, name, parameter list, and optional -> type.
+//   2. Allocate a 2048-byte frame, STP x29/x30, MOV fp, and STR argument registers.
+//   3. Bind each parameter name to its stack slot.
+//   4. Emit LDP/ADD-SP/RET epilogue.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+import "std/hw/silicon/aarch64_xfloat.oo";
+import "std/hw/silicon/aarch64_xmark.oo";
+
+pub fn a64x_frame() -> Int {
+    return 4000;
+}
+
+pub fn a64x_tmp_cmp() -> Int {
+    return 1904;
+}
+
+pub fn a64x_tmp_cond() -> Int {
+    return 1928;
+}
+
+pub fn a64x_tmp_st() -> Int {
+    return 1936;
+}
+
+pub fn a64x_tmp_res() -> Int {
+    return 1944;
+}
+
+pub fn a64x_tmp_rcv() -> Int {
+    return 2016;
+}
+
+pub fn a64x_eat_params(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_from_p(a64_eat(a64x_as_p(x0), 40), x0);
+    let mut narg: Int = 0;
+    x = a64x_skip(x);
+    while a64_peek(a64x_as_p(x)) != 41 && a64_peek(a64x_as_p(x)) >= 0 {
+        x = a64x_skip(x);
+        if a64_starts(a64x_as_p(x), "mut") {
+            x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "mut"), x);
+            x = a64x_skip(x);
+        }
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        let nm: String = x.p.text;
+        let mut tyn: String = "";
+        let mut islf: Int = 0;
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 58 {
+            x = a64x_from_p(a64_eat(a64x_as_p(x), 58), x);
+            x = a64x_eat_type(x);
+            tyn = x.p.text;
+            islf = x.p.ival;
+            let mut fpv: Int = 0;
+            if x.p.text == "Float" { fpv = 1; }
+            if x.p.text == "String" { fpv = 2; }
+            if x.p.text == "Result" || x.p.text == "Option" { fpv = 3; }
+            x = a64x_with_fp(x, fpv);
+        }
+        x = a64x_skip_default(x);
+        x = a64x_bind16(x, nm);
+        if x.st.fp == 2 {
+            x = a64x_mark_str(x, nm);
+        }
+        if x.st.fp == 3 {
+            x = a64x_mark_res(x, nm);
+            let inn: String = a64x_last_inner(x);
+            if bytes_len(inn) > 0 { x = a64x_mark_ok(x, nm, inn); }
+            let err_ty: String = a64x_last_err(x);
+            if bytes_len(err_ty) > 0 { x = a64x_mark_err(x, nm, err_ty); }
+        }
+        if bytes_len(tyn) > 0 && tyn != "Float" && tyn != "String" && tyn != "Result" && tyn != "Option" && tyn != "Int" && tyn != "Bool" {
+            x = a64x_mark_ty(x, nm, tyn);
+        }
+        if tyn == "List" && islf == 1 {
+            x = a64x_mark_str(x, "LF:" + nm);
+        }
+        narg = narg + 1;
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 44 {
+            x = a64x_from_p(a64_eat(a64x_as_p(x), 44), x);
+            x = a64x_skip(x);
+        }
+    }
+    x = a64x_from_p(a64_eat(a64x_as_p(x), 41), x);
+    return a64x_with_ival(x, narg);
+}
+
+pub fn a64x_prologue(x0: A64X, narg: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), a64x_frame()));
+    x = a64x_emit(x, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16));
+    x = a64x_emit(x, arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+    let nms: List[String] = x.p.names;
+    let mut reg: Int = 0;
+    let mut i: Int = 0;
+    while i < narg && reg < 8 {
+        let off: Int = 16 + i * 16;
+        let nm: String = list_get(nms, i);
+        x = a64x_emit(x, arm64_word_str(reg, abi_fp_reg(), off));
+        if a64x_name_is_res(x, nm) {
+            if reg + 1 < 8 {
+                x = a64x_emit(x, arm64_word_str(reg + 1, abi_fp_reg(), off + 8));
+            }
+            reg = reg + 2;
+        } else {
+            reg = reg + 1;
+        }
+        i = i + 1;
+    }
+    while i < narg {
+        let off2: Int = 16 + i * 16;
+        let stk_off: Int = 4016 + (i - 8) * 16;
+        let nm2: String = list_get(nms, i);
+        x = a64x_emit(a64x_emit(x, arm64_word_ldr(9, abi_fp_reg(), stk_off)), arm64_word_str(9, abi_fp_reg(), off2));
+        if a64x_name_is_res(x, nm2) {
+            x = a64x_emit(a64x_emit(x, arm64_word_ldr(10, abi_fp_reg(), stk_off + 8)), arm64_word_str(10, abi_fp_reg(), off2 + 8));
+        }
+        i = i + 1;
+    }
+    return x;
+}
+
+pub fn a64x_epilogue(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16));
+    x = a64x_emit(x, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), a64x_frame()));
+    return a64x_emit(x, arm64_word_ret());
+}
+
+pub fn a64x_fn_header(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    if a64_starts(a64x_as_p(x), "pub") {
+        x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "pub"), x);
+    }
+    x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "fn"), x);
+    x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+    let nm: String = x.p.text;
+    x = a64x_eat_params(x);
+    let narg: Int = x.p.ival;
+    x = a64x_skip(x);
+    if a64_peek(a64x_as_p(x)) == 45 {
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 45), x);
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 62), x);
+        x = a64x_eat_type(x);
+        let rt: String = x.p.text;
+        if rt == "Result" || rt == "Option" {
+            x = a64x_add_field(x, "->" + nm, 3);
+            let inn2: String = a64x_last_inner(x);
+            if bytes_len(inn2) > 0 { x = a64x_add_field(x, "K->" + nm + ":" + inn2, 0); }
+            let err2: String = a64x_last_err(x);
+            if bytes_len(err2) > 0 { x = a64x_add_field(x, "E->" + nm + ":" + err2, 0); }
+        }
+        if rt == "String" { x = a64x_add_field(x, "->" + nm, 2); }
+        if rt == "Float" { x = a64x_add_field(x, "->" + nm, 1); }
+        if rt != "Result" && rt != "Option" && rt != "String" && rt != "Float" && rt != "Int" && rt != "Bool" && rt != "List" && rt != "void" && rt != "Void" && bytes_len(rt) > 0 {
+            x = a64x_add_field(x, "R->" + nm + ":" + rt, 0);
+        }
+    }
+    x = a64x_skip(x);
+    if a64_starts(a64x_as_p(x), "requires") {
+        x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "requires"), x);
+        while a64_peek(a64x_as_p(x)) != 123 && a64_peek(a64x_as_p(x)) >= 0 {
+            let p: A64P = a64x_as_p(x);
+            x = a64x_from_p(a64_at(p, p.i + 1), x);
+        }
+    }
+    return a64x_with_ival_text(x, narg, nm);
+}
+
+pub fn a64x_call_indirect(x0: A64X, off_loc: Int, n_args: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_ldr(16, abi_fp_reg(), off_loc));
+    x = a64x_emit(x, arm64_word_ldr(17, 16, 0));
+    x = a64x_emit(x, arm64_word_blr(17));
+    if n_args > 8 {
+        x = a64x_emit(x, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), (n_args - 8) * 16));
+    }
+    return x;
+}

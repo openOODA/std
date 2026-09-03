@@ -1,0 +1,40 @@
+// # HMAC-SHA256 one-shot
+//
+// Logline: Forward hmac_sha256 to the runtime hex MAC and verify that hex tag.
+//
+// Setup: crypto_hmac_sha256_internal is product C (FIPS 198 / RFC 2104).
+//
+// Beats:
+//   1. hmac_sha256 returns the 64-char lowercase hex tag.
+//   2. hmac_sign is that same one-shot.
+//   3. hmac_verify accepts only an exact hex match of hmac_sha256.
+
+import "std/sec/ct/ct_primitives.oo";
+
+pub fn hmac_sha256(key: String, message: String) -> String {
+    return crypto_hmac_sha256_internal(key, message);
+}
+
+pub fn hmac_sign(key: String, message: String) -> String {
+    return hmac_sha256(key, message);
+}
+
+/// Convert a String to its bytes as List[Int] (for ct_memcmp_eq).
+fn hmac_str_bytes(s: String) -> List[Int] {
+    let mut out: List[Int] = bytes_new();
+    let n: Int = bytes_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        out = bytes_push(out, byte_at(s, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn hmac_verify(key: String, message: String, signature: String) -> Bool {
+    let got: String = hmac_sha256(key, message);
+    if got.len() != signature.len() {
+        return false;
+    }
+    return ct_memcmp_eq(hmac_str_bytes(got), hmac_str_bytes(signature)) == 1;
+}

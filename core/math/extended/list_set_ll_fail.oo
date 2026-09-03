@@ -1,0 +1,20 @@
+// # List Set Ll Fail
+//
+// Logline: Standard library verification and domain capabilities for List Set Ll Fail.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+// leftover: list_set on List[List[String]] stays ERR llvm_emit
+pub fn verify_list_set_ll_fail() -> Bool {
+    let mut inner: List[String] = list_new();
+    inner = list_push(inner, "a");
+    let mut xs: List[List[String]] = list_new();
+    xs = list_push(xs, inner);
+    xs = list_set(xs, 0, inner);
+    println("should_not_emit");
+    return true;
+}

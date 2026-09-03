@@ -1,0 +1,252 @@
+// # Aerodynamic Flight State Vector Dynamics
+//
+// Logline: Evaluate aerodynamic flight state vectors, dynamic pressure, and compressible airspeed dynamics.
+//
+// Setup: Pure aerodynamic state calculation with zero ambient authority.
+//
+// Beats:
+//   1. Calculate dynamic pressure and calibrated airspeed.
+//   2. Compute Mach number from true airspeed and local sound speed.
+//   3. Assemble full aerodynamic flight state vector.
+
+
+import "std/app/combat/atmosphere.oo";
+
+type AeroState = struct {
+    altitude_m: Float,
+    true_airspeed_mps: Float,
+    calibrated_airspeed_mps: Float,
+    mach: Float,
+    dynamic_pressure_pa: Float,
+    alpha_rad: Float,
+    beta_rad: Float,
+    load_factor_g: Float,
+    density_kg_m3: Float,
+    speed_of_sound_mps: Float
+};
+
+pub fn aero_compute_dynamic_pressure(rho: Float, tas_mps: Float) -> Float {
+    return 0.5 * rho * tas_mps * tas_mps;
+}
+
+pub fn aero_compute_mach(tas_mps: Float, speed_of_sound_mps: Float) -> Float {
+    if speed_of_sound_mps <= 0.0001 {
+        return 0.0;
+    }
+    return tas_mps / speed_of_sound_mps;
+}
+
+pub fn aero_compute_impact_pressure(mach: Float, pressure_pa: Float) -> Float {
+    let m2: Float = mach * mach;
+    let factor: Float = 1.0 + (0.2 * m2);
+    let pratio: Float = pow(factor, 3.5);
+    return pressure_pa * (pratio - 1.0);
+}
+
+pub fn aero_compute_cas_from_mach(mach: Float, pressure_pa: Float) -> Float {
+    let qc: Float = aero_compute_impact_pressure(mach, pressure_pa);
+    if qc <= 0.0 {
+        return 0.0;
+    }
+    let p0: Float = isa_sea_level_pressure();
+    let a0: Float = isa_sea_level_speed_of_sound();
+    let term: Float = (qc / p0) + 1.0;
+    let base: Float = pow(term, 0.2857142857);
+    let diff: Float = base - 1.0;
+    if diff <= 0.0 {
+        return 0.0;
+    }
+    return a0 * sqrt(5.0 * diff);
+}
+
+pub fn aero_compute_mach_from_cas(cas_mps: Float, pressure_pa: Float) -> Float {
+    let a0: Float = isa_sea_level_speed_of_sound();
+    let p0: Float = isa_sea_level_pressure();
+    let cas_ratio: Float = cas_mps / a0;
+    let term0: Float = 1.0 + (0.2 * cas_ratio * cas_ratio);
+    let qc: Float = p0 * (pow(term0, 3.5) - 1.0);
+    if qc <= 0.0 || pressure_pa <= 0.0 {
+        return 0.0;
+    }
+    let term: Float = (qc / pressure_pa) + 1.0;
+    let base: Float = pow(term, 0.2857142857);
+    let diff: Float = base - 1.0;
+    if diff <= 0.0 {
+        return 0.0;
+    }
+    return sqrt(5.0 * diff);
+}
+
+pub fn aero_state_new(
+    alt_m: Float,
+    tas_mps: Float,
+    cas_mps: Float,
+    mach_val: Float,
+    q_pa: Float,
+    alpha: Float,
+    beta: Float,
+    n_g: Float,
+    rho: Float,
+    a_sound: Float
+) -> AeroState {
+    return AeroState {
+        altitude_m: alt_m,
+        true_airspeed_mps: tas_mps,
+        calibrated_airspeed_mps: cas_mps,
+        mach: mach_val,
+        dynamic_pressure_pa: q_pa,
+        alpha_rad: alpha,
+        beta_rad: beta,
+        load_factor_g: n_g,
+        density_kg_m3: rho,
+        speed_of_sound_mps: a_sound
+    };
+}
+
+pub fn aero_state_from_mach(
+    alt_m: Float,
+    mach_val: Float,
+    alpha_rad: Float,
+    beta_rad: Float,
+    load_factor_g: Float
+) -> AeroState {
+    let atmo: IsaAtmosphere = isa_atmosphere_at(alt_m);
+    let tas: Float = mach_val * atmo.speed_of_sound_mps;
+    let cas: Float = aero_compute_cas_from_mach(mach_val, atmo.pressure_pa);
+    let q: Float = aero_compute_dynamic_pressure(atmo.density_kg_m3, tas);
+    return aero_state_new(
+        alt_m,
+        tas,
+        cas,
+        mach_val,
+        q,
+        alpha_rad,
+        beta_rad,
+        load_factor_g,
+        atmo.density_kg_m3,
+        atmo.speed_of_sound_mps
+    );
+}
+
+pub fn aero_state_from_tas(
+    alt_m: Float,
+    tas_mps: Float,
+    alpha_rad: Float,
+    beta_rad: Float,
+    load_factor_g: Float
+) -> AeroState {
+    let atmo: IsaAtmosphere = isa_atmosphere_at(alt_m);
+    let mach_val: Float = aero_compute_mach(tas_mps, atmo.speed_of_sound_mps);
+    let cas: Float = aero_compute_cas_from_mach(mach_val, atmo.pressure_pa);
+    let q: Float = aero_compute_dynamic_pressure(atmo.density_kg_m3, tas_mps);
+    return aero_state_new(
+        alt_m,
+        tas_mps,
+        cas,
+        mach_val,
+        q,
+        alpha_rad,
+        beta_rad,
+        load_factor_g,
+        atmo.density_kg_m3,
+        atmo.speed_of_sound_mps
+    );
+}
+
+pub fn aero_state_from_cas(
+    alt_m: Float,
+    cas_mps: Float,
+    alpha_rad: Float,
+    beta_rad: Float,
+    load_factor_g: Float
+) -> AeroState {
+    let atmo: IsaAtmosphere = isa_atmosphere_at(alt_m);
+    let mach_val: Float = aero_compute_mach_from_cas(cas_mps, atmo.pressure_pa);
+    let tas: Float = mach_val * atmo.speed_of_sound_mps;
+    let q: Float = aero_compute_dynamic_pressure(atmo.density_kg_m3, tas);
+    return aero_state_new(
+        alt_m,
+        tas,
+        cas_mps,
+        mach_val,
+        q,
+        alpha_rad,
+        beta_rad,
+        load_factor_g,
+        atmo.density_kg_m3,
+        atmo.speed_of_sound_mps
+    );
+}
+
+pub fn aero_compute_specific_energy(alt_m: Float, tas_mps: Float) -> Float {
+    let g0: Float = isa_standard_gravity();
+    return alt_m + ((tas_mps * tas_mps) / (2.0 * g0));
+}
+
+pub fn aero_compute_turn_rate(tas_mps: Float, load_factor_g: Float) -> Float {
+    if tas_mps <= 1.0 || load_factor_g <= 1.0 {
+        return 0.0;
+    }
+    let g0: Float = isa_standard_gravity();
+    let n2_minus_1: Float = (load_factor_g * load_factor_g) - 1.0;
+    return (g0 * sqrt(n2_minus_1)) / tas_mps;
+}
+
+pub fn aero_compute_turn_radius(tas_mps: Float, load_factor_g: Float) -> Float {
+    if load_factor_g <= 1.0001 {
+        return 999999.0;
+    }
+    let g0: Float = isa_standard_gravity();
+    let n2_minus_1: Float = (load_factor_g * load_factor_g) - 1.0;
+    return (tas_mps * tas_mps) / (g0 * sqrt(n2_minus_1));
+}
+
+pub fn aero_body_velocity_u(tas_mps: Float, alpha_rad: Float, beta_rad: Float) -> Float {
+    return tas_mps * cos(alpha_rad) * cos(beta_rad);
+}
+
+pub fn aero_body_velocity_v(tas_mps: Float, beta_rad: Float) -> Float {
+    return tas_mps * sin(beta_rad);
+}
+
+pub fn aero_body_velocity_w(tas_mps: Float, alpha_rad: Float, beta_rad: Float) -> Float {
+    return tas_mps * sin(alpha_rad) * cos(beta_rad);
+}
+
+pub fn verify_dynamic_pressure() -> Bool {
+    let kat: Float = aero_compute_dynamic_pressure(1.225, 10.0);
+    let mut d: Float = kat - 61.25;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    if aero_compute_dynamic_pressure(0.0, 100.0) != 0.0 {
+        return false;
+    }
+    return true;
+}
+
+pub fn verify_isa_mach() -> Bool {
+    let a0: Float = isa_sea_level_speed_of_sound();
+    let m1: Float = aero_compute_mach(a0, a0);
+    let mut d: Float = m1 - 1.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+    let a8: Float = isa_speed_of_sound_at(8000.0);
+    if a8 <= 300.0 {
+        return false;
+    }
+    if a8 >= 320.0 {
+        return false;
+    }
+    if aero_compute_mach(100.0, 0.0) != 0.0 {
+        return false;
+    }
+    return true;
+}

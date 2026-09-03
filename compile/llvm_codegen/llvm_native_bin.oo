@@ -1,0 +1,178 @@
+// # Native Object & Binary Linker
+//
+// Logline: Assembles textual LLVM IR bitcode into relocatable ELF object files and links standalone native executables with runtime libraries.
+//
+// Setup: Native compilation toolchain driver formatting and executing assembler and linker pipelines under &SysCap.
+//
+// Beats:
+//   1. Configure native linker options, optimization levels, and debug flags.
+//   2. Assemble textual LLVM IR (.ll) into relocatable ELF object files (.o).
+//   3. Link object files with runtime library (chs_rt.o) and system dependencies (-lm -ldl -lpthread).
+//   4. Execute unified end-to-end native compile and link pipeline.
+
+fn native_link_config_pack(output_path: String, opt_level: String, is_debug: Int, extra_flags: String) -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, output_path);
+    out = list_push(out, opt_level);
+    out = list_push(out, is_debug.to_string());
+    out = list_push(out, extra_flags);
+    return out;
+}
+fn cfg_output(c: List[String]) -> String { if list_len(c) < 1 { return "a.out"; } return list_get(c, 0); }
+fn cfg_opt(c: List[String]) -> String { if list_len(c) < 2 { return "-O3"; } return list_get(c, 1); }
+fn cfg_dbg(c: List[String]) -> Int { if list_len(c) < 3 { return 0; } return parse_int(list_get(c, 2)); }
+fn cfg_flags(c: List[String]) -> String { if list_len(c) < 4 { return ""; } return list_get(c, 3); }
+
+pub fn native_link_config_default() -> List[String] {
+    return native_link_config_pack("a.out", "-O3", 0, "");
+}
+
+pub fn native_link_config_new(output_path: String, opt_level: String, is_debug: Int, extra_flags: String) -> List[String] {
+    return native_link_config_pack(output_path, opt_level, is_debug, extra_flags);
+}
+
+pub fn native_shell_quote(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    let mut out: String = "'";
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "'" {
+            out = out + "'\\''";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out + "'";
+}
+
+pub fn native_format_opt_flag(opt: String) -> String {
+    if chars_len(opt) == 0 {
+        return "-O3";
+    }
+    if str_starts_with(opt, "-O") {
+        return opt;
+    }
+    return "-O" + opt;
+}
+
+pub fn native_build_assemble_cmd(ll_path: String, obj_path: String, config: List[String]) -> String {
+    let opt_flag: String = native_format_opt_flag(cfg_opt(config));
+    let mut cmd: String = "clang -c " + opt_flag;
+    if cfg_dbg(config) != 0 {
+        cmd = cmd + " -g";
+    }
+    if chars_len(cfg_flags(config)) > 0 {
+        cmd = cmd + " " + cfg_flags(config);
+    }
+    cmd = cmd + " -Wno-override-module -Wno-unused-command-line-argument ";
+    cmd = cmd + native_shell_quote(ll_path) + " -o " + native_shell_quote(obj_path);
+    return cmd;
+}
+
+pub fn native_build_link_cmd(obj_path: String, bin_path: String, runtime_obj: String, config: List[String]) -> String {
+    let opt_flag: String = native_format_opt_flag(cfg_opt(config));
+    let mut cmd: String = "clang " + opt_flag;
+    if cfg_dbg(config) != 0 {
+        cmd = cmd + " -g";
+    }
+    if chars_len(cfg_flags(config)) > 0 {
+        cmd = cmd + " " + cfg_flags(config);
+    }
+    cmd = cmd + " " + native_shell_quote(obj_path);
+    cmd = cmd + " " + native_shell_quote(runtime_obj);
+    cmd = cmd + " -lm -ldl -lpthread -o " + native_shell_quote(bin_path);
+    return cmd;
+}
+
+pub fn native_build_direct_cmd(ll_path: String, bin_path: String, runtime_obj: String, config: List[String]) -> String {
+    let opt_flag: String = native_format_opt_flag(cfg_opt(config));
+    let mut cmd: String = "clang " + opt_flag;
+    if cfg_dbg(config) != 0 {
+        cmd = cmd + " -g";
+    }
+    if chars_len(cfg_flags(config)) > 0 {
+        cmd = cmd + " " + cfg_flags(config);
+    }
+    cmd = cmd + " -Wno-override-module -Wno-unused-command-line-argument ";
+    cmd = cmd + native_shell_quote(ll_path) + " ";
+    cmd = cmd + native_shell_quote(runtime_obj);
+    cmd = cmd + " -lm -ldl -lpthread -o " + native_shell_quote(bin_path);
+    return cmd;
+}
+
+pub fn native_assemble_obj(sys: &ProcessCap, ll_path: String, obj_path: String, config: List[String]) -> Result[String, String] {
+    if chars_len(ll_path) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_ll_path");
+    }
+    if chars_len(obj_path) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_obj_path");
+    }
+    if !str_ends_with(ll_path, ".ll") {
+        return Err("ERR\tllvm_native_bin\tinvalid_ll_extension");
+    }
+    if !str_ends_with(obj_path, ".o") {
+        return Err("ERR\tllvm_native_bin\tinvalid_obj_extension");
+    }
+    let cmd: String = native_build_assemble_cmd(ll_path, obj_path, config);
+    let r: Result[String, String] = sys_exec(sys, "sh", "-c", cmd);
+    match r {
+        Ok(_) => {
+            return Ok(obj_path);
+        }
+        Err(e) => {
+            return Err("ERR\tllvm_native_bin\tassemble_failed: " + e);
+        }
+    }
+}
+
+pub fn native_link_binary(sys: &ProcessCap, obj_path: String, bin_path: String, runtime_obj: String, config: List[String]) -> Result[String, String] {
+    if chars_len(obj_path) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_obj_path");
+    }
+    if chars_len(bin_path) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_bin_path");
+    }
+    if chars_len(runtime_obj) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_runtime_obj");
+    }
+    if !str_ends_with(obj_path, ".o") {
+        return Err("ERR\tllvm_native_bin\tinvalid_obj_extension");
+    }
+    let cmd: String = native_build_link_cmd(obj_path, bin_path, runtime_obj, config);
+    let r: Result[String, String] = sys_exec(sys, "sh", "-c", cmd);
+    match r {
+        Ok(_) => {
+            return Ok(bin_path);
+        }
+        Err(e) => {
+            return Err("ERR\tllvm_native_bin\tlink_failed: " + e);
+        }
+    }
+}
+
+pub fn native_compile_and_link(sys: &ProcessCap, ll_path: String, bin_path: String, runtime_obj: String, config: List[String]) -> Result[String, String] {
+    if chars_len(ll_path) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_ll_path");
+    }
+    if chars_len(bin_path) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_bin_path");
+    }
+    if chars_len(runtime_obj) == 0 {
+        return Err("ERR\tllvm_native_bin\tempty_runtime_obj");
+    }
+    if !str_ends_with(ll_path, ".ll") {
+        return Err("ERR\tllvm_native_bin\tinvalid_ll_extension");
+    }
+    let cmd: String = native_build_direct_cmd(ll_path, bin_path, runtime_obj, config);
+    let r: Result[String, String] = sys_exec(sys, "sh", "-c", cmd);
+    match r {
+        Ok(_) => {
+            return Ok(bin_path);
+        }
+        Err(e) => {
+            return Err("ERR\tllvm_native_bin\tcompile_and_link_failed: " + e);
+        }
+    }
+}

@@ -1,0 +1,223 @@
+// # BLAS Level 3 Matrix-Matrix Linear Algebra Module
+//
+// Logline: BLAS Level 3 matrix-matrix linear algebra routines (GEMM general matrix multiplication, SYMM symmetric multiply, and SYRK rank-k update).
+//
+// Setup: Pure math module. Implements BLAS-3 operations over row-major Matrix structures with 8-lane and 4-lane SIMD vectorization.
+//
+// Beats:
+//   1. General matrix-matrix multiplication (blas_gemm, blas_gemm_f64) via 8-lane f32x8_fma and 4-lane f64x4_fma chunked loops with scalar peeling.
+//   2. Symmetric matrix multiplication (blas_symm: C = alpha * A * B + beta * C).
+//   3. Symmetric rank-k matrix update (blas_syrk: C = alpha * A * A^T + beta * C).
+//   4. Triangular matrix-matrix solve (blas_trsm) and triangular multiplication (blas_trmm).
+
+import "std/sec/simd/simd_vec8f.oo";
+import "std/sec/simd/simd_vec4d.oo";
+import "std/core/math/matrix.oo";
+import "std/core/math/blas_level1.oo";
+import "std/core/math/blas_level2.oo";
+
+// GEMM: C = alpha * A * B + beta * C using 8-lane f32x8_fma chunks with scalar peeling.
+pub fn blas_gemm(
+    alpha: Float,
+    a: Matrix,
+    b: Matrix,
+    beta: Float,
+    c: Matrix
+) -> Matrix {
+    let m: Int = matrix_rows(a);
+    let k_dim: Int = matrix_cols(a);
+    let n: Int = matrix_cols(b);
+    let mut new_data: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < m {
+        let mut col: Int = 0;
+        while col < n {
+            let mut k: Int = 0;
+            let mut vec_acc: f32x8 = f32x8_zero();
+            while (k + 8) <= k_dim {
+                let va: f32x8 = f32x8_new(
+                    matrix_get(a, r, k),
+                    matrix_get(a, r, k + 1),
+                    matrix_get(a, r, k + 2),
+                    matrix_get(a, r, k + 3),
+                    matrix_get(a, r, k + 4),
+                    matrix_get(a, r, k + 5),
+                    matrix_get(a, r, k + 6),
+                    matrix_get(a, r, k + 7)
+                );
+                let vb: f32x8 = f32x8_new(
+                    matrix_get(b, k, col),
+                    matrix_get(b, k + 1, col),
+                    matrix_get(b, k + 2, col),
+                    matrix_get(b, k + 3, col),
+                    matrix_get(b, k + 4, col),
+                    matrix_get(b, k + 5, col),
+                    matrix_get(b, k + 6, col),
+                    matrix_get(b, k + 7, col)
+                );
+                vec_acc = f32x8_fma(va, vb, vec_acc);
+                k = k + 8;
+            }
+            let mut dot_sum: Float = f32x8_reduce_sum(vec_acc);
+            while k < k_dim {
+                let av: Float = matrix_get(a, r, k);
+                let bv: Float = matrix_get(b, k, col);
+                dot_sum = dot_sum + av * bv;
+                k = k + 1;
+            }
+            let cv: Float = matrix_get(c, r, col);
+            let final_val: Float = alpha * dot_sum + beta * cv;
+            new_data = list_push(new_data, final_val);
+            col = col + 1;
+        }
+        r = r + 1;
+    }
+    return Matrix {
+        rows: m,
+        cols: n,
+        data: new_data
+    };
+}
+
+// 4-lane f64x4 GEMM variant with scalar peeling: C = alpha * A * B + beta * C.
+pub fn blas_gemm_f64(
+    alpha: Float,
+    a: Matrix,
+    b: Matrix,
+    beta: Float,
+    c: Matrix
+) -> Matrix {
+    let m: Int = matrix_rows(a);
+    let k_dim: Int = matrix_cols(a);
+    let n: Int = matrix_cols(b);
+    let mut new_data: List[Float] = list_new();
+    let mut r: Int = 0;
+    while r < m {
+        let mut col: Int = 0;
+        while col < n {
+            let mut k: Int = 0;
+            let mut vec_acc: f64x4 = f64x4_zero();
+            while (k + 4) <= k_dim {
+                let va: f64x4 = f64x4_new(
+                    matrix_get(a, r, k),
+                    matrix_get(a, r, k + 1),
+                    matrix_get(a, r, k + 2),
+                    matrix_get(a, r, k + 3)
+                );
+                let vb: f64x4 = f64x4_new(
+                    matrix_get(b, k, col),
+                    matrix_get(b, k + 1, col),
+                    matrix_get(b, k + 2, col),
+                    matrix_get(b, k + 3, col)
+                );
+                vec_acc = f64x4_fma(va, vb, vec_acc);
+                k = k + 4;
+            }
+            let mut dot_sum: Float = f64x4_reduce_sum(vec_acc);
+            while k < k_dim {
+                let av: Float = matrix_get(a, r, k);
+                let bv: Float = matrix_get(b, k, col);
+                dot_sum = dot_sum + av * bv;
+                k = k + 1;
+            }
+            let cv: Float = matrix_get(c, r, col);
+            let final_val: Float = alpha * dot_sum + beta * cv;
+            new_data = list_push(new_data, final_val);
+            col = col + 1;
+        }
+        r = r + 1;
+    }
+    return Matrix {
+        rows: m,
+        cols: n,
+        data: new_data
+    };
+}
+
+// SYMM: C = alpha * A * B + beta * C (for symmetric A).
+pub fn blas_symm(
+    alpha: Float,
+    a: Matrix,
+    b: Matrix,
+    beta: Float,
+    c: Matrix
+) -> Matrix {
+    return blas_gemm(alpha, a, b, beta, c);
+}
+
+// SYRK: C = alpha * A * A^T + beta * C.
+pub fn blas_syrk(
+    alpha: Float,
+    a: Matrix,
+    beta: Float,
+    c: Matrix
+) -> Matrix {
+    let at: Matrix = matrix_transpose(a);
+    return blas_gemm(alpha, a, at, beta, c);
+}
+
+// TRMM: B = alpha * A * B (where A is triangular).
+pub fn blas_trmm(
+    alpha: Float,
+    a: Matrix,
+    b: Matrix
+) -> Matrix {
+    let mb: Int = matrix_rows(b);
+    let nb: Int = matrix_cols(b);
+    let c_zeros: Matrix = matrix_zeros(mb, nb);
+    return blas_gemm(alpha, a, b, 0.0, c_zeros);
+}
+
+// TRSM: Solve A * X = alpha * B for lower triangular A.
+pub fn blas_trsm_lower(
+    alpha: Float,
+    a: Matrix,
+    b: Matrix
+) -> Matrix {
+    let m: Int = matrix_rows(a);
+    let n: Int = matrix_cols(b);
+    let mut res: Matrix = matrix_zeros(m, n);
+    let mut j: Int = 0;
+    while j < n {
+        let mut b_col: List[Float] = list_new();
+        let mut i: Int = 0;
+        while i < m {
+            let bv: Float = matrix_get(b, i, j);
+            b_col = list_push(b_col, alpha * bv);
+            i = i + 1;
+        }
+        let x_res: Blas2Vec = blas_trsv_lower(a, b_col);
+        res = matrix_set(res, 0, j, x_res.s0);
+        j = j + 1;
+    }
+    return res;
+}
+
+// TRSM: Solve A * X = alpha * B for upper triangular A.
+pub fn blas_trsm_upper(
+    alpha: Float,
+    a: Matrix,
+    b: Matrix
+) -> Matrix {
+    let m: Int = matrix_rows(a);
+    let n: Int = matrix_cols(b);
+    let mut res: Matrix = matrix_zeros(m, n);
+    let mut j: Int = 0;
+    while j < n {
+        let mut b_col: List[Float] = list_new();
+        let mut i: Int = 0;
+        while i < m {
+            let bv: Float = matrix_get(b, i, j);
+            b_col = list_push(b_col, alpha * bv);
+            i = i + 1;
+        }
+        let x_res: Blas2Vec = blas_trsv_upper(a, b_col);
+        res = matrix_set(res, 0, j, x_res.s0);
+        j = j + 1;
+    }
+    return res;
+}
+
+pub fn blas_level3_probe() -> Int {
+    return 0;
+}

@@ -1,0 +1,106 @@
+// # Advanced Programmable Interrupt Controllers & Routing
+//
+// Logline: 8259 PIC disable masking, Local APIC vector dispatch, IO-APIC redirection, ARM GICv3, and RISC-V PLIC routing.
+//
+// Setup: Declared capability: None. Direct hardware interrupt controller register configurations and routing tables.
+//
+// Beats:
+//   1. Declare APIC, IO-APIC redirection, GICv3, and PLIC data structures.
+//   2. Implement 8259 PIC legacy masking routine.
+//   3. Implement Local APIC initialization, EOI signaling, and ICR command dispatch.
+//   4. Implement IO-APIC redirection table entry formatting.
+
+type LapicDescriptor = struct {
+    base_address: Int,
+    lapic_id: Int,
+    spurious_vector: Int,
+    is_x2apic: Bool,
+    is_enabled: Bool
+};
+
+type LapicIcrPair = struct {
+    low_dword: Int,
+    high_dword: Int
+};
+
+type IoApicRedirEntry = struct {
+    vector: Int,
+    delivery_mode: Int,
+    destination_mode: Int,
+    polarity: Int,
+    trigger_mode: Int,
+    is_masked: Bool,
+    dest_apic_id: Int
+};
+
+type InterruptRouter = struct {
+    lapic: LapicDescriptor,
+    ioapic_base: Int,
+    pic_masked: Bool,
+    gic_distributor_base: Int,
+    plic_base: Int
+};
+
+pub fn lapic_init(base_addr: Int, id_val: Int) -> LapicDescriptor {
+    let safe_base: Int = if base_addr <= 0 { 4276092928 } else { base_addr };
+    let safe_id: Int = if id_val < 0 { 0 } else { id_val };
+    return LapicDescriptor {
+        base_address: safe_base,
+        lapic_id: safe_id,
+        spurious_vector: 255,
+        is_x2apic: false,
+        is_enabled: true
+    };
+}
+
+pub fn ioapic_redir_entry_new(vec: Int, dest_id: Int, masked: Bool) -> IoApicRedirEntry {
+    let safe_vec: Int = if vec < 32 { 32 } else { vec };
+    let safe_dest: Int = if dest_id < 0 { 0 } else { dest_id };
+    return IoApicRedirEntry {
+        vector: safe_vec,
+        delivery_mode: 0,
+        destination_mode: 0,
+        polarity: 0,
+        trigger_mode: 0,
+        is_masked: masked,
+        dest_apic_id: safe_dest
+    };
+}
+
+pub fn interrupt_router_init(lapic_base: Int, ioapic_base: Int) -> InterruptRouter {
+    let safe_l: Int = if lapic_base <= 0 { 4276092928 } else { lapic_base };
+    let safe_io: Int = if ioapic_base <= 0 { 4273995776 } else { ioapic_base };
+    let lapic_desc: LapicDescriptor = lapic_init(safe_l, 0);
+    return InterruptRouter {
+        lapic: lapic_desc,
+        ioapic_base: safe_io,
+        pic_masked: true,
+        gic_distributor_base: 134217728,
+        plic_base: 201326592
+    };
+}
+
+pub fn lapic_send_eoi(desc: LapicDescriptor) -> Int {
+    let base: Int = desc.base_address;
+    return base + 176;
+}
+
+pub fn lapic_build_icr(vector: Int, delivery_type: Int, dest_id: Int) -> LapicIcrPair {
+    let safe_vec: Int = vector % 256;
+    let safe_deliv: Int = (delivery_type % 8) * 256;
+    let low: Int = safe_vec + safe_deliv;
+    let high: Int = dest_id * 16777216;
+    return LapicIcrPair {
+        low_dword: low,
+        high_dword: high
+    };
+}
+
+pub fn ioapic_is_active(router: InterruptRouter) -> Bool {
+    let base: Int = router.ioapic_base;
+    let is_pic_off: Bool = router.pic_masked;
+    if base <= 0 {
+        return false;
+    }
+    return is_pic_off;
+}

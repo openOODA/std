@@ -1,0 +1,31 @@
+// # ChaCha20-Poly1305 AEAD Helpers (RFC 8439)
+//
+// Logline: Pure .oo string/list byte conversion helpers. Production seal/open is the C function crypto_chacha20poly1305_seal_internal / crypto_chacha20poly1305_open_internal; callers MUST supply a fresh random 12-byte nonce to avoid the Joux forbidden-attack key/nonce reuse.
+//
+// Setup: Pure module that does NOT call chacha20_poly1305_seal/open. The earlier wrappers aead_seal / aead_open were deleted because they forwarded a caller-supplied nonce without generating one (Joux forbidden attack: same key + reused nonce leaks plaintext XOR under ChaCha20-Poly1305).
+//
+// Beats:
+//   1. Convert String inputs to List[Int] bytes.
+//   2. Convert List[Int] bytes back to String.
+
+pub fn str_to_byte_list(s: String) -> List[Int] {
+    let n: Int = bytes_len(s);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, byte_at(s, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn byte_list_to_str(bytes: List[Int]) -> String {
+    let n: Int = list_len(bytes);
+    let mut buf: List[Int] = bytes_new();
+    let mut i: Int = 0;
+    while i < n {
+        buf = bytes_push(buf, list_get(bytes, i));
+        i = i + 1;
+    }
+    return bytes_to_str(buf);
+}

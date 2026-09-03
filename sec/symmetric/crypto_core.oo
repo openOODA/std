@@ -1,0 +1,256 @@
+// # Cryptographic Primitives (Toy/Educational)
+//
+// Logline: Pure .oo implementation of textbook RSA, Merkle trees, hash chains, HMAC-like MAC, and RSA signatures. Strictly for learning; not production crypto.
+//
+// Setup: Pure integer math on small domains. All public functions fail-closed to a sentinel value (0 or empty list) on invalid input. For real cryptography use std/crypto_secrets.
+//
+// Beats:
+//   1. mod_pow: modular exponentiation by squaring (square-and-multiply).
+//   2. gcd and modular_inverse via the Extended Euclidean Algorithm; returns 0 when no inverse exists.
+//   3. rsa_keygen/encrypt/decrypt: textbook RSA over small primes (61*53 by default).
+//   4. merkle_build/root/proof/verify: Merkle tree stored as a flat List[Int] with leaves_n as the header; canonical pair_hash detects tampering.
+//   5. hash_chain: deterministic H^n(seed) where H(x) = (31*x + 17) mod 1000003.
+//   6. hmac_like: H((key XOR n) || message) using pair_hash for combining.
+//   7. sign/verify_sig: textbook RSA signature; verify checks sig^e == m mod n.
+//
+// residual: Toy only. Primes below 1024 bits; deterministic; no side-channel hardening. Merkle tree uses canonical pair_hash (smaller-first) so proofs are direction-agnostic.
+
+type RsaKey = struct {
+    n: Int,
+    e: Int,
+    d: Int
+};
+
+// Modular exponentiation by squaring. Returns 0 when m <= 1 or exp < 0.
+pub fn mod_pow(base: Int, exp: Int, m: Int) -> Int {
+    if m <= 1 {
+        return 0;
+    }
+    if exp < 0 {
+        return 0;
+    }
+    if exp == 0 {
+        return 1 % m;
+    }
+    let mut res: Int = 1 % m;
+    let mut b: Int = base % m;
+    if b < 0 {
+        b = b + m;
+    }
+    let mut e: Int = exp;
+    while e > 0 {
+        if (e & 1) == 1 {
+            res = (res * b) % m;
+        }
+        b = (b * b) % m;
+        e = e >> 1;
+    }
+    return res;
+}
+
+pub fn gcd(a: Int, b: Int) -> Int {
+    let mut x: Int = a;
+    let mut y: Int = b;
+    if x < 0 {
+        x = 0 - x;
+    }
+    if y < 0 {
+        y = 0 - y;
+    }
+    while y != 0 {
+        let tmp: Int = y;
+        y = x % y;
+        x = tmp;
+    }
+    return x;
+}
+
+// Extended Euclidean Algorithm: returns x such that a*x == 1 mod m, or 0 when gcd(a, m) != 1.
+pub fn modular_inverse(a: Int, m: Int) -> Int {
+    if m <= 1 {
+        return 0;
+    }
+    let mut old_r: Int = a;
+    let mut r: Int = m;
+    let mut old_s: Int = 1;
+    let mut s: Int = 0;
+    while r != 0 {
+        let q: Int = old_r / r;
+        let tmp_r: Int = r;
+        r = old_r - q * r;
+        old_r = tmp_r;
+        let tmp_s: Int = s;
+        s = old_s - q * s;
+        old_s = tmp_s;
+    }
+    if old_r != 1 {
+        return 0;
+    }
+    if old_s < 0 {
+        old_s = old_s + m;
+    }
+    return old_s;
+}
+
+// RSA key generation: n = p*q, d = e^(-1) mod phi((p-1)*(q-1)).
+pub fn rsa_keygen(p: Int, q: Int, e: Int) -> RsaKey {
+    let n: Int = p * q;
+    let phi: Int = (p - 1) * (q - 1);
+    let d: Int = modular_inverse(e, phi);
+    return RsaKey { n: n, e: e, d: d };
+}
+
+// Textbook RSA encryption: c = m^e mod n.
+pub fn rsa_encrypt(m: Int, n: Int, e: Int) -> Int {
+    if n <= 1 {
+        return 0;
+    }
+    return mod_pow(m, e, n);
+}
+
+// Textbook RSA decryption: m = c^d mod n.
+pub fn rsa_decrypt(c: Int, n: Int, d: Int) -> Int {
+    if n <= 1 {
+        return 0;
+    }
+    return mod_pow(c, d, n);
+}
+
+// Canonical pair hash for the toy Merkle tree. Smaller first, injective for non-negative leaves < 100000.
+pub fn pair_hash(a: Int, b: Int) -> Int {
+    let big: Int = 100000;
+    if a < b {
+        return a * big + b;
+    }
+    return b * big + a;
+}
+
+// Build a Merkle tree. Returns a flat List[Int] with leaves_n stored at index 0, then all levels concatenated bottom-up. Returns [0] on invalid input.
+pub fn merkle_build(leaves: List[Int]) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    let mut sz: Int = list_len(leaves);
+    if sz <= 0 {
+        out = list_push(out, 0);
+        return out;
+    }
+    out = list_push(out, sz);
+    let mut cur: List[Int] = leaves;
+    let mut level_n: Int = sz;
+    while level_n > 0 {
+        let mut i: Int = 0;
+        while i < level_n {
+            out = list_push(out, list_get(cur, i));
+            i = i + 1;
+        }
+        if level_n == 1 {
+            return out;
+        }
+        let mut next: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j + 1 < level_n {
+            let a: Int = list_get(cur, j);
+            let b: Int = list_get(cur, j + 1);
+            next = list_push(next, pair_hash(a, b));
+            j = j + 2;
+        }
+        if j < level_n {
+            let last: Int = list_get(cur, j);
+            next = list_push(next, last);
+        }
+        cur = next;
+        level_n = list_len(cur);
+    }
+    return out;
+}
+
+// Root of a Merkle tree (the last element). Returns 0 for an empty/invalid tree.
+pub fn merkle_root(tree: List[Int]) -> Int {
+    let n: Int = list_len(tree);
+    if n <= 1 {
+        return 0;
+    }
+    return list_get(tree, n - 1);
+}
+
+// Build a sibling-path proof for the leaf at leaf_idx. Siblings are stored in canonical pair_hash order.
+pub fn merkle_proof(tree: List[Int], leaf_idx: Int) -> List[Int] {
+    let mut proof: List[Int] = list_new();
+    let total: Int = list_len(tree);
+    if total <= 1 {
+        return proof;
+    }
+    let leaves_n: Int = list_get(tree, 0);
+    if leaves_n <= 0 {
+        return proof;
+    }
+    let mut idx: Int = leaf_idx;
+    let mut level_n: Int = leaves_n;
+    let mut offset: Int = 1;
+    while level_n > 1 {
+        let mut sib_idx: Int = idx ^ 1;
+        if sib_idx >= level_n {
+            sib_idx = idx;
+        }
+        let sib_val: Int = list_get(tree, offset + sib_idx);
+        proof = list_push(proof, sib_val);
+        idx = idx / 2;
+        offset = offset + level_n;
+        level_n = (level_n + 1) / 2;
+    }
+    return proof;
+}
+
+// Verify a Merkle proof by hashing leaf up through the siblings. Returns false for tampered leaves.
+pub fn merkle_verify(proof: List[Int], leaf: Int, root: Int) -> Bool {
+    let mut cur: Int = leaf;
+    let n: Int = list_len(proof);
+    let mut i: Int = 0;
+    while i < n {
+        let sib: Int = list_get(proof, i);
+        cur = pair_hash(cur, sib);
+        i = i + 1;
+    }
+    return cur == root;
+}
+
+// Iterative hash chain: returns [H(seed), H(H(seed)), ..., H^n(seed)].
+pub fn chain_hash(x: Int) -> Int {
+    return ((x * 31) + 17) % 1000003;
+}
+
+pub fn hash_chain(seed: Int, n: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    if n <= 0 {
+        return out;
+    }
+    let mut cur: Int = seed;
+    let mut i: Int = 0;
+    while i < n {
+        cur = chain_hash(cur);
+        out = list_push(out, cur);
+        i = i + 1;
+    }
+    return out;
+}
+
+// HMAC-like construction: H((key XOR n) || message). Uses pair_hash for combining.
+pub fn hmac_like(key: Int, message: Int, n: Int) -> Int {
+    let key_xor: Int = (key ^ n) % 100000;
+    return pair_hash(key_xor, message);
+}
+
+// Textbook RSA signature: sig = m^d mod n. Returns 0 on invalid modulus.
+pub fn sign(m: Int, n: Int, d: Int) -> Int {
+    if n <= 1 {
+        return 0;
+    }
+    return mod_pow(m, d, n);
+}
+
+// Verify textbook RSA signature: returns true when sig^e mod n == m.
+pub fn verify_sig(sig: Int, m: Int, n: Int, e: Int) -> Bool {
+    if n <= 1 {
+        return false;
+    }
+    return mod_pow(sig, e, n) == m;
+}

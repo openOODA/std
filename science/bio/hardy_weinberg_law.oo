@@ -1,0 +1,188 @@
+// # Hardy-Weinberg population genetics equilibrium law
+//
+// Logline: Allele frequencies satisfy p + q = 1; genotype frequencies satisfy p^2 + 2pq + q^2 = 1. Out-of-range inputs return Err.
+//
+// Setup: Pure Float. Allele frequencies are caller-supplied; the identity is unit-agnostic.
+//
+// Beats:
+//   1. Compute homozygous dominant p^2, heterozygous 2pq, and homozygous recessive q^2 from allele frequencies.
+//   2. Verify Hardy-Weinberg equilibrium: p^2 + 2pq + q^2 == 1 within tolerance.
+//   3. Classify equilibrium: 1 = balanced, 0 = out of range.
+//   4. Hostile p < 0, p > 1, q < 0, q > 1, or p + q != 1 on the sum return Err.
+//   5. Pure-population p=0 or q=0 genotype frequencies are Ok(0).
+
+pub fn hw_homozygous_dominant_freq(p: Float) -> Result[Float, String] {
+    if p < 0.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if p > 1.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    return Ok(p * p);
+}
+
+pub fn hw_heterozygous_freq(p: Float, q: Float) -> Result[Float, String] {
+    if p < 0.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if q < 0.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if p > 1.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if q > 1.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    return Ok(2.0 * p * q);
+}
+
+pub fn hw_homozygous_recessive_freq(q: Float) -> Result[Float, String] {
+    if q < 0.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if q > 1.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    return Ok(q * q);
+}
+
+pub fn hw_equilibrium_sum(p: Float, q: Float) -> Result[Float, String] {
+    if p < 0.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if q < 0.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if p > 1.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    if q > 1.0 {
+        return Err("ERR\thw\tdomain");
+    }
+    let mut pq_diff: Float = (p + q) - 1.0;
+    if pq_diff < 0.0 {
+        pq_diff = 0.0 - pq_diff;
+    }
+    if pq_diff > 0.0000001 {
+        return Err("ERR\thw\tdomain");
+    }
+    let pp: Float = p * p;
+    let pq: Float = 2.0 * p * q;
+    let qq: Float = q * q;
+    return Ok(pp + pq + qq);
+}
+
+pub fn hw_is_balanced(p: Float, q: Float, tolerance: Float) -> Int {
+    if p < 0.0 {
+        return 0;
+    }
+    if q < 0.0 {
+        return 0;
+    }
+    if p > 1.0 {
+        return 0;
+    }
+    if q > 1.0 {
+        return 0;
+    }
+    if tolerance <= 0.0 {
+        return 0;
+    }
+    let mut diff: Float = (p + q) - 1.0;
+    if diff < 0.0 {
+        diff = 0.0 - diff;
+    }
+    if diff > tolerance {
+        return 0;
+    }
+    let s: Float = (p * p) + (2.0 * p * q) + (q * q);
+    let mut d2: Float = s - 1.0;
+    if d2 < 0.0 {
+        d2 = 0.0 - d2;
+    }
+    if d2 > tolerance {
+        return 0;
+    }
+    return 1;
+}
+
+fn hw_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn verify_hardy_weinberg_law() -> Bool {
+    let s: Float = hw_got(hw_equilibrium_sum(0.6, 0.4));
+    let mut d: Float = s - 1.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+
+    let pure: Float = hw_got(hw_equilibrium_sum(1.0, 0.0));
+    d = pure - 1.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+
+    let rec: Float = hw_got(hw_equilibrium_sum(0.0, 1.0));
+    d = rec - 1.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+
+    if hw_got(hw_homozygous_dominant_freq(0.0)) != 0.0 {
+        return false;
+    }
+    if hw_got(hw_heterozygous_freq(0.0, 1.0)) != 0.0 {
+        return false;
+    }
+    if hw_got(hw_heterozygous_freq(1.0, 0.0)) != 0.0 {
+        return false;
+    }
+    if hw_got(hw_homozygous_recessive_freq(0.0)) != 0.0 {
+        return false;
+    }
+
+    let half_pq: Float = hw_got(hw_heterozygous_freq(0.5, 0.5));
+    d = half_pq - 0.5;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0000001 {
+        return false;
+    }
+
+    if hw_is_balanced(0.7, 0.3, 0.0001) != 1 {
+        return false;
+    }
+    if hw_is_balanced(0.5, 0.5, 0.0001) != 1 {
+        return false;
+    }
+
+    if hw_is_balanced(0.7, 0.4, 0.0001) != 0 {
+        return false;
+    }
+
+    if hw_heterozygous_freq(0.0 - 0.1, 0.5).is_ok() { return false; }
+    if hw_heterozygous_freq(1.5, 0.0).is_ok() { return false; }
+    if hw_equilibrium_sum(0.0 - 0.1, 0.5).is_ok() { return false; }
+    if hw_equilibrium_sum(0.7, 0.4).is_ok() { return false; }
+    if hw_homozygous_dominant_freq(0.0 - 0.1).is_ok() { return false; }
+    if hw_homozygous_dominant_freq(1.5).is_ok() { return false; }
+    if hw_is_balanced(0.0 - 0.1, 0.5, 0.0001) != 0 {
+        return false;
+    }
+    if hw_is_balanced(0.5, 0.5, 0.0) != 0 {
+        return false;
+    }
+    return true;
+}

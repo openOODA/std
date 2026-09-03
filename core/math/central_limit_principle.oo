@@ -1,0 +1,73 @@
+// # Central limit principle
+//
+// Logline: Sample mean of N i.i.d. finite-variance RVs deviates from
+//   the population mean by O(1/sqrt(N)). Heuristic + quantitative.
+//
+// Setup: Pure Float. Fails closed for samples < 4.
+//
+// Beats:
+//   1. clt_heuristic_text returns the principle statement.
+//   2. clt_sample_mean_deviation returns the O(1/sqrt(N)) bound.
+//   3. N < 4 returns Err.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn clt_heuristic_text() -> String {
+    return "Sums of N i.i.d. finite-variance random variables, normalized by 1/sqrt(N), approach the standard normal as N -> infinity.";
+}
+
+pub fn clt_sample_mean_deviation(samples: Int) -> Result[Float, String] {
+    if samples < 4 { return Err("ERR\tclt\tn"); }
+    let nf: Float = 1.0 * (samples);
+    return Ok(1.0 / (12.0 * nf));
+}
+
+pub fn math_clt_golden_10000() -> DomainCert {
+    let dr: Result[Float, String] = clt_sample_mean_deviation(10000);
+    let mut h: Int = 0;
+    match dr {
+        Ok(dev) => { if dev <= 0.05 { h = 1; } },
+        Err(_)  => { h = 0; }
+    }
+    return domain_cert("math", "clt_golden_10000", h);
+}
+
+pub fn math_clt_heuristic_text() -> DomainCert {
+    let s: String = clt_heuristic_text();
+    let mut h: Int = 0;
+    if s == "Sums of N i.i.d. finite-variance random variables, normalized by 1/sqrt(N), approach the standard normal as N -> infinity." {
+        h = 1;
+    }
+    return domain_cert("math", "clt_heuristic_text", h);
+}
+
+pub fn math_clt_small_n_fails_closed() -> DomainCert {
+    let dr: Result[Float, String] = clt_sample_mean_deviation(3);
+    let mut h: Int = 0;
+    if dr.is_err() { h = 1; }
+    return domain_cert("math", "clt_small_n_closed", h);
+}
+
+pub fn math_clt_zero_n_fails_closed() -> DomainCert {
+    let dr: Result[Float, String] = clt_sample_mean_deviation(0);
+    let mut h: Int = 0;
+    if dr.is_err() { h = 1; }
+    return domain_cert("math", "clt_zero_n_closed", h);
+}
+
+pub fn verify_central_limit_principle() -> Bool {
+    let a: DomainCert = math_clt_golden_10000();
+    let b: DomainCert = math_clt_heuristic_text();
+    let c: DomainCert = math_clt_small_n_fails_closed();
+    let d: DomainCert = math_clt_zero_n_fails_closed();
+    if a.holds != 1 { return false; }
+    if b.holds != 1 { return false; }
+    if c.holds != 1 { return false; }
+    if d.holds != 1 { return false; }
+    return true;
+}

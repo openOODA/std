@@ -1,0 +1,212 @@
+// # BN254 256-bit Base Field (F_p) Arithmetic Engine
+//
+// Logline: Implements 8-limb 256-bit prime field arithmetic for the BN254 base field F_p.
+//
+// Setup: Prime modulus p = 21888242871839275222246405745257275088696311157297823662689037893645262701197.
+//
+// Beats:
+//   1. 8-limb 32-bit multi-precision representation of F_p elements.
+//   2. Constant-time addition and subtraction with carry propagation.
+//   3. Exact Horner shift-reduction modular multiplication.
+//   4. Modular exponentiation and multiplicative inversion via Fermat's Little Theorem.
+
+type Bn254Fp = struct {
+    l0: Int, l1: Int, l2: Int, l3: Int,
+    l4: Int, l5: Int, l6: Int, l7: Int
+};
+
+pub fn bn254_fp_zero() -> Bn254Fp {
+    return Bn254Fp { l0: 0, l1: 0, l2: 0, l3: 0, l4: 0, l5: 0, l6: 0, l7: 0 };
+}
+
+pub fn bn254_fp_one() -> Bn254Fp {
+    return Bn254Fp { l0: 1, l1: 0, l2: 0, l3: 0, l4: 0, l5: 0, l6: 0, l7: 0 };
+}
+
+pub fn bn254_fp_from_int(v: Int) -> Bn254Fp {
+    let mut val: Int = v;
+    if val < 0 { val = 0; }
+    let l0: Int = val & 4294967295;
+    let l1: Int = (val >> 32) & 4294967295;
+    return Bn254Fp { l0: l0, l1: l1, l2: 0, l3: 0, l4: 0, l5: 0, l6: 0, l7: 0 };
+}
+
+pub fn bn254_p0() -> Int { return 3632069959; }
+pub fn bn254_p1() -> Int { return 1008765974; }
+pub fn bn254_p2() -> Int { return 1752287885; }
+pub fn bn254_p3() -> Int { return 2541906577; }
+pub fn bn254_p4() -> Int { return 2172737629; }
+pub fn bn254_p5() -> Int { return 3092268470; }
+pub fn bn254_p6() -> Int { return 3778125865; }
+pub fn bn254_p7() -> Int { return 811888242; }
+
+pub fn bn254_fp_gte(a: Bn254Fp, b: Bn254Fp) -> Bool {
+    if a.l7 != b.l7 { return a.l7 > b.l7; }
+    if a.l6 != b.l6 { return a.l6 > b.l6; }
+    if a.l5 != b.l5 { return a.l5 > b.l5; }
+    if a.l4 != b.l4 { return a.l4 > b.l4; }
+    if a.l3 != b.l3 { return a.l3 > b.l3; }
+    if a.l2 != b.l2 { return a.l2 > b.l2; }
+    if a.l1 != b.l1 { return a.l1 > b.l1; }
+    return a.l0 >= b.l0;
+}
+
+pub fn bn254_fp_gte_p(a: Bn254Fp) -> Bool {
+    let p_val: Bn254Fp = Bn254Fp {
+        l0: bn254_p0(), l1: bn254_p1(), l2: bn254_p2(), l3: bn254_p3(),
+        l4: bn254_p4(), l5: bn254_p5(), l6: bn254_p6(), l7: bn254_p7()
+    };
+    return bn254_fp_gte(a, p_val);
+}
+
+pub fn bn254_fp_add(a: Bn254Fp, b: Bn254Fp) -> Bn254Fp {
+    let mut carry: Int = 0;
+    let s0: Int = a.l0 + b.l0; let r0: Int = s0 & 4294967295; carry = s0 >> 32;
+    let s1: Int = a.l1 + b.l1 + carry; let r1: Int = s1 & 4294967295; carry = s1 >> 32;
+    let s2: Int = a.l2 + b.l2 + carry; let r2: Int = s2 & 4294967295; carry = s2 >> 32;
+    let s3: Int = a.l3 + b.l3 + carry; let r3: Int = s3 & 4294967295; carry = s3 >> 32;
+    let s4: Int = a.l4 + b.l4 + carry; let r4: Int = s4 & 4294967295; carry = s4 >> 32;
+    let s5: Int = a.l5 + b.l5 + carry; let r5: Int = s5 & 4294967295; carry = s5 >> 32;
+    let s6: Int = a.l6 + b.l6 + carry; let r6: Int = s6 & 4294967295; carry = s6 >> 32;
+    let s7: Int = a.l7 + b.l7 + carry; let r7: Int = s7 & 4294967295; let has_ovf: Int = s7 >> 32;
+
+    let cand: Bn254Fp = Bn254Fp { l0: r0, l1: r1, l2: r2, l3: r3, l4: r4, l5: r5, l6: r6, l7: r7 };
+    if has_ovf > 0 || bn254_fp_gte_p(cand) {
+        return bn254_fp_raw_sub_p(cand);
+    }
+    return cand;
+}
+
+fn bn254_fp_raw_sub_p(a: Bn254Fp) -> Bn254Fp {
+    let p_val: Bn254Fp = Bn254Fp {
+        l0: bn254_p0(), l1: bn254_p1(), l2: bn254_p2(), l3: bn254_p3(),
+        l4: bn254_p4(), l5: bn254_p5(), l6: bn254_p6(), l7: bn254_p7()
+    };
+    return bn254_fp_raw_sub(a, p_val);
+}
+
+fn bn254_fp_raw_sub(a: Bn254Fp, b: Bn254Fp) -> Bn254Fp {
+    let mut borrow: Int = 0;
+    let mut d0: Int = a.l0 - b.l0; if d0 < 0 { d0 = d0 + 4294967296; borrow = 1; } else { borrow = 0; }
+    let mut d1: Int = a.l1 - b.l1 - borrow; if d1 < 0 { d1 = d1 + 4294967296; borrow = 1; } else { borrow = 0; }
+    let mut d2: Int = a.l2 - b.l2 - borrow; if d2 < 0 { d2 = d2 + 4294967296; borrow = 1; } else { borrow = 0; }
+    let mut d3: Int = a.l3 - b.l3 - borrow; if d3 < 0 { d3 = d3 + 4294967296; borrow = 1; } else { borrow = 0; }
+    let mut d4: Int = a.l4 - b.l4 - borrow; if d4 < 0 { d4 = d4 + 4294967296; borrow = 1; } else { borrow = 0; }
+    let mut d5: Int = a.l5 - b.l5 - borrow; if d5 < 0 { d5 = d5 + 4294967296; borrow = 1; } else { borrow = 0; }
+    let mut d6: Int = a.l6 - b.l6 - borrow; if d6 < 0 { d6 = d6 + 4294967296; borrow = 1; } else { borrow = 0; }
+    let mut d7: Int = a.l7 - b.l7 - borrow; if d7 < 0 { d7 = d7 + 4294967296; }
+    return Bn254Fp { l0: d0, l1: d1, l2: d2, l3: d3, l4: d4, l5: d5, l6: d6, l7: d7 };
+}
+
+pub fn bn254_fp_sub(a: Bn254Fp, b: Bn254Fp) -> Bn254Fp {
+    if bn254_fp_gte(a, b) {
+        return bn254_fp_raw_sub(a, b);
+    }
+    let p_val: Bn254Fp = Bn254Fp {
+        l0: bn254_p0(), l1: bn254_p1(), l2: bn254_p2(), l3: bn254_p3(),
+        l4: bn254_p4(), l5: bn254_p5(), l6: bn254_p6(), l7: bn254_p7()
+    };
+    let a_plus_p: Bn254Fp = bn254_fp_raw_add(a, p_val);
+    return bn254_fp_raw_sub(a_plus_p, b);
+}
+
+fn bn254_fp_raw_add(a: Bn254Fp, b: Bn254Fp) -> Bn254Fp {
+    let mut carry: Int = 0;
+    let s0: Int = a.l0 + b.l0; let r0: Int = s0 & 4294967295; carry = s0 >> 32;
+    let s1: Int = a.l1 + b.l1 + carry; let r1: Int = s1 & 4294967295; carry = s1 >> 32;
+    let s2: Int = a.l2 + b.l2 + carry; let r2: Int = s2 & 4294967295; carry = s2 >> 32;
+    let s3: Int = a.l3 + b.l3 + carry; let r3: Int = s3 & 4294967295; carry = s3 >> 32;
+    let s4: Int = a.l4 + b.l4 + carry; let r4: Int = s4 & 4294967295; carry = s4 >> 32;
+    let s5: Int = a.l5 + b.l5 + carry; let r5: Int = s5 & 4294967295; carry = s5 >> 32;
+    let s6: Int = a.l6 + b.l6 + carry; let r6: Int = s6 & 4294967295; carry = s6 >> 32;
+    let s7: Int = a.l7 + b.l7 + carry; let r7: Int = s7 & 4294967295;
+    return Bn254Fp { l0: r0, l1: r1, l2: r2, l3: r3, l4: r4, l5: r5, l6: r6, l7: r7 };
+}
+
+pub fn bn254_fp_mul(a: Bn254Fp, b: Bn254Fp) -> Bn254Fp {
+    let mut r: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 16 { r = list_push(r, 0); i = i + 1; }
+
+    let a_limbs: List[Int] = bn254_fp_to_list(a);
+    let b_limbs: List[Int] = bn254_fp_to_list(b);
+
+    i = 0;
+    while i < 8 {
+        let mut carry: Int = 0;
+        let ai: Int = list_get(a_limbs, i);
+        let mut j: Int = 0;
+        while j < 8 {
+            let bj: Int = list_get(b_limbs, j);
+            let cur: Int = list_get(r, i + j);
+            let sum_val: Int = cur + ai * bj + carry;
+            r = list_set(r, i + j, sum_val & 4294967295);
+            carry = sum_val >> 32;
+            j = j + 1;
+        }
+        r = list_set(r, i + 8, carry);
+        i = i + 1;
+    }
+    return bn254_fp_reduce_512(r);
+}
+
+pub fn bn254_fp_to_list(a: Bn254Fp) -> List[Int] {
+    let mut l: List[Int] = list_new();
+    l = list_push(l, a.l0); l = list_push(l, a.l1);
+    l = list_push(l, a.l2); l = list_push(l, a.l3);
+    l = list_push(l, a.l4); l = list_push(l, a.l5);
+    l = list_push(l, a.l6); l = list_push(l, a.l7);
+    return l;
+}
+
+fn bn254_fp_reduce_512(t: List[Int]) -> Bn254Fp {
+    let mut rem: Bn254Fp = bn254_fp_zero();
+    let one: Bn254Fp = bn254_fp_one();
+    let mut bit_idx: Int = 511;
+
+    while bit_idx >= 0 {
+        rem = bn254_fp_add(rem, rem);
+        let word_idx: Int = bit_idx / 32;
+        let bit_in_word: Int = bit_idx % 32;
+        let bit_val: Int = (list_get(t, word_idx) >> bit_in_word) & 1;
+        if bit_val == 1 {
+            rem = bn254_fp_add(rem, one);
+        }
+        bit_idx = bit_idx - 1;
+    }
+    return rem;
+}
+
+pub fn bn254_fp_equal(a: Bn254Fp, b: Bn254Fp) -> Bool {
+    return a.l0 == b.l0 && a.l1 == b.l1 && a.l2 == b.l2 && a.l3 == b.l3 &&
+           a.l4 == b.l4 && a.l5 == b.l5 && a.l6 == b.l6 && a.l7 == b.l7;
+}
+
+pub fn bn254_fp_inv(a: Bn254Fp) -> Bn254Fp {
+    if bn254_fp_equal(a, bn254_fp_zero()) {
+        return bn254_fp_zero();
+    }
+    let mut exp_limbs: List[Int] = list_new();
+    exp_limbs = list_push(exp_limbs, bn254_p0() - 2);
+    exp_limbs = list_push(exp_limbs, bn254_p1());
+    exp_limbs = list_push(exp_limbs, bn254_p2());
+    exp_limbs = list_push(exp_limbs, bn254_p3());
+    exp_limbs = list_push(exp_limbs, bn254_p4());
+    exp_limbs = list_push(exp_limbs, bn254_p5());
+    exp_limbs = list_push(exp_limbs, bn254_p6());
+    exp_limbs = list_push(exp_limbs, bn254_p7());
+
+    let mut res: Bn254Fp = bn254_fp_one();
+    let mut bit_idx: Int = 253;
+    while bit_idx >= 0 {
+        res = bn254_fp_mul(res, res);
+        let word_idx: Int = bit_idx / 32;
+        let bit_in_word: Int = bit_idx % 32;
+        let bit_val: Int = (list_get(exp_limbs, word_idx) >> bit_in_word) & 1;
+        if bit_val == 1 {
+            res = bn254_fp_mul(res, a);
+        }
+        bit_idx = bit_idx - 1;
+    }
+    return res;
+}

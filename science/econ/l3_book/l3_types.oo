@@ -1,0 +1,157 @@
+// # Level 3 Order Book Type Definitions
+//
+// Logline: Data structures for L3 limit order book, price priority ladders, and matching events.
+//
+// Setup: Fundamental types for high-throughput deterministic L3 order books.
+//
+// Beats:
+//   1. Define L3Order, L3MatchEvent, L3AddResult, and L3CancelResult structs.
+//   2. Define Structure-of-Arrays (SoA) L3OrderBook representation for cache efficiency.
+//   3. Define order side, state, and event constructor primitives.
+
+type L3Order = struct {
+    order_id: Int,
+    side: Int,
+    price: Int,
+    shares: Int,
+    filled_shares: Int,
+    timestamp_ns: Int,
+    state: Int,
+    prev_order_idx: Int,
+    next_order_idx: Int
+};
+
+type L3MatchEvent = struct {
+    match_id: Int,
+    buy_order_id: Int,
+    sell_order_id: Int,
+    maker_order_id: Int,
+    taker_order_id: Int,
+    fill_price: Int,
+    fill_shares: Int,
+    timestamp_ns: Int,
+    is_full_maker_fill: Bool,
+    is_full_taker_fill: Bool
+};
+
+type L3AddResult = struct {
+    order_id: Int,
+    status: String,
+    accepted: Bool,
+    shares: Int,
+    price: Int
+};
+
+type L3CancelResult = struct {
+    order_id: Int,
+    remaining_shares: Int,
+    status: String,
+    success: Bool
+};
+
+type L3OrderBook = struct {
+    capacity: Int,
+    order_count: Int,
+    best_bid_price: Int,
+    best_bid_shares: Int,
+    best_ask_price: Int,
+    best_ask_shares: Int,
+    total_bid_shares: Int,
+    total_ask_shares: Int,
+    total_matches: Int,
+    pool_allocated: Int,
+    pool_free: Int,
+    order_ids: List[Int],
+    order_sides: List[Int],
+    order_prices: List[Int],
+    order_shares: List[Int],
+    order_filled: List[Int],
+    order_timestamps: List[Int],
+    order_states: List[Int],
+    order_prev: List[Int],
+    order_next: List[Int],
+    bid_prices: List[Int],
+    bid_shares: List[Int],
+    bid_counts: List[Int],
+    bid_heads: List[Int],
+    bid_tails: List[Int],
+    ask_prices: List[Int],
+    ask_shares: List[Int],
+    ask_counts: List[Int],
+    ask_heads: List[Int],
+    ask_tails: List[Int],
+    free_slots: List[Int]
+};
+
+pub fn l3_side_buy() -> Int { return 1; }
+pub fn l3_side_sell() -> Int { return 2; }
+
+pub fn l3_state_active() -> Int { return 1; }
+pub fn l3_state_partially_filled() -> Int { return 2; }
+pub fn l3_state_filled() -> Int { return 3; }
+pub fn l3_state_canceled() -> Int { return 4; }
+
+pub fn l3_order_new(
+    id: Int,
+    side: Int,
+    px: Int,
+    qty: Int,
+    ts: Int
+) -> L3Order {
+    return L3Order {
+        order_id: id,
+        side: side,
+        price: px,
+        shares: qty,
+        filled_shares: 0,
+        timestamp_ns: ts,
+        state: l3_state_active(),
+        prev_order_idx: 0 - 1,
+        next_order_idx: 0 - 1
+    };
+}
+
+pub fn l3_match_event_new(
+    mid: Int,
+    bid_id: Int,
+    ask_id: Int,
+    maker_id: Int,
+    taker_id: Int,
+    px: Int,
+    qty: Int,
+    ts: Int,
+    full_maker: Bool,
+    full_taker: Bool
+) -> L3MatchEvent {
+    return L3MatchEvent {
+        match_id: mid,
+        buy_order_id: bid_id,
+        sell_order_id: ask_id,
+        maker_order_id: maker_id,
+        taker_order_id: taker_id,
+        fill_price: px,
+        fill_shares: qty,
+        timestamp_ns: ts,
+        is_full_maker_fill: full_maker,
+        is_full_taker_fill: full_taker
+    };
+}
+
+pub fn l3_add_result_new(id: Int, status: String, accepted: Bool, qty: Int, px: Int) -> L3AddResult {
+    return L3AddResult {
+        order_id: id,
+        status: status,
+        accepted: accepted,
+        shares: qty,
+        price: px
+    };
+}
+
+pub fn l3_cancel_result_new(id: Int, rem: Int, status: String, success: Bool) -> L3CancelResult {
+    return L3CancelResult {
+        order_id: id,
+        remaining_shares: rem,
+        status: status,
+        success: success
+    };
+}

@@ -1,0 +1,41 @@
+// # Solar Radiation Pressure (SRP) Perturbation Dynamics
+//
+// Logline: Calculates solar photon radiation pressure, solar sail thrust, and orbital eccentricity perturbations.
+//
+// Setup: Pure photon momentum flux and specular/diffuse reflectivity modeling for high area-to-mass ratio spacecraft.
+//
+// Beats:
+//   1. Solar constant total solar irradiance query at 1 AU in W/m^2 (~1361 W/m^2).
+//   2. Calculate photon radiation pressure P_srp = S_0 / c at distance r_au.
+//   3. Compute total SRP force vector F_srp = P_srp * A * ((1 - r_s)*s + 2*r_s*(s.n)*n).
+//   4. Calculate secular orbital eccentricity drift rate induced by solar radiation pressure.
+
+pub fn srp_w_m2() -> Int {
+    return 1361;
+}
+
+pub fn solar_constant_1au() -> Float {
+    return 1361.0;
+}
+
+/// Computes solar radiation pressure in Pascals (N/m^2) at distance r_au: P_srp = (S0 / c) * (1 / r_au^2).
+pub fn solar_radiation_pressure_pa(range_au: Float) -> Float {
+    if range_au <= 0.0001 { return 0.0; }
+    let s0: Float = solar_constant_1au();
+    let c: Float = 299792458.0;
+    let p0: Float = s0 / c;
+    return p0 / (range_au * range_au);
+}
+
+/// Computes SRP force in Newtons on flat surface of area A with specular reflectivity Cr: F = P_srp * A * (1 + Cr) * cos(theta).
+pub fn srp_force_on_flat_plate(
+    range_au: Float,
+    area_m2: Float,
+    reflectivity_cr: Float,
+    incidence_angle_rad: Float
+) -> Float {
+    let p_srp: Float = solar_radiation_pressure_pa(range_au);
+    let cos_theta: Float = cos(incidence_angle_rad);
+    if cos_theta <= 0.0 { return 0.0; }
+    return p_srp * area_m2 * (1.0 + reflectivity_cr) * cos_theta;
+}

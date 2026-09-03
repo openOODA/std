@@ -1,0 +1,72 @@
+// # Rice theorem decidability bound
+//
+// Logline: Non-trivial semantic property of programs is undecidable; verifier must fail closed on timeout.
+//
+// Setup: Pure Int. Property is non-trivial iff at least one true and one false program instance exist.
+//
+// Beats:
+//   1. rice_undecidable returns 1 when both a true and a false instance are observed.
+//   2. rice_is_decidable is the negation for trivial properties.
+//   3. rice_verifier_proven returns 1 only when verdict is 1 and no timeout occurred.
+//   4. Hostile empty input, hostile timeout, and hostile verdict=0 all fail closed to 0.
+
+// rice_undecidable: 1 iff the property has at least one true instance AND at least one
+// false instance. Both inputs must be exactly 1 for the witness. Any other combination
+// is treated as trivial and returns 0.
+pub fn rice_undecidable(has_true_instance: Int, has_false_instance: Int) -> Int {
+    if has_true_instance == 1 {
+        if has_false_instance == 1 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// rice_is_decidable: inverse of rice_undecidable. 1 if the property is trivial, 0 otherwise.
+pub fn rice_is_decidable(has_true_instance: Int, has_false_instance: Int) -> Int {
+    let u: Int = rice_undecidable(has_true_instance, has_false_instance);
+    if u == 1 {
+        return 0;
+    }
+    return 1;
+}
+
+// rice_verifier_proven: 1 only when verdict is 1 and timeout_occurred is 0.
+// A timeout collapses the verdict to 0 (fail closed).
+pub fn rice_verifier_proven(verdict: Int, timeout_occurred: Int) -> Int {
+    if verdict == 1 {
+        if timeout_occurred == 0 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+pub fn verify_rice_theorem_decidability_principle() -> Bool {
+    // Golden: non-trivial property (both true and false instances) is undecidable.
+    if rice_undecidable(1, 1) != 1 { return false; }
+    // Golden: trivial always-true property is decidable (not undecidable).
+    if rice_undecidable(1, 0) != 0 { return false; }
+    // Golden: trivial always-false property is decidable.
+    if rice_undecidable(0, 1) != 0 { return false; }
+    // Hostile: empty property (vacuous) is decidable.
+    if rice_undecidable(0, 0) != 0 { return false; }
+    // Hostile: garbage inputs (neither 0 nor 1) fail closed to 0.
+    if rice_undecidable(2, 1) != 0 { return false; }
+    if rice_undecidable(1, 0 - 1) != 0 { return false; }
+    // Golden: rice_is_decidable is the negation.
+    if rice_is_decidable(1, 1) != 0 { return false; }
+    if rice_is_decidable(1, 0) != 1 { return false; }
+    if rice_is_decidable(0, 1) != 1 { return false; }
+    if rice_is_decidable(0, 0) != 1 { return false; }
+    // Hostile: verifier with timeout must fail closed to 0.
+    if rice_verifier_proven(1, 1) != 0 { return false; }
+    if rice_verifier_proven(0, 0) != 0 { return false; }
+    if rice_verifier_proven(0, 1) != 0 { return false; }
+    // Hostile: forged verdict (not 0 or 1) fails closed.
+    if rice_verifier_proven(2, 0) != 0 { return false; }
+    if rice_verifier_proven(0 - 1, 0) != 0 { return false; }
+    // Golden: clean proven verdict holds.
+    if rice_verifier_proven(1, 0) != 1 { return false; }
+    return true;
+}

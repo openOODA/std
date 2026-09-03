@@ -1,0 +1,67 @@
+// # ProofVerifiers Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard proof_verifiers domain library. Re-exports a stable proof_verifiers_mod_* surface for the most-used public API (CDCL SAT, SAT/CNF, MaxSAT, SMT combination, SMT decision, kernel checker). Private siblings (literature KATs) remain non-public.
+//
+// Setup: Imports private proof_verifiers siblings; no caps required for proof-theoretic verifiers (return Int 0/1 for "holds").
+//
+// Beats:
+//   1. Re-export the CDCL SAT surface as proof_verifiers_mod_cdcl_*.
+//   2. Re-export the kernel checker surface as proof_verifiers_mod_kernel_*.
+//   3. Re-export the MaxSAT hard/soft surface as proof_verifiers_mod_maxsat_*.
+//   4. Re-export the SAT/CNF surface as proof_verifiers_mod_cnf_*.
+//   5. Re-export the SMT combination and decision surface as proof_verifiers_mod_smt_*. Document the private siblings.
+
+import "cdcl_sat_principle.oo";
+import "kernel_checker_theory.oo";
+import "maxsat_hard_soft_law.oo";
+import "sat_cnf_law.oo";
+import "smt_combination_theory.oo";
+import "smt_decision_principle.oo";
+
+// Public CDCL SAT surface: proof_verifiers_mod_cdcl_*
+pub fn proof_verifiers_mod_cdcl_abs(x: Int) -> Int { return pvabs(x); }
+pub fn proof_verifiers_mod_cdcl_clsh(x: Int, lo: Int, hi: Int) -> Int { return pvclsh(x, lo, hi); }
+pub fn proof_verifiers_mod_cdcl_rel_diff(a: Int, b: Int) -> Int { return pvrel_diff(a, b); }
+pub fn proof_verifiers_mod_cdcl_within_tol(a: Int, b: Int) -> Int { return pv_within_tol(a, b); }
+pub fn proof_verifiers_mod_cdcl_learned_clause_size(size: Int) -> Int { return cdcl_learned_clause_size(size); }
+
+// Public kernel checker surface: proof_verifiers_mod_kernel_*
+pub fn proof_verifiers_mod_kernel_is_trusted_primitive(prim_id: Int) -> Int { return kernel_is_trusted_primitive(prim_id); }
+pub fn proof_verifiers_mod_kernel_emit_theorem(s0: Int, s1: Int, s2: Int, s3: Int) -> Int { return kernel_emit_theorem(s0, s1, s2, s3); }
+pub fn proof_verifiers_mod_kernel_sound(s0: Int, s1: Int, s2: Int, s3: Int, n: Int) -> Int { return kernel_sound(s0, s1, s2, s3, n); }
+pub fn proof_verifiers_mod_kernel_is_small(n_primitives: Int) -> Int { return kernel_is_small(n_primitives); }
+pub fn proof_verifiers_mod_kernel_trustworthy(n_primitives: Int, audit_score: Int) -> Int { return kernel_trustworthy(n_primitives, audit_score); }
+
+// Public MaxSAT surface: proof_verifiers_mod_maxsat_*
+pub fn proof_verifiers_mod_maxsat_abs(x: Int) -> Int { return pvabs(x); }
+pub fn proof_verifiers_mod_maxsat_rel_diff(a: Int, b: Int) -> Int { return pvrel_diff(a, b); }
+pub fn proof_verifiers_mod_maxsat_within_tol(a: Int, b: Int) -> Int { return pv_within_tol(a, b); }
+pub fn proof_verifiers_mod_maxsat_is_known_kind(kind: Int) -> Int { return maxsat_is_known_kind(kind); }
+pub fn proof_verifiers_mod_maxsat_is_positive_weight(w: Int) -> Int { return maxsat_is_positive_weight(w); }
+
+// Public SAT/CNF surface: proof_verifiers_mod_cnf_*
+pub fn proof_verifiers_mod_cnf_literal_sat(lit: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_literal_sat(lit, a1, a2, a3); }
+pub fn proof_verifiers_mod_cnf_clause_sat(l1: Int, l2: Int, l3: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_clause_sat(l1, l2, l3, a1, a2, a3); }
+pub fn proof_verifiers_mod_cnf_formula_sat(n_clauses: Int, l1: Int, l2: Int, l3: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_formula_sat(n_clauses, l1, l2, l3, a1, a2, a3); }
+pub fn proof_verifiers_mod_cnf_is_sat(n_vars: Int, n_clauses: Int, l1: Int, l2: Int, l3: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_is_sat(n_vars, n_clauses, l1, l2, l3, a1, a2, a3); }
+pub fn proof_verifiers_mod_cnf_unit_propagate(unit_lit: Int) -> Int { return cnf_unit_propagate(unit_lit); }
+
+// Public SMT combination surface: proof_verifiers_mod_smt_*
+pub fn proof_verifiers_mod_smt_abs(x: Int) -> Int { return pvabs(x); }
+pub fn proof_verifiers_mod_smt_rel_diff(a: Int, b: Int) -> Int { return pvrel_diff(a, b); }
+pub fn proof_verifiers_mod_smt_within_tol(a: Int, b: Int) -> Int { return pv_within_tol(a, b); }
+pub fn proof_verifiers_mod_smt_theory_count() -> Int { return smt_theory_count(); }
+pub fn proof_verifiers_mod_smt_is_known_theory(id: Int) -> Int { return smt_is_known_theory(id); }
+
+// Public SMT decision surface: proof_verifiers_mod_smt_decide_*
+pub fn proof_verifiers_mod_smt_decide_lia_sat(x: Int, y: Int, k: Int) -> Int { return smt_lia_sat(x, y, k); }
+pub fn proof_verifiers_mod_smt_decide_is_known_op(op: Int) -> Int { return smt_is_known_op(op); }
+pub fn proof_verifiers_mod_smt_decide_check(op: Int, x: Int, y: Int, k: Int) -> Int { return smt_check(op, x, y, k); }
+pub fn proof_verifiers_mod_smt_decide_is_malformed(op: Int, x: Int, y: Int, k: Int) -> Int { return smt_is_malformed(op, x, y, k); }
+pub fn proof_verifiers_mod_smt_decide(op: Int, x: Int, y: Int, k: Int) -> Int { return smt_decide(op, x, y, k); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _principle files (e.g. cdcl_sat_principle.oo, smt_decision_principle.oo)
+//   _theory files (e.g. kernel_checker_theory.oo, smt_combination_theory.oo)
+//   _law files (e.g. maxsat_hard_soft_law.oo, sat_cnf_law.oo)
+//   _kat files (e.g. proof_verifiers_kat.oo, literature_kat.oo)

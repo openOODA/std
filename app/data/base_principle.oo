@@ -1,0 +1,83 @@
+// # BASE Data Store Principle
+//
+// Logline: Basically Available, Soft state, Eventually consistent: a service tolerates partial failure without strong consistency.
+//
+// Setup: Pure Int. Each property is 1 if held. BASE holds if all three are 1. Hosts data_invariants.oo stem.
+//
+// Beats:
+//   1. Basic availability: the service responds to most requests.
+//   2. Soft state: state may diverge without input and converge later.
+//   3. Eventual consistency: replicas converge after updates stop.
+//   4. Hosts data_invariants.oo stem for cross-law correlation.
+
+import "std/app/data/data_invariants.oo";
+
+// Property bits: 1 basic, 2 soft, 4 eventual.
+pub fn base_basic_bit() -> Int {
+    return 1;
+}
+
+pub fn base_soft_bit() -> Int {
+    return 2;
+}
+
+pub fn base_eventual_bit() -> Int {
+    return 4;
+}
+
+// BASE witness: 1 if all three property bits are 1.
+pub fn base_holds(basic: Int, soft: Int, eventual: Int) -> Int {
+    if basic != 1 { return 0; }
+    if soft != 1 { return 0; }
+    if eventual != 1 { return 0; }
+    return 1;
+}
+
+// BASE mask: 1 if mask has all three bits set.
+pub fn base_mask_holds(mask: Int) -> Int {
+    if mask < 0 { return 0; }
+    let combined: Int = base_basic_bit() + base_soft_bit() + base_eventual_bit();
+    if (mask & combined) == combined { return 1; }
+    return 0;
+}
+
+// Count of BASE bits held.
+fn bsc_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+pub fn base_count(mask: Int) -> Result[Int, String] {
+    if mask < 0 { return Err("ERR\tbsc\tdomain"); }
+    let mut c: Int = 0;
+    if (mask & base_basic_bit()) != 0 { c = c + 1; }
+    if (mask & base_soft_bit()) != 0 { c = c + 1; }
+    if (mask & base_eventual_bit()) != 0 { c = c + 1; }
+    return Ok(c);
+}
+
+// KAT and hostile cases for the BASE principle.
+pub fn verify_base_principle() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    if base_holds(1, 1, 1) != 1 { return false; }
+    if base_holds(0, 1, 1) != 0 { return false; }
+    if base_holds(1, 0, 1) != 0 { return false; }
+    if base_holds(1, 1, 0) != 0 { return false; }
+    if base_holds(0, 0, 0) != 0 { return false; }
+    if base_holds(2, 1, 1) != 0 { return false; }
+    if base_holds(0 - 1, 1, 1) != 0 { return false; }
+    if base_mask_holds(7) != 1 { return false; }
+    if base_mask_holds(3) != 0 { return false; }
+    if base_mask_holds(5) != 0 { return false; }
+    if base_mask_holds(6) != 0 { return false; }
+    if base_mask_holds(0) != 0 { return false; }
+    if base_mask_holds(0 - 1) != 0 { return false; }
+    if base_mask_holds(15) != 1 { return false; }
+    let zbase: Result[Int, String] = base_count(0);
+    if zbase.is_ok() == false { return false; }
+    if bsc_got(zbase) != 0 { return false; }
+    if bsc_got(base_count(7)) != 3 { return false; }
+    if bsc_got(base_count(1)) != 1 { return false; }
+    if base_count(0 - 1).is_ok() { return false; }
+    return true;
+}

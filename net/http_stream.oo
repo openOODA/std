@@ -1,0 +1,252 @@
+// # HTTP/1.1 Streaming Request Parser
+//
+// Logline: Incremental RFC 7230 HTTP/1.1 request parser that consumes the request line, header block, and content-length or chunked body one frame at a time as the network feed delivers bytes.
+//
+// Setup: Pure. The caller pushes raw bytes via http_stream_push, then drives http_stream_step until done is true. State machine reports method, URI, version, headers, and body in its public fields.
+//
+// Beats:
+//   1. Read the request line (METHOD URI HTTP/1.1) once a CRLF is buffered.
+//   2. Read each header line as a name/value pair until the empty CRLF terminates the header block.
+//   3. Switch into body mode and consume content-length bytes or chunked size/data chunks.
+//   4. Mark the stream as done when the full request has been consumed and surface any parse error.
+
+type HttpStream = struct {
+    input: String,
+    pos: Int,
+    state: Int,
+    method: String,
+    uri: String,
+    version: String,
+    headers: String,
+    body: String,
+    content_length: Int,
+    body_consumed: Int,
+    chunked: Bool,
+    done: Bool,
+    err: String
+};
+
+pub fn http_stream_new() -> HttpStream {
+    return HttpStream {
+        input: "", pos: 0, state: 0,
+        method: "", uri: "", version: "",
+        headers: "", body: "",
+        content_length: 0, body_consumed: 0,
+        chunked: false, done: false, err: ""
+    };
+}
+
+pub fn http_stream_push(p: HttpStream, chunk: String) -> HttpStream {
+    if p.done == true { return p; }
+    return HttpStream {
+        input: p.input + chunk, pos: p.pos, state: p.state,
+        method: p.method, uri: p.uri, version: p.version,
+        headers: p.headers, body: p.body,
+        content_length: p.content_length, body_consumed: p.body_consumed,
+        chunked: p.chunked, done: p.done, err: p.err
+    };
+}
+
+pub fn http_stream_eof(p: HttpStream) -> Bool { return p.done; }
+pub fn http_stream_error(p: HttpStream) -> String { return p.err; }
+
+fn hs_done(p: HttpStream, err: String) -> HttpStream {
+    return HttpStream {
+        input: p.input, pos: p.pos, state: 3,
+        method: p.method, uri: p.uri, version: p.version,
+        headers: p.headers, body: p.body,
+        content_length: p.content_length, body_consumed: p.body_consumed,
+        chunked: p.chunked, done: true, err: err
+    };
+}
+
+fn hs_find_crlf(s: String, start: Int) -> Int {
+    let n: Int = chars_len(s);
+    let mut i: Int = start;
+    while i + 1 < n {
+        if char_at(s, i) == "\r" && char_at(s, i + 1) == "\n" { return i; }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+fn hs_int_from(s: String) -> Int {
+    let n: Int = chars_len(s);
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let d: Int = byte_at(s, i) - 48;
+        if d < 0 { return acc; }
+        if d > 9 { return acc; }
+        acc = (acc * 10) + d;
+        i = i + 1;
+    }
+    return acc;
+}
+
+fn hs_lower(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b >= 65 && b <= 90 {
+            out = out + char_at("abcdefghijklmnopqrstuvwxyz", b - 65);
+        } else { out = out + char_at(s, i); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn hs_split3(line: String) -> String {
+    let n: Int = chars_len(line);
+    let mut sp1: Int = 0 - 1;
+    let mut sp2: Int = 0 - 1;
+    let mut k: Int = 0;
+    while k < n {
+        if char_at(line, k) == " " {
+            if sp1 < 0 { sp1 = k; } else if sp2 < 0 { sp2 = k; }
+        }
+        k = k + 1;
+    }
+    if sp1 < 0 || sp2 < 0 || sp2 <= sp1 + 1 { return ""; }
+    return str_slice(line, 0, sp1) + "|" + str_slice(line, sp1 + 1, sp2) + "|" + str_slice(line, sp2 + 1, n);
+}
+
+fn hs_drive_req_line(p: HttpStream) -> HttpStream {
+    let crlf: Int = hs_find_crlf(p.input, p.pos);
+    if crlf < 0 { return p; }
+    let parts: String = hs_split3(str_slice(p.input, p.pos, crlf));
+    if chars_len(parts) == 0 { return hs_done(p, "ERR\thttp\tbad_request_line"); }
+    let n: Int = chars_len(parts);
+    let mut p1: Int = 0 - 1;
+    let mut p2: Int = 0 - 1;
+    let mut k: Int = 0;
+    while k < n {
+        if char_at(parts, k) == "|" {
+            if p1 < 0 { p1 = k; } else { p2 = k; }
+        }
+        k = k + 1;
+    }
+    return HttpStream {
+        input: p.input, pos: crlf + 2, state: 1,
+        method: str_slice(parts, 0, p1),
+        uri: str_slice(parts, p1 + 1, p2),
+        version: str_slice(parts, p2 + 1, n),
+        headers: p.headers, body: p.body,
+        content_length: p.content_length, body_consumed: p.body_consumed,
+        chunked: p.chunked, done: false, err: ""
+    };
+}
+
+fn hs_drive_headers(p: HttpStream) -> HttpStream {
+    let crlf: Int = hs_find_crlf(p.input, p.pos);
+    if crlf < 0 { return p; }
+    let line: String = str_slice(p.input, p.pos, crlf);
+    if chars_len(line) == 0 {
+        let hl: String = hs_lower(p.headers);
+        let hn: Int = chars_len(hl);
+        let mut cl: Int = 0;
+        let mut chunked: Bool = false;
+        let mut i: Int = 0;
+        while i + 15 <= hn {
+            if str_slice(hl, i, i + 15) == "content-length:" {
+                let mut j: Int = i + 15;
+                let mut vs: String = "";
+                while j < hn {
+                    let c: String = char_at(p.headers, j);
+                    if c == "\n" { break; }
+                    vs = vs + c;
+                    j = j + 1;
+                }
+                cl = hs_int_from(vs);
+            }
+            if str_slice(hl, i, i + 17) == "transfer-encoding" {
+                let mut j2: Int = i + 17;
+                let mut vs2: String = "";
+                while j2 < hn {
+                    let c2: String = char_at(p.headers, j2);
+                    if c2 == "\n" { break; }
+                    vs2 = vs2 + c2;
+                    j2 = j2 + 1;
+                }
+                if hs_lower(vs2) == ":chunked" { chunked = true; }
+            }
+            i = i + 1;
+        }
+        return HttpStream {
+            input: p.input, pos: crlf + 2, state: 2,
+            method: p.method, uri: p.uri, version: p.version,
+            headers: p.headers, body: "",
+            content_length: cl, body_consumed: 0,
+            chunked: chunked, done: false, err: ""
+        };
+    }
+    let n: Int = chars_len(line);
+    let mut colon: Int = 0 - 1;
+    let mut k: Int = 0;
+    while k < n {
+        if char_at(line, k) == ":" { colon = k; break; }
+        k = k + 1;
+    }
+    if colon < 0 { return hs_done(p, "ERR\thttp\tbad_header"); }
+    let mut vs3: Int = colon + 1;
+    if vs3 < n {
+        if char_at(line, vs3) == " " { vs3 = vs3 + 1; }
+    }
+    return HttpStream {
+        input: p.input, pos: crlf + 2, state: 1,
+        method: p.method, uri: p.uri, version: p.version,
+        headers: p.headers + str_slice(line, 0, colon) + ":" + str_slice(line, vs3, n) + "\n",
+        body: p.body,
+        content_length: p.content_length, body_consumed: p.body_consumed,
+        chunked: p.chunked, done: false, err: ""
+    };
+}
+
+fn hs_drive_body(p: HttpStream) -> HttpStream {
+    let in_len: Int = chars_len(p.input);
+    if p.chunked == true {
+        let crlf: Int = hs_find_crlf(p.input, p.pos);
+        if crlf < 0 { return p; }
+        let size_line: String = str_slice(p.input, p.pos, crlf);
+        let semi: Int = str_index_of(size_line, ";");
+        let size_str: String = if semi < 0 { size_line } else { str_slice(size_line, 0, semi) };
+        let chunk_size: Int = hs_int_from(size_str);
+        if chunk_size == 0 { return hs_done(p, ""); }
+        let data_start: Int = crlf + 2;
+        let data_end: Int = data_start + chunk_size;
+        if data_end + 2 > in_len { return p; }
+        let data: String = str_slice(p.input, data_start, data_end);
+        return HttpStream {
+            input: p.input, pos: data_end + 2, state: 2,
+            method: p.method, uri: p.uri, version: p.version,
+            headers: p.headers, body: p.body + data,
+            content_length: p.content_length,
+            body_consumed: p.body_consumed + chunk_size,
+            chunked: p.chunked, done: false, err: ""
+        };
+    }
+    if p.content_length == 0 { return hs_done(p, ""); }
+    let avail: Int = in_len - p.pos;
+    if avail <= 0 { return p; }
+    let need: Int = p.content_length - p.body_consumed;
+    if avail < need { return p; }
+    let data2: String = str_slice(p.input, p.pos, p.pos + need);
+    return HttpStream {
+        input: p.input, pos: p.pos + need, state: 3,
+        method: p.method, uri: p.uri, version: p.version,
+        headers: p.headers, body: p.body + data2,
+        content_length: p.content_length,
+        body_consumed: p.body_consumed + need,
+        chunked: p.chunked, done: true, err: ""
+    };
+}
+
+pub fn http_stream_step(p: HttpStream) -> HttpStream {
+    if p.done == true { return p; }
+    if p.state == 0 { return hs_drive_req_line(p); }
+    if p.state == 1 { return hs_drive_headers(p); }
+    if p.state == 2 { return hs_drive_body(p); }
+    return p;
+}

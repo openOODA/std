@@ -1,0 +1,127 @@
+// # Michaelis-Menten enzyme kinetics theory
+//
+// Logline: Single-substrate reaction rate v = V_max * [S] / (K_m + [S]). With competitive inhibition, v = V_max * [S] / (K_m*(1 + [I]/K_i) + [S]). Hostile inputs fail closed to 0.
+//
+// Setup: Pure Float. Substrate concentration [S] (M), V_max (uM/min), K_m (M), inhibitor [I] (M), K_i (M); the theory is unit-agnostic.
+//
+// Beats:
+//   1. Closed form: v = V_max * [S] / (K_m + [S]).
+//   2. Coupled form with competitive inhibition: K_m_app = K_m * (1 + [I]/K_i).
+//   3. Domain certificate via domain_cert("bio", "michaelis_menten", holds).
+//   4. Hostile [S] < 0, K_m <= 0, or V_max <= 0 return 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn babs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+fn mm_inputs_valid(v_max: Float, k_m: Float, s_conc: Float) -> Int {
+    if v_max <= 0.0 { return 0; }
+    if k_m <= 0.0 { return 0; }
+    if s_conc < 0.0 { return 0; }
+    return 1;
+}
+
+pub fn michaelis_menten_rate(v_max: Float, k_m: Float, s_conc: Float) -> Result[Float, String] {
+    if mm_inputs_valid(v_max, k_m, s_conc) != 1 {
+        return Err("ERR\tmm\tdomain");
+    }
+    let denom: Float = k_m + s_conc;
+    if denom <= 0.0 {
+        return Err("ERR\tmm\tden");
+    }
+    return Ok((v_max * s_conc) / denom);
+}
+
+pub fn michaelis_menten_app_k_m(k_m: Float, i_conc: Float, k_i: Float) -> Result[Float, String] {
+    if k_m <= 0.0 {
+        return Err("ERR\tmm\tkm");
+    }
+    if i_conc < 0.0 {
+        return Err("ERR\tmm\ti");
+    }
+    if k_i <= 0.0 {
+        return Err("ERR\tmm\tki");
+    }
+    return Ok(k_m * (1.0 + (i_conc / k_i)));
+}
+
+pub fn michaelis_menten_inhibited_rate(
+    v_max: Float, k_m: Float, s_conc: Float, i_conc: Float, k_i: Float
+) -> Result[Float, String] {
+    if v_max <= 0.0 { return Err("ERR\tmm\tvmax"); }
+    if k_m <= 0.0 { return Err("ERR\tmm\tkm"); }
+    if k_i <= 0.0 { return Err("ERR\tmm\tki"); }
+    if s_conc < 0.0 { return Err("ERR\tmm\ts"); }
+    if i_conc < 0.0 { return Err("ERR\tmm\ti"); }
+    let ar: Result[Float, String] = michaelis_menten_app_k_m(k_m, i_conc, k_i);
+    match ar {
+        Ok(k_m_app) => {
+            let denom: Float = k_m_app + s_conc;
+            if denom <= 0.0 { return Err("ERR\tmm\tden"); }
+            return Ok((v_max * s_conc) / denom);
+        },
+        Err(e)      => { return Err(e); }
+    }
+}
+
+fn mm_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn michaelis_menten_cert(v_max: Float, k_m: Float, s_conc: Float) -> DomainCert {
+    let v: Float = mm_got(michaelis_menten_rate(v_max, k_m, s_conc));
+    let mut h: Int = 0;
+    let denom: Float = k_m + s_conc;
+    let want: Float = (v_max * s_conc) / denom;
+    if babs(v - want) <= 0.0000001 {
+        if v > 0.0 || (s_conc == 0.0 && v == 0.0) {
+            h = 1;
+        }
+    }
+    return domain_cert("bio", "michaelis_menten", h);
+}
+
+pub fn michaelis_menten_inhibited_cert(
+    v_max: Float, k_m: Float, s_conc: Float, i_conc: Float, k_i: Float
+) -> DomainCert {
+    let v: Float = mm_got(michaelis_menten_inhibited_rate(v_max, k_m, s_conc, i_conc, k_i));
+    let k_m_app: Float = k_m * (1.0 + (i_conc / k_i));
+    let denom: Float = k_m_app + s_conc;
+    let want: Float = (v_max * s_conc) / denom;
+    let mut h: Int = 0;
+    if babs(v - want) <= 0.0000001 { h = 1; }
+    return domain_cert("bio", "michaelis_menten_inhibited", h);
+}
+
+pub fn verify_michaelis_menten_theory() -> Bool {
+    let v_g: Float = mm_got(michaelis_menten_rate(100.0, 10.0, 10.0));
+    if babs(v_g - 50.0) > 0.0000001 { return false; }
+    if michaelis_menten_cert(100.0, 10.0, 10.0).holds != 1 { return false; }
+    let v_sat: Float = mm_got(michaelis_menten_rate(100.0, 10.0, 10000000.0));
+    if babs(v_sat - 100.0) > 0.01 { return false; }
+    if mm_got(michaelis_menten_rate(100.0, 10.0, 0.0)) != 0.0 { return false; }
+    if babs(mm_got(michaelis_menten_app_k_m(10.0, 0.0, 1.0)) - 10.0) > 0.0000001 { return false; }
+    if babs(mm_got(michaelis_menten_app_k_m(10.0, 1.0, 1.0)) - 20.0) > 0.0000001 { return false; }
+    if mm_got(michaelis_menten_inhibited_rate(100.0, 10.0, 0.0, 1.0, 1.0)) != 0.0 { return false; }
+    let v_sat_inh: Float = mm_got(michaelis_menten_inhibited_rate(100.0, 10.0, 10000000.0, 1.0, 1.0));
+    if babs(v_sat_inh - 100.0) > 0.01 { return false; }
+    let v_uninh: Float = mm_got(michaelis_menten_inhibited_rate(100.0, 10.0, 10.0, 0.0, 1.0));
+    let v_inh: Float = mm_got(michaelis_menten_inhibited_rate(100.0, 10.0, 10.0, 1.0, 1.0));
+    if v_inh > v_uninh { return false; }
+    if michaelis_menten_inhibited_cert(100.0, 10.0, 10.0, 1.0, 1.0).holds != 1 { return false; }
+    if michaelis_menten_rate(0.0 - 1.0, 10.0, 10.0).is_ok() { return false; }
+    if michaelis_menten_rate(100.0, 0.0, 10.0).is_ok() { return false; }
+    if michaelis_menten_rate(100.0, 0.0 - 1.0, 10.0).is_ok() { return false; }
+    if michaelis_menten_rate(100.0, 10.0, 0.0 - 1.0).is_ok() { return false; }
+    if michaelis_menten_app_k_m(0.0, 1.0, 1.0).is_ok() { return false; }
+    if michaelis_menten_app_k_m(10.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    if michaelis_menten_app_k_m(10.0, 1.0, 0.0).is_ok() { return false; }
+    if michaelis_menten_inhibited_rate(0.0, 10.0, 10.0, 1.0, 1.0).is_ok() { return false; }
+    if michaelis_menten_inhibited_rate(100.0, 10.0, 10.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    return true;
+}

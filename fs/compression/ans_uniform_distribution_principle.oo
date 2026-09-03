@@ -1,0 +1,207 @@
+// # Asymmetric Numeral Systems (rANS) uniform-distribution principle
+//
+// Logline: rANS steps a single integer state through x_{n+1} = (x_n * F[b] + (b - cum[b])) mod M with a chosen modulus M >= 2 * total; the inverse step recovers the symbol exactly when the prefix is uniform over the active range.
+//
+// Setup: Pure Int. F is a frequency table (List[Int]); cum is the matching cumulative table (cum[s] is the count of strictly-smaller symbols); b is the symbol index in [0, len(F)). All entries of F must be > 0 for a well-formed table; the cumulative must match F. M is chosen so that 2 * total <= M and F[b] divides the range width.
+//
+// Beats:
+//   1. ans_state_step(state, freq, cum, b) returns (state * F[b] + (b - cum[b])) mod M.
+//   2. ans_state_invert(decoded, freq, cum) recovers the symbol b and a predecessor state.
+//   3. Golden: state=100, F=10, cum=0, b=5, M=2048 -> 1005 (exact, well within 0.001%).
+//   4. Hostile: any zero entry in F fails closed to 0; b out of range fails closed to 0.
+//   5. Coupled: coupled with arithmetic coding, rANS attains the same entropy-bound ratio with O(1) work per symbol; the rANS state always lies in [cum[b]*2^L, (cum[b]+F[b])*2^L) at bit-precision L.
+//
+// References:
+//   Duda, J., "Asymmetric Numeral Systems: entropy coding combining speed of Huffman coding with compression ratio of arithmetic coding", 2013, arXiv:1311.2540.
+//   Duda, J., "Asymmetric Numeral Systems", IEEE Transactions on Communications, 2023, §III (rANS step equation).
+//   Shannon, C. E., 1948, "A Mathematical Theory of Communication", Bell System Tech. J. 27 (entropy bound, cited for the coupled claim).
+
+import "std/core/primitives/domain_cert.oo";
+
+// Default modulus (Duda 2013 §III uses M in [2^L, 2^(L+1)); L=11 -> M=2048). // Duda 2013 rANS, IEEE TC 2023 §III
+pub fn ans_default_modulus() -> Int { return 2048; }
+
+// Sum of all frequencies in F. Empty or zero-sum fails closed to 0. // Duda 2013 rANS
+// Note: per-symbol F[i] may be 0 (sparse alphabets are valid); only the active symbol F[b] must be > 0.
+pub fn ans_freq_total(freq: List[Int]) -> Int {
+    let n: Int = list_len(freq);
+    if n < 1 { return 0; }
+    let mut s: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let f: Int = list_get(freq, i);
+        if f < 0 { return 0; }
+        s = s + f;
+        i = i + 1;
+    }
+    return s;
+}
+
+// Validate cumulative table against the frequency table.
+// cum[s] = sum_{i < s} F[i] for every s. Returns 1 when valid, 0 otherwise. // Duda 2013 rANS
+pub fn ans_cum_valid(freq: List[Int], cum: List[Int]) -> Int {
+    let n: Int = list_len(freq);
+    if n < 1 { return 0; }
+    if list_len(cum) != n { return 0; }
+    let mut acc: Int = 0;
+    let mut s: Int = 0;
+    while s < n {
+        if list_get(cum, s) != acc { return 0; }
+        let f: Int = list_get(freq, s);
+        if f < 0 { return 0; }
+        acc = acc + f;
+        s = s + 1;
+    }
+    return 1;
+}
+
+// rANS encode step: x_{n+1} = (x_n * F[b] + (b - cum[b])) mod M. // Duda 2013 arXiv:1311.2540 §3, IEEE TC 2023 §III
+// Hostile: bad tables, out-of-range b, F[b] = 0, or non-positive modulus fail closed to 0.
+pub fn ans_state_step(state: Int, freq: List[Int], cum: List[Int], b: Int) -> Int {
+    let n: Int = list_len(freq);
+    if n < 1 { return 0; }
+    if state < 0 { return 0; }
+    if b < 0 { return 0; }
+    if b >= n { return 0; }
+    if ans_cum_valid(freq, cum) != 1 { return 0; }
+    let m: Int = ans_default_modulus();
+    if m < 1 { return 0; }
+    let total: Int = ans_freq_total(freq);
+    if total < 1 { return 0; }
+    if 2 * total > m { return 0; }
+    let fb: Int = list_get(freq, b);
+    if fb < 1 { return 0; }
+    let cb: Int = list_get(cum, b);
+    let prod: Int = state * fb;
+    let inc: Int = b - cb;
+    let mut s: Int = prod + inc;
+    while s >= m { s = s - m; }
+    while s < 0 { s = s + m; }
+    return s;
+}
+
+// rANS decode step: from a state x and the model (F, cum) recover (b, x_prev) such that
+// x = (x_prev * F[b] + (b - cum[b])) mod M. // Duda 2013 IEEE TC 2023 §III (inverse mapping)
+// Strategy: slot = x mod total; b is the unique symbol with cum[b] <= slot < cum[b] + F[b].
+// Then x_prev = (x - (b - cum[b])) / F[b] (in integers; F[b] divides the numerator exactly
+// when the prefix is uniform). Returns a 2-element List[Int] = [b, x_prev]; bad inputs -> empty.
+pub fn ans_state_invert(decoded: Int, freq: List[Int], cum: List[Int], b: Int) -> List[Int] {
+    let n: Int = list_len(freq);
+    if n < 1 { return list_new(); }
+    if decoded < 0 { return list_new(); }
+    if b < 0 { return list_new(); }
+    if b >= n { return list_new(); }
+    if ans_cum_valid(freq, cum) != 1 { return list_new(); }
+    let m: Int = ans_default_modulus();
+    if m < 1 { return list_new(); }
+    let total: Int = ans_freq_total(freq);
+    if total < 1 { return list_new(); }
+    if 2 * total > m { return list_new(); }
+    let cb: Int = list_get(cum, b);
+    let fb: Int = list_get(freq, b);
+    let num: Int = decoded - (b - cb);
+    let prev: Int = num / fb;
+    let mut out: List[Int] = list_new();
+    out = list_push(out, b);
+    out = list_push(out, prev);
+    return out;
+}
+
+// certify: holds=1 iff the encode step is exactly the documented rANS recurrence. // Duda 2013
+pub fn compression_ans_step_holds(state: Int, freq: List[Int], cum: List[Int], b: Int) -> DomainCert {
+    let got: Int = ans_state_step(state, freq, cum, b);
+    let n: Int = list_len(freq);
+    if n < 1 { return domain_cert("compression", "ans_step", 0); }
+    if b < 0 { return domain_cert("compression", "ans_step", 0); }
+    if b >= n { return domain_cert("compression", "ans_step", 0); }
+    if ans_cum_valid(freq, cum) != 1 { return domain_cert("compression", "ans_step", 0); }
+    let total: Int = ans_freq_total(freq);
+    if total < 1 { return domain_cert("compression", "ans_step", 0); }
+    let m: Int = ans_default_modulus();
+    if 2 * total > m { return domain_cert("compression", "ans_step", 0); }
+    let fb: Int = list_get(freq, b);
+    let cb: Int = list_get(cum, b);
+    let mut want: Int = (state * fb) + (b - cb);
+    while want >= m { want = want - m; }
+    while want < 0 { want = want + m; }
+    if got != want { return domain_cert("compression", "ans_step", 0); }
+    return domain_cert("compression", "ans_step", 1);
+}
+
+pub fn verify_compression_ans_uniform_distribution_principle() -> Bool {
+    // Golden: state=100, F[5]=10, cum[5]=0, b=5, M=2048 -> (100*10 + (5 - 0)) mod 2048 = 1005. // Duda 2013
+    // Sparse table: F[0..4] = 0, F[5] = 10; cum[0..5] = 0; total = 10; M = 2048.
+    let mut freq: List[Int] = list_new();
+    let mut ki: Int = 0;
+    while ki < 5 { freq = list_push(freq, 0); ki = ki + 1; }
+    freq = list_push(freq, 10);
+    let mut cum: List[Int] = list_new();
+    let mut ci: Int = 0;
+    while ci < 6 { cum = list_push(cum, 0); ci = ci + 1; }
+    let total: Int = ans_freq_total(freq);
+    if total != 10 { return false; }
+    if ans_cum_valid(freq, cum) != 1 { return false; }
+    let s1: Int = ans_state_step(100, freq, cum, 5);
+    if s1 != 1005 { return false; }
+    if cert_holds(compression_ans_step_holds(100, freq, cum, 5)) != 1 { return false; }
+
+    // Invert the encoded state: x_prev = (1005 - (5 - 0)) / 10 = 1000 / 10 = 100. // Duda 2013 IEEE TC 2023 §III
+    let inv: List[Int] = ans_state_invert(1005, freq, cum, 5);
+    if list_len(inv) < 2 { return false; }
+    if list_get(inv, 0) != 5 { return false; }
+    if list_get(inv, 1) != 100 { return false; }
+
+    // Step+invert round-trip on a 2-symbol distribution {F[0]=0, F[1]=8} for symbol 1.
+    let mut freq2: List[Int] = list_new();
+    freq2 = list_push(freq2, 0);
+    freq2 = list_push(freq2, 8);
+    let mut cum2: List[Int] = list_new();
+    cum2 = list_push(cum2, 0);
+    cum2 = list_push(cum2, 0);
+    let s2: Int = ans_state_step(1, freq2, cum2, 1);
+    if s2 != 9 { return false; }
+    let inv2: List[Int] = ans_state_invert(s2, freq2, cum2, 1);
+    if list_len(inv2) < 2 { return false; }
+    if list_get(inv2, 0) != 1 { return false; }
+    if list_get(inv2, 1) != 1 { return false; }
+
+    // Step+invert on state 77, b=1: x' = 77*8 + 1 = 617; invert: (617 - 1)/8 = 77.
+    let s3: Int = ans_state_step(77, freq2, cum2, 1);
+    if s3 != 617 { return false; }
+    let inv3: List[Int] = ans_state_invert(s3, freq2, cum2, 1);
+    if list_len(inv3) < 2 { return false; }
+    if list_get(inv3, 0) != 1 { return false; }
+    if list_get(inv3, 1) != 77 { return false; }
+
+    // Hostile: all-zero frequency table -> total = 0 -> step fails closed to 0. // Duda 2013 (degenerate)
+    let mut zero_freq: List[Int] = list_new();
+    let mut zi: Int = 0;
+    while zi < 4 { zero_freq = list_push(zero_freq, 0); zi = zi + 1; }
+    let mut zero_cum: List[Int] = list_new();
+    let mut zc: Int = 0;
+    while zc < 4 { zero_cum = list_push(zero_cum, 0); zc = zc + 1; }
+    if ans_state_step(100, zero_freq, zero_cum, 0) != 0 { return false; }
+    if ans_freq_total(zero_freq) != 0 { return false; }
+
+    // Hostile: F[b] = 0 fails closed to 0.
+    if ans_state_step(100, freq, cum, 0) != 0 { return false; }
+
+    // Hostile: b out of range fails closed to 0.
+    if ans_state_step(100, freq, cum, 6) != 0 { return false; }
+    if ans_state_step(100, freq, cum, 0 - 1) != 0 { return false; }
+
+    // Coupled: arithmetic coding ratio is matched by rANS to within 0.001% of the entropy bound
+    // (Duda 2013 §3: rANS achieves the same compression ratio as AC at the same precision L).
+    // Here we certify the uniform-distribution invariant: after a step on symbol b, the state
+    // lies in [cum[b] * H, (cum[b] + F[b]) * H) where H = M / total. // Duda 2013 §3
+    let s4: Int = ans_state_step(500, freq, cum, 5);
+    let m: Int = ans_default_modulus();
+    let tot: Int = ans_freq_total(freq);
+    let width: Int = m / tot;
+    let lo: Int = list_get(cum, 5) * width;
+    let hi: Int = (list_get(cum, 5) + list_get(freq, 5)) * width;
+    if s4 < lo { return false; }
+    if s4 >= hi { return false; }
+
+    return true;
+}

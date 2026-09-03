@@ -1,0 +1,80 @@
+// # Debye-Huckel limiting law for electrolyte activity
+//
+// Logline: log10(gamma) = -A * z^2 * sqrt(I). Non-physical I or A return Err.
+//
+// Setup: Pure Float. A is the solvent constant (water at 298 K is 0.509); the law is unit-agnostic.
+//
+// Beats:
+//   1. Ionic strength I = 0.5 * Sum(c_i * z_i^2) for n ionic species.
+//   2. Activity coefficient gamma = 10^(-A * z^2 * sqrt(I)) when I >= 0 and A > 0.
+//   3. Activity a = gamma * m for molal concentration m.
+//   4. Hostile negative I, non-positive A, or negative concentration/molality return Err.
+
+fn dh_eabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn dh_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn dh_ionic_strength_2(
+    conc1: Float,
+    charge1: Float,
+    conc2: Float,
+    charge2: Float
+) -> Result[Float, String] {
+    if conc1 < 0.0 { return Err("ERR\tdh\tc1"); }
+    if conc2 < 0.0 { return Err("ERR\tdh\tc2"); }
+    let term1: Float = conc1 * charge1 * charge1;
+    let term2: Float = conc2 * charge2 * charge2;
+    return Ok(0.5 * (term1 + term2));
+}
+
+pub fn dh_activity_coefficient(a_solvent: Float, charge_z: Float, ionic_strength: Float) -> Result[Float, String] {
+    if ionic_strength < 0.0 { return Err("ERR\tdh\ti"); }
+    if a_solvent <= 0.0 { return Err("ERR\tdh\ta"); }
+    let mut z_mag: Float = charge_z;
+    if z_mag < 0.0 { z_mag = 0.0 - z_mag; }
+    let exponent: Float = (0.0 - a_solvent) * z_mag * z_mag * sqrt(ionic_strength);
+    let ln10: Float = 2.302585092994046;
+    let exp_arg: Float = exponent * ln10;
+    if exp_arg < (0.0 - 700.0) { return Ok(0.0); }
+    return Ok(exp(exp_arg));
+}
+
+pub fn dh_activity(a_solvent: Float, charge_z: Float, ionic_strength: Float, molality: Float) -> Result[Float, String] {
+    if molality < 0.0 { return Err("ERR\tdh\tm"); }
+    let gr: Result[Float, String] = dh_activity_coefficient(a_solvent, charge_z, ionic_strength);
+    match gr {
+        Ok(gamma) => { return Ok(gamma * molality); },
+        Err(e)    => { return Err(e); }
+    }
+}
+
+pub fn verify_debye_huckel_theory() -> Bool {
+    let i_nacl: Float = dh_got(dh_ionic_strength_2(0.01, 1.0, 0.01, 1.0));
+    if dh_eabs(i_nacl - 0.01) > 0.0000001 { return false; }
+    let i_cacl2: Float = dh_got(dh_ionic_strength_2(0.01, 2.0, 0.02, 1.0));
+    if dh_eabs(i_cacl2 - 0.03) > 0.0000001 { return false; }
+    let g: Float = dh_got(dh_activity_coefficient(0.509, 1.0, 0.01));
+    if g < 0.85 { return false; }
+    if g > 0.92 { return false; }
+    let a: Float = dh_got(dh_activity(0.509, 1.0, 0.01, 0.1));
+    if a < 0.08 { return false; }
+    if a > 0.10 { return false; }
+    let g_z1: Float = dh_got(dh_activity_coefficient(0.509, 1.0, 0.1));
+    let g_z2: Float = dh_got(dh_activity_coefficient(0.509, 2.0, 0.1));
+    if g_z2 >= g_z1 { return false; }
+    let g_lo: Float = dh_got(dh_activity_coefficient(0.509, 1.0, 0.001));
+    let g_hi: Float = dh_got(dh_activity_coefficient(0.509, 1.0, 0.1));
+    if g_hi >= g_lo { return false; }
+    let g_zero: Float = dh_got(dh_activity_coefficient(0.509, 1.0, 0.0));
+    if dh_eabs(g_zero - 1.0) > 0.0000001 { return false; }
+    if dh_activity_coefficient(0.0, 1.0, 0.01).is_ok() { return false; }
+    if dh_activity_coefficient(0.509, 1.0, 0.0 - 0.01).is_ok() { return false; }
+    if dh_ionic_strength_2(0.0 - 1.0, 1.0, 0.01, 1.0).is_ok() { return false; }
+    if dh_activity(0.509, 1.0, 0.01, 0.0 - 1.0).is_ok() { return false; }
+    return true;
+}

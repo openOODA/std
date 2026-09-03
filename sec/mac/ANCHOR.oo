@@ -1,0 +1,22 @@
+// # MAC Submodule Hub -- Zero-Drag
+//
+// Logline: Message authentication codes and key derivation: HMAC, KMAC, HKDF, PBKDF2, TOTP, Shamir secret sharing. Re-exports a stable mac_mod_* surface for the most-used public API.
+//
+// Setup: Pure compute, no caps. All operations constant-time via sec/ct/.
+//
+// Beats:
+//   1. Re-export HMAC-SHA256 surface (mac_mod_hmac_*).
+//   2. Re-export KMAC and KDF surface (mac_mod_kmac_*, mac_mod_hkdf_*, mac_mod_pbkdf2_*).
+//   3. Re-export TOTP and Shamir secret sharing surface.
+
+import "hmac.oo";
+import "hkdf.oo";
+import "pbkdf2.oo";
+import "shamir_secret.oo";
+import "totp_rfc6238.oo";
+
+pub fn mac_mod_hmac_sha256(key: String, message: String) -> String { return hmac_sha256(key, message); }
+pub fn mac_mod_hmac_verify(key: String, message: String, signature: String) -> Bool { return hmac_verify(key, message, signature); }
+pub fn mac_mod_hkdf(salt: String, ikm: String, info: String, length: Int) -> String { return hkdf(salt, ikm, info, length); }
+pub fn mac_mod_pbkdf2(password: String, salt: String, iterations: Int, key_length: Int) -> String { return pbkdf2(password, salt, iterations, key_length); }
+pub fn mac_mod_totp(secret: String, time_step: Int) -> String { return totp_rfc6238(secret, time_step); }

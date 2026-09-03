@@ -1,0 +1,173 @@
+// # Snell's Law and Optical Refraction
+//
+// Logline: Computes refraction angles, critical angles, and TIR. n1<=0 or n2<=0 return Err.
+//
+// Setup: Pure optical kinematics based on Snell's law n1 * sin(theta1) = n2 * sin(theta2).
+//
+// Beats:
+//   1. Calculate critical angle for total internal reflection.
+//   2. Detect total internal reflection condition.
+//   3. Compute transmitted angle and complete refraction state.
+//   4. Protect against invalid refractive indices and non-physical angles.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_optics_snell_law() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+type RefractionResult = struct {
+    theta_incident_rad: Float,
+    theta_transmitted_rad: Float,
+    is_total_internal_reflection: Bool,
+    critical_angle_rad: Float
+};
+
+fn snell_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn snell_atan_poly(x: Float) -> Float {
+    let x2: Float = x * x;
+    let t17: Float = 1.0 / 17.0;
+    let t15: Float = 1.0 / 15.0;
+    let t13: Float = 1.0 / 13.0;
+    let t11: Float = 1.0 / 11.0;
+    let t9: Float = 1.0 / 9.0;
+    let t7: Float = 1.0 / 7.0;
+    let t5: Float = 1.0 / 5.0;
+    let t3: Float = 1.0 / 3.0;
+    let p: Float = x2 * (t3 - x2 * (t5 - x2 * (t7 - x2 * (t9 - x2 * (t11 - x2 * (t13 - x2 * (t15 - x2 * t17)))))));
+    return x * (1.0 - p);
+}
+
+fn snell_atan(x: Float) -> Float {
+    let ax: Float = snell_abs(x);
+    let pi: Float = circ_pi_std_phys_optics_snell_law();
+    let pi_4: Float = pi / 4.0;
+    let pi_2: Float = pi / 2.0;
+    let mut res: Float = 0.0;
+    if ax < 0.41421356237309505 {
+        res = snell_atan_poly(ax);
+    } else if ax < 2.414213562373095 {
+        let u: Float = (ax - 1.0) / (ax + 1.0);
+        res = pi_4 + snell_atan_poly(u);
+    } else {
+        let u: Float = 1.0 / ax;
+        res = pi_2 - snell_atan_poly(u);
+    }
+    if x < 0.0 { return 0.0 - res; }
+    return res;
+}
+
+fn snell_atan2(y: Float, x: Float) -> Float {
+    let pi: Float = circ_pi_std_phys_optics_snell_law();
+    if x > 0.0 { return snell_atan(y / x); }
+    if x < 0.0 {
+        if y >= 0.0 { return snell_atan(y / x) + pi; }
+        return snell_atan(y / x) - pi;
+    }
+    if y > 0.0 { return pi / 2.0; }
+    if y < 0.0 { return 0.0 - (pi / 2.0); }
+    return 0.0;
+}
+
+fn snell_asin(x: Float) -> Float {
+    let mut clamped: Float = x;
+    if clamped > 1.0 { clamped = 1.0; }
+    if clamped < (0.0 - 1.0) { clamped = 0.0 - 1.0; }
+    let cos_val: Float = sqrt(1.0 - (clamped * clamped));
+    return snell_atan2(clamped, cos_val);
+}
+
+fn sn_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Critical angle (radians). n1<=0 or n2<=0 returns Err. n1<=n2 is Ok(pi/2).
+pub fn snell_critical_angle(n1: Float, n2: Float) -> Result[Float, String] {
+    if n1 <= 0.0 { return Err("ERR\tsn\tn1"); }
+    if n2 <= 0.0 { return Err("ERR\tsn\tn2"); }
+    if n1 <= n2 {
+        return Ok(1.5707963267948966);
+    }
+    let ratio: Float = n2 / n1;
+    return Ok(snell_asin(ratio));
+}
+
+pub fn snell_is_tir(n1: Float, n2: Float, theta_i_rad: Float) -> Bool {
+    if n1 <= 0.0 || n2 <= 0.0 { return false; }
+    if n1 <= n2 { return false; }
+    let sin_i: Float = sin(theta_i_rad);
+    let sin_t: Float = (n1 / n2) * sin_i;
+    return sin_t > 1.0;
+}
+
+pub fn snell_sin_transmitted(n1: Float, n2: Float, theta_i_rad: Float) -> Result[Float, String] {
+    if n1 <= 0.0 { return Err("ERR\tsn\tn1"); }
+    if n2 <= 0.0 { return Err("ERR\tsn\tn2"); }
+    let sin_i: Float = sin(theta_i_rad);
+    return Ok((n1 / n2) * sin_i);
+}
+
+// Refracted angle theta_t. TIR has no real transmitted angle and returns Err.
+pub fn snell_refraction_angle(n1: Float, n2: Float, theta_i_rad: Float) -> Result[Float, String] {
+    let sr: Result[Float, String] = snell_sin_transmitted(n1, n2, theta_i_rad);
+    match sr {
+        Ok(sin_t) => {
+            if sin_t > 1.0 { return Err("ERR\tsn\ttir"); }
+            if sin_t < (0.0 - 1.0) { return Err("ERR\tsn\ttir"); }
+            return Ok(snell_asin(sin_t));
+        },
+        Err(e)    => { return Err(e); }
+    }
+}
+
+pub fn snell_refraction(n1: Float, n2: Float, theta_i_rad: Float) -> Result[RefractionResult, String] {
+    let cr: Result[Float, String] = snell_critical_angle(n1, n2);
+    let sr: Result[Float, String] = snell_sin_transmitted(n1, n2, theta_i_rad);
+    match cr {
+        Ok(crit)          => {
+            match sr {
+                Ok(sin_t) => {
+                    if sin_t > 1.0 {
+                        return Ok(RefractionResult {
+                            theta_incident_rad: theta_i_rad,
+                            theta_transmitted_rad: 0.0,
+                            is_total_internal_reflection: true,
+                            critical_angle_rad: crit
+                        });
+                    }
+                    let theta_t: Float = snell_asin(sin_t);
+                    return Ok(RefractionResult {
+                        theta_incident_rad: theta_i_rad,
+                        theta_transmitted_rad: theta_t,
+                        is_total_internal_reflection: false,
+                        critical_angle_rad: crit
+                    });
+                },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn verify_snell_law() -> Bool {
+    let pi: Float = circ_pi_std_phys_optics_snell_law();
+    let theta_i: Float = (30.0 * pi) / 180.0;
+    let tt: Float = sn_got(snell_refraction_angle(1.0, 1.5, theta_i));
+    let exp_rad: Float = (19.47122063449069 * pi) / 180.0;
+    let mut d: Float = tt - exp_rad;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    if sn_got(snell_refraction_angle(1.0, 1.5, 0.0)) != 0.0 { return false; }
+    if snell_refraction_angle(0.0, 1.5, theta_i).is_ok() { return false; }
+    if snell_refraction_angle(1.0, 0.0, theta_i).is_ok() { return false; }
+    if snell_sin_transmitted(0.0, 1.5, theta_i).is_ok() { return false; }
+    if snell_critical_angle(0.0, 1.5).is_ok() { return false; }
+    let crit_half: Float = sn_got(snell_critical_angle(1.0, 1.5));
+    let mut dc: Float = crit_half - (pi / 2.0);
+    if dc < 0.0 { dc = 0.0 - dc; }
+    if dc > 0.0001 { return false; }
+    if snell_is_tir(1.5, 1.0, pi / 3.0) == false { return false; }
+    if snell_is_tir(1.0, 1.5, pi / 3.0) == true { return false; }
+    return true;
+}

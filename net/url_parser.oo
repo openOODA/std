@@ -1,0 +1,251 @@
+// # WHATWG-style URL Parser and Serializer
+//
+// Logline: Pure string-only URL decomposition into scheme, host, port, path, query, and fragment, plus canonical re-serialization and a status wrapper for parse validation.
+//
+// Setup: Pure module. Inputs are Strings. The internal url_inner helper yields a Url struct, and url_parse_status wraps it to return Result[Int, String]. The full Result[Url, String] spec API lives in std/net/url_parse_full.oo. The scheme is validated as ASCII alpha then lowercased on every parse so canonical form is stable.
+//
+// Beats:
+//   1. Validate the scheme as one or more ASCII letters followed by a colon.
+//   2. Scan the authority (host[:port]) until the first '/', '?', or '#'.
+//   3. Split the path, query, and fragment at '?' and '#' boundaries.
+//   4. Lowercase the scheme on parse for canonical output and omit the port when absent.
+//   5. Reassemble scheme + "://" + host + optional ":port" + path + optional "?query" + optional "#fragment".
+//   6. Status wrapper url_parse_status mirrors the spec API validation and returns Result[Int, String].
+
+type Url = struct {
+    scheme: String,
+    host: String,
+    port: Int,
+    path: String,
+    query: String,
+    fragment: String
+};
+
+fn url_is_alpha_byte(b: Int) -> Bool {
+    if b < 65 { return false; }
+    if b > 122 { return false; }
+    if b > 90 && b < 97 { return false; }
+    return true;
+}
+
+fn url_lower_alpha_byte(b: Int) -> String {
+    let abc: String = "abcdefghijklmnopqrstuvwxyz";
+    if b < 65 { return ""; }
+    if b > 90 { return ""; }
+    return char_at(abc, b - 65);
+}
+
+fn url_lower_str(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        let b: Int = byte_at(s, i);
+        let lc: String = url_lower_alpha_byte(b);
+        if chars_len(lc) > 0 {
+            out = out + lc;
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn url_parse_port(s: String) -> Int {
+    let n: Int = chars_len(s);
+    if n == 0 { return 0 - 1; }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b < 48 { return 0 - 1; }
+        if b > 57 { return 0 - 1; }
+        acc = acc * 10 + (b - 48);
+        i = i + 1;
+    }
+    return acc;
+}
+
+fn url_inner(s: String) -> Url {
+    let n: Int = chars_len(s);
+    if n < 5 {
+        return Url {
+            scheme: "",
+            host: "",
+            port: 0 - 1,
+            path: "",
+            query: "",
+            fragment: ""
+        };
+    }
+    let mut p: Int = 0;
+    while p < n {
+        if char_at(s, p) == ":" { break; }
+        p = p + 1;
+    }
+    if p == n {
+        return Url {
+            scheme: "",
+            host: "",
+            port: 0 - 1,
+            path: "",
+            query: "",
+            fragment: ""
+        };
+    }
+    let mut scheme: String = "";
+    let mut i: Int = 0;
+    while i < p {
+        let ch: String = char_at(s, i);
+        if !url_is_alpha_byte(byte_at(ch, 0)) {
+            return Url {
+                scheme: "",
+                host: "",
+                port: 0 - 1,
+                path: "",
+                query: "",
+                fragment: ""
+            };
+        }
+        scheme = scheme + ch;
+        i = i + 1;
+    }
+    let scheme_lo: String = url_lower_str(scheme);
+    let mut q: Int = p + 1;
+    if q + 1 >= n {
+        return Url {
+            scheme: scheme_lo,
+            host: "",
+            port: 0 - 1,
+            path: "",
+            query: "",
+            fragment: ""
+        };
+    }
+    if char_at(s, q) != "/" {
+        return Url {
+            scheme: scheme_lo,
+            host: "",
+            port: 0 - 1,
+            path: "",
+            query: "",
+            fragment: ""
+        };
+    }
+    if char_at(s, q + 1) != "/" {
+        return Url {
+            scheme: scheme_lo,
+            host: "",
+            port: 0 - 1,
+            path: "",
+            query: "",
+            fragment: ""
+        };
+    }
+    let mut host: String = "";
+    let mut port_str: String = "";
+    let mut has_port: Bool = false;
+    let mut k: Int = q + 2;
+    while k < n {
+        let c: String = char_at(s, k);
+        if c == "/" || c == "?" || c == "#" { break; }
+        if c == ":" {
+            has_port = true;
+        } else if has_port {
+            port_str = port_str + c;
+        } else {
+            host = host + c;
+        }
+        k = k + 1;
+    }
+    let port_val: Int = if has_port { url_parse_port(port_str) } else { 0 - 1 };
+    let mut path: String = "";
+    if k < n && char_at(s, k) == "/" {
+        path = "/";
+        k = k + 1;
+        while k < n {
+            let c: String = char_at(s, k);
+            if c == "?" || c == "#" { break; }
+            path = path + c;
+            k = k + 1;
+        }
+    }
+    if chars_len(path) == 0 {
+        path = "/";
+    }
+    let mut query: String = "";
+    if k < n && char_at(s, k) == "?" {
+        k = k + 1;
+        while k < n {
+            let c: String = char_at(s, k);
+            if c == "#" { break; }
+            query = query + c;
+            k = k + 1;
+        }
+    }
+    let mut fragment: String = "";
+    if k < n && char_at(s, k) == "#" {
+        k = k + 1;
+        while k < n {
+            fragment = fragment + char_at(s, k);
+            k = k + 1;
+        }
+    }
+    return Url {
+        scheme: scheme_lo,
+        host: host,
+        port: port_val,
+        path: path,
+        query: query,
+        fragment: fragment
+    };
+}
+
+pub fn url_parse_status(s: String) -> Result[Int, String] {
+    if chars_len(s) == 0 {
+        return Err("ERR\turl_parse\tempty");
+    }
+    let u: Url = url_inner(s);
+    if chars_len(u.scheme) == 0 {
+        return Err("ERR\turl_parse\tno_scheme");
+    }
+    if chars_len(u.host) == 0 {
+        return Err("ERR\turl_parse\tno_host");
+    }
+    return Ok(1);
+}
+
+pub fn url_to_string(u: Url) -> String {
+    let scheme: String = u.scheme;
+    let host: String = u.host;
+    let port: Int = u.port;
+    let path: String = u.path;
+    let query: String = u.query;
+    let frag: String = u.fragment;
+    let mut out: String = url_lower_str(scheme) + "://" + host;
+    if port >= 0 {
+        out = out + ":" + port.to_string();
+    }
+    if chars_len(path) == 0 {
+        out = out + "/";
+    } else {
+        out = out + path;
+    }
+    if chars_len(query) > 0 {
+        out = out + "?" + query;
+    }
+    if chars_len(frag) > 0 {
+        out = out + "#" + frag;
+    }
+    return out;
+}
+
+pub fn url_is_valid(s: String) -> Bool {
+    if chars_len(s) == 0 { return false; }
+    let u: Url = url_inner(s);
+    if chars_len(u.scheme) == 0 { return false; }
+    if chars_len(u.host) == 0 { return false; }
+    return true;
+}

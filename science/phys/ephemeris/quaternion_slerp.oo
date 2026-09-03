@@ -1,0 +1,158 @@
+// # Quaternion Spherical Linear Interpolation
+//
+// Logline: Calculate high-precision unit quaternion spherical linear interpolation with antipodal alignment and small-angle fallback.
+//
+// Setup: Pure astrodynamics and GNC mathematics module. Operates on 4D unit orientation quaternions.
+//
+// Beats:
+//   1. Implement safe inverse cosine and square root functions with domain guards.
+//   2. Construct and normalize unit quaternions with fail-closed zero checks.
+//   3. Perform shortest-path antipodal alignment when quaternion inner product is negative.
+//   4. Execute geodesic SLERP with smooth small-angle NLERP fallback when angle approaches zero.
+//   5. Expose list-based and struct-based public interpolation interfaces.
+
+type EphemQuat = struct {
+    w: Float,
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+pub fn ephem_quat_new(w: Float, x: Float, y: Float, z: Float) -> EphemQuat {
+    return EphemQuat { w: w, x: x, y: y, z: z };
+}
+
+pub fn ephem_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn ephem_asin_series(x: Float) -> Float {
+    let mut u: Float = x;
+    if u > 1.0 { u = 1.0; }
+    if u < -1.0 { u = -1.0; }
+    let u2: Float = u * u;
+    let u3: Float = u2 * u;
+    let u5: Float = u3 * u2;
+    let u7: Float = u5 * u2;
+    let u9: Float = u7 * u2;
+    return u + u3 * 0.1666666667 + u5 * 0.075 + u7 * 0.0446428571 + u9 * 0.0303819444;
+}
+
+pub fn ephem_acos_safe(cos_val: Float) -> Float {
+    let mut c: Float = cos_val;
+    if c > 1.0 { c = 1.0; }
+    if c < -1.0 { c = -1.0; }
+    let half_minus: Float = (1.0 - c) * 0.5;
+    let s: Float = sqrt(half_minus);
+    return 2.0 * ephem_asin_series(s);
+}
+
+pub fn ephem_sin_series(x: Float) -> Float {
+    let x2: Float = x * x;
+    let x3: Float = x2 * x;
+    let x5: Float = x3 * x2;
+    let x7: Float = x5 * x2;
+    return x - x3 * 0.1666666667 + x5 * 0.0833333333 * 0.1 - x7 * 0.0001984127;
+}
+
+pub fn ephem_quat_norm_sq(q: EphemQuat) -> Float {
+    return q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+}
+
+pub fn ephem_quat_normalize(q: EphemQuat) -> EphemQuat {
+    let n2: Float = ephem_quat_norm_sq(q);
+    if n2 <= 0.000000000001 {
+        return EphemQuat { w: 1.0, x: 0.0, y: 0.0, z: 0.0 };
+    }
+    let inv_n: Float = 1.0 / sqrt(n2);
+    return EphemQuat {
+        w: q.w * inv_n,
+        x: q.x * inv_n,
+        y: q.y * inv_n,
+        z: q.z * inv_n
+    };
+}
+
+pub fn ephem_quat_dot(a: EphemQuat, b: EphemQuat) -> Float {
+    return a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+pub fn ephem_quat_nlerp(q1: EphemQuat, q2: EphemQuat, t: Float) -> EphemQuat {
+    let one_t: Float = 1.0 - t;
+    let raw: EphemQuat = EphemQuat {
+        w: one_t * q1.w + t * q2.w,
+        x: one_t * q1.x + t * q2.x,
+        y: one_t * q1.y + t * q2.y,
+        z: one_t * q1.z + t * q2.z
+    };
+    return ephem_quat_normalize(raw);
+}
+
+pub fn ephem_quat_slerp(q1: EphemQuat, q2: EphemQuat, t: Float) -> EphemQuat {
+    let n1: EphemQuat = ephem_quat_normalize(q1);
+    let mut n2: EphemQuat = ephem_quat_normalize(q2);
+    let mut mut_t: Float = t;
+    if mut_t < 0.0 { mut_t = 0.0; }
+    if mut_t > 1.0 { mut_t = 1.0; }
+    let mut cos_theta: Float = ephem_quat_dot(n1, n2);
+    if cos_theta < 0.0 {
+        n2 = EphemQuat {
+            w: 0.0 - n2.w,
+            x: 0.0 - n2.x,
+            y: 0.0 - n2.y,
+            z: 0.0 - n2.z
+        };
+        cos_theta = 0.0 - cos_theta;
+    }
+    if cos_theta > 0.9995 {
+        return ephem_quat_nlerp(n1, n2, mut_t);
+    }
+    let theta: Float = ephem_acos_safe(cos_theta);
+    let sin_theta: Float = ephem_sin_series(theta);
+    if sin_theta <= 0.000001 {
+        return ephem_quat_nlerp(n1, n2, mut_t);
+    }
+    let inv_sin: Float = 1.0 / sin_theta;
+    let w1: Float = ephem_sin_series((1.0 - mut_t) * theta) * inv_sin;
+    let w2: Float = ephem_sin_series(mut_t * theta) * inv_sin;
+    let res: EphemQuat = EphemQuat {
+        w: w1 * n1.w + w2 * n2.w,
+        x: w1 * n1.x + w2 * n2.x,
+        y: w1 * n1.y + w2 * n2.y,
+        z: w1 * n1.z + w2 * n2.z
+    };
+    return ephem_quat_normalize(res);
+}
+
+pub fn quaternion_slerp_interpolate(q1: List[Float], q2: List[Float], t: Float) -> List[Float] {
+    let l1: Int = list_len(q1);
+    let l2: Int = list_len(q2);
+    if l1 < 4 || l2 < 4 {
+        let mut def: List[Float] = list_new();
+        def = list_push(def, 1.0);
+        def = list_push(def, 0.0);
+        def = list_push(def, 0.0);
+        def = list_push(def, 0.0);
+        return def;
+    }
+    let a: EphemQuat = EphemQuat {
+        w: list_get(q1, 0),
+        x: list_get(q1, 1),
+        y: list_get(q1, 2),
+        z: list_get(q1, 3)
+    };
+    let b: EphemQuat = EphemQuat {
+        w: list_get(q2, 0),
+        x: list_get(q2, 1),
+        y: list_get(q2, 2),
+        z: list_get(q2, 3)
+    };
+    let interp: EphemQuat = ephem_quat_slerp(a, b, t);
+    let mut out: List[Float] = list_new();
+    out = list_push(out, interp.w);
+    out = list_push(out, interp.x);
+    out = list_push(out, interp.y);
+    out = list_push(out, interp.z);
+    return out;
+}

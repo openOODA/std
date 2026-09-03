@@ -1,0 +1,230 @@
+// # Restarted GMRES Sparse Solver
+//
+// Logline: Solves non-symmetric sparse Ax = b by restarted GMRES on CSR arrays.
+//
+// Setup: Pure math. A is square CSR. Restart length m is at most 6. x starts at zero.
+//
+// Beats:
+//   1. Build an Arnoldi basis with modified Gram-Schmidt and CSR SpMV.
+//   2. Form the Hessenberg least-squares problem H y = beta e1.
+//   3. Solve H^T H y = H^T g by in-module Gaussian elimination.
+//   4. Restart until the residual is below tol, else fail closed.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/sparse/csr_matrix.oo";
+
+fn gm_zeros(n: Int) -> List[Float] {
+    let mut v: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        v = list_push(v, 0.0);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn gm_dot(a: List[Float], b: List[Float]) -> Float {
+    let n: Int = list_len(a);
+    let mut s: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        s = s + list_get(a, i) * list_get(b, i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn gm_axpy(a: Float, x: List[Float], y: List[Float]) -> List[Float] {
+    let n: Int = list_len(y);
+    let mut o: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        o = list_push(o, a * list_get(x, i) + list_get(y, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+fn gm_scale(a: Float, x: List[Float]) -> List[Float] {
+    let n: Int = list_len(x);
+    let mut o: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        o = list_push(o, a * list_get(x, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+fn gm_col(v: List[Float], n: Int, j: Int) -> List[Float] {
+    let mut o: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        o = list_push(o, list_get(v, j * n + i));
+        i = i + 1;
+    }
+    return o;
+}
+
+fn gm_ge_solve(a0: List[Float], n: Int, b0: List[Float]) -> Result[List[Float], String] {
+    if list_len(a0) != n * n { return Err("ERR\tgmres\tge"); }
+    let mut a: List[Float] = a0;
+    let mut b: List[Float] = b0;
+    let mut k: Int = 0;
+    while k < n {
+        let mut piv: Float = list_get(a, k * n + k);
+        if piv < 0.0 { piv = 0.0 - piv; }
+        let mut pr: Int = k;
+        let mut r: Int = k + 1;
+        while r < n {
+            let mut v: Float = list_get(a, r * n + k);
+            if v < 0.0 { v = 0.0 - v; }
+            if v > piv {
+                piv = v;
+                pr = r;
+            }
+            r = r + 1;
+        }
+        if piv == 0.0 { return Err("ERR\tgmres\tsingular"); }
+        if pr != k {
+            let mut c: Int = 0;
+            while c < n {
+                let t: Float = list_get(a, k * n + c);
+                a = list_set(a, k * n + c, list_get(a, pr * n + c));
+                a = list_set(a, pr * n + c, t);
+                c = c + 1;
+            }
+            let tb: Float = list_get(b, k);
+            b = list_set(b, k, list_get(b, pr));
+            b = list_set(b, pr, tb);
+        }
+        let akk: Float = list_get(a, k * n + k);
+        r = k + 1;
+        while r < n {
+            let f: Float = list_get(a, r * n + k) / akk;
+            let mut c2: Int = k;
+            while c2 < n {
+                let nv: Float = list_get(a, r * n + c2) - f * list_get(a, k * n + c2);
+                a = list_set(a, r * n + c2, nv);
+                c2 = c2 + 1;
+            }
+            b = list_set(b, r, list_get(b, r) - f * list_get(b, k));
+            r = r + 1;
+        }
+        k = k + 1;
+    }
+    let mut x: List[Float] = gm_zeros(n);
+    let mut i: Int = n - 1;
+    while i >= 0 {
+        let mut s: Float = list_get(b, i);
+        let mut j: Int = i + 1;
+        while j < n {
+            s = s - list_get(a, i * n + j) * list_get(x, j);
+            j = j + 1;
+        }
+        let di: Float = list_get(a, i * n + i);
+        if di == 0.0 { return Err("ERR\tgmres\tsingular"); }
+        x = list_set(x, i, s / di);
+        i = i - 1;
+    }
+    return Ok(x);
+}
+
+fn gm_put_col(v: List[Float], n: Int, j: Int, col: List[Float]) -> List[Float] {
+    let mut o: List[Float] = v;
+    let mut i: Int = 0;
+    while i < n {
+        o = list_set(o, j * n + i, list_get(col, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+pub fn gmres_solve(row_ptr: List[Int], col_idx: List[Int], values: List[Float], n: Int, b: List[Float], m: Int, max_restart: Int, tol: Float) -> Result[List[Float], String] {
+    if n < 1 { return Err("ERR\tgmres\tn"); }
+    if m < 1 { return Err("ERR\tgmres\tm"); }
+    if m > 6 { return Err("ERR\tgmres\tm"); }
+    if list_len(b) != n { return Err("ERR\tgmres\tb"); }
+    if max_restart < 1 { return Err("ERR\tgmres\trestart"); }
+    let mut x: List[Float] = gm_zeros(n);
+    let mut it: Int = 0;
+    while it < max_restart {
+        let ax_r: Result[List[Float], String] = csr_spmv(row_ptr, col_idx, values, n, x);
+        let ax: List[Float] = match ax_r {
+            Ok(v)  => v,
+            Err(e) => { return Err(e); }
+        };
+        let r: List[Float] = gm_axpy(0.0 - 1.0, ax, b);
+        let beta: Float = sqrt(gm_dot(r, r));
+        if beta < tol { return Ok(x); }
+        let mut vpack: List[Float] = gm_zeros(n * (m + 1));
+        vpack = gm_put_col(vpack, n, 0, gm_scale(1.0 / beta, r));
+        let mut h: List[Float] = gm_zeros((m + 1) * m);
+        let mut j: Int = 0;
+        let mut kdim: Int = 0;
+        while j < m {
+            let vj: List[Float] = gm_col(vpack, n, j);
+            let w_r: Result[List[Float], String] = csr_spmv(row_ptr, col_idx, values, n, vj);
+            let mut w: List[Float] = match w_r {
+                Ok(vv) => vv,
+                Err(e) => { return Err(e); }
+            };
+            let mut i: Int = 0;
+            while i <= j {
+                let vi: List[Float] = gm_col(vpack, n, i);
+                let hij: Float = gm_dot(w, vi);
+                h = list_set(h, i * m + j, hij);
+                w = gm_axpy(0.0 - hij, vi, w);
+                i = i + 1;
+            }
+            let hnp: Float = sqrt(gm_dot(w, w));
+            h = list_set(h, (j + 1) * m + j, hnp);
+            kdim = j + 1;
+            if hnp < tol {
+                j = m;
+            } else {
+                vpack = gm_put_col(vpack, n, j + 1, gm_scale(1.0 / hnp, w));
+                j = j + 1;
+            }
+        }
+        let kd: Int = kdim;
+        let mut ht_h: List[Float] = gm_zeros(kd * kd);
+        let mut rhs: List[Float] = gm_zeros(kd);
+        let mut p: Int = 0;
+        while p < kd {
+            let mut q: Int = 0;
+            while q < kd {
+                let mut s: Float = 0.0;
+                let mut row: Int = 0;
+                while row <= kd {
+                    s = s + list_get(h, row * m + p) * list_get(h, row * m + q);
+                    row = row + 1;
+                }
+                ht_h = list_set(ht_h, p * kd + q, s);
+                q = q + 1;
+            }
+            rhs = list_set(rhs, p, list_get(h, 0 * m + p) * beta);
+            p = p + 1;
+        }
+        let y_r: Result[List[Float], String] = gm_ge_solve(ht_h, kd, rhs);
+        let y: List[Float] = match y_r {
+            Ok(v)  => v,
+            Err(e) => { return Err(e); }
+        };
+        let mut t: Int = 0;
+        while t < kd {
+            let vt: List[Float] = gm_col(vpack, n, t);
+            x = gm_axpy(list_get(y, t), vt, x);
+            t = t + 1;
+        }
+        it = it + 1;
+    }
+    let ax2_r: Result[List[Float], String] = csr_spmv(row_ptr, col_idx, values, n, x);
+    let ax2: List[Float] = match ax2_r {
+        Ok(v)  => v,
+        Err(e) => { return Err(e); }
+    };
+    let r2: List[Float] = gm_axpy(0.0 - 1.0, ax2, b);
+    if sqrt(gm_dot(r2, r2)) < tol { return Ok(x); }
+    return Err("ERR\tgmres\max_iter");
+}

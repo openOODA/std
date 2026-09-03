@@ -1,0 +1,103 @@
+// # Interval addition principle
+//
+// Logline: An interval is a non-negative duration; the sum of two non-negative intervals is non-negative, and a request to add a negative duration fails closed.
+//
+// Setup: Pure Int on an Interval record. No FS, net, env, or wall clock.
+//
+// Beats:
+//   1. New interval has length 0.
+//   2. add with a non-negative step yields a new interval whose length is the sum.
+//   3. add with a negative step fails closed (no change).
+
+import "std/core/primitives/domain_cert.oo";
+
+pub type Interval = struct {
+    length: Int
+};
+
+fn iva_got(r: Result[Interval, String]) -> Interval {
+    match r { Ok(v) => { return v; }, Err(_) => { return Interval { length: 0 - 1 }; } }
+}
+
+pub fn interval_new() -> Interval {
+    return Interval {
+        length: 0
+    };
+}
+
+pub fn interval_at(length: Int) -> Result[Interval, String] {
+    if length < 0 { return Err("ERR\tiva\tdomain"); }
+    return Ok(Interval { length: length });
+}
+
+// Add a step. step=0 is Ok(iv). step<0 is Err.
+pub fn interval_add(iv: Interval, step: Int) -> Result[Interval, String] {
+    if step < 0 { return Err("ERR\tiva\tdomain"); }
+    return Ok(Interval { length: iv.length + step });
+}
+
+// True when the interval length is non-negative.
+pub fn interval_nonneg(iv: Interval) -> Bool {
+    if iv.length < 0 {
+        return false;
+    }
+    return true;
+}
+
+// True when two intervals have the same length.
+pub fn interval_eq(a: Interval, b: Interval) -> Bool {
+    let al: Int = a.length;
+    let bl: Int = b.length;
+    if al != bl {
+        return false;
+    }
+    return true;
+}
+
+pub fn verify_interval_addition_principle() -> Bool {
+    // Golden: empty interval is 0.
+    let i0: Interval = interval_new();
+    if i0.length != 0 {
+        return false;
+    }
+    if interval_nonneg(i0) != true {
+        return false;
+    }
+    // Golden: add 7 then add 5 lands at 12.
+    let i1: Interval = iva_got(interval_add(i0, 7));
+    if i1.length != 7 {
+        return false;
+    }
+    let i2: Interval = iva_got(interval_add(i1, 5));
+    if i2.length != 12 {
+        return false;
+    }
+    if interval_nonneg(i2) != true {
+        return false;
+    }
+    // Golden: add 0 leaves length unchanged.
+    let i3: Interval = iva_got(interval_add(i2, 0));
+    if i3.length != 12 {
+        return false;
+    }
+    if interval_at(0 - 3).is_ok() { return false; }
+    let ziv: Interval = iva_got(interval_at(0));
+    if ziv.length != 0 { return false; }
+    let pos: Interval = iva_got(interval_at(99));
+    if pos.length != 99 {
+        return false;
+    }
+    if interval_add(i2, 0 - 4).is_ok() { return false; }
+    // Hostile: interval_eq must distinguish different lengths.
+    if interval_eq(i1, i2) != false {
+        return false;
+    }
+    if interval_eq(i3, i2) != true {
+        return false;
+    }
+    // Hostile: a well-formed interval is still non-negative after operations.
+    if interval_nonneg(i2) != true {
+        return false;
+    }
+    return true;
+}

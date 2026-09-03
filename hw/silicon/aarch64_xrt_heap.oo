@@ -1,0 +1,191 @@
+// # AArch64 Dynamic Freelist Heap Allocator
+//
+// Logline: Standalone zero-libc dynamic heap allocator, free, and realloc for AArch64.
+//
+// Setup: Chunks use 16-byte headers [size (8B), next_free (8B)]. Base heap control block in x28.
+//
+// Beats:
+//   1. oo_a64_alloc searches freelist, unlinks/splits chunk, or falls back to bump.
+//   2. oo_a64_free prepends deallocated chunk to LIFO freelist_head at [x28, #16].
+//   3. oo_a64_realloc checks in-place reuse or allocates new block, copies, and frees old block.
+//   4. a64rt_heap emits alloc, free, and realloc routines for the compiler runtime.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_regs.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+
+pub fn a64rt_alloc(r0: A64R) -> A64R {
+    if a64rt_has(r0, "oo_a64_alloc") { return r0; }
+    let mut r: A64R = a64rt_fn(a64rt_fn(r0, "oo_a64_alloc"), "alloc");
+    let mut x: A64X = r.x;
+
+    // Normalization: if sz < 16, sz = 16
+    x = a64x_emit(a64x_emit(x, arm64_word_movz(9, 16, 0)), arm64_word_cmp_reg(0, 9));
+    let b_ge16: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0)), arm64_word_movz(0, 16, 0));
+    let off_ge16: Int = list_len(x.p.words) - b_ge16;
+    x = a64x_set_words(x, a64_wset(x.p.words, b_ge16, arm64_word_b_cond(arm64_cond_ge(), off_ge16)));
+
+    // 16-byte alignment: (sz + 15) & ~15
+    x = a64x_emit(a64x_emit(x, arm64_word_add_imm(0, 0, 15)), arm64_word_movz(9, 4, 0));
+    x = a64x_emit(a64x_emit(x, arm64_word_lsr_reg(0, 0, 9)), arm64_word_lsl_reg(0, 0, 9));
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+
+    // Freelist Search: prev = NULL, curr = freelist_head
+    x = a64x_emit(a64x_emit(x, arm64_word_movz(10, 0, 0)), arm64_word_ldr(11, 28, 16));
+    let loop_top: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(11, 31));
+    let b_bump: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0)), arm64_word_ldr(12, 11, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(12, 9));
+    let b_found: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0)), arm64_word_mov_reg(10, 11));
+    x = a64x_emit(a64x_emit(x, arm64_word_ldr(11, 11, 8)), arm64_word_b(loop_top - list_len(x.p.words) - 1));
+
+    // Found Free Chunk: Unlink from freelist
+    let found_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_found, arm64_word_b_cond(arm64_cond_ge(), found_pos - b_found)));
+    x = a64x_emit(a64x_emit(x, arm64_word_ldr(13, 11, 8)), arm64_word_cmp_reg(10, 31));
+    let b_prev: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0)), arm64_word_str(13, 28, 16));
+    let jmp_unlink: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+
+    let prev_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_prev, arm64_word_b_cond(arm64_cond_ne(), prev_pos - b_prev)));
+    x = a64x_emit(x, arm64_word_str(13, 10, 8));
+    let unlink_done: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, jmp_unlink, arm64_word_b(unlink_done - jmp_unlink)));
+
+    // Splitting check: curr.size >= req_sz + 32
+    x = a64x_emit(a64x_emit(x, arm64_word_sub_reg(14, 12, 9)), arm64_word_movz(15, 32, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(14, 15));
+    let b_nosplit: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_lt(), 0));
+
+    // Split chunk
+    x = a64x_emit(a64x_emit(x, arm64_word_sub_imm(14, 14, 16)), arm64_word_add_imm(15, 11, 16));
+    x = a64x_emit(a64x_emit(x, arm64_word_add_reg(15, 15, 9)), arm64_word_str(14, 15, 0));
+    x = a64x_emit(a64x_emit(x, arm64_word_ldr(16, 28, 16)), arm64_word_str(16, 15, 8));
+    x = a64x_emit(a64x_emit(x, arm64_word_str(15, 28, 16)), arm64_word_str(9, 11, 0));
+
+    let nosplit_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_nosplit, arm64_word_b_cond(arm64_cond_lt(), nosplit_pos - b_nosplit)));
+    x = a64x_emit(a64x_emit(x, arm64_word_str(31, 11, 8)), arm64_word_add_imm(0, 11, 16));
+    x = a64x_emit(x, arm64_word_ret());
+
+    // Bump fallback
+    let bump_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_bump, arm64_word_b_cond(arm64_cond_eq(), bump_pos - b_bump)));
+    x = a64x_emit(a64x_emit(x, arm64_word_ldr(11, 28, 0)), arm64_word_add_imm(12, 11, 16));
+    x = a64x_emit(a64x_emit(x, arm64_word_add_reg(12, 12, 9)), arm64_word_ldr(13, 28, 8));
+    x = a64x_emit(x, arm64_word_cmp_reg(12, 13));
+    let b_oom: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_gt(), 0)), arm64_word_str(12, 28, 0));
+    x = a64x_emit(a64x_emit(x, arm64_word_str(9, 11, 0)), arm64_word_str(31, 11, 8));
+    x = a64x_emit(a64x_emit(x, arm64_word_add_imm(0, 11, 16)), arm64_word_ret());
+
+    let oom_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_oom, arm64_word_b_cond(arm64_cond_gt(), oom_pos - b_oom)));
+    return a64rt_setx(r, a64x_emit(a64x_emit(x, arm64_word_movz(0, 0, 0)), arm64_word_ret()));
+}
+
+pub fn a64rt_free(r0: A64R) -> A64R {
+    if a64rt_has(r0, "oo_a64_free") { return r0; }
+    let mut r: A64R = a64rt_fn(a64rt_fn(r0, "oo_a64_free"), "free");
+    let mut x: A64X = r.x;
+
+    // Null check
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    let b_null: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0)), arm64_word_sub_imm(9, 0, 16));
+    x = a64x_emit(a64x_emit(x, arm64_word_ldr(10, 28, 16)), arm64_word_str(10, 9, 8));
+    x = a64x_emit(x, arm64_word_str(9, 28, 16));
+
+    let ret_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_null, arm64_word_b_cond(arm64_cond_eq(), ret_pos - b_null)));
+    return a64rt_setx(r, a64x_emit(x, arm64_word_ret()));
+}
+
+pub fn a64rt_realloc(r0: A64R) -> A64R {
+    if a64rt_has(r0, "oo_a64_realloc") { return r0; }
+    let mut r: A64R = a64rt_fn(a64rt_fn(r0, "oo_a64_realloc"), "realloc");
+    let mut x: A64X = r.x;
+
+    // Frame setup (32 bytes)
+    x = a64x_emit(a64x_emit(x, arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -32)), arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+
+    // Check ptr == NULL -> alloc(new_sz)
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    let b_hasptr: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0)), arm64_word_mov_reg(0, 1));
+    x = a64x_bl(x, "oo_a64_alloc");
+    x = a64x_emit(a64x_emit(x, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 32)), arm64_word_ret());
+
+    let hasptr_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_hasptr, arm64_word_b_cond(arm64_cond_ne(), hasptr_pos - b_hasptr)));
+
+    // Check new_sz == 0 -> free(ptr); return NULL
+    x = a64x_emit(x, arm64_word_cmp_reg(1, 31));
+    let b_hassz: Int = list_len(x.p.words);
+    x = a64x_bl(a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 0)), "oo_a64_free");
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 32)), arm64_word_movz(0, 0, 0)), arm64_word_ret());
+
+    let hassz_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_hassz, arm64_word_b_cond(arm64_cond_ne(), hassz_pos - b_hassz)));
+
+    // In-place reuse check
+    x = a64x_emit(a64x_emit(x, arm64_word_sub_imm(9, 0, 16)), arm64_word_ldr(10, 9, 0));
+    x = a64x_emit(a64x_emit(x, arm64_word_movz(2, 16, 0)), arm64_word_cmp_reg(1, 2));
+    let b_sok: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0)), arm64_word_movz(1, 16, 0));
+    let sok_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_sok, arm64_word_b_cond(arm64_cond_ge(), sok_pos - b_sok)));
+
+    x = a64x_emit(a64x_emit(x, arm64_word_add_imm(1, 1, 15)), arm64_word_movz(2, 4, 0));
+    x = a64x_emit(a64x_emit(x, arm64_word_lsr_reg(1, 1, 2)), arm64_word_lsl_reg(1, 1, 2));
+    x = a64x_emit(x, arm64_word_cmp_reg(10, 1));
+    let b_grow: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_lt(), 0)), arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 32)), arm64_word_ret());
+
+    // Expand
+    let grow_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_grow, arm64_word_b_cond(arm64_cond_lt(), grow_pos - b_grow)));
+    x = a64x_emit(a64x_emit(x, arm64_word_str(0, abi_sp_reg(), 16)), arm64_word_str(10, abi_sp_reg(), 24));
+    x = a64x_bl(a64x_emit(x, arm64_word_mov_reg(0, 1)), "oo_a64_alloc");
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 31));
+    let b_fail: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 0)), arm64_word_ldr(1, abi_sp_reg(), 16));
+    x = a64x_emit(a64x_emit(x, arm64_word_ldr(2, abi_sp_reg(), 24)), arm64_word_mov_reg(3, 0));
+
+    // Copy loop
+    let copy_top: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_cmp_reg(2, 31));
+    let b_copydone: Int = list_len(x.p.words);
+    x = a64x_emit(a64x_emit(x, arm64_word_b_cond(arm64_cond_le(), 0)), arm64_word_ldr(4, 1, 0));
+    x = a64x_emit(a64x_emit(x, arm64_word_add_imm(1, 1, 8)), arm64_word_str(4, 3, 0));
+    x = a64x_emit(a64x_emit(x, arm64_word_add_imm(3, 3, 8)), arm64_word_sub_imm(2, 2, 8));
+    x = a64x_emit(x, arm64_word_b(copy_top - list_len(x.p.words)));
+
+    let copydone_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_copydone, arm64_word_b_cond(arm64_cond_le(), copydone_pos - b_copydone)));
+    x = a64x_emit(a64x_emit(x, arm64_word_str(0, abi_sp_reg(), 24)), arm64_word_ldr(0, abi_sp_reg(), 16));
+    x = a64x_bl(x, "oo_a64_free");
+    x = a64x_emit(x, arm64_word_ldr(0, abi_sp_reg(), 24));
+
+    let fail_pos: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, b_fail, arm64_word_b_cond(arm64_cond_eq(), fail_pos - b_fail)));
+    x = a64x_emit(a64x_emit(x, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 32)), arm64_word_ret());
+    return a64rt_setx(r, x);
+}
+
+pub fn a64rt_heap(r0: A64R) -> A64R {
+    if a64rt_has(r0, "oo_a64_alloc") { return r0; }
+    let mut r: A64R = a64rt_alloc(r0);
+    r = a64rt_free(r);
+    return a64rt_realloc(r);
+}

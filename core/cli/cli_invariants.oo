@@ -1,0 +1,24 @@
+// # CLI program-name law
+//
+// Logline: An empty program name is invalid; "ooda" is a valid program name.
+//
+// Setup: Pure String check. No argv parse.
+//
+// Beats:
+//   1. cli_prog_ok("") holds=0.
+//   2. cli_prog_ok("ooda") holds=1.
+//   3. domain_cert boxes the holds bit for the cli domain.
+//
+// residual: name gate only; not a parser
+
+import "std/core/primitives/domain_cert.oo";
+pub fn cli_prog_ok(name: String) -> Int {
+    if name == "" {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn cli_prog_law(name: String) -> DomainCert {
+    return domain_cert("cli", "prog_ok", cli_prog_ok(name));
+}

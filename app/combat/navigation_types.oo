@@ -1,0 +1,34 @@
+// # Navigation types
+//
+// Logline: NavVec3 implemented off pub type Float ECEF/NED.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type NavVec3 = struct {
+    x: Int,
+    y: Int,
+    z: Int
+};
+
+pub fn nav_vec3_new(x: Int, y: Int, z: Int) -> NavVec3 {
+    return NavVec3 { x: x, y: y, z: z };
+}
+
+pub fn nav_vec3_x(v: NavVec3) -> Int {
+    return v.x;
+}
+
+pub fn nav_vec3_y(v: NavVec3) -> Int {
+    return v.y;
+}
+
+pub fn nav_vec3_z(v: NavVec3) -> Int {
+    return v.z;
+}

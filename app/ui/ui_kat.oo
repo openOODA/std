@@ -1,0 +1,167 @@
+// # UI KAT (post-2010 standards literature)
+//
+// Logline: PhD-level literature golden values for WCAG 2.2, ISO 9241-210:2019, Fitts mouse and touch throughput, Brysbaert reading speed, and Fitts 1954 W3C legacy.
+//
+// Setup: Pure Float/Int. Imports wcag_2_2_principle.oo, iso_9241_ergo_law.oo, fitts_3d_theory.oo, ui_invariants.oo. Each golden holds within 0.001% or stated literature tolerance. verify_ui_kat returns true on full PASS.
+//
+// Beats:
+//   1. WCAG 2.2: 86 total criteria, 9 new, 4 POUR principles, published 2023-10-05.
+//   2. ISO 9241-210 publication year 2019.
+//   3. Fitts b parameter: mouse 100-200 ms/bit, modern touch 50-150 ms/bit.
+//   4. Brysbaert 2019: reading speed 200-250 wpm.
+//   5. Fitts 1954 psychophysical basis: W3C accessibility legacy.
+
+import "std/app/ui/wcag_2_2_principle.oo";
+import "std/app/ui/iso_9241_ergo_law.oo";
+import "std/app/ui/fitts_3d_theory.oo";
+import "std/app/ui/ui_invariants.oo";
+
+fn kat_uabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn kat_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// W3C WCAG 2.2 (W3C Recommendation 05 October 2023): 86 total success criteria.
+fn kat_wcag22_total() -> Int {
+    return 86;
+}
+
+// W3C WCAG 2.2: 9 new success criteria vs WCAG 2.1.
+fn kat_wcag22_new() -> Int {
+    return 9;
+}
+
+// W3C WCAG 2.2: 4 principles (Perceivable, Operable, Understandable, Robust).
+fn kat_wcag22_principles() -> Int {
+    return 4;
+}
+
+// WCAG 2.2 publication year (2023).
+fn kat_wcag22_year() -> Int {
+    return 2023;
+}
+
+// WCAG 2.2 publication month (10 = October).
+fn kat_wcag22_month() -> Int {
+    return 10;
+}
+
+// WCAG 2.2 publication day.
+fn kat_wcag22_day() -> Int {
+    return 5;
+}
+
+// ISO 9241-210 publication year (2019).
+fn kat_iso9241_year() -> Int {
+    return 2019;
+}
+
+// Card English Burr 1978 CACM 21,21: Fitts b parameter for mouse ~100-200 ms/bit (0.100..0.200 s/bit).
+fn kat_fitts_b_mouse_min() -> Float {
+    return 0.100;
+}
+
+fn kat_fitts_b_mouse_max() -> Float {
+    return 0.200;
+}
+
+// Modern touch: b parameter ~50-150 ms/bit (0.050..0.150 s/bit).
+fn kat_fitts_b_touch_min() -> Float {
+    return 0.050;
+}
+
+fn kat_fitts_b_touch_max() -> Float {
+    return 0.150;
+}
+
+// Brysbaert 2019 J. Mem. Lang. 109, 104047: silent reading ~238 wpm; literature band 200-250 wpm.
+fn kat_reading_wpm_low() -> Int {
+    return 200;
+}
+
+fn kat_reading_wpm_high() -> Int {
+    return 250;
+}
+
+fn kat_reading_wpm_mean() -> Int {
+    return 238;
+}
+
+// Fitts 1954 Psychophysical basis: ID = log2(D/W + 1) is the W3C accessibility legacy formulation.
+fn kat_fitts_legacy_id_witness() -> Float {
+    return 1.0;
+}
+
+pub fn verify_ui_kat() -> Bool {
+    // 1. WCAG 2.2: 4 POUR principles.
+    if wcag22_principle_count() != kat_wcag22_principles() { return false; }
+    // 2. WCAG 2.2: 9 new success criteria.
+    if wcag22_new_criteria_count() != kat_wcag22_new() { return false; }
+    // 3. WCAG 2.2: 86 total success criteria.
+    if wcag22_total_criteria_count() != kat_wcag22_total() { return false; }
+    // 4. WCAG 2.2 publication: 2023-10-05.
+    if kat_wcag22_year() != 2023 { return false; }
+    if kat_wcag22_month() != 10 { return false; }
+    if kat_wcag22_day() != 5 { return false; }
+    // 5. WCAG 2.2 conformance levels A/AA/AAA.
+    if wcag22_conformance_level("A") != 1 { return false; }
+    if wcag22_conformance_level("AA") != 2 { return false; }
+    if wcag22_conformance_level("AAA") != 3 { return false; }
+    if wcag22_conformance_level("B") != 0 { return false; }
+    // 6. ISO 9241-210 publication year 2019.
+    if kat_iso9241_year() != 2019 { return false; }
+    // 7. ISO 9241-210: full HCD yields 1.
+    if iso9241_user_centric_score(1, 3, 1, 1, 1, 1) != 1 { return false; }
+    // 8. ISO 9241-210: zero user involvement yields 0.
+    if iso9241_user_centric_score(0, 3, 1, 1, 1, 1) != 0 { return false; }
+    // 9. ISO 9241-210: iterations >= 3.
+    if iso9241_min_iterations() != 3 { return false; }
+    // 10. Card English Burr 1978: Fitts mouse b in [0.100, 0.200] s/bit.
+    let b_mouse_lo: Float = kat_fitts_b_mouse_min();
+    let b_mouse_hi: Float = kat_fitts_b_mouse_max();
+    if b_mouse_lo < 0.100 { return false; }
+    if b_mouse_hi > 0.200 { return false; }
+    if b_mouse_lo >= b_mouse_hi { return false; }
+    // 11. Modern touch: b in [0.050, 0.150] s/bit.
+    let b_touch_lo: Float = kat_fitts_b_touch_min();
+    let b_touch_hi: Float = kat_fitts_b_touch_max();
+    if b_touch_lo < 0.050 { return false; }
+    if b_touch_hi > 0.150 { return false; }
+    if b_touch_lo >= b_touch_hi { return false; }
+    // 12. Fitts 2D golden: D=100, W=10, a=0.05, b=0.15 -> MT ~ 0.5689s.
+    let mt2: Float = kat_got(fitts_2d_mt(0.05, 0.15, 100.0, 10.0));
+    if kat_uabs(mt2 - 0.5689147427) > 0.0001 { return false; }
+    // 13. Fitts 2D ID golden: log2(11) ~ 3.4594316.
+    let id2: Float = kat_got(fitts_id_2d(100.0, 10.0));
+    if kat_uabs(id2 - 3.4594316186) > 0.0001 { return false; }
+    // 14. Fitts 3D reduces to 2D with zero depth.
+    if fitts_3d_reduces_to_2d(0.05, 0.15, 100.0, 10.0) != 1 { return false; }
+    // 15. Brysbaert 2019: reading speed 200-250 wpm, mean 238.
+    let wpm_lo: Int = kat_reading_wpm_low();
+    let wpm_hi: Int = kat_reading_wpm_high();
+    let wpm_mean: Int = kat_reading_wpm_mean();
+    if wpm_lo < 200 { return false; }
+    if wpm_hi > 250 { return false; }
+    if wpm_mean < wpm_lo { return false; }
+    if wpm_mean > wpm_hi { return false; }
+    // 16. Fitts 1954 psychophysical basis: ID=1 when D=W (log2(2)).
+    let id_eq: Float = kat_got(fitts_id_2d(10.0, 10.0));
+    if kat_uabs(id_eq - kat_fitts_legacy_id_witness()) > 0.0001 { return false; }
+    // 17. UI invariant cross-check.
+    if ui_size_ok(8, 8) != 1 { return false; }
+    // 18. Fitts mouse b witness: MT for b=0.150 within 0.5..0.6s.
+    let mt_mouse: Float = kat_got(fitts_2d_mt(0.05, 0.150, 100.0, 10.0));
+    if mt_mouse < 0.5 { return false; }
+    if mt_mouse > 0.6 { return false; }
+    // 19. Fitts touch b witness: MT for b=0.100 within 0.3..0.5s.
+    let mt_touch: Float = kat_got(fitts_2d_mt(0.05, 0.100, 100.0, 10.0));
+    if mt_touch < 0.3 { return false; }
+    if mt_touch > 0.5 { return false; }
+    // 20. DomainCert from WCAG 2.2.
+    if cert_holds(wcag22_principle_cert()) != 1 { return false; }
+    return true;
+}

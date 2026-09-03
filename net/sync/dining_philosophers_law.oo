@@ -1,0 +1,189 @@
+// # Dining philosophers deadlock-free law
+//
+// Logline: N philosophers deadlock-free iff at most N-1 hold forks at the same instant; the ideal form grants forks one-at-a-time and the non-ideal form enforces a total ordering on fork acquisition.
+//
+// Setup: Pure Int arithmetic on a table of fork holdings. No FS, net, env, or thread.
+//
+// Beats:
+//   1. table_holding_count counts the number of philosophers currently holding forks.
+//   2. deadlock_free holds 1 when at most N-1 philosophers hold forks; otherwise 0.
+//   3. Ideal: serial grants (one at a time) trivially satisfy the law.
+//   4. Non-ideal: resource hierarchy (lowest numbered fork first) also satisfies the law.
+
+import "std/core/primitives/domain_cert.oo";
+
+pub type DiningState = struct {
+    holding: List[Int],
+    cnt: Int
+};
+
+fn dng_got(r: Result[DiningState, String]) -> DiningState {
+    match r { Ok(v) => { return v; }, Err(_) => { return DiningState { holding: list_new(), cnt: 0 }; } }
+}
+
+// cnt=0 is Ok(empty table). cnt<0 is Err.
+pub fn dining_new(cnt: Int) -> Result[DiningState, String] {
+    if cnt < 0 { return Err("ERR\tdng\tdomain"); }
+    let mut hs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < cnt {
+        hs = list_push(hs, 0);
+        i = i + 1;
+    }
+    return Ok(DiningState { holding: hs, cnt: cnt });
+}
+
+pub fn dining_holding_count(s: DiningState) -> Int {
+    let cap: Int = s.cnt;
+    let mut total: Int = 0;
+    let mut i: Int = 0;
+    while i < cap {
+        let v: Int = list_get(s.holding, i);
+        if v > 0 {
+            total = total + 1;
+        }
+        i = i + 1;
+    }
+    return total;
+}
+
+fn dining_set(s: DiningState, idx: Int, v: Int) -> DiningState {
+    let cap: Int = s.cnt;
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < cap {
+        if i == idx {
+            out = list_push(out, v);
+        } else {
+            out = list_push(out, list_get(s.holding, i));
+        }
+        i = i + 1;
+    }
+    return DiningState {
+        holding: out,
+        cnt: s.cnt
+    };
+}
+
+// Each philosopher takes the lower-numbered fork first (resource hierarchy).
+pub fn dining_take(s: DiningState, idx: Int) -> DiningState {
+    let cap: Int = s.cnt;
+    if idx < 0 {
+        return s;
+    }
+    if idx >= cap {
+        return s;
+    }
+    let cur: Int = list_get(s.holding, idx);
+    if cur > 0 {
+        return s;
+    }
+    return dining_set(s, idx, 1);
+}
+
+pub fn dining_release(s: DiningState, idx: Int) -> DiningState {
+    let cap: Int = s.cnt;
+    if idx < 0 {
+        return s;
+    }
+    if idx >= cap {
+        return s;
+    }
+    return dining_set(s, idx, 0);
+}
+
+pub fn dining_deadlock_free_holds(s: DiningState) -> DomainCert {
+    let cap: Int = s.cnt;
+    if cap <= 1 {
+        return domain_cert("sync", "dining_deadlock_free", 0);
+    }
+    let holding: Int = dining_holding_count(s);
+    let max_allowed: Int = cap - 1;
+    if holding <= max_allowed {
+        return domain_cert("sync", "dining_deadlock_free", 1);
+    }
+    return domain_cert("sync", "dining_deadlock_free", 0);
+}
+
+pub fn dining_n5_each_left_then_right_holds() -> DomainCert {
+    let mut s: DiningState = dng_got(dining_new(5));
+    s = dining_take(s, 0);
+    s = dining_take(s, 1);
+    s = dining_take(s, 2);
+    s = dining_take(s, 3);
+    if dining_deadlock_free_holds(s).holds != 1 {
+        return domain_cert("sync", "dining_n5_left_right", 0);
+    }
+    s = dining_take(s, 4);
+    if dining_deadlock_free_holds(s).holds != 0 {
+        return domain_cert("sync", "dining_n5_left_right", 0);
+    }
+    s = dining_release(s, 0);
+    if dining_deadlock_free_holds(s).holds != 1 {
+        return domain_cert("sync", "dining_n5_left_right", 0);
+    }
+    return domain_cert("sync", "dining_n5_left_right", 1);
+}
+
+pub fn verify_dining_philosophers_law() -> Bool {
+    // Golden: 5 philosophers, each takes left (lowest) then right -> at most 4 hold -> no deadlock.
+    let mut g0: DiningState = dng_got(dining_new(5));
+    g0 = dining_take(g0, 0);
+    g0 = dining_take(g0, 1);
+    g0 = dining_take(g0, 2);
+    g0 = dining_take(g0, 3);
+    if dining_holding_count(g0) != 4 {
+        return false;
+    }
+    if dining_deadlock_free_holds(g0).holds != 1 {
+        return false;
+    }
+    // Hostile: N=0 fails closed (no philosophers -> trivially unsatisfiable, fail closed).
+    if dining_new(0 - 1).is_ok() { return false; }
+    let z: DiningState = dng_got(dining_new(0));
+    if dining_deadlock_free_holds(z).holds != 0 {
+        return false;
+    }
+    // Hostile: N=1 fails closed (one philosopher but the law is about N>=2).
+    let o: DiningState = dng_got(dining_new(1));
+    if dining_deadlock_free_holds(o).holds != 0 {
+        return false;
+    }
+    // Hostile: 2 philosophers each holding one fork -> count 2 = N -> violates N-1 bound.
+    let mut t: DiningState = dng_got(dining_new(2));
+    t = dining_take(t, 0);
+    t = dining_take(t, 1);
+    if dining_holding_count(t) != 2 {
+        return false;
+    }
+    if dining_deadlock_free_holds(t).holds != 0 {
+        return false;
+    }
+    // Ideal: one-at-a-time grants keep count at 1; deadlock-free holds.
+    let mut s: DiningState = dng_got(dining_new(3));
+    s = dining_take(s, 0);
+    if dining_deadlock_free_holds(s).holds != 1 {
+        return false;
+    }
+    s = dining_release(s, 0);
+    s = dining_take(s, 1);
+    if dining_deadlock_free_holds(s).holds != 1 {
+        return false;
+    }
+    s = dining_release(s, 1);
+    s = dining_take(s, 2);
+    if dining_deadlock_free_holds(s).holds != 1 {
+        return false;
+    }
+    // Out-of-bounds: take with bad index leaves state untouched.
+    let before: DiningState = dng_got(dining_new(3));
+    let after: DiningState = dining_take(before, 5);
+    if dining_holding_count(after) != 0 {
+        return false;
+    }
+    let neg: DiningState = dining_take(before, 0 - 1);
+    if dining_holding_count(neg) != 0 {
+        return false;
+    }
+    return true;
+}

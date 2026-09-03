@@ -1,0 +1,255 @@
+// # AArch64 Terms Calls And Structs
+// Logline: Lowers prefixes, calls, struct literals, field/method postfix, and integer/string ALU.
+// Setup: Atoms come from xexpr. a64x_expr in xarith adds if-expressions and boolean tails.
+// Beats:
+//   1. Evaluate call arguments into x0–x7 and stack then BL the callee.
+//   2. Keep a method receiver in x0 after shifting evaluated arguments.
+//   3. Allocate a 256-byte heap record at x28 and store fields in order.
+//   4. + - take a * / factor on the right so * binds tighter.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xfn.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xfloat.oo";
+import "std/hw/silicon/aarch64_xmark.oo";
+import "std/hw/silicon/aarch64_xclosure.oo";
+
+pub fn a64x_pack_args(x0: A64X, n: Int, flags: List[Int]) -> A64X {
+    let mut x: A64X = x0; let mut reg: Int = 0; let mut i: Int = 0;
+    while i < n && reg < 8 {
+        x = a64x_emit(x, arm64_word_ldr(reg, abi_sp_reg(), (n - 1 - i) * 16));
+        if list_get(flags, i) == 1 && reg + 1 < 8 { x = a64x_emit(x, arm64_word_ldr(reg + 1, abi_sp_reg(), (n - 1 - i) * 16 + 8)); reg = reg + 2; } else { reg = reg + 1; }
+        i = i + 1;
+    }
+    if n > 8 {
+        let mut j: Int = 8;
+        while j < n {
+            x = a64x_emit(a64x_emit(x, arm64_word_ldr(9, abi_sp_reg(), (n - 1 - j) * 16)), arm64_word_str(9, abi_fp_reg(), 2100 + (j - 8) * 16));
+            if list_get(flags, j) == 1 { x = a64x_emit(a64x_emit(x, arm64_word_ldr(10, abi_sp_reg(), (n - 1 - j) * 16 + 8)), arm64_word_str(10, abi_fp_reg(), 2100 + (j - 8) * 16 + 8)); }
+            j = j + 1;
+        }
+        x = a64x_emit(a64x_emit(x, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), n * 16)), arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), (n - 8) * 16));
+        let mut k: Int = 8;
+        while k < n {
+            x = a64x_emit(a64x_emit(x, arm64_word_ldr(9, abi_fp_reg(), 2100 + (k - 8) * 16)), arm64_word_str(9, abi_sp_reg(), (k - 8) * 16));
+            if list_get(flags, k) == 1 { x = a64x_emit(a64x_emit(x, arm64_word_ldr(10, abi_fp_reg(), 2100 + (k - 8) * 16 + 8)), arm64_word_str(10, abi_sp_reg(), (k - 8) * 16 + 8)); }
+            k = k + 1;
+        }
+    } else {
+        if n > 0 { x = a64x_emit(x, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), n * 16)); }
+    }
+    return a64x_with_ival(x, n);
+}
+
+pub fn a64x_call_bl(x0: A64X, nm: String, n_args: Int) -> A64X {
+    let x: A64X = a64x_bl(x0, nm);
+    if n_args > 8 { return a64x_emit(x, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), (n_args - 8) * 16)); }
+    return x;
+}
+
+pub fn a64x_call_args(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(a64x_from_p(a64_eat(a64x_as_p(x0), 40), x0));
+    let mut n: Int = 0;
+    let mut flags: List[Int] = list_new();
+    while a64_peek(a64x_as_p(x)) != 41 && a64_peek(a64x_as_p(x)) >= 0 {
+        x = a64x_maybe_rel(a64x_term(x));
+        x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), 16)), arm64_word_str(0, abi_sp_reg(), 0)), arm64_word_str(1, abi_sp_reg(), 8));
+        let mut f_flag: Int = 0; if x.st.fp == 3 { f_flag = 1; }
+        flags = list_push(flags, f_flag); n = n + 1; x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 44 { x = a64x_skip(a64x_from_p(a64_eat(a64x_as_p(x), 44), x)); }
+    }
+    return a64x_pack_args(a64x_from_p(a64_eat(a64x_as_p(x), 41), x), n, flags);
+}
+
+pub fn a64x_maybe_rel(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    let b: Int = a64_peek(a64x_as_p(x));
+    if b != 60 && b != 62 && !((b == 61 || b == 33) && x.p.i + 1 < bytes_len(x.p.src) && byte_at(x.p.src, x.p.i + 1) == 61) { return x; }
+    let lfp: Int = x.st.fp; let lstr: Bool = a64x_is_str(x);
+    x = a64x_emit(x, arm64_word_str(0, abi_fp_reg(), a64x_tmp_cmp()));
+    x = a64x_take_relop(x);
+    let inv: Int = x.p.ival;
+    x = a64x_term(x);
+    x = a64x_emit(x, arm64_word_ldr(1, abi_fp_reg(), a64x_tmp_cmp()));
+    if (b == 61 || b == 33) && (lstr || a64x_is_str(x)) {
+        x = a64x_emit(a64x_bl(a64x_emit(a64x_emit(a64x_emit(x, arm64_word_mov_reg(2, 0)), arm64_word_mov_reg(0, 1)), arm64_word_mov_reg(1, 2)), "__strcmp"), arm64_word_cmp_reg(0, 31));
+    } else {
+        if lfp == 1 || x.st.fp == 1 { x = a64x_fcmp(x); } else { x = a64x_emit(x, arm64_word_cmp_reg(1, 0)); }
+    }
+    x = a64x_emit(a64x_emit(x, arm64_word_movz(0, 0, 0)), arm64_word_b_cond(inv, 2));
+    x = a64x_with_fp(a64x_emit(x, arm64_word_movz(0, 1, 0)), 0);
+    x = a64x_skip(x);
+    while a64_peek(a64x_as_p(x)) == 124 || a64_peek(a64x_as_p(x)) == 38 {
+        let opb: Int = a64_peek(a64x_as_p(x));
+        let p: A64P = a64x_as_p(x);
+        if p.i + 1 >= bytes_len(p.src) || byte_at(p.src, p.i + 1) != opb { break; }
+        x = a64x_from_p(a64_at(p, p.i + 2), x);
+        x = a64x_emit(x, arm64_word_str(0, abi_fp_reg(), a64x_tmp_cond()));
+        x = a64x_maybe_rel(a64x_term(x));
+        x = a64x_emit(x, arm64_word_ldr(1, abi_fp_reg(), a64x_tmp_cond()));
+        if opb == 124 { x = a64x_emit(x, arm64_word_orr_reg(0, 1, 0)); } else { x = a64x_emit(x, arm64_word_and_reg(0, 1, 0)); }
+        x = a64x_skip(x);
+    }
+    return x;
+}
+
+fn a64x_method(x0: A64X, meth: String) -> A64X {
+    let mut x: A64X = a64x_call_args(a64x_emit(x0, arm64_word_str(0, abi_fp_reg(), a64x_tmp_rcv())));
+    let mut i: Int = x.p.ival;
+    while i > 0 { x = a64x_emit(x, arm64_word_mov_reg(i, i - 1)); i = i - 1; }
+    return a64x_call_bl(a64x_emit(x, arm64_word_ldr(0, abi_fp_reg(), a64x_tmp_rcv())), meth, x.p.ival + 1);
+}
+
+pub fn a64x_dots(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    while a64_peek(a64x_as_p(x)) == 46 {
+        let p: A64P = a64x_as_p(x);
+        if p.i + 1 < bytes_len(p.src) && byte_at(p.src, p.i + 1) == 46 { return x; }
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 46), x);
+        let obj: String = x.p.text;
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        let meth: String = x.p.text;
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 40 { x = a64x_mark_call_ty(a64x_ret_fp(a64x_method(x, meth), meth), meth); } else {
+            let foff: Int = 0 + a64x_field_off_obj(x, obj, meth);
+            if foff < 0 { return a64x_fail(x, "ERR\ta64x_field"); }
+            x = a64x_with_fp(a64x_emit(x, arm64_word_ldr(0, 0, foff)), a64x_field_fp(x, obj, meth));
+            let fty: String = a64x_field_ty(x, obj, meth); if bytes_len(fty) > 0 { x = a64x_mark_ty(x, meth, fty); }
+        }
+        x = a64x_skip(x);
+    }
+    return x;
+}
+
+pub fn a64x_struct(x0: A64X) -> A64X {
+    let ty: String = x0.p.text;
+    let mut x: A64X = a64x_emit(a64x_emit(x0, arm64_word_mov_reg(0, 28)), arm64_word_add_imm(28, 28, 256));
+    x = a64x_emit(a64x_emit(x, arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), 16)), arm64_word_str(0, abi_sp_reg(), 0));
+    x = a64x_skip(a64x_from_p(a64_eat(a64x_as_p(x), 123), x));
+    while x.st.err == "" && a64_peek(a64x_as_p(x)) != 125 && a64_peek(a64x_as_p(x)) >= 0 {
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        let fnm: String = x.p.text;
+        x = a64x_maybe_rel(a64x_term(a64x_from_p(a64_eat(a64x_as_p(x), 58), x)));
+        x = a64x_emit(x, arm64_word_ldr(1, abi_sp_reg(), 0));
+        let key: String = ty + "." + fnm;
+        let foff: Int = 0 + a64x_lookup_field(x, key); if foff < 0 { return a64x_fail(x, "ERR\ta64x_struct_field"); }
+        x = a64x_skip(a64x_emit(x, arm64_word_str(0, 1, foff)));
+        if a64_peek(a64x_as_p(x)) == 44 { x = a64x_skip(a64x_from_p(a64_eat(a64x_as_p(x), 44), x)); }
+    }
+    x = a64x_emit(a64x_from_p(a64_eat(a64x_as_p(x), 125), x), arm64_word_ldr(0, abi_sp_reg(), 0));
+    return a64x_emit(x, arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), 16));
+}
+
+pub fn a64x_prefix(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    if a64_peek(a64x_as_p(x)) == 124 { return a64x_dots(a64x_closure(x)); }
+    if a64_peek(a64x_as_p(x)) == 40 {
+        x = a64x_maybe_rel(a64x_term(a64x_from_p(a64_eat(a64x_as_p(x), 40), x)));
+        let obj_nm: String = x.p.text;
+        return a64x_dots(a64x_with_text(a64x_from_p(a64_eat(a64x_as_p(x), 41), x), obj_nm));
+    }
+    if a64_peek(a64x_as_p(x)) == 45 {
+        x = a64x_prefix(a64x_from_p(a64_eat(a64x_as_p(x), 45), x));
+        if x.st.fp == 1 { return a64x_fneg_x0(x); }
+        return a64x_with_fp(a64x_emit(x, arm64_word_neg(0, 0)), 0);
+    }
+    if a64_peek(a64x_as_p(x)) == 38 && (x.p.i + 1 >= bytes_len(x.p.src) || byte_at(x.p.src, x.p.i + 1) != 38) {
+        x = a64x_skip(a64x_from_p(a64_eat(a64x_as_p(x), 38), x));
+        if a64_starts(a64x_as_p(x), "mut") { x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "mut"), x); }
+        return a64x_prefix(x);
+    }
+    if a64_peek(a64x_as_p(x)) == 33 {
+        x = a64x_prefix(a64x_from_p(a64_eat(a64x_as_p(x), 33), x));
+        x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_cmp_reg(0, 31)), arm64_word_movz(0, 1, 0)), arm64_word_b_cond(arm64_cond_eq(), 2));
+        return a64x_with_fp(a64x_emit(x, arm64_word_movz(0, 0, 0)), 0);
+    }
+    if a64_is_alpha(a64_peek(a64x_as_p(x))) {
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        let nm: String = x.p.text;
+        x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 40 {
+            if nm == "Ok" || nm == "Some" { return a64x_okerr(x, 0); }
+            if nm == "Err" { return a64x_okerr(x, 1); }
+            let mut lf: Int = 0;
+            if nm == "list_get" { let y: A64X = a64x_from_p(a64_ident(a64x_as_p(a64x_skip(a64x_from_p(a64_eat(a64x_as_p(x), 40), x)))), x); if a64x_name_is_str(x, "LF:" + y.p.text) { lf = 1; } }
+            let off_loc: Int = 0 + a64_lookup_parse(x.p.names, x.p.offs, nm);
+            if off_loc >= 0 {
+                x = a64x_call_args(x);
+                return a64x_dots(a64x_call_indirect(x, off_loc, x.p.ival));
+            }
+            x = a64x_call_args(x);
+            x = a64x_ret_fp(a64x_call_bl(x, nm, x.p.ival), nm);
+            let arr_nm: String = "->" + nm;
+            let rf: Int = 0 + a64x_lookup_field(x, arr_nm);
+            if rf == 3 || rf == 2 || rf == 1 || lf == 1 { let mut use_f: Int = rf; if lf == 1 { use_f = 1; } x = a64x_with_fp(x, use_f); }
+            return a64x_dots(a64x_mark_call_ty(x, nm));
+        }
+        if bytes_len(nm) > 0 && a64x_looks_struct(x) { return a64x_struct(x); }
+        if nm == "true" { return a64x_dots(a64x_with_fp(a64x_movimm(x, 0, 1), 0)); }
+        if nm == "false" || nm == "void" || nm == "Void" { return a64x_dots(a64x_with_fp(a64x_movimm(x, 0, 0), 0)); }
+        let off2: Int = 0 + a64_lookup_parse(x.p.names, x.p.offs, nm);
+        if off2 < 0 { return a64x_fail(x, "ERR\ta64x_unknown"); }
+        return a64x_dots(a64x_with_fp(a64x_load_pair(x, off2), a64x_local_fp(x, nm)));
+    }
+    return a64x_dots(a64x_primary(x));
+}
+
+fn a64x_okerr(x0: A64X, tag: Int) -> A64X {
+    let mut x: A64X = a64x_movimm(a64x_emit(a64x_term(a64x_from_p(a64_eat(a64x_as_p(x0), 40), x0)), arm64_word_mov_reg(1, 0)), 0, tag);
+    return a64x_with_fp(a64x_from_p(a64_eat(a64x_as_p(x), 41), x), 3);
+}
+
+fn a64x_muls(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    while x.st.err == "" {
+        let b: Int = a64_peek(a64x_as_p(x));
+        if b != 42 && b != 47 && b != 37 { return x; }
+        let lfp: Int = x.st.fp;
+        x = a64x_emit(a64x_emit(x, arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), 16)), arm64_word_str(0, abi_sp_reg(), 0));
+        x = a64x_prefix(a64x_from_p(a64_at(a64x_as_p(x), x.p.i + 1), x));
+        x = a64x_emit(a64x_emit(x, arm64_word_ldr(1, abi_sp_reg(), 0)), arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), 16));
+        if (lfp == 1 || x.st.fp == 1) && b != 37 { x = a64x_fbinop(x, b); } else { x = a64x_ibinop(x, b); }
+        x = a64x_skip(x);
+    }
+    return x;
+}
+
+pub fn a64x_alu(x0: A64X) -> A64X {
+    let mut x: A64X = x0;
+    while x.st.err == "" {
+        x = a64x_skip(x);
+        let b: Int = a64_peek(a64x_as_p(x));
+        if b != 43 && b != 45 && b != 42 && b != 47 && b != 38 && b != 124 && b != 94 && b != 37 && b != 62 && b != 60 { return x; }
+        let p2: A64P = a64x_as_p(x);
+        if (b == 124 || b == 38) && p2.i + 1 < bytes_len(p2.src) && byte_at(p2.src, p2.i + 1) == b { return x; }
+        if (b == 62 || b == 60) && (p2.i + 1 >= bytes_len(p2.src) || byte_at(p2.src, p2.i + 1) != b) { return x; }
+        let lfp: Int = x.st.fp;
+        let mut is_cat: Bool = false;
+        if b == 43 {
+            is_cat = a64x_is_str(x);
+            let mut j: Int = x.p.i + 1;
+            while j < bytes_len(x.p.src) && byte_at(x.p.src, j) <= 32 { j = j + 1; }
+            if j < bytes_len(x.p.src) && byte_at(x.p.src, j) == 34 { is_cat = true; }
+        }
+        x = a64x_emit(a64x_emit(x, arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), 16)), arm64_word_str(0, abi_sp_reg(), 0));
+        if b == 62 || b == 60 { x = a64x_from_p(a64_at(a64x_as_p(x), p2.i + 2), x); } else { x = a64x_from_p(a64_at(a64x_as_p(x), p2.i + 1), x); }
+        x = a64x_prefix(x);
+        if b == 43 || b == 45 { x = a64x_muls(x); }
+        x = a64x_emit(a64x_emit(x, arm64_word_ldr(1, abi_sp_reg(), 0)), arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), 16));
+        if b == 43 && (is_cat || x.st.fp == 2) {
+            x = a64x_with_fp(a64x_bl(a64x_emit(a64x_emit(a64x_emit(x, arm64_word_mov_reg(2, 0)), arm64_word_mov_reg(0, 1)), arm64_word_mov_reg(1, 2)), "__concat"), 2);
+        } else {
+            if (lfp == 1 || x.st.fp == 1) && (b == 43 || b == 45 || b == 42 || b == 47) { x = a64x_fbinop(x, b); } else { x = a64x_ibinop(x, b); }
+        }
+    }
+    return x;
+}
+
+pub fn a64x_term(x0: A64X) -> A64X {
+    return a64x_alu(a64x_prefix(x0));
+}

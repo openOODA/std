@@ -1,0 +1,166 @@
+// # FIPS 203 ML-KEM Polynomial Vector & Matrix Operations
+//
+// Logline: Implements module vector R_q^k operations, NTT transformations, and inner product accumulation over flat coefficient lists.
+//
+// Setup: Vector dimension k in {2, 3, 4} corresponding to ML-KEM-512, 768, and 1024.
+//
+// Beats:
+//   1. Represent vector of polynomials in R_q^k with flat 256*k coefficient array.
+//   2. Compute element-wise addition, subtraction, and NTT mappings.
+//   3. Compute dot product in NTT domain using BaseMul subring products.
+//   4. Compute matrix-vector multiplication A_hat * s_hat in R_q^k.
+
+import "./ml_kem_poly.oo";
+import "./ml_kem_ntt.oo";
+
+type MlKemPolyVec = struct {
+    coeffs: List[Int],
+    k: Int
+};
+
+pub fn ml_kem_polyvec_new(k: Int) -> MlKemPolyVec {
+    let mut c: List[Int] = list_new();
+    let total: Int = 256 * k;
+    let mut i: Int = 0;
+    while i < total {
+        c = list_push(c, 0);
+        i = i + 1;
+    }
+    return MlKemPolyVec {
+        coeffs: c,
+        k: k
+    };
+}
+
+pub fn ml_kem_polyvec_add(a: MlKemPolyVec, b: MlKemPolyVec) -> MlKemPolyVec {
+    let k: Int = a.k;
+    let total: Int = 256 * k;
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        c = list_push(c, ml_kem_poly_mod(va + vb));
+        i = i + 1;
+    }
+    return MlKemPolyVec {
+        coeffs: c,
+        k: k
+    };
+}
+
+pub fn ml_kem_polyvec_sub(a: MlKemPolyVec, b: MlKemPolyVec) -> MlKemPolyVec {
+    let k: Int = a.k;
+    let total: Int = 256 * k;
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        let va: Int = list_get(a.coeffs, i);
+        let vb: Int = list_get(b.coeffs, i);
+        c = list_push(c, ml_kem_poly_mod(va - vb));
+        i = i + 1;
+    }
+    return MlKemPolyVec {
+        coeffs: c,
+        k: k
+    };
+}
+
+pub fn ml_kem_polyvec_ntt_fwd(v: MlKemPolyVec) -> MlKemPolyVec {
+    let k: Int = v.k;
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut chunk: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 {
+            chunk = list_push(chunk, list_get(v.coeffs, i * 256 + j));
+            j = j + 1;
+        }
+        let p: MlKemPoly = MlKemPoly { coeffs: chunk, degree: 256, modulus: 3329 };
+        let ntt_p: MlKemPoly = ml_kem_ntt_fwd(p);
+        j = 0;
+        while j < 256 {
+            out_c = list_push(out_c, list_get(ntt_p.coeffs, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return MlKemPolyVec {
+        coeffs: out_c,
+        k: k
+    };
+}
+
+pub fn ml_kem_polyvec_ntt_inv(v: MlKemPolyVec) -> MlKemPolyVec {
+    let k: Int = v.k;
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut chunk: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 {
+            chunk = list_push(chunk, list_get(v.coeffs, i * 256 + j));
+            j = j + 1;
+        }
+        let p: MlKemPoly = MlKemPoly { coeffs: chunk, degree: 256, modulus: 3329 };
+        let inv_p: MlKemPoly = ml_kem_ntt_inv(p);
+        j = 0;
+        while j < 256 {
+            out_c = list_push(out_c, list_get(inv_p.coeffs, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return MlKemPolyVec {
+        coeffs: out_c,
+        k: k
+    };
+}
+
+pub fn ml_kem_polyvec_dot_ntt(a_hat: MlKemPolyVec, b_hat: MlKemPolyVec) -> MlKemPoly {
+    let k: Int = a_hat.k;
+    let mut acc: MlKemPoly = ml_kem_poly_zero();
+    let mut i: Int = 0;
+    while i < k {
+        let mut chunk_a: List[Int] = list_new();
+        let mut chunk_b: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < 256 {
+            chunk_a = list_push(chunk_a, list_get(a_hat.coeffs, i * 256 + j));
+            chunk_b = list_push(chunk_b, list_get(b_hat.coeffs, i * 256 + j));
+            j = j + 1;
+        }
+        let pa: MlKemPoly = MlKemPoly { coeffs: chunk_a, degree: 256, modulus: 3329 };
+        let pb: MlKemPoly = MlKemPoly { coeffs: chunk_b, degree: 256, modulus: 3329 };
+        let prod: MlKemPoly = ml_kem_basemul(pa, pb);
+        acc = ml_kem_poly_add(acc, prod);
+        i = i + 1;
+    }
+    return acc;
+}
+
+pub fn ml_kem_matvec_mul_ntt(matrix_coeffs: List[Int], s_hat: MlKemPolyVec, k: Int) -> MlKemPolyVec {
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < k {
+        let mut row_coeffs: List[Int] = list_new();
+        let mut j: Int = 0;
+        while j < (256 * k) {
+            row_coeffs = list_push(row_coeffs, list_get(matrix_coeffs, i * 256 * k + j));
+            j = j + 1;
+        }
+        let row_vec: MlKemPolyVec = MlKemPolyVec { coeffs: row_coeffs, k: k };
+        let dot: MlKemPoly = ml_kem_polyvec_dot_ntt(row_vec, s_hat);
+        j = 0;
+        while j < 256 {
+            out_c = list_push(out_c, list_get(dot.coeffs, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return MlKemPolyVec {
+        coeffs: out_c,
+        k: k
+    };
+}

@@ -1,0 +1,138 @@
+// # Referential transparency principle
+//
+// Logline: a referentially transparent expression equals its value at every sample; impure expressions like rng() do not, so two rng calls disagree and rt_check returns 0.
+//
+// Setup: Pure Int. Sample cap is 100. Hostile: unknown expr_id, sample_count < 1, or sample_count > 100 fail closed to 0. expr 0 = constant; 1 and 2 = two non-deterministic rng calls; 3 = linear; 4 = counter.
+//
+// Beats:
+//   1. eval_expr(expr_id, sample_id, constant) returns the value of the expression at the sample.
+//   2. rt_check(expr1, expr2, constant, sample_count) returns 1 if the two expressions match at every sample.
+//   3. Golden: 2+3 = 5 in 100 samples returns 1.
+//   4. Hostile: rng() vs rng() in 100 samples returns 0; sample_count < 1 returns 0.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Maximum supported sample count.
+pub fn rt_max_samples() -> Int {
+    return 100;
+}
+
+// expr ids:
+//   0 = constant (returns `constant`)
+//   1 = rng call A (returns sample_id * 7 + 1)
+//   2 = rng call B (returns sample_id * 13 + 3) — differs from A, so two rng calls never agree
+//   3 = linear (returns constant * sample_id)
+//   4 = counter (returns constant + sample_id)
+pub fn eval_expr(expr_id: Int, sample_id: Int, constant: Int) -> Int {
+    if expr_id == 0 { return constant; }
+    if expr_id == 1 { return sample_id * 7 + 1; }
+    if expr_id == 2 { return sample_id * 13 + 3; }
+    if expr_id == 3 { return constant * sample_id; }
+    if expr_id == 4 { return constant + sample_id; }
+    return 0;
+}
+
+// 1 if expr_id is a known expression id 0..4.
+pub fn expr_id_known(expr_id: Int) -> Int {
+    if expr_id < 0 { return 0; }
+    if expr_id > 4 { return 0; }
+    return 1;
+}
+
+// 1 if the two expressions agree at every sample; 0 otherwise.
+// Hostile: sample_count < 1 or sample_count > max fails closed to 0; unknown expr_id fails closed.
+pub fn rt_check(expr1_id: Int, expr2_id: Int, constant: Int, sample_count: Int) -> Int {
+    if expr_id_known(expr1_id) == 0 { return 0; }
+    if expr_id_known(expr2_id) == 0 { return 0; }
+    if sample_count < 1 { return 0; }
+    let cap: Int = rt_max_samples();
+    if sample_count > cap { return 0; }
+    let mut i: Int = 0;
+    let mut ok: Int = 1;
+    while i < sample_count {
+        let a: Int = eval_expr(expr1_id, i, constant);
+        let b: Int = eval_expr(expr2_id, i, constant);
+        if a != b { ok = 0; }
+        i = i + 1;
+    }
+    return ok;
+}
+
+// 1 if the expression is deterministic (its value at sample 0 equals its value at sample 1).
+// Useful heuristic: rng-style expr 1 and 2 return 0 (non-deterministic across samples), constant returns 1.
+pub fn rt_is_pure(expr_id: Int, constant: Int) -> Int {
+    if expr_id_known(expr_id) == 0 { return 0; }
+    let a: Int = eval_expr(expr_id, 0, constant);
+    let b: Int = eval_expr(expr_id, 1, constant);
+    if a == b { return 1; }
+    return 0;
+}
+
+// domain_cert wrapper for the referential transparency lock.
+pub fn rt_principle_holds(expr1_id: Int, expr2_id: Int, constant: Int, sample_count: Int) -> DomainCert {
+    let v: Int = rt_check(expr1_id, expr2_id, constant, sample_count);
+    return domain_cert("core", "referential_transparency_principle", v);
+}
+
+pub fn verify_referential_transparency_principle() -> Bool {
+    // Golden: eval_expr is the documented function.
+    if eval_expr(0, 0, 5) != 5 { return false; }
+    if eval_expr(0, 99, 5) != 5 { return false; }
+    if eval_expr(3, 4, 6) != 24 { return false; }
+    if eval_expr(4, 4, 6) != 10 { return false; }
+
+    // Golden: 2+3 = 5 in 100 samples — both are constant 5.
+    if rt_check(0, 0, 5, 100) != 1 { return false; }
+    if rt_check(0, 0, 0, 100) != 1 { return false; }
+    if rt_check(0, 0, 0 - 5, 100) != 1 { return false; }
+
+    // Golden: 2*s = 2*s for any s, in 100 samples.
+    if rt_check(3, 3, 2, 100) != 1 { return false; }
+    // Golden: c+s = c+s in 100 samples.
+    if rt_check(4, 4, 7, 100) != 1 { return false; }
+
+    // Hostile: rng() vs rng() in 100 samples returns 0 (two rng calls disagree at every sample).
+    if rt_check(1, 2, 0, 100) != 0 { return false; }
+    if rt_check(1, 2, 5, 1) != 0 { return false; }
+    if rt_check(1, 2, 5, 2) != 0 { return false; }
+
+    // Hostile: deterministic vs non-deterministic does not match.
+    if rt_check(0, 1, 5, 100) != 0 { return false; }
+    if rt_check(0, 2, 5, 100) != 0 { return false; }
+
+    // Hostile: sample_count < 1 fails closed to 0.
+    if rt_check(0, 0, 5, 0) != 0 { return false; }
+    if rt_check(0, 0, 5, 0 - 1) != 0 { return false; }
+    if rt_check(0, 0, 5, 0 - 100) != 0 { return false; }
+
+    // Hostile: sample_count > 100 fails closed to 0.
+    if rt_check(0, 0, 5, 101) != 0 { return false; }
+    if rt_check(0, 0, 5, 1000) != 0 { return false; }
+
+    // Hostile: unknown expr_id fails closed to 0.
+    if rt_check(5, 0, 5, 100) != 0 { return false; }
+    if rt_check(0, 5, 5, 100) != 0 { return false; }
+    if rt_check(0 - 1, 0, 5, 100) != 0 { return false; }
+    if rt_check(0, 0 - 1, 5, 100) != 0 { return false; }
+
+    // Golden: rt_is_pure is 1 for constant, linear, counter; 0 for rng.
+    if rt_is_pure(0, 5) != 1 { return false; }
+    if rt_is_pure(3, 5) != 0 { return false; }
+    if rt_is_pure(4, 5) != 0 { return false; }
+    if rt_is_pure(1, 5) != 0 { return false; }
+    if rt_is_pure(2, 5) != 0 { return false; }
+
+    // Hostile: unknown expr_id is not pure.
+    if rt_is_pure(99, 5) != 0 { return false; }
+    if rt_is_pure(0 - 1, 5) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the value.
+    let c1: DomainCert = rt_principle_holds(0, 0, 5, 100);
+    if c1.domain != "core" { return false; }
+    if c1.law_name != "referential_transparency_principle" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = rt_principle_holds(1, 2, 0, 100);
+    if c2.holds != 0 { return false; }
+
+    return true;
+}

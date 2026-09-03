@@ -1,0 +1,17 @@
+// # Import C header is residual
+//
+// Logline: import of a .h path must refuse at check.
+//
+// Setup: OPEN-22. No C-header product path.
+//
+// Beats:
+//   1. Import a header name.
+//   2. Declare main.
+//   3. Check refuses.
+
+import "stdio.h";
+
+pub fn verify_open_import_c() -> Bool {
+    println(1);
+    return true;
+}

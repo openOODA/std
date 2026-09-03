@@ -1,0 +1,104 @@
+// # Compton scattering law
+//
+// Logline: Δλ = λ_C (1 - cos θ) for a photon scattering off a stationary electron.
+//
+// Setup: Imports std/principles/constants.oo for h and c. Pure Float.
+//
+// Beats:
+//   1. Ideal single-photon, stationary-electron form.
+//   2. Max shift 2 λ_C at θ = π (180°).
+//   3. λ_C = h / (m_e c) where m_e is CODATA electron rest mass.
+
+import "std/core/principles/physical_constants.oo";
+import "std/core/primitives/domain_cert.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_quantum_compton_scattering_law() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+fn pabs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn cs_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn compton_electron_mass() -> Float {
+    return 0.00000000000000000000000000000091093837;
+}
+
+pub fn compton_wavelength() -> Float {
+    let pc: PhysicalConstants = constants_codata_2022();
+    let h: Float = pc.planck_constant;
+    let c_val: Float = pc.speed_of_light;
+    let me: Float = compton_electron_mass();
+    return h / (me * c_val);
+}
+
+// Compton wavelength shift Δλ = λ_C (1 - cos θ). θ=0 is Ok(0). θ outside [0, π] is Err.
+pub fn compton_wavelength_shift(theta: Float) -> Result[Float, String] {
+    if theta < 0.0 { return Err("ERR\tcs\ttheta"); }
+    let pi: Float = circ_pi_std_phys_quantum_compton_scattering_law();
+    if theta > pi { return Err("ERR\tcs\ttheta"); }
+    let lc: Float = compton_wavelength();
+    return Ok(lc * (1.0 - cos(theta)));
+}
+
+pub fn compton_photon_energy(lambda: Float) -> Result[Float, String] {
+    if lambda <= 0.0 { return Err("ERR\tcs\tlambda"); }
+    let pc: PhysicalConstants = constants_codata_2022();
+    let h: Float = pc.planck_constant;
+    let c_val: Float = pc.speed_of_light;
+    return Ok((h * c_val) / lambda);
+}
+
+pub fn phys_compton_scattering_law(theta: Float) -> DomainCert {
+    let r: Result[Float, String] = compton_wavelength_shift(theta);
+    let mut h: Int = 0;
+    match r {
+        Ok(shift) => {
+            let lc: Float = compton_wavelength();
+            let want: Float = lc * (1.0 - cos(theta));
+            if pabs(shift - want) <= 0.0000000001 { h = 1; }
+        },
+        Err(_)    => { }
+    }
+    return domain_cert("phys", "compton_scattering", h);
+}
+
+pub fn verify_compton_scattering_law() -> Bool {
+    let lc: Float = compton_wavelength();
+    let lc_target: Float = 0.0000000000024263;
+    let mut dlc: Float = lc - lc_target;
+    if dlc < 0.0 { dlc = 0.0 - dlc; }
+    let lc_pct: Float = (dlc * 100.0) / lc_target;
+    if lc_pct > 0.1 { return false; }
+    let s0: Float = cs_got(compton_wavelength_shift(0.0));
+    if s0 != 0.0 { return false; }
+    let pi: Float = circ_pi_std_phys_quantum_compton_scattering_law();
+    let s90: Float = cs_got(compton_wavelength_shift(pi / 2.0));
+    let mut d90: Float = s90 - lc;
+    if d90 < 0.0 { d90 = 0.0 - d90; }
+    let d90_pct: Float = (d90 * 100.0) / lc;
+    if d90_pct > 0.1 { return false; }
+    let s180: Float = cs_got(compton_wavelength_shift(pi));
+    let target180: Float = 2.0 * lc;
+    let mut d180: Float = s180 - target180;
+    if d180 < 0.0 { d180 = 0.0 - d180; }
+    let d180_pct: Float = (d180 * 100.0) / target180;
+    if d180_pct > 0.1 { return false; }
+    if compton_wavelength_shift(0.0 - 100.0).is_ok() { return false; }
+    if compton_wavelength_shift(100.0).is_ok() { return false; }
+    if compton_photon_energy(0.0).is_ok() { return false; }
+    let lambda_init: Float = 2.0 * lc;
+    let e_init: Float = cs_got(compton_photon_energy(lambda_init));
+    let lambda_final: Float = lambda_init + s180;
+    let e_final: Float = cs_got(compton_photon_energy(lambda_final));
+    let ratio: Float = e_final / e_init;
+    let mut dr: Float = ratio - 0.5;
+    if dr < 0.0 { dr = 0.0 - dr; }
+    if dr > 0.01 { return false; }
+    if phys_compton_scattering_law(0.0).holds != 1 { return false; }
+    if phys_compton_scattering_law(0.0 - 100.0).holds != 0 { return false; }
+    return true;
+}

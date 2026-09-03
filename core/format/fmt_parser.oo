@@ -1,0 +1,118 @@
+// # Fmt Parser ◈ ZERO-DRAG
+//
+// Logline: Parses .oo source into indent and match blocks.
+//
+// Setup: Pure parser over String.
+//
+// Beats:
+//   1. Split lines and count indent.
+//   2. Collect match arms and => cols.
+//   3. Emit parse tree for printer.
+
+pub fn fmt_parse(src: String) -> List[String] {
+  let n: Int = chars_len(src);
+  let mut out: List[String] = list_new();
+  let mut start: Int = 0;
+  let mut i: Int = 0;
+  while i <= n {
+    let at_end: Bool = i == n;
+    let mut is_nl: Bool = false;
+    if !at_end {
+      if char_at(src, i) == "\n" {
+        is_nl = true;
+      }
+    }
+    if at_end || is_nl {
+      let line: String = str_slice(src, start, i);
+      out = list_push(out, line);
+      start = i + 1;
+    }
+    i = i + 1;
+  }
+  return out;
+}
+
+pub fn fmt_indent_of(line: String) -> Int {
+  let n: Int = chars_len(line);
+  let mut i: Int = 0;
+  let mut cnt: Int = 0;
+  while i < n {
+    let c: String = char_at(line, i);
+    if c == " " {
+      cnt = cnt + 1;
+    } else {
+      break;
+    }
+    i = i + 1;
+  }
+  return cnt;
+}
+
+pub fn fmt_is_blank(line: String) -> Bool {
+  let n: Int = chars_len(line);
+  if n == 0 {
+    return true;
+  }
+  let mut i: Int = 0;
+  while i < n {
+    let c: String = char_at(line, i);
+    if c != " " && c != "\t" && c != "\r" {
+      return false;
+    }
+    i = i + 1;
+  }
+  return true;
+}
+
+pub fn fmt_trim_right(line: String) -> String {
+  let n: Int = chars_len(line);
+  let mut end: Int = n;
+  while end > 0 {
+    let c: String = char_at(line, end - 1);
+    if c == " " || c == "\t" || c == "\r" {
+      end = end - 1;
+    } else {
+      break;
+    }
+  }
+  return str_slice(line, 0, end);
+}
+
+pub fn fmt_collect_arms(
+  lines: List[String]
+) -> List[Int] {
+  let n: Int = list_len(lines);
+  let mut cols: List[Int] = list_new();
+  let mut i: Int = 0;
+  while i < n {
+    let line: String = list_get(lines, i);
+    let ln: Int = chars_len(line);
+    let mut p: Int = 0;
+    let mut col: Int = -1;
+    while p + 1 < ln {
+      if char_at(line, p) == "=" {
+        if char_at(line, p + 1) == ">" {
+          col = p;
+          break;
+        }
+      }
+      p = p + 1;
+    }
+    cols = list_push(cols, col);
+    i = i + 1;
+  }
+  return cols;
+}
+
+pub fn fmt_has_match(lines: List[String]) -> Bool {
+  let n: Int = list_len(lines);
+  let mut i: Int = 0;
+  while i < n {
+    let line: String = list_get(lines, i);
+    if str_contains(line, "match") {
+      return true;
+    }
+    i = i + 1;
+  }
+  return false;
+}

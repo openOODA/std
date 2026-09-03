@@ -1,0 +1,164 @@
+// # Net literature KAT constants
+//
+// Logline: documented network-layer constants exposed as pure Int comparators for the net KAT lock to verify against the published values.
+//
+// Setup: Pure Int. Each claim is a predicate returning 1 for true. Hostile or off-by-one inputs return 0. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. IPv4 = 32 bits, IPv6 = 128 bits.
+//   2. MTU 1500, TCP MSS 1460, UDP header 8, TCP header 20, Ethernet payload MTU 1500.
+//   3. Well-known ports: 80, 443, 22, 53, 25.
+//   4. RTT orders of magnitude: 50ms within continent, 100ms transcontinental.
+//   5. BGP AS width: 16-bit historical, 32-bit (RFC 6793); good-link loss < 1% = 100 bps.
+
+import "std/net/net_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// IPv4 address width in bits.
+pub fn net_kat_ipv4_bits() -> Int {
+    return 32;
+}
+
+// IPv6 address width in bits.
+pub fn net_kat_ipv6_bits() -> Int {
+    return 128;
+}
+
+// Typical Ethernet MTU in bytes.
+pub fn net_kat_mtu() -> Int {
+    return 1500;
+}
+
+// TCP MSS = MTU - 40 (IPv6 + TCP headers, no options).
+pub fn net_kat_tcp_mss() -> Int {
+    return 1460;
+}
+
+// UDP header size in bytes.
+pub fn net_kat_udp_header() -> Int {
+    return 8;
+}
+
+// TCP header size in bytes (no options).
+pub fn net_kat_tcp_header() -> Int {
+    return 20;
+}
+
+// Ethernet payload MTU in bytes.
+pub fn net_kat_ethernet_mtu() -> Int {
+    return 1500;
+}
+
+// 1 if port is a well-known port (1..1023).
+pub fn net_kat_is_well_known_port(port: Int) -> Int {
+    if port < 1 { return 0; }
+    if port > 1023 { return 0; }
+    return 1;
+}
+
+// Well-known ports.
+pub fn net_kat_port_http() -> Int {
+    return 80;
+}
+
+pub fn net_kat_port_https() -> Int {
+    return 443;
+}
+
+pub fn net_kat_port_ssh() -> Int {
+    return 22;
+}
+
+pub fn net_kat_port_dns() -> Int {
+    return 53;
+}
+
+pub fn net_kat_port_smtp() -> Int {
+    return 25;
+}
+
+// RTT within continent (ms).
+pub fn net_kat_rtt_within_continent_ms() -> Int {
+    return 50;
+}
+
+// RTT transcontinental (ms).
+pub fn net_kat_rtt_transcontinental_ms() -> Int {
+    return 100;
+}
+
+// BGP AS width bits.
+pub fn net_kat_bgp_as_16() -> Int {
+    return 16;
+}
+
+pub fn net_kat_bgp_as_32() -> Int {
+    return 32;
+}
+
+// Good link packet loss upper bound in basis points (< 1% = 100 bps).
+pub fn net_kat_good_link_loss_bps() -> Int {
+    return 100;
+}
+
+// 1 if loss_bps is within the good-link budget (<= 100 bps).
+pub fn net_kat_is_good_link_loss(loss_bps: Int) -> Int {
+    if loss_bps < 0 { return 0; }
+    if loss_bps > 100 { return 0; }
+    return 1;
+}
+
+// Domain certificate: 1 if all documented network constants hold.
+pub fn net_kat_holds() -> DomainCert {
+    let inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if inv_ok == false { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_ipv4_bits() != 32 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_ipv6_bits() != 128 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_mtu() != 1500 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_tcp_mss() != 1460 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_udp_header() != 8 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_tcp_header() != 20 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_ethernet_mtu() != 1500 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_port_http() != 80 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_port_https() != 443 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_port_ssh() != 22 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_port_dns() != 53 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_port_smtp() != 25 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_rtt_within_continent_ms() != 50 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_rtt_transcontinental_ms() != 100 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_bgp_as_16() != 16 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_bgp_as_32() != 32 { return domain_cert("net", "literature_kat", 0); }
+    if net_kat_good_link_loss_bps() != 100 { return domain_cert("net", "literature_kat", 0); }
+    return domain_cert("net", "literature_kat", 1);
+}
+
+// KAT and hostile cases for the net literature KAT.
+pub fn verify_net_literature_kat() -> Bool {
+    if net_kat_holds().holds != 1 { return false; }
+    if net_kat_ipv4_bits() != 32 { return false; }
+    if net_kat_ipv6_bits() != 128 { return false; }
+    if net_kat_mtu() != 1500 { return false; }
+    if net_kat_tcp_mss() != 1460 { return false; }
+    if net_kat_udp_header() != 8 { return false; }
+    if net_kat_tcp_header() != 20 { return false; }
+    if net_kat_ethernet_mtu() != 1500 { return false; }
+    if net_kat_port_http() != 80 { return false; }
+    if net_kat_port_https() != 443 { return false; }
+    if net_kat_port_ssh() != 22 { return false; }
+    if net_kat_port_dns() != 53 { return false; }
+    if net_kat_port_smtp() != 25 { return false; }
+    if net_kat_is_well_known_port(80) != 1 { return false; }
+    if net_kat_is_well_known_port(1023) != 1 { return false; }
+    if net_kat_is_well_known_port(1024) != 0 { return false; }
+    if net_kat_is_well_known_port(0) != 0 { return false; }
+    if net_kat_is_well_known_port(0 - 1) != 0 { return false; }
+    if net_kat_rtt_within_continent_ms() != 50 { return false; }
+    if net_kat_rtt_transcontinental_ms() != 100 { return false; }
+    if net_kat_bgp_as_16() != 16 { return false; }
+    if net_kat_bgp_as_32() != 32 { return false; }
+    if net_kat_is_good_link_loss(0) != 1 { return false; }
+    if net_kat_is_good_link_loss(100) != 1 { return false; }
+    if net_kat_is_good_link_loss(101) != 0 { return false; }
+    if net_kat_is_good_link_loss(0 - 1) != 0 { return false; }
+    return true;
+}

@@ -1,0 +1,51 @@
+// # Hohmann Coplanar Orbital Transfer Maneuver
+//
+// Logline: Calculates fail-closed two-burn Hohmann transfer delta-v and transfer time between coplanar circular orbits.
+//
+// Setup: Pure celestial mechanics. No capability tokens. Inputs in kilometers and seconds; mu in km^3/s^2.
+//
+// Beats:
+//   1. Define TransferDeltaV product type.
+//   2. Validate positive radii and gravitational parameter.
+//   3. Compute departure and circularization delta-v magnitudes.
+//   4. Return transfer time for the semi-elliptical transfer orbit.
+// residual: Bi-elliptic and low-thrust spiral transfers are residual.
+
+import "std/core/math/constants.oo";
+
+pub type TransferDeltaV = struct {
+    delta_v1_kms: Float,
+    delta_v2_kms: Float,
+    total_delta_v_kms: Float,
+    transfer_time_s: Float
+};
+
+fn hohmann_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+pub fn hohmann_calculate_burns(r1_km: Float, r2_km: Float, mu: Float) -> Result[TransferDeltaV, String] {
+    if r1_km <= 0.0 || r2_km <= 0.0 {
+        return Err("ERR\thohmann_calculate_burns\tinvalid_radius");
+    }
+    if mu <= 0.0 {
+        return Err("ERR\thohmann_calculate_burns\tinvalid_mu");
+    }
+    let a_trans: Float = 0.5 * (r1_km + r2_km);
+    let v_circ1: Float = sqrt(mu / r1_km);
+    let v_circ2: Float = sqrt(mu / r2_km);
+    let v_trans1: Float = sqrt(mu * ((2.0 / r1_km) - (1.0 / a_trans)));
+    let v_trans2: Float = sqrt(mu * ((2.0 / r2_km) - (1.0 / a_trans)));
+    let dv1: Float = hohmann_abs(v_trans1 - v_circ1);
+    let dv2: Float = hohmann_abs(v_circ2 - v_trans2);
+    let total: Float = dv1 + dv2;
+    let pack: CircleConstants = circle_constants();
+    let t: Float = pack.pi * sqrt((a_trans * a_trans * a_trans) / mu);
+    return Ok(TransferDeltaV {
+        delta_v1_kms: dv1,
+        delta_v2_kms: dv2,
+        total_delta_v_kms: total,
+        transfer_time_s: t
+    });
+}

@@ -1,0 +1,93 @@
+// # Kullback-Leibler Divergence and Cross-Entropy
+//
+// Logline: KL divergence D_KL(P || Q) and cross-entropy H(P, Q). Support holes and length mismatch return Err.
+//
+// Setup: Pure floating-point math. Probabilities are non-negative floats of equal length.
+//
+// Beats:
+//   1. kl_divergence(P, Q) is sum p * ln(p / q). q==0 with p>0 is Err.
+//   2. cross_entropy(P, Q) is -sum p * ln(q). Same guards.
+//   3. js_divergence(P, Q) is the symmetric Jensen-Shannon divergence.
+//   4. Length mismatch and negative masses return Err.
+
+pub fn kl_divergence(p: List[Float], q: List[Float]) -> Result[Float, String] {
+    let n_p: Int = list_len(p);
+    let n_q: Int = list_len(q);
+    if n_p != n_q { return Err("ERR\tkl\tlen"); }
+    if n_p == 0 { return Ok(0.0); }
+    let mut d: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n_p {
+        let pi: Float = list_get(p, i);
+        let qi: Float = list_get(q, i);
+        if pi < 0.0 { return Err("ERR\tkl\tp"); }
+        if qi < 0.0 { return Err("ERR\tkl\tq"); }
+        if pi > 0.0 {
+            if qi <= 0.0 { return Err("ERR\tkl\tsupport"); }
+            d = d + pi * ln(pi / qi);
+        }
+        i = i + 1;
+    }
+    return Ok(d);
+}
+
+pub fn cross_entropy(p: List[Float], q: List[Float]) -> Result[Float, String] {
+    let n_p: Int = list_len(p);
+    let n_q: Int = list_len(q);
+    if n_p != n_q { return Err("ERR\tkl\tlen"); }
+    if n_p == 0 { return Ok(0.0); }
+    let mut h: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n_p {
+        let pi: Float = list_get(p, i);
+        let qi: Float = list_get(q, i);
+        if pi < 0.0 { return Err("ERR\tkl\tp"); }
+        if qi < 0.0 { return Err("ERR\tkl\tq"); }
+        if pi > 0.0 {
+            if qi <= 0.0 { return Err("ERR\tkl\tsupport"); }
+            h = h + (0.0 - pi * ln(qi));
+        }
+        i = i + 1;
+    }
+    return Ok(h);
+}
+
+pub fn js_average(p: List[Float], q: List[Float]) -> Result[List[Float], String] {
+    let n_p: Int = list_len(p);
+    let n_q: Int = list_len(q);
+    if n_p != n_q { return Err("ERR\tkl\tlen"); }
+    let mut m: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n_p {
+        let pi: Float = list_get(p, i);
+        let qi: Float = list_get(q, i);
+        m = list_push(m, (pi + qi) / 2.0);
+        i = i + 1;
+    }
+    return Ok(m);
+}
+
+pub fn js_divergence(p: List[Float], q: List[Float]) -> Result[Float, String] {
+    let mr: Result[List[Float], String] = js_average(p, q);
+    match mr {
+        Ok(m)                  => {
+            let kl_pm: Result[Float, String] = kl_divergence(p, m);
+            let kl_qm: Result[Float, String] = kl_divergence(q, m);
+            match kl_pm {
+                Ok(a)          => {
+                    match kl_qm {
+                        Ok(b)  => { return Ok((a + b) / 2.0); },
+                        Err(e) => { return Err(e); }
+                    }
+                },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn gibbs_inequality_holds(d: Float) -> Bool {
+    if d < 0.0 { return false; }
+    return true;
+}

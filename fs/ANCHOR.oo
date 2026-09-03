@@ -1,0 +1,45 @@
+// # FS Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard fs (filesystem) domain library. Re-exports the subdir hubs (file, os, process, time, archive, compression) so that callers can `import "std/fs/ANCHOR.oo"` to pull in the full filesystem stack. Each subdir's own ANCHOR.oo is the canonical surface for that subdir; the top-level hub stitches them together.
+//
+// Setup: Imports each subdir's ANCHOR.oo. The file subdir (Path, FileInfo, FileReader/Writer, Glob, Watch, Jail, DirEntry, TempFile) takes FsReadCap / FsWriteCap / SysCap at the call site. The os subdir (terminal, fs, file_mode, temp, cpu, gpu, microvm, page tables, cgroups, eBPF, scheduler) takes ProcessCap / ThreadCap / EnvCap / SysCap at the call site. The process subdir (cmd, env, process, process_spawn, signal, rlimit, python) takes ProcessCap / EnvCap / SysCap at the call site. The time subdir (chrono) takes TimeCap at the call site. Archive and compression are pure byte-list / stream operations with no caps.
+//
+// Beats:
+//   1. Re-export the file/ subdir hub (file path, file_info, file_reader, file_writer, jail, glob, dir_entry, tempfile, stream, watch, fs_ops, src_fs).
+//   2. Re-export the os/ subdir hub (os.oo, terminal, file_mode, temp, cpu, gpu, microvm, pipe_redirect, uptime, path_canonicalize, path_relative, plus os invariants / laws / theories / principles / kats / page tables).
+//   3. Re-export the process/ subdir (cmd, env, env_vars, process, process_spawn, signal, rlimit, python, os_process_law).
+//   4. Re-export the time/ subdir hub (chrono).
+//   5. Re-export the archive/ subdir hub (archive, gzip, tar, zip, zstd stream, pcap reader).
+//   6. Re-export the compression/ subdir hub (huffman, lz4, lz77, brotli, neural image compression v2).
+//   7. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat files in each subdir.
+
+import "file/ANCHOR.oo";
+import "os/ANCHOR.oo";
+import "process/ANCHOR.oo";
+import "time/ANCHOR.oo";
+import "archive/ANCHOR.oo";
+import "compression/ANCHOR.oo";
+
+// Public fs version: fs_mod_fs_version_*
+pub fn fs_mod_fs_version() -> String { return "fs/0.1.0"; }
+
+// Public fs domain: fs_mod_fs_*
+pub fn fs_mod_fs_subdir_count() -> Int { return 6; }
+pub fn fs_mod_fs_subdir_list() -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, "file");
+    out = list_push(out, "os");
+    out = list_push(out, "process");
+    out = list_push(out, "time");
+    out = list_push(out, "archive");
+    out = list_push(out, "compression");
+    return out;
+}
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   fs/file/_law, _theory, _principle, _invariants, _kat files (btrfs_cow_law, ext4_inode_theory, f2fs_log_structure_theory, fs_invariants, fs_kat, journaling_law, inode_dirent_law, dentry_cache_principle, path_separator_principle, zfs_raid_z_principle)
+//   fs/os/_law, _theory, _principle, _invariants, _kat files (cgroups_v2_law, ebpf_in_kernel_safety_theory, literature_kat, os_invariants, os_kat, os_kat_strict, page_table_riscv, page_table_x86, preemptive_principle, scheduler_cfs_theory, sel4_iss_principle, syscall_overhead_law)
+//   fs/process/_law files (os_process_law)
+//   fs/time/_law, _theory, _principle, _invariants, _kat files (duration_arithmetic_theory, duration_law, gps_relativistic_correction_theory, interval_addition_principle, leap_second_law, monotonic_clock_principle, ptp_ieee_1588_law, time_invariants, time_kat, true_time_principle, utc_offset_theory)
+//   fs/archive/_law, _theory, _principle, _invariants, _kat files (archive_gzip_magic_law, archive_invariants, archive_kat, archive_tar_magic_law, cdc_rsync_principle, deflate_block_law, streaming_integrity_principle, tar_header_law, tar_header_safe is PUBLIC, zfs_snapshots_law, zip_crc32_theory, zstd_dictionary_compression_theory)
+//   fs/compression/_law, _theory, _principle, _invariants, _kat files (ans_uniform_distribution_principle, arithmetic_coding_theory, bwt_invertibility_principle, bwt_invertibility_via_lf_mapping_law, compression_invariants, compression_kat, huffman_prefix_free_principle, lz77_match_length_law, lzma_dict_law, neural_image_compression_theory)

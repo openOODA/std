@@ -1,0 +1,167 @@
+// # WebAssembly Tail-Call Optimization and Fast Dispatch
+//
+// Logline: Tail-call proposal opcodes return_call and return_call_indirect with a stack-frame reuse counter that recurses in O(1) stack space.
+//
+// Setup: Pure tail-call module backed by std/compile/wasm_interpreter/wasm_codegen.oo for opcode emission and std/compile/wasm_interpreter/wasm_binary_builder.oo for LEB128 encoding.
+//
+// Beats:
+//   1. Define return_call and return_call_indirect opcodes from the WebAssembly tail-call proposal.
+//   2. Emit return_call and return_call_indirect with LEB128 function and type table indices.
+//   3. Implement a TailCallFrame that reuses the parent stack frame in O(1) memory for unbounded recursion.
+//   4. Implement an Ackermann-style depth-bounded tail call validator and a tail-recursive state machine runner.
+
+pub fn wasm_op_return_call() -> Int { return 18; }
+pub fn wasm_op_return_call_indirect() -> Int { return 19; }
+
+import "std/compile/wasm_interpreter/wasm_codegen.oo";
+import "std/compile/wasm_interpreter/wasm_binary_builder.oo";
+
+type TailCallFrame = struct {
+    function_idx: Int,
+    frame_depth: Int,
+    return_value: Int,
+    reused_count: Int
+};
+
+pub fn wasm_tail_call_frame_new(function_idx: Int, depth: Int, return_value: Int) -> TailCallFrame {
+    return TailCallFrame {
+        function_idx: function_idx,
+        frame_depth: depth,
+        return_value: return_value,
+        reused_count: 0
+    };
+}
+
+pub fn wasm_tail_call_frame_reuse(f: TailCallFrame, next_function: Int) -> TailCallFrame {
+    return TailCallFrame {
+        function_idx: next_function,
+        frame_depth: f.frame_depth,
+        return_value: f.return_value,
+        reused_count: f.reused_count + 1
+    };
+}
+
+pub fn wasm_tail_call_frame_depth(f: TailCallFrame) -> Int {
+    return f.frame_depth;
+}
+
+pub fn wasm_tail_call_frame_reused(f: TailCallFrame) -> Int {
+    return f.reused_count;
+}
+
+pub fn wasm_tail_call_frame_return_value(f: TailCallFrame) -> Int {
+    return f.return_value;
+}
+
+pub fn wasm_emit_return_call(cg: WasmCodeGen, function_idx: Int) -> WasmCodeGen {
+    let mut next: WasmCodeGen = cg_push_tc_byte(cg, wasm_op_return_call());
+    let leb: List[Int] = wasm_binary_encode_u32_leb128(function_idx);
+    return cg_push_tc_bytes(next, leb);
+}
+
+pub fn wasm_emit_return_call_indirect(cg: WasmCodeGen, type_idx: Int, table_idx: Int) -> WasmCodeGen {
+    let mut next: WasmCodeGen = cg_push_tc_byte(cg, wasm_op_return_call_indirect());
+    let leb_t: List[Int] = wasm_binary_encode_u32_leb128(type_idx);
+    next = cg_push_tc_bytes(next, leb_t);
+    let leb_tbl: List[Int] = wasm_binary_encode_u32_leb128(table_idx);
+    return cg_push_tc_bytes(next, leb_tbl);
+}
+
+fn cg_push_tc_byte(cg: WasmCodeGen, byte_val: Int) -> WasmCodeGen {
+    return WasmCodeGen {
+        code_bytes: list_push(cg.code_bytes, byte_val & 255),
+        locals: cg.locals
+    };
+}
+
+fn cg_push_tc_bytes(cg: WasmCodeGen, bytes: List[Int]) -> WasmCodeGen {
+    let n: Int = list_len(bytes);
+    let mut next: WasmCodeGen = cg;
+    let mut i: Int = 0;
+    while i < n {
+        next = cg_push_tc_byte(next, list_get(bytes, i));
+        i = i + 1;
+    }
+    return next;
+}
+
+pub fn wasm_tail_recursive_sum(n: Int, frame: TailCallFrame) -> TailCallFrame {
+    if n <= 0 {
+        return frame;
+    }
+    let reused: TailCallFrame = wasm_tail_call_frame_reuse(frame, 1);
+    return wasm_tail_recursive_sum(n - 1, reused);
+}
+
+pub fn wasm_tail_recursive_count_to(target: Int) -> Int {
+    let initial: TailCallFrame = wasm_tail_call_frame_new(0, 1, 0);
+    let final: TailCallFrame = wasm_tail_recursive_sum(target, initial);
+    return wasm_tail_call_frame_reused(final);
+}
+
+pub fn wasm_ackermann_iterative(m: Int, n: Int, max_depth: Int) -> Int {
+    let mut depth: Int = 0;
+    let mut mm: Int = m;
+    let mut nn: Int = n;
+    let mut result: Int = 0;
+    let mut cont: Bool = true;
+    while cont {
+        if depth > max_depth {
+            return 0 - 1;
+        }
+        if mm == 0 {
+            result = nn + 1;
+            cont = false;
+        } else if nn == 0 {
+            mm = mm - 1;
+            nn = 1;
+            depth = depth + 1;
+        } else {
+            let new_n: Int = wasm_ackermann_iterative(mm, nn - 1, max_depth);
+            if new_n < 0 {
+                return new_n;
+            }
+            nn = new_n;
+            mm = mm - 1;
+            depth = depth + 1;
+        }
+    }
+    return result;
+}
+
+pub fn wasm_state_machine_step(state: Int, input: Int) -> Int {
+    if state == 0 {
+        return input + 1;
+    }
+    if state == 1 {
+        return input * 2;
+    }
+    if state == 2 {
+        return input - 3;
+    }
+    return input;
+}
+
+pub fn wasm_state_machine_run(start: Int, inputs: List[Int], n: Int) -> Int {
+    let mut state: Int = start;
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let v: Int = list_get(inputs, i);
+        if state == 0 {
+            acc = v + 1;
+            state = 1;
+        } else if state == 1 {
+            acc = v * 2;
+            state = 2;
+        } else if state == 2 {
+            acc = v - 3;
+            state = 0;
+        } else {
+            acc = v;
+            state = 0;
+        }
+        i = i + 1;
+    }
+    return acc;
+}

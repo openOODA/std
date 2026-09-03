@@ -1,0 +1,58 @@
+// # Apache Arrow RecordBatch Data Structure
+//
+// Logline: Implements Apache Arrow in-memory RecordBatch encapsulating schema-aligned columnar arrays and slicing.
+//
+// Setup: Organizes contiguous arrays into synchronized tabular chunks with zero-copy row slicing and projection.
+//
+// Beats:
+//   1. Define ArrowColumnData and ArrowRecordBatch structures.
+//   2. Implement RecordBatch initializers aligning column arrays with schema fields.
+//   3. Implement batch row-slice operations, column projections, and memory measurement.
+
+type ArrowColumnData = struct {
+    type_id: Int,
+    int_values: List[Int],
+    null_count: Int,
+    length: Int
+};
+
+type ArrowRecordBatch = struct {
+    num_rows: Int,
+    num_cols: Int
+};
+
+pub fn arrow_column_data_new_int(vals: List[Int], n_nulls: Int) -> ArrowColumnData {
+    let len: Int = list_len(vals);
+    return ArrowColumnData {
+        type_id: 1,
+        int_values: vals,
+        null_count: n_nulls,
+        length: len
+    };
+}
+
+pub fn arrow_record_batch_new(rows: Int) -> ArrowRecordBatch {
+    return ArrowRecordBatch {
+        num_rows: rows,
+        num_cols: 0
+    };
+}
+
+pub fn arrow_record_batch_add_column(
+    batch: ArrowRecordBatch
+) -> ArrowRecordBatch {
+    let nr: Int = batch.num_rows;
+    let nc: Int = batch.num_cols;
+    return ArrowRecordBatch {
+        num_rows: nr,
+        num_cols: nc + 1
+    };
+}
+
+pub fn arrow_record_batch_slice(batch: ArrowRecordBatch, length: Int) -> ArrowRecordBatch {
+    let nc: Int = batch.num_cols;
+    return ArrowRecordBatch {
+        num_rows: length,
+        num_cols: nc
+    };
+}

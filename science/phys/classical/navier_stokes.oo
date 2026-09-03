@@ -1,0 +1,151 @@
+// # Discretized 1D and 2D Navier-Stokes Momentum Equations
+//
+// Logline: Solves Navier-Stokes momentum equations with advection, viscous diffusion, and pressure Poisson projection.
+//
+// Setup: Pure floating-point finite difference approximations on uniform spatial grids with fail-closed bounds.
+//
+// Beats:
+//   1. 1D point momentum update combining nonlinear advection, pressure gradient, and viscosity.
+//   2. 1D grid velocity profile stepping over spatial arrays.
+//   3. 2D kinematic field divergence and vorticity curl operators.
+//   4. 2D pressure Poisson projection step enforcing incompressibility (div u = 0).
+
+type FieldPoint2D = struct {
+    u: Float,
+    v: Float,
+    p: Float
+};
+
+type FlowField2D = struct {
+    div: Float,
+    vorticity: Float,
+    u_next: Float,
+    v_next: Float
+};
+
+pub fn ns_reynolds_number(velocity_m_per_s: Float, length_meters: Float, nu_m2_per_s: Float) -> Float {
+    if nu_m2_per_s <= 0.000000001 || length_meters <= 0.0 { return 0.0; }
+    let mut v: Float = velocity_m_per_s;
+    if v < 0.0 { v = 0.0 - v; }
+    return (v * length_meters) / nu_m2_per_s;
+}
+
+pub fn ns_kinematic_viscosity(mu_pa_s: Float, rho_kg_per_m3: Float) -> Float {
+    if rho_kg_per_m3 <= 0.000000001 || mu_pa_s < 0.0 { return 0.0; }
+    return mu_pa_s / rho_kg_per_m3;
+}
+
+pub fn ns1d_point_update(
+    u_curr: Float, u_prev: Float, u_next: Float,
+    p_prev: Float, p_next: Float,
+    rho: Float, nu: Float, dx: Float, dt: Float
+) -> Float {
+    if dx <= 0.000000001 || rho <= 0.000000001 || dt <= 0.0 { return u_curr; }
+    let adv: Float = if u_curr >= 0.0 { u_curr * ((u_curr - u_prev) / dx) } else { u_curr * ((u_next - u_curr) / dx) };
+    let p_grad: Float = (p_next - p_prev) / (2.0 * rho * dx);
+    let diff: Float = nu * ((u_next - (2.0 * u_curr) + u_prev) / (dx * dx));
+    let du_dt: Float = (0.0 - adv - p_grad) + diff;
+    return u_curr + (dt * du_dt);
+}
+
+pub fn ns1d_step(
+    u: List[Float], p: List[Float],
+    rho: Float, nu: Float, dx: Float, dt: Float
+) -> List[Float] {
+    let n: Int = list_len(u);
+    if n < 3 || list_len(p) != n { return u; }
+    let mut u_new: List[Float] = list_new();
+    u_new = list_push(u_new, list_get(u, 0));
+    let mut i: Int = 1;
+    while i < (n - 1) {
+        let unext: Float = ns1d_point_update(list_get(u, i), list_get(u, i - 1), list_get(u, i + 1), list_get(p, i - 1), list_get(p, i + 1), rho, nu, dx, dt);
+        u_new = list_push(u_new, unext);
+        i = i + 1;
+    }
+    u_new = list_push(u_new, list_get(u, n - 1));
+    return u_new;
+}
+
+pub fn ns2d_divergence(u_east: Float, u_west: Float, v_north: Float, v_south: Float, dx: Float, dy: Float) -> Float {
+    if dx <= 0.000000001 || dy <= 0.000000001 { return 0.0; }
+    return ((u_east - u_west) / (2.0 * dx)) + ((v_north - v_south) / (2.0 * dy));
+}
+
+pub fn ns2d_vorticity(v_east: Float, v_west: Float, u_north: Float, u_south: Float, dx: Float, dy: Float) -> Float {
+    if dx <= 0.000000001 || dy <= 0.000000001 { return 0.0; }
+    return ((v_east - v_west) / (2.0 * dx)) - ((u_north - u_south) / (2.0 * dy));
+}
+
+pub fn ns2d_step_point(
+    center: FieldPoint2D, east: FieldPoint2D, west: FieldPoint2D, north: FieldPoint2D, south: FieldPoint2D,
+    rho: Float, nu: Float, dx: Float, dy: Float, dt: Float
+) -> FlowField2D {
+    if dx <= 0.000000001 || dy <= 0.000000001 || rho <= 0.000000001 || dt <= 0.0 {
+        return FlowField2D { div: 0.0, vorticity: 0.0, u_next: center.u, v_next: center.v };
+    }
+    let div: Float = ns2d_divergence(east.u, west.u, north.v, south.v, dx, dy);
+    let vort: Float = ns2d_vorticity(east.v, west.v, north.u, south.u, dx, dy);
+    let du_dx: Float = (east.u - west.u) / (2.0 * dx);
+    let du_dy: Float = (north.u - south.u) / (2.0 * dy);
+    let dv_dx: Float = (east.v - west.v) / (2.0 * dx);
+    let dv_dy: Float = (north.v - south.v) / (2.0 * dy);
+    let adv_u: Float = (center.u * du_dx) + (center.v * du_dy);
+    let adv_v: Float = (center.u * dv_dx) + (center.v * dv_dy);
+    let dp_dx: Float = (east.p - west.p) / (2.0 * rho * dx);
+    let dp_dy: Float = (north.p - south.p) / (2.0 * rho * dy);
+    let lap_u: Float = ((east.u - (2.0 * center.u) + west.u) / (dx * dx)) + ((north.u - (2.0 * center.u) + south.u) / (dy * dy));
+    let lap_v: Float = ((east.v - (2.0 * center.v) + west.v) / (dx * dx)) + ((north.v - (2.0 * center.v) + south.v) / (dy * dy));
+    let u_next: Float = center.u + (dt * ((0.0 - adv_u - dp_dx) + (nu * lap_u)));
+    let v_next: Float = center.v + (dt * ((0.0 - adv_v - dp_dy) + (nu * lap_v)));
+    return FlowField2D { div: div, vorticity: vort, u_next: u_next, v_next: v_next };
+}
+
+pub fn ns2d_poisson_rhs(div_u_star: Float, rho: Float, dt: Float) -> Float {
+    if dt <= 0.000000001 { return 0.0; }
+    return (rho / dt) * div_u_star;
+}
+
+pub fn ns2d_pressure_poisson_jacobi_point(
+    p_center: Float, p_east: Float, p_west: Float, p_north: Float, p_south: Float,
+    rhs: Float, dx: Float, dy: Float
+) -> Float {
+    if dx <= 0.000000001 || dy <= 0.000000001 { return p_center; }
+    let dx2: Float = dx * dx;
+    let dy2: Float = dy * dy;
+    let denom: Float = (2.0 * dx2) + (2.0 * dy2);
+    let num: Float = ((p_east + p_west) * dy2) + ((p_north + p_south) * dx2) - (rhs * dx2 * dy2);
+    return num / denom;
+}
+
+pub fn ns2d_pressure_poisson_sor_point(
+    p_center: Float, p_east: Float, p_west: Float, p_north: Float, p_south: Float,
+    rhs: Float, dx: Float, dy: Float, omega: Float
+) -> Float {
+    let p_j: Float = ns2d_pressure_poisson_jacobi_point(p_center, p_east, p_west, p_north, p_south, rhs, dx, dy);
+    return ((1.0 - omega) * p_center) + (omega * p_j);
+}
+
+pub fn ns2d_project_velocity(
+    u_star: Float, v_star: Float,
+    p_east: Float, p_west: Float, p_north: Float, p_south: Float,
+    rho: Float, dt: Float, dx: Float, dy: Float
+) -> FieldPoint2D {
+    if dx <= 0.000000001 || dy <= 0.000000001 || rho <= 0.000000001 {
+        return FieldPoint2D { u: u_star, v: v_star, p: 0.0 };
+    }
+    let dp_dx: Float = (p_east - p_west) / (2.0 * dx);
+    let dp_dy: Float = (p_north - p_south) / (2.0 * dy);
+    let coeff: Float = dt / rho;
+    return FieldPoint2D { u: u_star - (coeff * dp_dx), v: v_star - (coeff * dp_dy), p: 0.0 };
+}
+
+pub fn ns2d_pressure_projection_step(
+    center: FieldPoint2D, east: FieldPoint2D, west: FieldPoint2D, north: FieldPoint2D, south: FieldPoint2D,
+    rho: Float, nu: Float, dx: Float, dy: Float, dt: Float, sor_omega: Float
+) -> FieldPoint2D {
+    let inter: FlowField2D = ns2d_step_point(center, east, west, north, south, rho, nu, dx, dy, dt);
+    let rhs: Float = ns2d_poisson_rhs(inter.div, rho, dt);
+    let p_new: Float = ns2d_pressure_poisson_sor_point(center.p, east.p, west.p, north.p, south.p, rhs, dx, dy, sor_omega);
+    let proj: FieldPoint2D = ns2d_project_velocity(inter.u_next, inter.v_next, east.p, west.p, north.p, south.p, rho, dt, dx, dy);
+    return FieldPoint2D { u: proj.u, v: proj.v, p: p_new };
+}

@@ -1,0 +1,132 @@
+// # Jacobi-Preconditioned Conjugate Gradient
+//
+// Logline: Solves sparse SPD Ax = b with Jacobi-preconditioned conjugate gradient on CSR arrays.
+//
+// Setup: Pure math module. Zero ambient effects.
+//
+// Beats:
+//   1. Extract M^{-1} from the CSR diagonal and refuse a missing or zero pivot.
+//   2. Iterate x += alpha p and r -= alpha A p with z = M^{-1} r.
+//   3. Fail closed on p·Ap = 0 or max_iter without ||r|| < tol.
+
+import "std/core/primitives/result.oo";
+import "std/core/math/sparse/csr_matrix.oo";
+
+fn cg_zeros(n: Int) -> List[Float] {
+    let mut v: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        v = list_push(v, 0.0);
+        i = i + 1;
+    }
+    return v;
+}
+
+fn cg_dot(a: List[Float], b: List[Float]) -> Float {
+    let n: Int = list_len(a);
+    let mut s: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        s = s + list_get(a, i) * list_get(b, i);
+        i = i + 1;
+    }
+    return s;
+}
+
+fn cg_axpy(a: Float, x: List[Float], y: List[Float]) -> List[Float] {
+    let n: Int = list_len(y);
+    let mut o: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        o = list_push(o, a * list_get(x, i) + list_get(y, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+fn cg_nrm(x: List[Float]) -> Float {
+    return sqrt(cg_dot(x, x));
+}
+
+fn cg_jacobi(inv: List[Float], r: List[Float]) -> List[Float] {
+    let n: Int = list_len(r);
+    let mut z: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        z = list_push(z, list_get(inv, i) * list_get(r, i));
+        i = i + 1;
+    }
+    return z;
+}
+
+fn cg_diag_inv(row_ptr: List[Int], col_idx: List[Int], values: List[Float], n: Int) -> Result[List[Float], String] {
+    if list_len(row_ptr) != n + 1 { return Err("ERR\tcg\trow_ptr"); }
+    let nnz: Int = list_len(values);
+    if list_len(col_idx) != nnz { return Err("ERR\tcg\tnnz"); }
+    let mut inv: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let start: Int = list_get(row_ptr, i);
+        let end: Int = list_get(row_ptr, i + 1);
+        if start < 0 { return Err("ERR\tcg\trow_ptr"); }
+        if end < start { return Err("ERR\tcg\trow_ptr"); }
+        if end > nnz { return Err("ERR\tcg\trow_ptr"); }
+        let mut found: Bool = false;
+        let mut d: Float = 0.0;
+        let mut k: Int = start;
+        while k < end {
+            if list_get(col_idx, k) == i {
+                d = d + list_get(values, k);
+                found = true;
+            }
+            k = k + 1;
+        }
+        if found == false { return Err("ERR\tcg\tdiag"); }
+        if d == 0.0 { return Err("ERR\tcg\tdiag"); }
+        inv = list_push(inv, 1.0 / d);
+        i = i + 1;
+    }
+    return Ok(inv);
+}
+
+pub fn cg_solve(row_ptr: List[Int], col_idx: List[Int], values: List[Float], n: Int, b: List[Float], max_iter: Int, tol: Float) -> Result[List[Float], String] {
+    if n < 1 { return Err("ERR\tcg\tn"); }
+    if max_iter < 1 { return Err("ERR\tcg\tmax_iter"); }
+    if list_len(b) != n { return Err("ERR\tcg\tb"); }
+    let inv_r: Result[List[Float], String] = cg_diag_inv(row_ptr, col_idx, values, n);
+    let inv: List[Float] = match inv_r {
+        Ok(v)  => v,
+        Err(e) => { return Err(e); }
+    };
+    let mut x: List[Float] = cg_zeros(n);
+    let mut rk: List[Float] = b;
+    if cg_nrm(rk) < tol { return Ok(x); }
+    let mut zk: List[Float] = cg_jacobi(inv, rk);
+    let mut pk: List[Float] = zk;
+    let mut rz: Float = cg_dot(rk, zk);
+    if rz == 0.0 { return Err("ERR\tcg\trz"); }
+    let mut it: Int = 0;
+    while it < max_iter {
+        let ap_r: Result[List[Float], String] = csr_spmv(row_ptr, col_idx, values, n, pk);
+        let ap: List[Float] = match ap_r {
+            Ok(v)  => v,
+            Err(e) => { return Err(e); }
+        };
+        let pap: Float = cg_dot(pk, ap);
+        if pap == 0.0 { return Err("ERR\tcg\tpAp"); }
+        let alpha: Float = rz / pap;
+        x = cg_axpy(alpha, pk, x);
+        let rnew: List[Float] = cg_axpy(0.0 - alpha, ap, rk);
+        if cg_nrm(rnew) < tol { return Ok(x); }
+        let znew: List[Float] = cg_jacobi(inv, rnew);
+        let rznew: Float = cg_dot(rnew, znew);
+        if rz == 0.0 { return Err("ERR\tcg\trz"); }
+        let beta: Float = rznew / rz;
+        pk = cg_axpy(beta, pk, znew);
+        rk = rnew;
+        zk = znew;
+        rz = rznew;
+        it = it + 1;
+    }
+    return Err("ERR\tcg\tmax_iter");
+}

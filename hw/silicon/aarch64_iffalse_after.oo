@@ -1,0 +1,18 @@
+// # Const if false then later print
+//
+// Logline: Print OK after a const-false if and do not emit BAD.
+//
+// Setup: Side emit-aarch64 skips the false then and harvests the next println.
+//
+// Beats:
+//   1. if false print BAD.
+//   2. Then print OK.
+//   3. Expect OK only.
+
+pub fn verify_aarch64_iffalse_after() -> Bool {
+    if false {
+        println("BAD");
+    }
+    println("OK");
+    return true;
+}

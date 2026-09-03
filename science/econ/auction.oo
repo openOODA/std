@@ -1,0 +1,72 @@
+// # Game Theory, Vickrey Second-Price Auctions, and Resource Markets
+//
+// Logline: Truthful second-price sealed-bid auction engine and Nash equilibrium evaluator for thread pool and task scheduling.
+//
+// Setup: Pure economic game theoretic mechanism ensuring dominant-strategy truthful bidding for bounded hardware resources.
+//
+// Beats:
+//   1. Collect sealed bids from competing task actors.
+//   2. Resolve winner as highest bidder and clearing price as second-highest bid.
+//   3. Prevent over-allocation and enforce truthful marginal value revelation.
+//   4. Evaluate Nash equilibrium payoffs for 2-player strategic contention matrices.
+
+type Bid = struct {
+    actor_id: Int,
+    amount: Int
+};
+
+type AuctionResult = struct {
+    winner_id: Int,
+    clearing_price: Int,
+    bid_count: Int
+};
+
+pub fn auction_new_bid(actor_id: Int, amount: Int) -> Bid {
+    return Bid { actor_id: actor_id, amount: amount };
+}
+
+// Second-price sealed-bid (Vickrey) auction resolution
+pub fn auction_resolve_vickrey(bids: List[Bid]) -> AuctionResult {
+    let n: Int = list_len(bids);
+    if n == 0 {
+        return AuctionResult { winner_id: 0 - 1, clearing_price: 0, bid_count: 0 };
+    }
+    if n == 1 {
+        let only_bid: Bid = list_get(bids, 0);
+        return AuctionResult {
+            winner_id: only_bid.actor_id,
+            clearing_price: 0,
+            bid_count: 1
+        };
+    }
+    let mut highest: Int = 0 - 1;
+    let mut second_highest: Int = 0 - 1;
+    let mut win_id: Int = 0 - 1;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Bid = list_get(bids, i);
+        if b.amount > highest {
+            second_highest = highest;
+            highest = b.amount;
+            win_id = b.actor_id;
+        } else if b.amount > second_highest {
+            second_highest = b.amount;
+        }
+        i = i + 1;
+    }
+    let mut price: Int = second_highest;
+    if price < 0 { price = 0; }
+    return AuctionResult {
+        winner_id: win_id,
+        clearing_price: price,
+        bid_count: n
+    };
+}
+
+// Verify if a strategy profile (payoff_a, payoff_b) satisfies Nash stability (no unilateral incentive to defect)
+pub fn auction_is_nash_stable(current_payoff: Int, defect_payoff: Int) -> Bool {
+    if current_payoff >= defect_payoff {
+        return true;
+    }
+    return false;
+}

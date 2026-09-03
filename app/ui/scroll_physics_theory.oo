@@ -1,0 +1,135 @@
+// # Scroll Momentum Physics Theory
+//
+// Logline: Touch-scroll velocity decays exponentially; total displacement is bounded by v_0 / mu.
+//
+// Setup: Pure Float. v_0 >= 0, mu > 0, t >= 0. v_0<0, mu<=0, t<0 return Err. Hosts ui_invariants.oo stem.
+//
+// Beats:
+//   1. Closed: velocity v(t) = v_0 * exp(-mu * t).
+//   2. Coupled: position s(t) = v_0 / mu * (1 - exp(-mu * t)).
+//   3. Total displacement saturates at v_0 / mu as t -> infinity.
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+pub fn scroll_min_mu() -> Float {
+    return 0.001;
+}
+
+fn scroll_exp_safe(x: Float) -> Float {
+    if x > 30.0 { return exp(30.0); }
+    if x < 0.0 - 30.0 { return exp(0.0 - 30.0); }
+    return exp(x);
+}
+
+fn sp_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Velocity v(t) = v_0 * exp(-mu * t). v_0 < 0, mu <= 0, t < 0 return Err.
+pub fn scroll_velocity(v_0: Float, mu: Float, t: Float) -> Result[Float, String] {
+    if v_0 < 0.0 { return Err("ERR\tscroll\tv0"); }
+    if mu <= 0.0 { return Err("ERR\tscroll\tmu"); }
+    if t < 0.0 { return Err("ERR\tscroll\tt"); }
+    let decay: Float = scroll_exp_safe(0.0 - (mu * t));
+    return Ok(v_0 * decay);
+}
+
+// Position s(t) = v_0 / mu * (1 - exp(-mu * t)). v_0 < 0, mu <= 0, t < 0 return Err.
+pub fn scroll_position(v_0: Float, mu: Float, t: Float) -> Result[Float, String] {
+    if v_0 < 0.0 { return Err("ERR\tscroll\tv0"); }
+    if mu <= 0.0 { return Err("ERR\tscroll\tmu"); }
+    if t < 0.0 { return Err("ERR\tscroll\tt"); }
+    let decay: Float = scroll_exp_safe(0.0 - (mu * t));
+    let bracket: Float = 1.0 - decay;
+    return Ok((v_0 / mu) * bracket);
+}
+
+// Terminal displacement: v_0 / mu. v_0 < 0 or mu <= 0 return Err.
+pub fn scroll_terminal_displacement(v_0: Float, mu: Float) -> Result[Float, String] {
+    if v_0 < 0.0 { return Err("ERR\tscroll\tv0"); }
+    if mu <= 0.0 { return Err("ERR\tscroll\tmu"); }
+    return Ok(v_0 / mu);
+}
+
+// Saturated witness: 1 if position at t is within 1% of terminal_displacement.
+pub fn scroll_saturated(v_0: Float, mu: Float, t: Float) -> Int {
+    let tr: Result[Float, String] = scroll_terminal_displacement(v_0, mu);
+    let sr: Result[Float, String] = scroll_position(v_0, mu, t);
+    if tr.is_ok() == false { return 0; }
+    if sr.is_ok() == false { return 0; }
+    let term: Float = sp_got(tr);
+    let s: Float = sp_got(sr);
+    if term <= 0.0 { return 0; }
+    let diff: Float = term - s;
+    let ad: Float = diff;
+    if ad < 0.0 { return 0; }
+    let ratio: Float = ad / term;
+    if ratio > 0.01 { return 0; }
+    return 1;
+}
+
+// Domain certificate from caller params.
+pub fn scroll_physics_cert(v_0: Float, mu: Float, t: Float) -> DomainCert {
+    let mut h: Int = 0;
+    if scroll_velocity(v_0, mu, t).is_ok() { h = 1; }
+    return domain_cert("ui", "scroll_physics", h);
+}
+
+// KAT and hostile cases for the scroll momentum theory.
+pub fn verify_scroll_physics_theory() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    let v: Float = sp_got(scroll_velocity(1000.0, 0.1, 1.0));
+    let target_v: Float = 904.837;
+    let mut dv: Float = v - target_v;
+    if dv < 0.0 { dv = 0.0 - dv; }
+    if dv > 9.05 { return false; }
+    let s_at_50: Float = sp_got(scroll_position(1000.0, 0.1, 50.0));
+    let term: Float = sp_got(scroll_terminal_displacement(1000.0, 0.1));
+    if term != 10000.0 { return false; }
+    let target_s: Float = 10000.0;
+    let mut ds: Float = s_at_50 - target_s;
+    if ds < 0.0 { ds = 0.0 - ds; }
+    if ds > 100.0 { return false; }
+    if s_at_50 >= term { return false; }
+    let s10: Float = sp_got(scroll_position(1000.0, 0.1, 10.0));
+    if s10 <= 0.0 { return false; }
+    if s10 >= term { return false; }
+    let v0: Float = sp_got(scroll_velocity(800.0, 0.2, 0.0));
+    let mut dv0: Float = v0 - 800.0;
+    if dv0 < 0.0 { dv0 = 0.0 - dv0; }
+    if dv0 > 0.0001 { return false; }
+    let s0: Float = sp_got(scroll_position(800.0, 0.2, 0.0));
+    let mut ds0: Float = s0 - 0.0;
+    if ds0 < 0.0 { ds0 = 0.0 - ds0; }
+    if ds0 > 0.0001 { return false; }
+    let v_a: Float = sp_got(scroll_velocity(1000.0, 0.1, 0.5));
+    let v_b: Float = sp_got(scroll_velocity(1000.0, 0.1, 2.0));
+    if v_b >= v_a { return false; }
+    if scroll_velocity(0.0 - 1.0, 0.1, 1.0).is_ok() { return false; }
+    if scroll_velocity(1000.0, 0.0, 1.0).is_ok() { return false; }
+    if scroll_velocity(1000.0, 0.0 - 0.1, 1.0).is_ok() { return false; }
+    if scroll_velocity(1000.0, 0.1, 0.0 - 1.0).is_ok() { return false; }
+    if scroll_position(0.0 - 1.0, 0.1, 1.0).is_ok() { return false; }
+    if scroll_position(1000.0, 0.0, 1.0).is_ok() { return false; }
+    if scroll_position(1000.0, 0.0 - 0.1, 1.0).is_ok() { return false; }
+    if scroll_position(1000.0, 0.1, 0.0 - 1.0).is_ok() { return false; }
+    if scroll_terminal_displacement(0.0 - 1.0, 0.1).is_ok() { return false; }
+    if scroll_terminal_displacement(1000.0, 0.0).is_ok() { return false; }
+    if scroll_terminal_displacement(1000.0, 0.0 - 0.1).is_ok() { return false; }
+    if scroll_saturated(0.0 - 1.0, 0.1, 100.0) != 0 { return false; }
+    if scroll_saturated(1000.0, 0.0, 100.0) != 0 { return false; }
+    if scroll_saturated(1000.0, 0.1, 0.0 - 1.0) != 0 { return false; }
+    if scroll_saturated(1000.0, 0.1, 100.0) != 1 { return false; }
+    if scroll_saturated(1000.0, 0.1, 0.5) != 0 { return false; }
+    if scroll_min_mu() <= 0.0 { return false; }
+    let c1: DomainCert = scroll_physics_cert(1000.0, 0.1, 1.0);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = scroll_physics_cert(0.0 - 1.0, 0.1, 1.0);
+    if cert_holds(c0) != 0 { return false; }
+    let c9: DomainCert = scroll_physics_cert(1000.0, 0.0, 1.0);
+    if cert_holds(c9) != 0 { return false; }
+    return true;
+}

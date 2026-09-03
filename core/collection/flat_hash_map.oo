@@ -1,0 +1,210 @@
+// # Flat Hash Map (String -> String)
+//
+// Logline: Open-addressed string-to-string hash map with FNV-1a 64-bit hashing, Robin Hood displacement on insert, and backward-shift deletion that keeps every probe sequence length minimal.
+//
+// Setup: Parallel List[String] for keys and vals, parallel List[Int] for PSL (probe sequence length, -1 means empty, 0+ means occupied). Capacity is fixed at construction; the table is not resized.
+//
+// Beats:
+//   1. Build an empty map with a fixed capacity, all slots marked empty (PSL = -1).
+//   2. Hash a string with FNV-1a 64-bit and reduce mod capacity.
+//   3. Insert or update a key/value pair via Robin Hood probing; displace richer entries.
+//   4. Look up a key with PSL-aware early exit, returning Some(val) or None.
+//   5. Test key presence and report current entry count.
+//   6. Remove a key by backward-shifting any downstream entries with non-zero PSL.
+
+import "std/core/primitives/list.oo";
+import "std/core/primitives/option.oo";
+import "std/core/primitives/result.oo";
+
+fn list_set_str(l: List[String], idx: Int, v: String) -> List[String] {
+    let n: Int = list_len(l);
+    let mut out: List[String] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx { out = list_push(out, v); }
+        else { out = list_push(out, list_get(l, i)); }
+        i = i + 1;
+    }
+    return out;
+}
+
+type FlatHashMap = struct {
+    capacity: Int,
+    count: Int,
+    keys: List[String],
+    vals: List[String],
+    psl: List[Int]
+};
+
+pub fn fhm_new(capacity: Int) -> FlatHashMap {
+    let mut keys: List[String] = list_new();
+    let mut vals: List[String] = list_new();
+    let mut psl: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < capacity {
+        keys = list_push(keys, "");
+        vals = list_push(vals, "");
+        psl = list_push(psl, 0 - 1);
+        i = i + 1;
+    }
+    return FlatHashMap {
+        capacity: capacity,
+        count: 0,
+        keys: keys,
+        vals: vals,
+        psl: psl
+    };
+}
+
+// FNV-1a 64-bit string hash, reduced to [0, cap).
+pub fn fhm_hash(key: String, cap: Int) -> Int {
+    let prime: Int = 1099511628211;
+    let mut h: Int = 14695981039346656037;
+    let n: Int = chars_len(key);
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(key, i);
+        h = ((h ^ b) * prime);
+        i = i + 1;
+    }
+    if h < 0 { h = 0 - h; }
+    return h % cap;
+}
+
+// Robin Hood insertion: probe until empty slot, swapping in entries whose PSL
+// is greater than the new entry's PSL. Returns map unchanged if the table is
+// full or capacity is zero.
+pub fn fhm_insert(m: FlatHashMap, key: String, val: String) -> FlatHashMap {
+    let cap: Int = m.capacity;
+    if cap < 1 { return m; }
+    let mut k: List[String] = m.keys;
+    let mut v: List[String] = m.vals;
+    let mut p: List[Int] = m.psl;
+    let mut idx: Int = fhm_hash(key, cap);
+    let mut probe: Int = 0;
+    let mut cur_key: String = key;
+    let mut cur_val: String = val;
+    let mut cur_psl: Int = 0;
+    let mut new_count: Int = m.count;
+    let mut done: Bool = false;
+    while probe < cap {
+        let slot_psl: Int = list_get(p, idx);
+        if slot_psl < 0 {
+            k = list_set_str(k, idx, cur_key);
+            v = list_set_str(v, idx, cur_val);
+            p = list_set(p, idx, cur_psl);
+            new_count = new_count + 1;
+            done = true;
+            break;
+        }
+        if list_get(k, idx) == cur_key {
+            v = list_set_str(v, idx, cur_val);
+            done = true;
+            break;
+        }
+        if slot_psl < cur_psl {
+            let old_key: String = list_get(k, idx);
+            let old_val: String = list_get(v, idx);
+            k = list_set_str(k, idx, cur_key);
+            v = list_set_str(v, idx, cur_val);
+            p = list_set(p, idx, cur_psl);
+            cur_key = old_key;
+            cur_val = old_val;
+            cur_psl = slot_psl;
+        }
+        probe = probe + 1;
+        cur_psl = cur_psl + 1;
+        idx = (idx + 1) % cap;
+    }
+    if !done { return m; }
+    return FlatHashMap {
+        capacity: cap,
+        count: new_count,
+        keys: k,
+        vals: v,
+        psl: p
+    };
+}
+
+pub fn fhm_get(m: FlatHashMap, key: String) -> Result[String, String] {
+    let cap: Int = m.capacity;
+    if cap < 1 { return opt_none(); }
+    if m.count == 0 { return opt_none(); }
+    let mut idx: Int = fhm_hash(key, cap);
+    let mut probe: Int = 0;
+    while probe < cap {
+        let slot_psl: Int = list_get(m.psl, idx);
+        if slot_psl < 0 { return opt_none(); }
+        if slot_psl < probe { return opt_none(); }
+        if list_get(m.keys, idx) == key {
+            return opt_some(list_get(m.vals, idx));
+        }
+        probe = probe + 1;
+        idx = (idx + 1) % cap;
+    }
+    return opt_none();
+}
+
+pub fn fhm_contains(m: FlatHashMap, key: String) -> Bool {
+    return opt_is_some(fhm_get(m, key));
+}
+
+pub fn fhm_len(m: FlatHashMap) -> Int {
+    return m.count;
+}
+
+// Backward shift deletion: locate the key, then walk forward and shift each
+// downstream entry back by one slot as long as its PSL is greater than 1.
+// When we reach a slot with PSL <= 1 we stop and clear the previous slot.
+pub fn fhm_remove(m: FlatHashMap, key: String) -> FlatHashMap {
+    let cap: Int = m.capacity;
+    if cap < 1 { return m; }
+    if m.count == 0 { return m; }
+    let mut idx: Int = fhm_hash(key, cap);
+    let mut probe: Int = 0;
+    let mut found: Bool = false;
+    while probe < cap {
+        let slot_psl: Int = list_get(m.psl, idx);
+        if slot_psl < 0 { return m; }
+        if slot_psl < probe { return m; }
+        if list_get(m.keys, idx) == key {
+            found = true;
+            break;
+        }
+        probe = probe + 1;
+        idx = (idx + 1) % cap;
+    }
+    if !found { return m; }
+    let mut k: List[String] = m.keys;
+    let mut v: List[String] = m.vals;
+    let mut p: List[Int] = m.psl;
+    let mut cur: Int = idx;
+    let mut stop: Bool = false;
+    while !stop {
+        let next: Int = (cur + 1) % cap;
+        let next_psl: Int = list_get(p, next);
+        if next_psl < 2 {
+            k = list_set_str(k, cur, "");
+            v = list_set_str(v, cur, "");
+            p = list_set(p, cur, 0 - 1);
+            stop = true;
+        } else {
+            k = list_set_str(k, cur, list_get(k, next));
+            v = list_set_str(v, cur, list_get(v, next));
+            p = list_set(p, cur, next_psl - 1);
+            cur = next;
+        }
+    }
+    return FlatHashMap {
+        capacity: cap,
+        count: m.count - 1,
+        keys: k,
+        vals: v,
+        psl: p
+    };
+}
+
+pub fn fhm_has(m: FlatHashMap, key: String) -> Bool { return fhm_contains(m, key); }
+pub fn flat_map_insert(m: FlatHashMap, key: String, val: String) -> FlatHashMap { return fhm_insert(m, key, val); }
+pub fn flat_map_get(m: FlatHashMap, key: String) -> Result[String, String] { return fhm_get(m, key); }
+pub fn flat_map_remove(m: FlatHashMap, key: String) -> FlatHashMap { return fhm_remove(m, key); }

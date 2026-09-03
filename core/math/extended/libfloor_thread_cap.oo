@@ -1,0 +1,29 @@
+// # Libfloor Thread Cap
+//
+// Logline: Standard library verification and domain capabilities for Libfloor Thread Cap.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_libfloor_thread_cap() -> Bool {
+    let s: Result[String, String] = thread_spawn(thread, "t");
+    if s.is_ok() {
+        println("thread-residual-ok");
+    } else {
+        println("thread-spawn-fail");
+    }
+    let m: Result[String, String] = mutex_lock(thread, 2);
+    if m.is_ok() {
+        println("mutex-residual-ok");
+        let u: Result[String, String] = mutex_unlock(thread, 2);
+        if u.is_ok() {
+            println("mutex-unlock-ok");
+        }
+    } else {
+        println("mutex-fail");
+    }
+    return true;
+}

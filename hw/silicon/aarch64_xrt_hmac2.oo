@@ -1,0 +1,116 @@
+// # AArch64 HMAC-SHA256 One-Shot Hex
+//
+// Logline: Builds ipad/opad, hashes inner then outer, and returns 64 lowercase hex chars.
+//
+// Setup: x0 is key C string, x1 is message C string. Keys longer than 64 are hashed first.
+//
+// Beats:
+//   1. If key length exceeds 64, replace the key with SHA-256 raw bytes.
+//   2. XOR-pad the key with 0x36 and 0x5c into 64-byte ipad and opad.
+//   3. Inner digest is SHA-256 of ipad concatenated with the message.
+//   4. Outer digest is SHA-256 of opad concatenated with the 32-byte inner.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+
+fn a64rt_hmac_key(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_ldr(0, 31, 16));
+    x = a64x_emit(x, arm64_word_movz(1, 64, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+    let bsk: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_le(), 0));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 16));
+    x = a64x_bl(x, "__sha256_raw");
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 32, 0));
+    x = a64x_emit(x, arm64_word_str(0, 31, 16));
+    let kdn: Int = list_len(x.p.words);
+    return a64x_set_words(x, a64_wset(x.p.words, bsk, arm64_word_b_cond(arm64_cond_le(), kdn - bsk)));
+}
+
+fn a64rt_hmac_pads(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_str(0, 31, 32));
+    x = a64x_emit(x, arm64_word_add_imm(28, 28, 64));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_str(0, 31, 40));
+    x = a64x_emit(x, arm64_word_add_imm(28, 28, 64));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 16));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 32));
+    x = a64x_emit(x, arm64_word_movz(3, 54, 0));
+    x = a64x_bl(x, "__sha_xorpad");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 0));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 16));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 40));
+    x = a64x_emit(x, arm64_word_movz(3, 92, 0));
+    return a64x_bl(x, "__sha_xorpad");
+}
+
+fn a64rt_hmac_inner(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_ldr(0, 31, 24));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 64));
+    x = a64x_emit(x, arm64_word_str(0, 31, 64));
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_str(0, 31, 48));
+    x = a64x_emit(x, arm64_word_add_reg(28, 28, 1));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 48));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 32));
+    x = a64x_emit(x, arm64_word_movz(2, 64, 0));
+    x = a64x_bl(x, "__sha_cpy");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 48));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 64));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 8));
+    x = a64x_emit(x, arm64_word_ldr(2, 31, 24));
+    x = a64x_bl(x, "__sha_cpy");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 48));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 64));
+    x = a64x_bl(x, "__sha256_raw");
+    return a64x_emit(x, arm64_word_str(0, 31, 56));
+}
+
+fn a64rt_hmac_outer(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_mov_reg(0, 28));
+    x = a64x_emit(x, arm64_word_str(0, 31, 72));
+    x = a64x_emit(x, arm64_word_add_imm(28, 28, 96));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 72));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 40));
+    x = a64x_emit(x, arm64_word_movz(2, 64, 0));
+    x = a64x_bl(x, "__sha_cpy");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 72));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 64));
+    x = a64x_emit(x, arm64_word_ldr(1, 31, 56));
+    x = a64x_emit(x, arm64_word_movz(2, 32, 0));
+    x = a64x_bl(x, "__sha_cpy");
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 72));
+    x = a64x_emit(x, arm64_word_movz(1, 96, 0));
+    return a64x_bl(x, "__sha256_n");
+}
+
+pub fn a64rt_hmac2(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_hmac");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_sub_imm(31, 31, 96));
+    x = a64x_emit(x, arm64_word_str(0, 31, 0));
+    x = a64x_emit(x, arm64_word_str(1, 31, 8));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_str(0, 31, 16));
+    x = a64x_emit(x, arm64_word_ldr(0, 31, 8));
+    x = a64x_bl(x, "__strlen");
+    x = a64x_emit(x, arm64_word_str(0, 31, 24));
+    x = a64rt_hmac_key(x);
+    x = a64rt_hmac_pads(x);
+    x = a64rt_hmac_inner(x);
+    x = a64rt_hmac_outer(x);
+    x = a64x_emit(x, arm64_word_add_imm(31, 31, 96));
+    r = a64rt_setx(r, a64rt_epi(x));
+    r = a64rt_fn(r, "crypto_hmac_sha256_internal");
+    x = a64rt_prol(r.x);
+    x = a64x_bl(x, "__sha_hmac");
+    return a64rt_setx(r, a64rt_epi(x));
+}

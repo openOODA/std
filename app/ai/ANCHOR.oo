@@ -1,0 +1,58 @@
+// # AI Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard ai domain library. Re-exports a stable ai_mod_* surface for the most-used public API (tensors, transformer kernels, GGUF parser, quant, scaling law). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
+//
+// Setup: Imports private ai siblings; no caps required for pure tensor/quant/scaling operations. Transformer and GGUF operations take AiCap or FsReadCap at the call site.
+//
+// Beats:
+//   1. Re-export the tensor surface (zeros, broadcast, normalization, activations) as ai_mod_tensor_*.
+//   2. Re-export the transformer sampling surface as ai_mod_transformer_*.
+//   3. Re-export the quant surface (FP16, Q4, Q8) as ai_mod_quant_*.
+//   4. Re-export the GGUF parser and scaling law surface as ai_mod_gguf_*, ai_mod_scaling_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat files.
+
+import "tensor_nn.oo";
+import "ai.oo";
+import "transformer.oo";
+import "gguf.oo";
+import "gguf_parser.oo";
+import "quant.oo";
+import "quant_q4_k.oo";
+import "quant_q8_0.oo";
+import "scaling_law.oo";
+
+// Public tensor surface: ai_mod_tensor_*
+pub fn ai_mod_tensor_zeros(numel: Int) -> List[Float] { return tensor_zeros(numel); }
+pub fn ai_mod_tensor_broadcast_add(a: List[Float], b: List[Float]) -> List[Float] { return tensor_broadcast_add(a, b); }
+pub fn ai_mod_tensor_broadcast_mul(a: List[Float], b: List[Float]) -> List[Float] { return tensor_broadcast_mul(a, b); }
+pub fn ai_mod_tensor_rms_norm(x: List[Float], g: List[Float], eps: Float) -> List[Float] { return tensor_rms_norm(x, g, eps); }
+pub fn ai_mod_tensor_silu(x: List[Float]) -> List[Float] { return tensor_silu(x); }
+pub fn ai_mod_tensor_swiglu(gate: List[Float], up: List[Float]) -> List[Float] { return tensor_swiglu(gate, up); }
+pub fn ai_mod_tensor_softmax(x: List[Float]) -> List[Float] { return tensor_softmax_last_dim(x); }
+pub fn ai_mod_tensor_argmax(x: List[Float]) -> Int { return tensor_argmax(x); }
+
+// Public transformer surface: ai_mod_transformer_*
+pub fn ai_mod_transformer_sample_greedy(logits: List[Float]) -> Int { return transformer_sample_greedy(logits); }
+pub fn ai_mod_transformer_sample_temperature(logits: List[Float], temp: Float) -> Int { return transformer_sample_temperature(logits, temp); }
+
+// Public quant surface: ai_mod_quant_*
+pub fn ai_mod_quant_fp16_to_f32(h: Int) -> Float { return fp16_to_f32(h); }
+pub fn ai_mod_quant_f32_to_fp16(f: Float) -> Int { return f32_to_fp16(f); }
+pub fn ai_mod_quant_q4_0_dequantize_block(raw: String, offset: Int) -> List[Float] { return q4_0_dequantize_block(raw, offset); }
+
+// Public GGUF parser surface: ai_mod_gguf_*
+pub fn ai_mod_gguf_read_u8(data: String, offset: Int) -> Int { return gguf_read_u8(data, offset); }
+pub fn ai_mod_gguf_read_u16_le(data: String, offset: Int) -> Int { return gguf_read_u16_le(data, offset); }
+pub fn ai_mod_gguf_read_u32_le(data: String, offset: Int) -> Int { return gguf_read_u32_le(data, offset); }
+
+// Public scaling-law surface: ai_mod_scaling_*
+pub fn ai_mod_scaling_loss(a: Float, b: Float, alpha: Float, n: Float) -> Result[Float, String] { return sl_loss(a, b, alpha, n); }
+pub fn ai_mod_scaling_improvement(a: Float, b: Float, alpha: Float, n1: Float, n2: Float) -> Result[Float, String] { return sl_improvement(a, b, alpha, n1, n2); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. backprop_chain_law.oo, gradient_descent_law.oo, softmax_normalization_law.oo, transformer_attention_law.oo)
+//   _theory files (e.g. bias_variance_theory.oo, conv2d_receptive_field_theory.oo, double_descent_curve_theory.oo, pac_vc_dimension_theory.oo, universal_approx_theory.oo)
+//   _principle files (e.g. early_stopping_principle.oo, exploration_exploitation_principle.oo, no_free_lunch_principle.oo, ntk_lazy_regime_principle.oo, ntk_lazy_regime_principle_v2.oo, occam_principle.oo)
+//   _invariants files (e.g. ai_invariants.oo)
+//   _kat files (e.g. ai_kat.oo)
+// External callers must import this ANCHOR.oo and use the ai_mod_* surface.

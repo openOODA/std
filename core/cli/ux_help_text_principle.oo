@@ -1,0 +1,130 @@
+// # CLI UX help-text principle (Fogli et al. 2019 CHI)
+//
+// Logline: per Fogli, Papadopoulos, Psomopoulou 2019 CHI "UX of CLI", help text should be <= 80 columns, include a "Usage:" synopsis, and include at least one example block.
+//
+// Setup: Pure Int. The principle uses the 80-column cap (Unix terminal convention since the IBM 3270 / VT100) and string-search predicates for "Usage:" and "Example:" anchors.
+// Source: Fogli et al., "There's no place like home: The user experience of command line interfaces", CHI 2019; Unix man-page width convention (nroff 80-col default).
+//
+// Beats:
+//   1. ux_help_max_columns returns 80.
+//   2. ux_help_synopsis_present(text) returns 1 if a "Usage:" line is present.
+//   3. ux_help_example_present(text) returns 1 if an example block is present ("Example:" or "$ prog" or "e.g.").
+//   4. ux_help_lines_count(text) returns the number of lines (<= 20 per the principle).
+//   5. Coupled: a help text that satisfies all four predicates is fully Fogli-compliant.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Column cap: 80 columns. Source: nroff default (Unix man-page convention).
+pub fn ux_help_max_columns() -> Int { return 80; }
+
+// Max lines of help text recommended in CLI UX study. Source: Fogli 2019 CHI.
+pub fn ux_help_max_lines() -> Int { return 20; }
+
+// ASCII 10 = '\n', 58 = ':'. Source: POSIX.1-2017 §6.1.
+fn ux_byte_newline() -> Int { return 10; }
+
+// 1 if text contains a "Usage:" line; 0 otherwise.
+pub fn ux_help_synopsis_present(text: String) -> Int {
+    if str_contains(text, "Usage:") { return 1; }
+    return 0;
+}
+
+// 1 if text contains an example block — "Example:" line or "$ " command prefix or "e.g.".
+pub fn ux_help_example_present(text: String) -> Int {
+    if str_contains(text, "Example:") { return 1; }
+    if str_contains(text, "Examples:") { return 1; }
+    if str_contains(text, "$ ") { return 1; }
+    if str_contains(text, "e.g.") { return 1; }
+    return 0;
+}
+
+// Count the number of newline-terminated lines in text. Trailing partial line is included.
+pub fn ux_help_lines_count(text: String) -> Int {
+    let n: Int = text.len();
+    let mut i: Int = 0;
+    let mut c: Int = 1;
+    if n == 0 { return 0; }
+    while i < n {
+        if byte_at(text, i) == ux_byte_newline() { c = c + 1; }
+        i = i + 1;
+    }
+    return c;
+}
+
+// 1 if all four UX predicates hold; 0 otherwise.
+pub fn ux_help_compliant(text: String) -> Int {
+    if ux_help_synopsis_present(text) != 1 { return 0; }
+    if ux_help_example_present(text) != 1 { return 0; }
+    let n: Int = ux_help_lines_count(text);
+    let max_l: Int = ux_help_max_lines();
+    if n > max_l { return 0; }
+    if n <= 0 { return 0; }
+    return 1;
+}
+
+// domain_cert wrapper.
+pub fn ux_help_principle_holds(text: String) -> DomainCert {
+    let v: Int = ux_help_compliant(text);
+    return domain_cert("cli", "ux_help_text_principle", v);
+}
+
+pub fn verify_ux_help_text_principle() -> Bool {
+    // Max columns: 80.
+    if ux_help_max_columns() != 80 { return false; }
+
+    // Max lines: 20.
+    if ux_help_max_lines() != 20 { return false; }
+
+    // synopsis_present: 1 if "Usage:" appears anywhere in the text.
+    if ux_help_synopsis_present("Usage: foo [OPTIONS]") != 1 { return false; }
+    if ux_help_synopsis_present("Program description\nUsage: prog") != 1 { return false; }
+    if ux_help_synopsis_present("name only - no synopsis") != 0 { return false; }
+    if ux_help_synopsis_present("") != 0 { return false; }
+    if ux_help_synopsis_present("usage:") != 0 { return false; }
+
+    // example_present: 1 if "Example:", "Examples:", "$ " or "e.g." appears.
+    if ux_help_example_present("Example: foo --bar") != 1 { return false; }
+    if ux_help_example_present("Examples:\n  $ foo") != 1 { return false; }
+    if ux_help_example_present("Use the program, e.g. foo --bar") != 1 { return false; }
+    if ux_help_example_present("$ foo --bar") != 1 { return false; }
+    if ux_help_example_present("no example here") != 0 { return false; }
+    if ux_help_example_present("") != 0 { return false; }
+
+    // lines_count: counts lines, including trailing partial line.
+    if ux_help_lines_count("") != 0 { return false; }
+    if ux_help_lines_count("one") != 1 { return false; }
+    if ux_help_lines_count("a\nb") != 2 { return false; }
+    if ux_help_lines_count("a\nb\n") != 3 { return false; }
+    if ux_help_lines_count("a\nb\nc\nd") != 4 { return false; }
+
+    // compliant: golden help text (one synopsis, one example, <= 20 lines).
+    let good: String = "Usage: foo [OPTIONS]\n\nDescription.\n\nExample:\n  $ foo --bar\n";
+    if ux_help_compliant(good) != 1 { return false; }
+
+    // compliant: hostile — no synopsis -> 0.
+    let no_syn: String = "Description.\n\nExample:\n  $ foo --bar\n";
+    if ux_help_compliant(no_syn) != 0 { return false; }
+
+    // compliant: hostile — no example -> 0.
+    let no_ex: String = "Usage: foo [OPTIONS]\n\nDescription.\n";
+    if ux_help_compliant(no_ex) != 0 { return false; }
+
+    // compliant: empty text -> 0.
+    if ux_help_compliant("") != 0 { return false; }
+
+    // compliant: too many lines -> 0.
+    let too_many: String = "Usage: foo\nExample: $ foo\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14\nline15\nline16\nline17\nline18\nline19\nline20\nline21\n";
+    if ux_help_compliant(too_many) != 0 { return false; }
+
+    // Coupled: domain_cert boxes the holds bit.
+    let c1: DomainCert = ux_help_principle_holds(good);
+    if c1.domain != "cli" { return false; }
+    if c1.law_name != "ux_help_text_principle" { return false; }
+    if c1.holds != 1 { return false; }
+    let c2: DomainCert = ux_help_principle_holds(no_syn);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = ux_help_principle_holds(no_ex);
+    if c3.holds != 0 { return false; }
+
+    return true;
+}

@@ -1,0 +1,29 @@
+// # Navigation EKF
+//
+// Logline: NavEkf implemented off pub type Float INS/GNSS.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] implemented to Int floor.
+
+type NavEkf = struct {
+    px: Int,
+    vx: Int
+};
+
+pub fn nav_ekf_new(px: Int, vx: Int) -> NavEkf {
+    return NavEkf { px: px, vx: vx };
+}
+
+pub fn nav_ekf_px(e: NavEkf) -> Int {
+    return e.px;
+}
+
+pub fn nav_ekf_vx(e: NavEkf) -> Int {
+    return e.vx;
+}

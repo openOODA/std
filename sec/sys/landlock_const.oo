@@ -1,0 +1,114 @@
+// # Landlock ABI Bitmask Constants
+//
+// Logline: Provide landlock_access_fs_* and landlock_access_net_* bitmask tag values.
+//
+// Setup: Imports landlock_types.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+//
+// Beats:
+//   1. landlock_access_fs_*: return execute, write_file, read_file, read_dir, remove_dir bit tags.
+//   2. landlock_access_net_*: return bind_tcp, connect_tcp bit tags.
+//   3. landlock_scope_*: return abstract_unix_socket and signal scope tags.
+//   4. landlock_default_handled_access: aggregate default access mask.
+//
+// residual: constants only; live landlock syscall is process_exit in landlock_stubs.
+
+// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
+// RULES.oot 1.3: Fail-closed residual for unimplemented builtins.
+
+import "std/sec/sys/landlock_types.oo";
+
+pub fn landlock_access_fs_execute() -> Int {
+    return 1; // 1 << 0
+}
+
+pub fn landlock_access_fs_write_file() -> Int {
+    return 2; // 1 << 1
+}
+
+pub fn landlock_access_fs_read_file() -> Int {
+    return 4; // 1 << 2
+}
+
+pub fn landlock_access_fs_read_dir() -> Int {
+    return 8; // 1 << 3
+}
+
+pub fn landlock_access_fs_remove_dir() -> Int {
+    return 16; // 1 << 4
+}
+
+pub fn landlock_access_fs_remove_file() -> Int {
+    return 32; // 1 << 5
+}
+
+pub fn landlock_access_fs_make_char() -> Int {
+    return 64; // 1 << 6
+}
+
+pub fn landlock_access_fs_make_dir() -> Int {
+    return 128; // 1 << 7
+}
+
+pub fn landlock_access_fs_make_reg() -> Int {
+    return 256; // 1 << 8
+}
+
+pub fn landlock_access_fs_make_sock() -> Int {
+    return 512; // 1 << 9
+}
+
+pub fn landlock_access_fs_make_fifo() -> Int {
+    return 1024; // 1 << 10
+}
+
+pub fn landlock_access_fs_make_block() -> Int {
+    return 2048; // 1 << 11
+}
+
+pub fn landlock_access_fs_make_sym() -> Int {
+    return 4096; // 1 << 12
+}
+
+pub fn landlock_access_fs_refer() -> Int {
+    return 8192; // 1 << 13
+}
+
+pub fn landlock_access_fs_truncate() -> Int {
+    return 16384; // 1 << 14
+}
+
+pub fn landlock_access_fs_all() -> Int {
+    return 32767; // Sum of bits 0 to 14
+}
+
+pub fn landlock_access_net_bind_tcp() -> Int {
+    return 1; // 1 << 0
+}
+
+pub fn landlock_access_net_connect_tcp() -> Int {
+    return 2; // 1 << 1
+}
+
+pub fn landlock_access_net_all() -> Int {
+    return 3;
+}
+
+pub fn landlock_scope_abstract_unix_socket() -> Int {
+    return 1; // 1 << 0
+}
+
+pub fn landlock_scope_signal() -> Int {
+    return 2; // 1 << 1
+}
+
+pub fn landlock_scope_all() -> Int {
+    return 3;
+}
+
+pub fn landlock_rule_path_beneath() -> Int {
+    return 1;
+}
+
+pub fn landlock_rule_net_port() -> Int {
+    return 2;
+}

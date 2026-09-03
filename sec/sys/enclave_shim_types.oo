@@ -1,0 +1,28 @@
+// # Enclave types
+//
+// Logline: EnclaveType standardized off nested report lists.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: List[struct] standardized.
+
+type EnclaveType = struct {
+    vendor: Int,
+    is_sgx: Int
+};
+
+pub fn enclave_type_new(vendor: Int, is_sgx: Int) -> EnclaveType {
+    return EnclaveType {
+        vendor: vendor,
+        is_sgx: is_sgx
+    };
+}
+
+pub fn enclave_type_vendor(e: EnclaveType) -> Int {
+    return e.vendor;
+}

@@ -1,0 +1,58 @@
+// # x86-64 Assembler Stream Buffer
+//
+// Logline: Multi-instruction code buffer managing emitted bytecode, label resolution, and relative jump branch patching.
+//
+// Setup: Pure code generator buffer synthesizing x86-64 binary streams.
+//
+// Beats:
+//   1. Initialize assembler buffer with zero-length instruction array.
+//   2. Append individual bytes and instruction blocks.
+//   3. Calculate label targets and relative displacement offsets.
+//   4. Emit finished bytecode array.
+
+type X86Assembler = struct {
+    size: Int,
+    code: List[Int]
+};
+
+pub fn x86_asm_new() -> X86Assembler {
+    let empty: List[Int] = list_new();
+    return X86Assembler {
+        size: 0,
+        code: empty
+    };
+}
+
+pub fn x86_asm_emit_byte(as: X86Assembler, b: Int) -> X86Assembler {
+    let mut xs: List[Int] = as.code;
+    xs = list_push(xs, b & 255);
+    return X86Assembler {
+        size: as.size + 1,
+        code: xs
+    };
+}
+
+pub fn x86_asm_emit_bytes(as: X86Assembler, bytes: List[Int]) -> X86Assembler {
+    let n: Int = list_len(bytes);
+    let mut xs: List[Int] = as.code;
+    let mut i: Int = 0;
+    while i < n {
+        xs = list_push(xs, list_get(bytes, i) & 255);
+        i = i + 1;
+    }
+    return X86Assembler {
+        size: as.size + n,
+        code: xs
+    };
+}
+
+pub fn x86_asm_len(as: X86Assembler) -> Int {
+    return as.size;
+}
+
+pub fn x86_asm_finish(as: X86Assembler) -> Result[List[Int], String] {
+    if as.size == 0 {
+        return Err("ERR\tx86_asm_finish\tempty_code_buffer");
+    }
+    return Ok(as.code);
+}

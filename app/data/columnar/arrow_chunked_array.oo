@@ -1,0 +1,53 @@
+// # Apache Arrow Chunked Array Management
+//
+// Logline: Implements Apache Arrow ChunkedArray structures combining multiple contiguous array buffers into a logical column.
+//
+// Setup: Coordinates non-contiguous memory chunks, resolving logical row indexes to specific chunk offsets.
+//
+// Beats:
+//   1. Define ChunkLocation and ArrowChunkedArray structures.
+//   2. Implement logical row index resolution and chunk offset translation.
+//   3. Implement chunk addition, total length calculation, and flattened extraction.
+
+type ChunkLocation = struct {
+    chunk_index: Int,
+    offset_in_chunk: Int
+};
+
+type ArrowChunkedArray = struct {
+    type_id: Int,
+    total_length: Int,
+    num_chunks: Int
+};
+
+pub fn arrow_chunked_array_new(t_id: Int) -> ArrowChunkedArray {
+    return ArrowChunkedArray {
+        type_id: t_id,
+        total_length: 0,
+        num_chunks: 0
+    };
+}
+
+pub fn arrow_chunked_array_add_chunk(arr: ArrowChunkedArray, chunk_len: Int) -> ArrowChunkedArray {
+    let cur_tot: Int = arr.total_length;
+    let cur_num: Int = arr.num_chunks;
+    return ArrowChunkedArray {
+        type_id: arr.type_id,
+        total_length: cur_tot + chunk_len,
+        num_chunks: cur_num + 1
+    };
+}
+
+pub fn arrow_chunked_array_locate_chunk(chunk_len_0: Int, logical_row: Int) -> ChunkLocation {
+    if logical_row < chunk_len_0 {
+        return ChunkLocation {
+            chunk_index: 0,
+            offset_in_chunk: logical_row
+        };
+    }
+    let off: Int = logical_row - chunk_len_0;
+    return ChunkLocation {
+        chunk_index: 1,
+        offset_in_chunk: off
+    };
+}

@@ -1,0 +1,99 @@
+// # Network Calculus Arrival Curve and Service Curve Law
+//
+// Logline: Cruz 1991 ISIT: leaky-bucket arrival curve alpha(t) = b + r*t with rate-latency service curve beta(t) = R*t yields max backlog = b and max delay = b/R.
+//
+// Setup: Pure Int. burst in bytes, rate in bps. R<=0 returns Err. b<0 returns Err. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. nc_max_backlog(b, r) = b (leaky-bucket burst is the max backlog).
+//   2. nc_max_delay_ms(b, R) = b*8*1000/R milliseconds.
+//   3. Coupled: calculus is the foundation of deterministic networking (DetNet RFC 8655, 2019).
+
+import "std/net/net_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+fn nc_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Max backlog for leaky-bucket alpha(t) = b + r*t with rate-latency service beta(t) = R*t.
+// Cruz 1991 ISIT: max backlog = b (for pure rate service, latency T=0).
+// Source: Cruz, "A Calculus for Network Delay", IEEE ISIT 1991.
+pub fn nc_max_backlog(burst_bytes: Int, arrival_rate_bps: Int) -> Result[Int, String] {
+    if burst_bytes < 0 { return Err("ERR\tnc\tburst"); }
+    if arrival_rate_bps < 0 { return Err("ERR\tnc\trate"); }
+    return Ok(burst_bytes);
+}
+
+// Max delay for the same arrival and service curves: delay = b / R.
+// Returns delay in milliseconds. R <= 0 returns Err.
+// Source: Cruz 1991 ISIT "A Calculus for Network Delay".
+pub fn nc_max_delay_ms(burst_bytes: Int, service_rate_bps: Int) -> Result[Int, String] {
+    if burst_bytes < 0 { return Err("ERR\tnc\tburst"); }
+    if service_rate_bps <= 0 { return Err("ERR\tnc\trate"); }
+    return Ok((burst_bytes * 8 * 1000) / service_rate_bps);
+}
+
+// 1 if network calculus is the foundation of deterministic networking (DetNet RFC 8655, 2019).
+// Source: Deterministic Networking (DetNet) RFC 8655, October 2019.
+pub fn nc_is_detnet_foundation() -> Int {
+    return 1;  // DetNet RFC 8655, 2019
+}
+
+// Domain certificate: 1 if max backlog and max delay are well-defined (burst>=0, R>0).
+pub fn nc_holds(burst_bytes: Int, service_rate_bps: Int) -> DomainCert {
+    let inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if inv_ok == false { return domain_cert("net", "network_calculus_arrival_curve_law", 0); }
+    if burst_bytes < 0 { return domain_cert("net", "network_calculus_arrival_curve_law", 0); }
+    if service_rate_bps <= 0 { return domain_cert("net", "network_calculus_arrival_curve_law", 0); }
+    return domain_cert("net", "network_calculus_arrival_curve_law", 1);
+}
+
+// KAT and hostile cases for the network calculus arrival curve law.
+pub fn verify_network_calculus_arrival_curve_law() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    // Golden: b=100KB, r=1Mbps, R=10Mbps -> backlog=100KB, delay=80ms within 0.001% (Int exact).
+    // 100 KB decimal = 100_000 bytes. 1 Mbps = 1_000_000 bps. 10 Mbps = 10_000_000 bps.
+    let burst: Int = 100000;  // 100 KB
+    let rate: Int = 1000000;  // 1 Mbps
+    let service: Int = 10000000;  // 10 Mbps
+    let backlog: Int = nc_got(nc_max_backlog(burst, rate));
+    if backlog != burst { return false; }  // Cruz 1991 ISIT
+    let delay: Int = nc_got(nc_max_delay_ms(burst, service));
+    if delay != 80 { return false; }  // 100000*8*1000/10000000 = 80 ms (Cruz 1991 ISIT)
+    // Other: zero burst -> 0 backlog, 0 delay.
+    let zback: Int = nc_got(nc_max_backlog(0, rate));
+    if zback != 0 { return false; }
+    let zdelay: Int = nc_got(nc_max_delay_ms(0, service));
+    if zdelay != 0 { return false; }
+    // Other: 1 GB at 1 Gbps = 8000 ms delay.
+    let gb_back: Int = nc_got(nc_max_backlog(1000000000, 0));
+    if gb_back != 1000000000 { return false; }
+    let gb_delay: Int = nc_got(nc_max_delay_ms(1000000000, 1000000000));
+    if gb_delay != 8000 { return false; }  // 1e9*8*1000/1e9 = 8000 ms
+    // Other: 1500 B at 100 Mbps = 0.12 ms.
+    let mtu_delay: Int = nc_got(nc_max_delay_ms(1500, 100000000));
+    if mtu_delay != 0 { return false; }  // 1500*8*1000/100_000_000 = 120_000/100_000_000 = 1 (rounded down? actually = 0.12 -> 0)
+    // Recompute: 1500*8*1000 = 12_000_000; 12_000_000 / 100_000_000 = 0 (Int). So 0 is OK.
+    // Try 1500 B at 10 Mbps = 1.2 ms -> 1 ms (Int).
+    let mtu2_delay: Int = nc_got(nc_max_delay_ms(1500, 10000000));
+    if mtu2_delay != 1 { return false; }  // 1500*8*1000/10_000_000 = 12_000_000/10_000_000 = 1
+    // Hostile: R<=0 -> fail.
+    if nc_max_delay_ms(burst, 0).is_ok() { return false; }
+    if nc_max_delay_ms(burst, 0 - 1).is_ok() { return false; }
+    if nc_max_backlog(0 - 1, 0).is_ok() { return false; }
+    if nc_max_backlog(0, 0 - 1).is_ok() { return false; }
+    if nc_max_backlog(0 - 1, 0 - 1).is_ok() { return false; }
+    if nc_max_delay_ms(0 - 1, service).is_ok() { return false; }
+    // Coupled: calculus is DetNet foundation (RFC 8655, 2019).
+    if nc_is_detnet_foundation() != 1 { return false; }
+    // Cert: golden 1, hostile 0.
+    if nc_holds(burst, service).holds != 1 { return false; }
+    if nc_holds(burst, 0).holds != 0 { return false; }
+    if nc_holds(0, service).holds != 1 { return false; }
+    if nc_holds(0, 0).holds != 0 { return false; }
+    if nc_holds(0 - 1, service).holds != 0 { return false; }
+    if nc_holds(burst, 0 - 1).holds != 0 { return false; }
+    return true;
+}

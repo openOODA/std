@@ -1,0 +1,74 @@
+// # SGP4 Orbital Mechanics Propagator
+//
+// Logline: Propagates orbits under J2-J4 geopotential harmonics and B* atmospheric drag decay.
+//
+// Setup: Imports state_vector_transforms.oo and tle_types.oo for orbit structures.
+//
+// Beats:
+//   1. Compute secular drift rates for RAAN, argument of perigee, and mean anomaly.
+//   2. Model atmospheric drag decay using B* ballistic coefficient on semimajor axis and eccentricity.
+//   3. Check perigee altitude thresholds and transform osculating elements to Cartesian state.
+
+import "./state_vector_transforms.oo";
+import "./tle_types.oo";
+
+pub fn sgp4_propagate(tle: TLEData, dt_minutes: Float) -> Result[StateVector, String] {
+    let n0: Float = tle.mean_motion_rad_per_min;
+    let a0: Float = tle.semi_major_axis_km;
+    let e0: Float = tle.eccentricity;
+    let inc0: Float = tle.inclination_rad;
+    let raan0: Float = tle.raan_rad;
+    let argp0: Float = tle.arg_of_perigee_rad;
+    let m0: Float = tle.mean_anomaly_rad;
+    let bstar: Float = tle.bstar;
+
+    let r_earth: Float = const_r_earth();
+    let mu_earth: Float = const_mu_earth();
+    let j2: Float = const_j2_earth();
+
+    let p0: Float = a0 * (1.0 - (e0 * e0));
+    if p0 <= 0.000000001 {
+        return Err("DegenerateOrbitSemiLatusRectum");
+    }
+
+    let theta: Float = cos(inc0);
+    let theta_sq: Float = theta * theta;
+    let xi: Float = r_earth / p0;
+    let xi_sq: Float = xi * xi;
+
+    let factor_j2: Float = 1.5 * j2 * xi_sq * n0;
+    let raan_dot: Float = (0.0 - factor_j2) * theta;
+    let argp_dot: Float = (0.75 * j2 * xi_sq * n0) * ((5.0 * theta_sq) - 1.0);
+    let sqrt_ecc: Float = sqrt(1.0 - (e0 * e0));
+    let m_dot: Float = n0 * (1.0 + ((0.75 * j2 * xi_sq * sqrt_ecc) * ((3.0 * theta_sq) - 1.0)));
+
+    let dt_days: Float = dt_minutes / 1440.0;
+    let a_er: Float = a0 / r_earth;
+    let a_t: Float = a0 * (1.0 - (((2.0 / 3.0) * bstar * a_er) * dt_days));
+    let mut e_t: Float = e0 - ((bstar * a_er * (1.0 - e0)) * dt_days);
+    if e_t < 0.000001 {
+        e_t = 0.000001;
+    }
+    if e_t >= 0.9999 {
+        return Err("EccentricityDiverged");
+    }
+
+    let perigee_r: Float = a_t * (1.0 - e_t);
+    let min_perigee_r: Float = r_earth + 98.0;
+    if perigee_r < min_perigee_r {
+        return Err("SatelliteDecayed");
+    }
+
+    let raan_t: Float = normalize_angle_2pi(raan0 + (raan_dot * dt_minutes));
+    let argp_t: Float = normalize_angle_2pi(argp0 + (argp_dot * dt_minutes));
+    let m_t: Float = normalize_angle_2pi(m0 + (m_dot * dt_minutes));
+
+    let e_anom_t: Float = kepler_solve_eccentric_anomaly(m_t, e_t);
+    let nu_t: Float = eccentric_to_true(e_anom_t, e_t);
+
+    let osc_elem: OrbitElements = orbit_elements_new(
+        a_t, e_t, inc0, raan_t, argp_t, nu_t, dt_minutes * 60.0
+    );
+    let state: StateVector = state_vector_from_keplerian(osc_elem, mu_earth);
+    return Ok(state);
+}

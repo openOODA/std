@@ -1,0 +1,124 @@
+// # Resilient Circuit Breaker State Guard
+//
+// Logline: Trips on consecutive fault thresholds and transitions between Closed, Open, and Half-Open operational states.
+//
+// Setup: Pure fault isolation module preventing cascading failure storms.
+//
+// Beats:
+//   1. Track Closed (0), Open (1), Half-Open (2) operational states.
+//   2. Count consecutive errors and trip from Closed to Open on threshold breach.
+//   3. Transition to Half-Open after cooldown probe trigger.
+//   4. Reset to Closed upon consecutive probe successes.
+
+pub fn cb_state_closed() -> Int { return 0; }
+pub fn cb_state_open() -> Int { return 1; }
+pub fn cb_state_half_open() -> Int { return 2; }
+
+type CircuitBreaker = struct {
+    state: Int,
+    failure_threshold: Int,
+    success_threshold: Int,
+    consecutive_failures: Int,
+    consecutive_successes: Int
+};
+
+pub fn cb_new(fail_thresh: Int, success_thresh: Int) -> Result[CircuitBreaker, String] {
+    if fail_thresh <= 0 || success_thresh <= 0 {
+        return Err("ERR\tcb_new\tthresholds_must_be_positive");
+    }
+    let cb: CircuitBreaker = CircuitBreaker {
+        state: cb_state_closed(),
+        failure_threshold: fail_thresh,
+        success_threshold: success_thresh,
+        consecutive_failures: 0,
+        consecutive_successes: 0
+    };
+    return Ok(cb);
+}
+
+pub fn cb_allow_request(cb: CircuitBreaker) -> Bool {
+    let s: Int = cb.state;
+    if s == cb_state_closed() || s == cb_state_half_open() {
+        return true;
+    }
+    return false;
+}
+
+pub fn cb_record_success(cb: CircuitBreaker) -> CircuitBreaker {
+    let s: Int = cb.state;
+    if s == cb_state_closed() {
+        return CircuitBreaker {
+            state: cb_state_closed(),
+            failure_threshold: cb.failure_threshold,
+            success_threshold: cb.success_threshold,
+            consecutive_failures: 0,
+            consecutive_successes: cb.consecutive_successes + 1
+        };
+    }
+    if s == cb_state_half_open() {
+        let succ: Int = cb.consecutive_successes + 1;
+        if succ >= cb.success_threshold {
+            return CircuitBreaker {
+                state: cb_state_closed(),
+                failure_threshold: cb.failure_threshold,
+                success_threshold: cb.success_threshold,
+                consecutive_failures: 0,
+                consecutive_successes: 0
+            };
+        }
+        return CircuitBreaker {
+            state: cb_state_half_open(),
+            failure_threshold: cb.failure_threshold,
+            success_threshold: cb.success_threshold,
+            consecutive_failures: 0,
+            consecutive_successes: succ
+        };
+    }
+    return cb;
+}
+
+pub fn cb_record_failure(cb: CircuitBreaker) -> CircuitBreaker {
+    let s: Int = cb.state;
+    if s == cb_state_closed() {
+        let fails: Int = cb.consecutive_failures + 1;
+        if fails >= cb.failure_threshold {
+            return CircuitBreaker {
+                state: cb_state_open(),
+                failure_threshold: cb.failure_threshold,
+                success_threshold: cb.success_threshold,
+                consecutive_failures: fails,
+                consecutive_successes: 0
+            };
+        }
+        return CircuitBreaker {
+            state: cb_state_closed(),
+            failure_threshold: cb.failure_threshold,
+            success_threshold: cb.success_threshold,
+            consecutive_failures: fails,
+            consecutive_successes: 0
+        };
+    }
+    if s == cb_state_half_open() {
+        return CircuitBreaker {
+            state: cb_state_open(),
+            failure_threshold: cb.failure_threshold,
+            success_threshold: cb.success_threshold,
+            consecutive_failures: cb.consecutive_failures + 1,
+            consecutive_successes: 0
+        };
+    }
+    return cb;
+}
+
+pub fn cb_probe_half_open(cb: CircuitBreaker) -> CircuitBreaker {
+    if cb.state == cb_state_open() {
+        return CircuitBreaker {
+            state: cb_state_half_open(),
+            failure_threshold: cb.failure_threshold,
+            success_threshold: cb.success_threshold,
+            consecutive_failures: 0,
+            consecutive_successes: 0
+        };
+    }
+    return cb;
+}

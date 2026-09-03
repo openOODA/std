@@ -1,0 +1,76 @@
+// # AI/ML Cross-Entropy Loss and Softmax Gradients
+//
+// Logline: Implements multi-class categorical cross-entropy loss, label smoothing regularization, and analytical softmax gradient computation.
+//
+// Setup: Imports tensor_types.oo and activation_ops.oo for loss and gradient operations.
+//
+// Beats:
+//   1. Calculate categorical cross-entropy loss for single and batched sample predictions.
+//   2. Apply label smoothing regularization to mitigate overconfident probability assignments.
+//   3. Compute exact analytical softmax cross-entropy gradients (dL/dz = p - y).
+
+import "tensor_types.oo";
+import "activation_ops.oo";
+
+pub fn loss_cross_entropy_single(logits: Tensor1D, target_class: Int) -> Float {
+    let n: Int = logits.size;
+    if target_class < 0 || target_class >= n {
+        return 0.0;
+    }
+    let p: Float = act_softmax_element(logits, target_class);
+    if p <= 0.0 {
+        return 100.0;
+    }
+    return 0.0 - ln(p);
+}
+
+pub fn loss_cross_entropy_smoothed(logits: Tensor1D, target_class: Int, smoothing: Float) -> Float {
+    let n: Int = logits.size;
+    if n == 0 {
+        return 0.0;
+    }
+    let uniform_prob: Float = smoothing / int_to_float(n);
+    let target_prob: Float = (1.0 - smoothing) + uniform_prob;
+
+    let mut loss: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n {
+        let lp: Float = act_log_softmax_element(logits, i);
+        let mut p: Float = uniform_prob;
+        if i == target_class {
+            p = target_prob;
+        }
+        loss = loss - (p * lp);
+        i = i + 1;
+    }
+    return loss;
+}
+
+pub fn loss_cross_entropy_batch(logits: Tensor2D, targets: List[Int]) -> Float {
+    let logits_data_list: List[Float] = logits.data;
+    let batch_size: Int = logits.rows;
+    let num_classes: Int = logits.cols;
+    if batch_size == 0 {
+        return 0.0;
+    }
+
+    let mut total_loss: Float = 0.0;
+    let mut i: Int = 0;
+    while i < batch_size {
+        let mut row_logits: List[Float] = list_new();
+        let mut j: Int = 0;
+        while j < num_classes {
+            row_logits = list_push(row_logits, list_get(logits_data_list, (i * num_classes) + j));
+            j = j + 1;
+        }
+        let row_t: Tensor1D = Tensor1D { data: row_logits, size: num_classes };
+        let target: Int = list_get(targets, i);
+        total_loss = total_loss + loss_cross_entropy_single(row_t, target);
+        i = i + 1;
+    }
+    return total_loss / int_to_float(batch_size);
+}
+
+pub fn loss_cross_entropy_marker() -> Int {
+    return 1;
+}

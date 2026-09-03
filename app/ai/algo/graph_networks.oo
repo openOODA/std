@@ -1,0 +1,104 @@
+// # Complex Networks & Probabilistic Graph Structures Facade
+//
+// Logline: Re-exports HyperLogLog, MinHash, Count-Min Sketch, Complex Networks, Mesh Routing, and DHT Overlays.
+//
+// Setup: Pure module shim and facade importing all 49 companion graph network and probabilistic sketch submodules.
+//
+// Beats:
+//   1. Import 49 modular Probabilistic Data Structures, Complex Network Models, Mesh Protocols, and DHT overlays.
+//   2. Re-export public constructors, capability-gated interfaces, and routing entry points.
+//   3. Maintain full compatibility with downstream openOODA graph and network consumers.
+
+import "std/app/ai/algo/hyperloglog_cardinality.oo";
+import "std/app/ai/algo/minhash_lsh_index.oo";
+import "std/app/ai/algo/count_min_sketch_heavy.oo";
+import "std/app/ai/algo/topk_heavy_hitters.oo";
+import "std/app/ai/algo/cuckoo_filter_probabilistic.oo";
+import "std/app/ai/algo/bloom_filter_counting.oo";
+import "std/app/ai/algo/quotient_filter_compact.oo";
+import "std/app/ai/algo/hyperloglog_plus_plus.oo";
+import "std/app/ai/algo/hyperanf_graph_diameter.oo";
+import "std/app/ai/algo/flajolet_martin_distinct.oo";
+import "std/app/ai/algo/tdigest_streaming_quantile.oo";
+import "std/app/ai/algo/misra_gries_frequency.oo";
+import "std/app/ai/algo/simrank_similarity.oo";
+import "std/app/ai/algo/girvan_newman_clustering.oo";
+import "std/app/ai/algo/fruchterman_reingold_layout.oo";
+import "std/app/ai/algo/kamada_kawai_layout.oo";
+import "std/app/ai/algo/tarjan_bridges_articulation.oo";
+import "std/app/ai/algo/brandes_betweenness_centrality.oo";
+import "std/app/ai/algo/closeness_harmonic_centrality.oo";
+import "std/app/ai/algo/eigenvector_katz_centrality.oo";
+import "std/app/ai/algo/watts_strogatz_smallworld.oo";
+import "std/app/ai/algo/barabasi_albert_preferential.oo";
+import "std/app/ai/algo/erdos_renyi_random_graph.oo";
+import "std/app/ai/algo/stochastic_block_model.oo";
+import "std/app/ai/algo/label_propagation_community.oo";
+import "std/app/ai/algo/core_periphery_detection.oo";
+import "std/app/ai/algo/hierarchical_random_graph.oo";
+import "std/app/ai/algo/triadic_closure_clustering.oo";
+import "std/app/ai/algo/graph_degree_assortativity.oo";
+import "std/app/ai/algo/modularity_matrix_optimization.oo";
+import "std/net/protocol/routing/aodv_routing_mesh.oo";
+import "std/net/protocol/routing/rpl_dodag_tree.oo";
+import "std/net/protocol/routing/epidemic_routing_protocol.oo";
+import "std/net/protocol/routing/olsr_multipoint_relays.oo";
+import "std/net/protocol/routing/dsr_source_routing.oo";
+import "std/net/protocol/routing/batman_mesh_protocol.oo";
+import "std/net/protocol/routing/dsdv_distance_vector.oo";
+import "std/net/protocol/routing/gpsr_geographic_routing.oo";
+import "std/net/protocol/routing/prophet_dtn_routing.oo";
+import "std/net/protocol/routing/directed_diffusion_sensor.oo";
+import "std/net/protocol/routing/zigbee_cluster_tree_routing.oo";
+import "std/net/protocol/routing/hwmp_wireless_mesh.oo";
+import "std/net/protocol/routing/chord_dht_finger_table.oo";
+import "std/net/protocol/routing/can_dht_coordinate.oo";
+import "std/net/protocol/routing/pastry_prefix_routing.oo";
+import "std/net/protocol/routing/tapestry_dolr_overlay.oo";
+import "std/net/protocol/routing/viceroy_dht_butterfly.oo";
+import "std/net/protocol/routing/symphony_small_world_dht.oo";
+import "std/app/ai/algo/graph_networks_stubs.oo";
+
+pub fn net_hll_create(p: Int) -> HllRegisterBank {
+    return hll_create(p);
+}
+
+pub fn net_minhash_create(k: Int) -> MinHashConfig {
+    return minhash_config_create(k);
+}
+
+pub fn net_cms_create(depth: Int, width: Int) -> CountMinSketch {
+    return cms_create(depth, width);
+}
+
+pub fn net_topk_create(k: Int) -> SpaceSavingSummary {
+    return topk_summary_create(k);
+}
+
+pub fn net_cuckoo_create(num_buckets: Int, cap: Int) -> CuckooFilter {
+    return cuckoo_filter_create(num_buckets, cap);
+}
+
+pub fn net_cbf_create(m: Int, k: Int) -> CountingBloomFilter {
+    return cbf_create(m, k);
+}
+
+pub fn net_tdigest_create(max_centroids: Int) -> TDigest {
+    return tdigest_create(max_centroids);
+}
+
+pub fn net_aodv_create(local_ip: Int) -> AodvRoutingTable {
+    return aodv_table_create(local_ip);
+}
+
+pub fn net_rpl_create(node_id: Int, is_root: Bool, dodag_id: Int) -> RplDodagNode {
+    return rpl_node_create(node_id, is_root, dodag_id);
+}
+
+pub fn net_chord_create(node_id: Int, m_bits: Int) -> ChordNode {
+    return chord_node_create(node_id, m_bits);
+}
+
+pub fn net_brandes_compute(num_nodes: Int, adj: List[List[Int]]) -> BrandesResult {
+    return brandes_compute(num_nodes, adj);
+}

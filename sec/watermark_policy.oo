@@ -1,0 +1,16 @@
+// # Watermark Policy and Security Policies
+//
+// Logline: standardized onto ./watermark_types.oo Int-floor API.
+//
+// Setup: Companion types standardized; keep fail-closed real calls.
+//
+// Beats:
+//   1. Import standardized companion.
+//   2. Wrap constructor and Int query.
+//   3. Deterministic work helper for prove.
+
+import "std/sec/watermark_types.oo";
+
+pub fn watermark_policy_init(algo_id: Int, strength: Int) -> WatermarkMeta {
+    return watermark_meta_new(algo_id, strength);
+}

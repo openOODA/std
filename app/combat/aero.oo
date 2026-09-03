@@ -1,0 +1,42 @@
+// # Unified Aerospace and Astrodynamics Facade
+//
+// Logline: Unified entry point for two-body Keplerian propagation, coordinate transforms, and SGP4 orbital mechanics.
+//
+// Setup: Pure .oo standard library module importing aerospace orbital subsystems.
+//
+// Beats:
+//   1. Re-export Kepler equation solver and anomaly transformations.
+//   2. Re-export two-body Keplerian state vector propagation and coordinate transforms.
+//   3. Re-export NORAD TLE parser and SGP4 perturbation propagator.
+
+import "./propagation_twobody.oo";
+import "./tle_parser.oo";
+import "./sgp4_propagator.oo";
+
+pub fn aero_version() -> String {
+    return "1.0.0";
+}
+
+pub fn aero_solve_eccentric_anomaly(mean_anom: Float, ecc: Float) -> Float {
+    return kepler_solve_eccentric_anomaly(mean_anom, ecc);
+}
+
+pub fn aero_propagate_twobody(initial: OrbitElements, dt_sec: Float) -> StateVector {
+    return kepler_propagate_twobody(initial, dt_sec);
+}
+
+pub fn aero_parse_tle(line1: String, line2: String) -> Result[TLEData, String] {
+    return sgp4_parse_tle(line1, line2);
+}
+
+pub fn aero_propagate_sgp4(tle: TLEData, dt_min: Float) -> Result[StateVector, String] {
+    return sgp4_propagate(tle, dt_min);
+}
+
+pub fn aero_state_vector_from_keplerian(elem: OrbitElements, mu: Float) -> StateVector {
+    return state_vector_from_keplerian(elem, mu);
+}
+
+pub fn aero_state_vector_to_keplerian(state: StateVector, mu: Float) -> OrbitElements {
+    return state_vector_to_keplerian(state, mu);
+}

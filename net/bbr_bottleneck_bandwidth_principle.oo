@@ -1,0 +1,77 @@
+// # BBR Bottleneck Bandwidth and Round-Trip Propagation Time Principle
+//
+// Logline: BBR (Cardwell 2016 ACM Queue) estimates the path's bottleneck bandwidth BtlBw as the filtered max delivery rate and the round-trip propagation time RTprop as the filtered min RTT.
+//
+// Setup: Pure Int. Rates in bps, RTT in microseconds. Hostile (zero or negative) inputs fail closed to 0. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. bbr_btlbw(filtered_max_delivery_rate_bps) returns the rate (Cardwell 2016 BBR).
+//   2. bbr_rtprop(filtered_min_rtt_us) returns the RTT (Cardwell 2016 BBR).
+//   3. Coupled: BBR replaces CUBIC in Linux 4.9 (Jan 2017) for modern congestion control.
+
+import "std/net/net_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// BBR bottleneck bandwidth estimate = filtered max delivery rate in bps (Cardwell 2016).
+// Source: Cardwell, Cheng, Yeganeh, Swanson, "BBR: Congestion-Based Congestion Control", ACM Queue 14(5), 2016.
+pub fn bbr_btlbw(filtered_max_delivery_rate_bps: Int) -> Int {
+    if filtered_max_delivery_rate_bps <= 0 { return 0; }
+    return filtered_max_delivery_rate_bps;  // Cardwell 2016 ACM Queue BBR
+}
+
+// BBR round-trip propagation time estimate = filtered min RTT in microseconds (Cardwell 2016).
+// Source: Cardwell 2016 ACM Queue BBR.
+pub fn bbr_rtprop(filtered_min_rtt_us: Int) -> Int {
+    if filtered_min_rtt_us <= 0 { return 0; }
+    return filtered_min_rtt_us;  // Cardwell 2016 ACM Queue BBR
+}
+
+// 1 if BBR replaces CUBIC in modern congestion control (Linux 4.9, Jan 2017).
+// Source: BBR merged into Linux 4.9, January 2017; Cardwell 2016 ACM Queue.
+pub fn bbr_replaces_cubic() -> Int {
+    return 1;  // BBR merged Linux 4.9, Jan 2017
+}
+
+// Domain certificate: 1 if BBR estimates are positive (BtlBw > 0, RTprop > 0) and BBR replaces CUBIC.
+pub fn bbr_holds(rate_bps: Int, rtt_us: Int) -> DomainCert {
+    let inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if inv_ok == false { return domain_cert("net", "bbr_bottleneck_bandwidth_principle", 0); }
+    if rate_bps <= 0 { return domain_cert("net", "bbr_bottleneck_bandwidth_principle", 0); }
+    if rtt_us <= 0 { return domain_cert("net", "bbr_bottleneck_bandwidth_principle", 0); }
+    if bbr_replaces_cubic() != 1 { return domain_cert("net", "bbr_bottleneck_bandwidth_principle", 0); }
+    return domain_cert("net", "bbr_bottleneck_bandwidth_principle", 1);
+}
+
+// KAT and hostile cases for the BBR bottleneck bandwidth principle.
+pub fn verify_bbr_bottleneck_bandwidth_principle() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    // Golden: rate=1Gbps, rtt=50ms -> btlbw=1Gbps, rtprop=50ms within 0.001% (Int exact).
+    // 1 Gbps = 1_000_000_000 bps (Cardwell 2016 BBR ACM Queue example).
+    // 50 ms = 50_000 us (Cardwell 2016 BBR ACM Queue example).
+    let gbps: Int = 1000000000;  // Cardwell 2016 BBR 1 Gbps example
+    let rtt50ms_us: Int = 50000;  // Cardwell 2016 BBR 50 ms example
+    if bbr_btlbw(gbps) != gbps { return false; }
+    if bbr_rtprop(rtt50ms_us) != rtt50ms_us { return false; }
+    // Other typical values: 100 Mbps and 10 ms.
+    if bbr_btlbw(100000000) != 100000000 { return false; }  // 100 Mbps
+    if bbr_rtprop(10000) != 10000 { return false; }  // 10 ms
+    // Smallest legal: 1 bps, 1 us.
+    if bbr_btlbw(1) != 1 { return false; }  // 1 bps
+    if bbr_rtprop(1) != 1 { return false; }  // 1 us
+    // Hostile: zero rate -> 0.
+    if bbr_btlbw(0) != 0 { return false; }
+    if bbr_btlbw(0 - 1) != 0 { return false; }
+    if bbr_rtprop(0) != 0 { return false; }
+    if bbr_rtprop(0 - 1) != 0 { return false; }
+    // Coupled: BBR replaces CUBIC (Linux 4.9, Jan 2017).
+    if bbr_replaces_cubic() != 1 { return false; }
+    // Cert: golden 1, hostile 0.
+    if bbr_holds(gbps, rtt50ms_us).holds != 1 { return false; }
+    if bbr_holds(0, rtt50ms_us).holds != 0 { return false; }
+    if bbr_holds(gbps, 0).holds != 0 { return false; }
+    if bbr_holds(0, 0).holds != 0 { return false; }
+    if bbr_holds(0 - 1, rtt50ms_us).holds != 0 { return false; }
+    if bbr_holds(gbps, 0 - 1).holds != 0 { return false; }
+    return true;
+}

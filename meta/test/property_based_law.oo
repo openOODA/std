@@ -1,0 +1,180 @@
+// # Property-based test law
+//
+// Logline: A property f(x) holds for every x in a finite domain; shrinking finds the smallest counter-example when one exists.
+//
+// Setup: Pure Int arithmetic. No FS, net, env. Uses a deterministic LCG-style seed stream to stay reproducible.
+//
+// Beats:
+//   1. property_based_check returns holds=1 when an invariant (commutative add) passes for all sampled x.
+//   2. property_based_check returns holds=0 when the domain is empty (no proof by absence).
+//   3. property_based_check returns holds=0 when a violated predicate is supplied.
+//   4. shrink_int moves a counter-example one step toward zero.
+//   5. shrinking preserves the violation when the predicate is broken at every step.
+
+import "std/core/primitives/domain_cert.oo";
+
+// Deterministic LCG step: (a*seed + c) mod m. Returns the next seed.
+pub fn property_seed_next(seed: Int) -> Int {
+    let a: Int = 1103515245;
+    let c: Int = 12345;
+    let m: Int = 2147483647;
+    let raw: Int = a * seed + c;
+    let q: Int = raw / m;
+    let r: Int = raw - q * m;
+    if r < 0 {
+        return 0 - r;
+    }
+    return r;
+}
+
+pub fn commutative_add_holds(x: Int, y: Int) -> Int {
+    if x + y == y + x {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn violated_predicate_holds(x: Int, y: Int) -> Int {
+    // Claims x + y == 0 for every (x, y); fails for almost all inputs.
+    if x + y == 0 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn shrink_int(x: Int) -> Int {
+    if x > 0 {
+        return x - 1;
+    }
+    if x < 0 {
+        return x + 1;
+    }
+    return 0;
+}
+
+pub fn property_based_check(seed: Int, count: Int) -> DomainCert {
+    if count <= 0 {
+        return domain_cert("test", "property_based_law", 0);
+    }
+    let mut all_held: Int = 1;
+    let mut i: Int = 0;
+    let mut s: Int = seed;
+    while i < count {
+        let x: Int = s;
+        let y: Int = s + 1;
+        let h: Int = commutative_add_holds(x, y);
+        if h != 1 {
+            all_held = 0;
+        }
+        s = property_seed_next(s);
+        i = i + 1;
+    }
+    return domain_cert("test", "property_based_law", all_held);
+}
+
+pub fn property_based_check_with(seed: Int, count: Int, use_violated: Int) -> DomainCert {
+    if count <= 0 {
+        return domain_cert("test", "property_based_law", 0);
+    }
+    let mut all_held: Int = 1;
+    let mut i: Int = 0;
+    let mut s: Int = seed;
+    while i < count {
+        let x: Int = s;
+        let y: Int = s + 1;
+        let h: Int = 0;
+        let mut hh: Int = h;
+        if use_violated == 1 {
+            hh = violated_predicate_holds(x, y);
+        } else {
+            hh = commutative_add_holds(x, y);
+        }
+        if hh != 1 {
+            all_held = 0;
+        }
+        s = property_seed_next(s);
+        i = i + 1;
+    }
+    return domain_cert("test", "property_based_law", all_held);
+}
+
+// Coupled: given a counter-example, shrink it. For commutative add the shrunken
+// value is still a non-counter-example, so the shrinker reports "no smaller
+// counter-example found" and returns 1. For a violated predicate the shrunken
+// value is still a counter-example, so shrinking preserves the violation.
+pub fn shrinking_preserves_violation(counter_x: Int, use_violated: Int) -> Int {
+    let smaller: Int = shrink_int(counter_x);
+    if smaller == counter_x {
+        return 0;
+    }
+    let h: Int = 0;
+    let mut hh: Int = h;
+    if use_violated == 1 {
+        hh = violated_predicate_holds(smaller, smaller + 1);
+    } else {
+        hh = commutative_add_holds(smaller, smaller + 1);
+    }
+    if hh != 1 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn verify_property_based_law() -> Bool {
+    // Golden: 100 random ints, commutative add holds for all.
+    let golden: DomainCert = property_based_check(42, 100);
+    if golden.holds != 1 {
+        return false;
+    }
+    // Golden: 1 sample still proves the property.
+    let one: DomainCert = property_based_check(7, 1);
+    if one.holds != 1 {
+        return false;
+    }
+    // Hostile: empty domain fails closed.
+    let empty: DomainCert = property_based_check(0, 0);
+    if empty.holds != 0 {
+        return false;
+    }
+    // Hostile: negative count fails closed.
+    let neg_count: DomainCert = property_based_check(0, 0 - 1);
+    if neg_count.holds != 0 {
+        return false;
+    }
+    // Violated predicate returns holds=0.
+    let violated: DomainCert = property_based_check_with(1, 50, 1);
+    if violated.holds != 0 {
+        return false;
+    }
+    // Invariant still holds when the violated predicate is not selected.
+    let kept: DomainCert = property_based_check_with(1, 50, 0);
+    if kept.holds != 1 {
+        return false;
+    }
+    // Coupled: shrinking a counter-example from a violated predicate keeps the
+    // violation, returning 1 (preserved).
+    let preserve: Int = shrinking_preserves_violation(5, 1);
+    if preserve != 1 {
+        return false;
+    }
+    // Coupled: shrinking a valid input for commutative add produces another
+    // valid input, returning 0 (no preserved violation).
+    let no_preserve: Int = shrinking_preserves_violation(5, 0);
+    if no_preserve != 0 {
+        return false;
+    }
+    // shrink_int moves positive toward zero, negative toward zero, and zero to zero.
+    if shrink_int(0) != 0 {
+        return false;
+    }
+    if shrink_int(1) != 0 {
+        return false;
+    }
+    if shrink_int(7) != 6 {
+        return false;
+    }
+    if shrink_int(0 - 3) != 0 - 2 {
+        return false;
+    }
+    return true;
+}

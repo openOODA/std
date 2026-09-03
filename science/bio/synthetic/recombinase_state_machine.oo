@@ -1,0 +1,77 @@
+// # Sequential DNA Recombinase Finite State Machines
+//
+// Logline: Models multi-event temporal lineage recording and ordered state transitions using nested integrase cassettes.
+//
+// Setup: Non-volatile genomic state machine registering consecutive biological stimuli (A -> B vs B -> A) into distinct permanent states.
+//
+// Beats:
+//   1. Define StateTransitionRule, GenomicRegisterState, and FsmExecutionResult data structures.
+//   2. Evaluate order-dependent cassette inversions and lock-out mechanisms.
+//   3. Compute current discrete machine state ID and multi-channel reporter output profile.
+
+type StateTransitionRule = struct {
+    from_state: Int,
+    input_signal_id: Int,
+    to_state: Int,
+    inversion_efficiency: Float
+};
+
+type GenomicRegisterState = struct {
+    current_state_id: Int,
+    register_history: List[Int],
+    state_entropy: Float
+};
+
+type FsmExecutionResult = struct {
+    next_state_id: Int,
+    is_valid_transition: Bool,
+    gfp_output: Float,
+    rfp_output: Float,
+    cfp_output: Float
+};
+
+pub fn fsm_step_transition(
+    reg: GenomicRegisterState,
+    input_id: Int,
+    rules: List[StateTransitionRule],
+) -> FsmExecutionResult {
+    let cur_id: Int = reg.current_state_id;    let n: Int = list_len(rules);
+    let mut found_next: Int = cur_id;    let mut valid: Bool = false;
+    let mut i: Int = 0;    while i < n {
+        let r: Int = list_get(rules, i);        if r.from_state == cur_id && r.input_signal_id == input_id {
+            found_next = r.to_state;
+            valid = true;
+        }
+        i = i + 1;
+    }
+
+    // Reporter outputs mapped to states:
+    // State 0: Baseline (no signal)
+    // State 1: A first -> GFP
+    // State 2: B first -> RFP
+    // State 3: A then B -> CFP
+    let mut gfp: Float = 0.0;
+
+    if found_next == 1 {
+
+        gfp = 100.0;
+
+    }    let mut rfp: Float = 0.0;
+    if found_next == 2 {
+        rfp = 100.0;
+    }    let mut cfp: Float = 0.0;
+    if found_next == 3 {
+        cfp = 100.0;
+    }
+    return FsmExecutionResult {
+        next_state_id: found_next,
+        is_valid_transition: valid,
+        gfp_output: gfp,
+        rfp_output: rfp,
+        cfp_output: cfp
+    };
+}
+
+pub fn recombinase_state_machine_probe() -> Int {
+    return 0;
+}

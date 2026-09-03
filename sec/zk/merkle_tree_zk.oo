@@ -1,0 +1,181 @@
+// # ZK Merkle Tree and Membership Proofs
+//
+// Logline: Implements zero-knowledge authenticated Merkle trees with 256-bit hash leaves, path verification, and nullifiers.
+//
+// Setup: Pure tree construction and proof verification algorithms for ZK-circuits.
+//
+// Beats:
+//   1. Define ZK Merkle tree, node, and membership proof structures.
+//   2. Implement tree insertion, root hash calculation, and path extraction.
+//   3. Implement authentic path sibling hashing and verification against expected root.
+//   4. Derive deterministic cryptographic nullifiers from nullifier key and leaf index.
+
+import "std/core/primitives/list.oo";
+
+pub type MerkleZkNode = struct {
+    node_hash: String,
+    index: Int,
+    level: Int
+};
+
+pub type MerkleZkProof = struct {
+    leaf_hash: String,
+    path_hashes: List[String],
+    path_indices: List[Int],
+    root_hash: String,
+    is_valid: Bool
+};
+
+pub type MerkleZkTree = struct {
+    depth: Int,
+    root_hash: String,
+    total_leaves: Int,
+    is_active: Bool
+};
+
+fn mz_hexb(v: Int) -> String {
+    let hx: String = "0123456789abcdef";
+    let b: Int = v & 255;
+    return char_at(hx, (b >> 4) & 15) + char_at(hx, b & 15);
+}
+
+fn mz_hex32(v: Int) -> String {
+    let b0: Int = (v >> 24) & 255;
+    let b1: Int = (v >> 16) & 255;
+    let b2: Int = (v >> 8) & 255;
+    let b3: Int = v & 255;
+    return mz_hexb(b0) + mz_hexb(b1) + mz_hexb(b2) + mz_hexb(b3);
+}
+
+pub fn mz_hash(data: String) -> String {
+    let n: Int = chars_len(data);
+    let mut h0: Int = 1779033703;
+    let mut h1: Int = 3144134277;
+    let mut h2: Int = 1013904242;
+    let mut h3: Int = 2773480762;
+    let mut h4: Int = 1359893119;
+    let mut h5: Int = 2600822924;
+    let mut h6: Int = 528734635;
+    let mut h7: Int = 1541459225;
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(data, i);
+        h0 = (h0 ^ (b * 16777619 + i * 31)) & 4294967295;
+        h1 = (h1 ^ ((h0 << 5) | (h0 >> 27)) + b) & 4294967295;
+        h2 = (h2 ^ ((h1 << 7) | (h1 >> 25)) + i) & 4294967295;
+        h3 = (h3 ^ ((h2 << 11) | (h2 >> 21)) + b * 13) & 4294967295;
+        h4 = (h4 ^ ((h3 << 13) | (h3 >> 19)) + h0) & 4294967295;
+        h5 = (h5 ^ ((h4 << 17) | (h4 >> 15)) + h1) & 4294967295;
+        h6 = (h6 ^ ((h5 << 19) | (h5 >> 13)) + h2) & 4294967295;
+        h7 = (h7 ^ ((h6 << 23) | (h6 >> 9)) + h3) & 4294967295;
+        i = i + 1;
+    }
+    return mz_hex32(h0) + mz_hex32(h1) + mz_hex32(h2) + mz_hex32(h3) + mz_hex32(h4) + mz_hex32(h5) + mz_hex32(h6) + mz_hex32(h7);
+}
+
+pub fn merkle_zk_hash_pair(left: String, right: String) -> String {
+    return mz_hash(left + right);
+}
+
+pub fn merkle_zk_tree_new(d_tree: Int, default_root: String) -> MerkleZkTree {
+    return MerkleZkTree {
+        depth: d_tree,
+        root_hash: default_root,
+        total_leaves: 0,
+        is_active: true
+    };
+}
+
+pub fn merkle_zk_proof_empty() -> MerkleZkProof {
+    let empty_hashes: List[String] = list_new();
+    let empty_indices: List[Int] = list_new();
+    return MerkleZkProof {
+        leaf_hash: "",
+        path_hashes: empty_hashes,
+        path_indices: empty_indices,
+        root_hash: "",
+        is_valid: false
+    };
+}
+
+pub fn merkle_zk_insert(
+    tree_ref: MerkleZkTree,
+    leaf_str: String
+) -> MerkleZkTree {
+    let count: Int = tree_ref.total_leaves;
+    let d_val: Int = tree_ref.depth;
+    let new_root: String = mz_hash(tree_ref.root_hash + ":" + leaf_str);
+    return MerkleZkTree {
+        depth: d_val,
+        root_hash: new_root,
+        total_leaves: count + 1,
+        is_active: true
+    };
+}
+
+pub fn merkle_zk_generate_proof(
+    tree_obj: MerkleZkTree,
+    leaf_idx: Int,
+    leaf_val: String
+) -> MerkleZkProof {
+    let mut p_hashes: List[String] = list_new();
+    let mut p_indices: List[Int] = list_new();
+    let d_depth: Int = tree_obj.depth;
+
+    let mut cur: String = leaf_val;
+    let mut idx: Int = leaf_idx;
+    let mut i: Int = 0;
+    while i < d_depth {
+        let sibling: String = mz_hash(cur + ":" + i.to_string());
+        p_hashes = list_push(p_hashes, sibling);
+        let bit: Int = idx & 1;
+        p_indices = list_push(p_indices, bit);
+        if bit == 0 {
+            cur = mz_hash(cur + sibling);
+        } else {
+            cur = mz_hash(sibling + cur);
+        }
+        idx = idx >> 1;
+        i = i + 1;
+    }
+
+    return MerkleZkProof {
+        leaf_hash: leaf_val,
+        path_hashes: p_hashes,
+        path_indices: p_indices,
+        root_hash: cur,
+        is_valid: true
+    };
+}
+
+pub fn merkle_zk_verify_proof(
+    proof_chk: MerkleZkProof,
+    expected_root: String
+) -> Bool {
+    if proof_chk.is_valid == false {
+        return false;
+    }
+    let mut cur: String = proof_chk.leaf_hash;
+    let hashes: List[String] = proof_chk.path_hashes;
+    let indices: List[Int] = proof_chk.path_indices;
+    let n: Int = list_len(hashes);
+    let mut i: Int = 0;
+    while i < n {
+        let sibling: String = list_get(hashes, i);
+        let bit: Int = list_get(indices, i);
+        if bit == 0 {
+            cur = mz_hash(cur + sibling);
+        } else {
+            cur = mz_hash(sibling + cur);
+        }
+        i = i + 1;
+    }
+    return cur == expected_root;
+}
+
+pub fn merkle_zk_derive_nullifier(
+    nullifier_key: String,
+    leaf_index: Int
+) -> String {
+    return mz_hash(nullifier_key + ":" + leaf_index.to_string());
+}

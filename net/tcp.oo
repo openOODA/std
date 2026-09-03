@@ -1,0 +1,36 @@
+// # Net TCP ◈ ZERO-DRAG
+//
+// Logline: Flat-prefix TCP wrapper with minimal TcpCap.
+//
+// Setup: Requires &TcpCap for connect, read, write.
+//
+// Beats:
+//   1. Connect via TcpCap.
+//   2. Read and write via TcpCap.
+//   3. Close, no NetCap fallback.
+
+// ## CAPs
+//   TcpCap:  tcp_connect, tcp_read, tcp_write
+
+pub fn net_tcp_connect(
+  tcp: &TcpCap,
+  host: String,
+  port: Int
+) -> Result[Int, String] {
+  return tcp_connect(tcp, host, port);
+}
+
+pub fn net_tcp_write(
+  tcp: &TcpCap,
+  fd: Int,
+  data: String
+) -> Result[Int, String] {
+  return tcp_write(tcp, fd, data);
+}
+
+pub fn net_tcp_read(
+  tcp: &TcpCap,
+  fd: Int
+) -> Result[String, String] {
+  return tcp_read(tcp, fd);
+}

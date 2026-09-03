@@ -1,0 +1,62 @@
+// # AArch64 SHA-256 Helpers And Compress
+//
+// Logline: Big-endian 32-bit load, 32-bit rotate, and the SHA-256 compression driver.
+//
+// Setup: W words sit in 8-byte heap slots. Compress delegates rounds to __sha_rounds.
+//
+// Beats:
+//   1. __sha_be4 loads four bytes as a big-endian uint32.
+//   2. __sha_rotr rotates a 32-bit value.
+//   3. __sha_compress inits H, fills W, and calls rounds per block.
+//   4. HMAC is emitted by a64rt_sha256e.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+import "std/hw/silicon/aarch64_xrt_sha256e.oo";
+
+fn a64rt_be4(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_be4");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(0, 9, 31));
+    x = a64x_emit(x, arm64_word_movz(2, 24, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(0, 0, 2));
+    x = a64x_emit(x, arm64_word_movz(3, 1, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(1, 9, 3));
+    x = a64x_emit(x, arm64_word_movz(2, 16, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(1, 1, 2));
+    x = a64x_emit(x, arm64_word_orr_reg(0, 0, 1));
+    x = a64x_emit(x, arm64_word_movz(3, 2, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(1, 9, 3));
+    x = a64x_emit(x, arm64_word_movz(2, 8, 0));
+    x = a64x_emit(x, arm64_word_lsl_reg(1, 1, 2));
+    x = a64x_emit(x, arm64_word_orr_reg(0, 0, 1));
+    x = a64x_emit(x, arm64_word_movz(3, 3, 0));
+    x = a64x_emit(x, arm64_word_ldrb_reg(1, 9, 3));
+    x = a64x_emit(x, arm64_word_orr_reg(0, 0, 1));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_rotr(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__sha_rotr");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_movz(2, 32, 0));
+    x = a64x_emit(x, arm64_word_sub_reg(2, 2, 1));
+    x = a64x_emit(x, arm64_word_lsr_reg(3, 0, 1));
+    x = a64x_emit(x, arm64_word_lsl_reg(4, 0, 2));
+    x = a64x_emit(x, arm64_word_orr_reg(0, 3, 4));
+    x = a64x_emit(x, arm64_word_movz(2, 65535, 0));
+    x = a64x_emit(x, arm64_word_movk(2, 65535, 1));
+    x = a64x_emit(x, arm64_word_and_reg(0, 0, 2));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+pub fn a64rt_sha256h(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_be4(r0);
+    r = a64rt_rotr(r);
+    return a64rt_sha256e(r);
+}

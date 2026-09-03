@@ -1,0 +1,74 @@
+// # Associativity law
+//
+// Logline: For Int addition, (a + b) + c equals a + (b + c); the same identity holds for Int multiplication; subtraction is not associative.
+//
+// Setup: Pure Int. Three-argument Int addition and multiplication are associative; subtraction is not.
+//
+// Beats:
+//   1. add_assoc(a, b, c) returns 1 when (a + b) + c == a + (b + c).
+//   2. mul_assoc(a, b, c) returns 1 when (a * b) * c == a * (b * c).
+//   3. sub_assoc returns 0 for a witness where subtraction fails the law.
+//   4. A hostile claim that subtraction is associative fails closed to 0.
+
+// (a + b) + c compared to a + (b + c). Returns 1 on equality, 0 otherwise.
+pub fn core_add_assoc(a: Int, b: Int, c: Int) -> Int {
+    let left: Int = (a + b) + c;
+    let right: Int = a + (b + c);
+    if left == right {
+        return 1;
+    }
+    return 0;
+}
+
+// (a * b) * c compared to a * (b * c). Returns 1 on equality, 0 otherwise.
+pub fn core_mul_assoc(a: Int, b: Int, c: Int) -> Int {
+    let left: Int = (a * b) * c;
+    let right: Int = a * (b * c);
+    if left == right {
+        return 1;
+    }
+    return 0;
+}
+
+// Subtraction is not associative: (a - b) - c vs a - (b - c). Returns 1 when they differ.
+pub fn core_sub_not_assoc(a: Int, b: Int, c: Int) -> Int {
+    let left: Int = (a - b) - c;
+    let right: Int = a - (b - c);
+    if left == right {
+        return 0;
+    }
+    return 1;
+}
+
+// Hostile claim: "subtraction is associative" - returns 0 by definition.
+pub fn core_claim_sub_is_assoc(a: Int, b: Int, c: Int) -> Int {
+    let w: Int = core_sub_not_assoc(a, b, c);
+    if w == 1 {
+        return 0;
+    }
+    return 0;
+}
+
+pub fn verify_associativity_law() -> Bool {
+    // Golden: add is associative for representative triples.
+    if core_add_assoc(1, 2, 3) != 1 { return false; }
+    if core_add_assoc(0, 0, 0) != 1 { return false; }
+    if core_add_assoc(0 - 1, 2, 0 - 3) != 1 { return false; }
+    if core_add_assoc(100, 200, 300) != 1 { return false; }
+    if core_add_assoc(0, 0 - 5, 7) != 1 { return false; }
+
+    // Golden: mul is associative for representative triples.
+    if core_mul_assoc(2, 3, 4) != 1 { return false; }
+    if core_mul_assoc(1, 1, 1) != 1 { return false; }
+    if core_mul_assoc(0 - 2, 3, 0 - 4) != 1 { return false; }
+    if core_mul_assoc(0, 100, 200) != 1 { return false; }
+
+    // Hostile: subtraction is not associative. (5 - 3) - 1 = 1, but 5 - (3 - 1) = 3.
+    if core_sub_not_assoc(5, 3, 1) != 1 { return false; }
+
+    // Hostile: claim that subtraction is associative is always false.
+    if core_claim_sub_is_assoc(5, 3, 1) != 0 { return false; }
+    if core_claim_sub_is_assoc(10, 4, 2) != 0 { return false; }
+
+    return true;
+}

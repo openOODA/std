@@ -1,0 +1,192 @@
+// # Gen 4 Aerial Combat Simulation & F-14 Tomcat vs F-16 Falcon E-M Dogfight
+//
+// Logline: Deep E-M dogfight simulation pitting the heavy variable-sweep F-14 Tomcat against the agile FBW F-16 Falcon.
+//
+// Setup: Pure aerodynamic physics module with zero ambient authority, coupling CADC wing sweep with FBW 9G turn dynamics.
+//
+// Beats:
+//   1. Define Gen 4 flight dynamics state vector and dogfight delta comparison structures.
+//   2. Implement F-14 Tomcat state evaluation with dynamic CADC wing sweep schedule (20° to 68°).
+//   3. Implement F-16 Fighting Falcon state evaluation with relaxed static stability and FBW 9G limiter.
+//   4. Evaluate Boyd E-M delta: demonstrate F-14 negative Ps in high-G turns vs F-16 positive Ps retention at 9G.
+//   5. Step discrete dogfight turn maneuvers and track instantaneous specific energy evolution.
+
+import "std/app/combat/atmosphere.oo";
+import "std/app/combat/boyd_em.oo";
+import "std/app/combat/cadc_sweep.oo";
+
+type Gen4FlightState = struct {
+    aircraft_code: Int,
+    weight_lbs: Float,
+    thrust_lbf: Float,
+    mach: Float,
+    velocity_fps: Float,
+    dynamic_pressure_psf: Float,
+    sweep_deg: Float,
+    aspect_ratio: Float,
+    oswald_e: Float,
+    cd0: Float,
+    cd: Float,
+    drag_lbf: Float,
+    load_factor_g: Float,
+    turn_rate_deg: Float,
+    turn_radius_ft: Float,
+    ps_fps: Float,
+    energy_height_ft: Float,
+    max_sustained_g: Float
+};
+
+type DogfightEmDelta = struct {
+    delta_ps_fps: Float,
+    delta_turn_rate_deg: Float,
+    delta_energy_height_ft: Float,
+    f14_retains_energy: Bool,
+    f16_retains_energy: Bool,
+    f16_turn_advantage: Bool
+};
+
+pub fn f14_eval_flight_state(
+    altitude_ft: Float,
+    velocity_fps: Float,
+    mach: Float,
+    density_slug_ft3: Float,
+    load_factor_g: Float,
+    current_sweep: Float,
+    dt: Float
+) -> Gen4FlightState {
+    let weight: Float = 61000.0;
+    let thrust_max_ab: Float = 41800.0;
+    let wing_area: Float = 565.0;
+
+    let q: Float = calculate_dynamic_pressure(density_slug_ft3, velocity_fps);
+    let target_sweep: Float = cadc_compute_wing_sweep(mach, q);
+    let sweep: Float = cadc_rate_limit(current_sweep, target_sweep, dt);
+    let ar: Float = cadc_compute_aspect_ratio(sweep);
+    let e_val: Float = cadc_compute_oswald_efficiency(sweep);
+    let cd0_val: Float = cadc_compute_cd0(sweep, mach);
+
+    let cl_val: Float = calculate_lift_coefficient(weight, load_factor_g, q, wing_area);
+    let cdi_val: Float = calculate_induced_drag(cl_val, ar, e_val);
+    let cd_tot: Float = cd0_val + cdi_val;
+    let drag_tot: Float = calculate_total_drag_force(q, wing_area, cd_tot);
+    let ps_val: Float = calculate_ps(thrust_max_ab, drag_tot, weight, velocity_fps);
+    let tr_deg: Float = calculate_turn_rate_deg(velocity_fps, load_factor_g);
+    let rad_ft: Float = calculate_turn_radius_ft(velocity_fps, load_factor_g);
+    let he: Float = calculate_specific_energy(altitude_ft, velocity_fps);
+    let sustained_g: Float = calculate_max_sustained_g(thrust_max_ab, cd0_val, ar, e_val, q, wing_area, weight);
+
+    return Gen4FlightState {
+        aircraft_code: 14,
+        weight_lbs: weight,
+        thrust_lbf: thrust_max_ab,
+        mach: mach,
+        velocity_fps: velocity_fps,
+        dynamic_pressure_psf: q,
+        sweep_deg: sweep,
+        aspect_ratio: ar,
+        oswald_e: e_val,
+        cd0: cd0_val,
+        cd: cd_tot,
+        drag_lbf: drag_tot,
+        load_factor_g: load_factor_g,
+        turn_rate_deg: tr_deg,
+        turn_radius_ft: rad_ft,
+        ps_fps: ps_val,
+        energy_height_ft: he,
+        max_sustained_g: sustained_g
+    };
+}
+
+pub fn f16_eval_flight_state(
+    altitude_ft: Float,
+    velocity_fps: Float,
+    mach: Float,
+    density_slug_ft3: Float,
+    load_factor_g: Float
+) -> Gen4FlightState {
+    let weight: Float = 25000.0;
+    let thrust_max_ab: Float = 29000.0;
+    let wing_area: Float = 300.0;
+    let ar: Float = 3.20;
+    let e_val: Float = 0.82;
+    let cd0_base: Float = 0.0180;
+
+    let mut g_clamped: Float = load_factor_g;
+    if g_clamped > 9.0 {
+        g_clamped = 9.0;
+    }
+
+    let q: Float = calculate_dynamic_pressure(density_slug_ft3, velocity_fps);
+    let cl_val: Float = calculate_lift_coefficient(weight, g_clamped, q, wing_area);
+    let cdi_val: Float = calculate_induced_drag(cl_val, ar, e_val);
+    let cdw_val: Float = calculate_wave_drag(mach, 0.86, 1.6);
+    let cd_tot: Float = cd0_base + cdi_val + cdw_val;
+    let drag_tot: Float = calculate_total_drag_force(q, wing_area, cd_tot);
+    let ps_val: Float = calculate_ps(thrust_max_ab, drag_tot, weight, velocity_fps);
+    let tr_deg: Float = calculate_turn_rate_deg(velocity_fps, g_clamped);
+    let rad_ft: Float = calculate_turn_radius_ft(velocity_fps, g_clamped);
+    let he: Float = calculate_specific_energy(altitude_ft, velocity_fps);
+    let sustained_g: Float = calculate_max_sustained_g(thrust_max_ab, cd0_base, ar, e_val, q, wing_area, weight);
+
+    return Gen4FlightState {
+        aircraft_code: 16,
+        weight_lbs: weight,
+        thrust_lbf: thrust_max_ab,
+        mach: mach,
+        velocity_fps: velocity_fps,
+        dynamic_pressure_psf: q,
+        sweep_deg: 40.0,
+        aspect_ratio: ar,
+        oswald_e: e_val,
+        cd0: cd0_base,
+        cd: cd_tot,
+        drag_lbf: drag_tot,
+        load_factor_g: g_clamped,
+        turn_rate_deg: tr_deg,
+        turn_radius_ft: rad_ft,
+        ps_fps: ps_val,
+        energy_height_ft: he,
+        max_sustained_g: sustained_g
+    };
+}
+
+pub fn dogfight_eval_em_delta(f14: Gen4FlightState, f16: Gen4FlightState) -> DogfightEmDelta {
+    let d_ps: Float = f16.ps_fps - f14.ps_fps;
+    let d_tr: Float = f16.turn_rate_deg - f14.turn_rate_deg;
+    let d_he: Float = f16.energy_height_ft - f14.energy_height_ft;
+    let f14_pos: Bool = f14.ps_fps >= 0.0;
+    let f16_pos: Bool = f16.ps_fps >= 0.0;
+    let f16_adv: Bool = d_tr > 0.0 && f16_pos;
+
+    return DogfightEmDelta {
+        delta_ps_fps: d_ps,
+        delta_turn_rate_deg: d_tr,
+        delta_energy_height_ft: d_he,
+        f14_retains_energy: f14_pos,
+        f16_retains_energy: f16_pos,
+        f16_turn_advantage: f16_adv
+    };
+}
+
+pub fn is_f14_energy_deficient_at_high_g(ps_fps: Float, load_factor_g: Float) -> Bool {
+    if load_factor_g >= 6.5 {
+        if ps_fps < 0.0 {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn is_f16_energy_positive_at_9g(ps_fps: Float, load_factor_g: Float) -> Bool {
+    if load_factor_g >= 8.5 {
+        if ps_fps >= 0.0 {
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn dogfight_step_energy(current_energy_height_ft: Float, ps_fps: Float, dt: Float) -> Float {
+    let ps_unscaled: Float = ps_fps / 850.0;
+    return current_energy_height_ft + (ps_unscaled * dt);
+}

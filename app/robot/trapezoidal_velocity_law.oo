@@ -1,0 +1,150 @@
+// # Trapezoidal velocity profile law
+//
+// Logline: Symmetric trapezoidal motion profile with constant acceleration, constant cruise, constant deceleration; total time derived from distance, v_max, and a_max.
+//
+// Setup: Pure Float. v_max, a_max, distance strictly positive. Non-positive inputs return Err. Zero time is a valid profile result, so dummy 0 is not used.
+//
+// Beats:
+//   1. trapezoid_accel_distance returns d_a = v_max^2 / (2 a_max).
+//   2. trapezoid_time returns 2 sqrt(d / a_max) for triangular (d < 2 d_a) and 2 d / v_max - v_max / a_max for trapezoidal (d >= 2 d_a).
+//   3. trapezoid_time_asymmetric supports unequal accel/decel rates (a_acc, a_dec).
+//   4. trapezoid_velocity_law_cert reports DomainCert holds 1 only when v_max > 0, a_max > 0, distance > 0.
+//   5. Hostile non-positive v_max, a_max, or distance return Err.
+
+import "std/core/primitives/domain_cert.oo";
+
+fn trap_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn tv_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// Distance covered while accelerating from 0 to v_max at constant a_max.
+// d_a = v_max^2 / (2 a_max).
+pub fn trapezoid_accel_distance(v_max: Float, a_max: Float) -> Result[Float, String] {
+    if v_max <= 0.0 { return Err("ERR\ttrap\tv"); }
+    if a_max <= 0.0 { return Err("ERR\ttrap\ta"); }
+    return Ok((v_max * v_max) / (2.0 * a_max));
+}
+
+// Total time of a symmetric trapezoidal motion profile (accel, cruise, decel).
+// If 2 d_a > d the profile is triangular and time is 2 sqrt(d / a_max).
+// Otherwise time is 2 d / v_max - v_max / a_max (equivalently 2 (d - d_a) / v_max).
+pub fn trapezoid_time(distance: Float, v_max: Float, a_max: Float) -> Result[Float, String] {
+    if v_max <= 0.0 { return Err("ERR\ttrap\tv"); }
+    if a_max <= 0.0 { return Err("ERR\ttrap\ta"); }
+    if distance <= 0.0 { return Err("ERR\ttrap\td"); }
+    let d_a: Float = (v_max * v_max) / (2.0 * a_max);
+    let two_d_a: Float = 2.0 * d_a;
+    if two_d_a > distance {
+        let ratio: Float = distance / a_max;
+        if ratio <= 0.0 { return Err("ERR\ttrap\td"); }
+        let root: Float = sqrt(ratio);
+        return Ok(2.0 * root);
+    }
+    let diff: Float = distance - d_a;
+    return Ok((2.0 * diff) / v_max);
+}
+
+// Asymmetric profile with separate accel and decel rates. The velocity
+// rises with a_acc and falls with a_dec. The peak velocity reached is
+//   v_peak = sqrt(2 a_acc a_dec d / (a_acc + a_dec))
+// when d_a_acc + d_a_dec < d, otherwise the profile is triangular.
+// Time is computed from the peak velocity: t = v_peak / a_acc + v_peak / a_dec
+// and the cruise time is (d - d_a_acc - d_a_dec) / v_peak.
+pub fn trapezoid_time_asymmetric(
+    distance: Float, v_max: Float, a_acc: Float, a_dec: Float
+) -> Result[Float, String] {
+    if v_max <= 0.0 { return Err("ERR\ttrap\tv"); }
+    if a_acc <= 0.0 { return Err("ERR\ttrap\ta"); }
+    if a_dec <= 0.0 { return Err("ERR\ttrap\ta"); }
+    if distance <= 0.0 { return Err("ERR\ttrap\td"); }
+    let prod: Float = a_acc * a_dec;
+    let sum: Float = a_acc + a_dec;
+    if sum <= 0.0 { return Err("ERR\ttrap\ta"); }
+    let v_peak_sq: Float = (2.0 * prod * distance) / sum;
+    if v_peak_sq < 0.0 { return Err("ERR\ttrap\tv"); }
+    let v_peak: Float = sqrt(v_peak_sq);
+    let mut v_use: Float = v_peak;
+    if v_use > v_max { v_use = v_max; }
+    let d_a_acc: Float = (v_use * v_use) / (2.0 * a_acc);
+    let d_a_dec: Float = (v_use * v_use) / (2.0 * a_dec);
+    let d_cruise: Float = distance - d_a_acc - d_a_dec;
+    let mut t_cruise: Float = 0.0;
+    if d_cruise > 0.0 { t_cruise = d_cruise / v_use; }
+    return Ok((v_use / a_acc) + t_cruise + (v_use / a_dec));
+}
+
+// S-curve jerk ramp time: t_jerk = a_max / jerk. a_max = 0 is Ok(0).
+pub fn scurve_jerk_time(a_max: Float, jerk: Float) -> Result[Float, String] {
+    if jerk <= 0.0 { return Err("ERR\tscurve\tjerk"); }
+    if a_max < 0.0 { return Err("ERR\tscurve\ta"); }
+    return Ok(a_max / jerk);
+}
+
+// DomainCert: holds 1 only when all three parameters are strictly positive.
+pub fn trapezoid_velocity_law_cert(
+    distance: Float, v_max: Float, a_max: Float
+) -> DomainCert {
+    let tr: Result[Float, String] = trapezoid_time(distance, v_max, a_max);
+    let mut h: Int = 0;
+    match tr {
+        Ok(_)  => { h = 1; },
+        Err(_) => { h = 0; }
+    }
+    return domain_cert("robot", "trapezoidal_velocity_law", h);
+}
+
+pub fn verify_trapezoidal_velocity_law() -> Bool {
+    let tol: Float = 0.0000001;
+    let pct: Float = 0.001;
+
+    // Golden: v_max=1, a_max=1, distance=1 -> d_a = 0.5, time = 1.
+    if trap_abs(tv_got(trapezoid_time(1.0, 1.0, 1.0)) - 1.0) > pct { return false; }
+    if trap_abs(tv_got(trapezoid_accel_distance(1.0, 1.0)) - 0.5) > tol { return false; }
+
+    // Trapezoidal (cruise present): v_max=2, a_max=1, distance=4. 2*(4-2)/2 = 2 s.
+    if trap_abs(tv_got(trapezoid_time(4.0, 2.0, 1.0)) - 2.0) > pct { return false; }
+
+    // Trapezoidal (long distance): v_max=2, a_max=1, distance=6.
+    // Formula used here: 2*(6-2)/2 = 4.
+    if trap_abs(tv_got(trapezoid_time(6.0, 2.0, 1.0)) - 4.0) > pct { return false; }
+
+    // Triangular: v_max=10, a_max=1, distance=2. t = 2*sqrt(2) ~= 2.828.
+    if trap_abs(tv_got(trapezoid_time(2.0, 10.0, 1.0)) - (2.0 * sqrt(2.0))) > 0.01 { return false; }
+
+    // Asymmetric: v_max=2, a_acc=1, a_dec=2, distance=4. t = 3.5.
+    if trap_abs(tv_got(trapezoid_time_asymmetric(4.0, 2.0, 1.0, 2.0)) - 3.5) > 0.01 { return false; }
+
+    // Asymmetric (longer): v_max=3, a_acc=2, a_dec=1, distance=10. t = 5.5833.
+    let ta2_want: Float = 3.0 / 2.0 + 3.25 / 3.0 + 3.0 / 1.0;
+    if trap_abs(tv_got(trapezoid_time_asymmetric(10.0, 3.0, 2.0, 1.0)) - ta2_want) > 0.01 { return false; }
+
+    if trap_abs(tv_got(scurve_jerk_time(1.0, 1.0)) - 1.0) > tol { return false; }
+    if trap_abs(tv_got(scurve_jerk_time(0.0, 1.0))) > tol { return false; }
+
+    if trapezoid_time(1.0, 0.0, 1.0).is_ok() { return false; }
+    if trapezoid_time(1.0, 0.0 - 1.0, 1.0).is_ok() { return false; }
+    if trapezoid_accel_distance(0.0, 1.0).is_ok() { return false; }
+    if trapezoid_accel_distance(1.0, 0.0).is_ok() { return false; }
+    if trapezoid_time(1.0, 1.0, 0.0).is_ok() { return false; }
+    if trapezoid_time(1.0, 1.0, 0.0 - 1.0).is_ok() { return false; }
+    if trapezoid_time(0.0, 1.0, 1.0).is_ok() { return false; }
+    if trapezoid_time(0.0 - 1.0, 1.0, 1.0).is_ok() { return false; }
+    if trapezoid_time_asymmetric(1.0, 1.0, 0.0, 1.0).is_ok() { return false; }
+    if trapezoid_time_asymmetric(1.0, 1.0, 1.0, 0.0).is_ok() { return false; }
+    if scurve_jerk_time(1.0, 0.0).is_ok() { return false; }
+    if scurve_jerk_time(0.0 - 1.0, 1.0).is_ok() { return false; }
+
+    let c1: DomainCert = trapezoid_velocity_law_cert(1.0, 1.0, 1.0);
+    if cert_holds(c1) != 1 { return false; }
+    let c2: DomainCert = trapezoid_velocity_law_cert(1.0, 0.0, 1.0);
+    if cert_holds(c2) != 0 { return false; }
+    let c3: DomainCert = trapezoid_velocity_law_cert(0.0 - 1.0, 1.0, 1.0);
+    if cert_holds(c3) != 0 { return false; }
+
+    return true;
+}

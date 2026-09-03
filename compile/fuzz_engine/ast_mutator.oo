@@ -1,0 +1,74 @@
+// # Fuzz Input and Byte Array Mutators
+//
+// Logline: Structural and bit-level fuzzing mutations including bit flips, byte arithmetic, boundary values, and block splicing.
+//
+// Setup: Pure mutation engine synthesizing varied execution inputs for hostile fuzzing.
+//
+// Beats:
+//   1. Implement single-bit inversion at specified byte offsets.
+//   2. Implement byte-level arithmetic addition and subtraction mutations.
+//   3. Inject boundary critical values (0, 1, 127, 128, 255).
+//   4. Splice prefix and suffix byte sequences between distinct test cases.
+
+pub fn mut_flip_bit(buf: List[Int], byte_idx: Int, bit_idx: Int) -> Result[List[Int], String] {
+    let n: Int = list_len(buf);
+    if byte_idx < 0 || byte_idx >= n {
+        return Err("ERR\tmut_flip_bit\tbyte_index_out_of_bounds");
+    }
+    if bit_idx < 0 || bit_idx >= 8 {
+        return Err("ERR\tmut_flip_bit\tbit_index_out_of_bounds");
+    }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = list_get(buf, i);
+        if i == byte_idx {
+            let flipped: Int = (b ^ (1 << bit_idx)) & 255;
+            out = list_push(out, flipped);
+        } else {
+            out = list_push(out, b);
+        }
+        i = i + 1;
+    }
+    return Ok(out);
+}
+
+pub fn mut_byte_add(buf: List[Int], byte_idx: Int, delta: Int) -> Result[List[Int], String] {
+    let n: Int = list_len(buf);
+    if byte_idx < 0 || byte_idx >= n {
+        return Err("ERR\tmut_byte_add\tbyte_index_out_of_bounds");
+    }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = list_get(buf, i);
+        if i == byte_idx {
+            let new_b: Int = (b + delta) & 255;
+            out = list_push(out, new_b);
+        } else {
+            out = list_push(out, b);
+        }
+        i = i + 1;
+    }
+    return Ok(out);
+}
+
+pub fn mut_splice(buf_a: List[Int], cut_a: Int, buf_b: List[Int], cut_b: Int) -> Result[List[Int], String] {
+    let na: Int = list_len(buf_a);
+    let nb: Int = list_len(buf_b);
+    if cut_a < 0 || cut_a > na || cut_b < 0 || cut_b > nb {
+        return Err("ERR\tmut_splice\tcut_point_out_of_bounds");
+    }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < cut_a {
+        out = list_push(out, list_get(buf_a, i));
+        i = i + 1;
+    }
+    let mut j: Int = cut_b;
+    while j < nb {
+        out = list_push(out, list_get(buf_b, j));
+        j = j + 1;
+    }
+    return Ok(out);
+}

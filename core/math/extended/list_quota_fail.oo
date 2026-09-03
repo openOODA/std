@@ -1,0 +1,20 @@
+// # List Quota Fail
+//
+// Logline: Standard library verification and domain capabilities for List Quota Fail.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_list_quota_fail() -> Bool {
+    let mut lst: List[Int] = list_new();
+    let mut i = 0;
+    while i < 200 {
+        lst = list_push(lst, i);
+        i = i + 1;
+    }
+    println(list_len(lst));
+    return true;
+}

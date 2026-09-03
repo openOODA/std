@@ -1,0 +1,91 @@
+// # SIMD lane width and 4-vector dot product law
+//
+// Logline: A valid SIMD lane width in bytes is one of 1, 2, 4, 8, 16, or 32, and the dot product of two 4-vectors is the sum of the four element-wise products.
+//
+// Setup: Pure Int and Float. Width is in bytes. Dot product uses Vec4f from std/simd/simd_types.oo.
+//
+// Beats:
+//   1. simd_lane_width_ok holds 1 for {1, 2, 4, 8, 16, 32} and 0 otherwise.
+//   2. Negative or non-pow2 widths fail closed to 0.
+//   3. simd_vec4_dot sums a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w.
+
+import "std/sec/simd/simd_types.oo";
+
+pub fn simd_lane_width_ok(width: Int) -> Int {
+    if width == 1 {
+        return 1;
+    }
+    if width == 2 {
+        return 1;
+    }
+    if width == 4 {
+        return 1;
+    }
+    if width == 8 {
+        return 1;
+    }
+    if width == 16 {
+        return 1;
+    }
+    if width == 32 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn simd_vec4_dot(a: Vec4f, b: Vec4f) -> Float {
+    let p0: Float = a.x * b.x;
+    let p1: Float = a.y * b.y;
+    let p2: Float = a.z * b.z;
+    let p3: Float = a.w * b.w;
+    return p0 + p1 + p2 + p3;
+}
+
+pub fn verify_simd_lane_law() -> Bool {
+    if simd_lane_width_ok(1) != 1 {
+        return false;
+    }
+    if simd_lane_width_ok(2) != 1 {
+        return false;
+    }
+    if simd_lane_width_ok(4) != 1 {
+        return false;
+    }
+    if simd_lane_width_ok(8) != 1 {
+        return false;
+    }
+    if simd_lane_width_ok(16) != 1 {
+        return false;
+    }
+    if simd_lane_width_ok(32) != 1 {
+        return false;
+    }
+    if simd_lane_width_ok(0) != 0 {
+        return false;
+    }
+    if simd_lane_width_ok(3) != 0 {
+        return false;
+    }
+    if simd_lane_width_ok(64) != 0 {
+        return false;
+    }
+    if simd_lane_width_ok(-1) != 0 {
+        return false;
+    }
+    let a1: Vec4f = vec4f_new(1.0, 2.0, 3.0, 4.0);
+    let b1: Vec4f = vec4f_new(5.0, 6.0, 7.0, 8.0);
+    if simd_vec4_dot(a1, b1) != 70.0 {
+        return false;
+    }
+    let za: Vec4f = vec4f_zero();
+    let zb: Vec4f = vec4f_new(1.0, 2.0, 3.0, 4.0);
+    if simd_vec4_dot(za, zb) != 0.0 {
+        return false;
+    }
+    let ea: Vec4f = vec4f_new(1.0, 0.0, 0.0, 0.0);
+    let eb: Vec4f = vec4f_new(1.0, 0.0, 0.0, 0.0);
+    if simd_vec4_dot(ea, eb) != 1.0 {
+        return false;
+    }
+    return true;
+}

@@ -1,0 +1,170 @@
+// # AArch64 Loop Control And Iteration
+//
+// Logline: Lowers while loops, range-for loops, List[T] collection iteration, break, and continue.
+//
+// Setup: Loop nesting state tracks __loop_top, __for_incr, __for_br, and __for_prev.
+//
+// Beats:
+//   1. Patch inner #brk branches to #brk_done without clobbering outer loops.
+//   2. Lower dynamic range bounds with [lo, hi) half-open comparison.
+//   3. Lower List[T] collection loops loading elements at xs + 16 + 8*idx.
+//   4. Route break to loop exit and continue to induction increment.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xfn.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xarith.oo";
+import "std/hw/silicon/aarch64_xfloat.oo";
+import "std/hw/silicon/aarch64_xmark.oo";
+
+pub fn a64x_push_note(x: A64X, nm: String, v: Int) -> A64X {
+    let nms: List[String] = x.p.names;
+    let ofs: List[Int] = x.p.offs;
+    return a64x_with_names_offs(x, list_push(nms, nm), list_push(ofs, v));
+}
+
+fn a64_sset(xs: List[String], idx: Int, s: String) -> List[String] {
+    let mut out: List[String] = list_new();
+    let n: Int = list_len(xs);
+    let mut i: Int = 0;
+    while i < n {
+        if i == idx {
+            out = list_push(out, s);
+        } else {
+            out = list_push(out, list_get(xs, i));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn a64x_patch_brks(x0: A64X, from: Int) -> A64X {
+    let end_at: Int = list_len(x0.p.words);
+    let bats: List[Int] = x0.st.bl_at;
+    let bnms: List[String] = x0.st.bl_nm;
+    let nbl: Int = list_len(bats);
+    let mut words: List[Int] = x0.p.words;
+    let mut m: List[String] = bnms;
+    let mut j: Int = 0;
+    while j < nbl {
+        let at: Int = list_get(bats, j);
+        let nm: String = list_get(m, j);
+        if nm == "#brk" && at >= from {
+            words = a64_wset(words, at, arm64_word_b(end_at - at));
+            m = a64_sset(m, j, "#brk_done");
+        }
+        j = j + 1;
+    }
+    return a64x_with_words_bl(x0, words, bats, m);
+}
+
+pub fn a64x_break(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "break"), x0);
+    x = a64x_skip(x);
+    if a64_peek(a64x_as_p(x)) == 59 { x = a64x_from_p(a64_eat(a64x_as_p(x), 59), x); }
+    let top: Int = a64_lookup_parse(x.p.names, x.p.offs, "__loop_top");
+    if top < 0 { return a64x_fail(x, "ERR\ta64x_break"); }
+    let at: Int = list_len(x.p.words);
+    let y: A64X = a64x_emit(x, arm64_word_b(0));
+    let bats: List[Int] = y.st.bl_at;
+    let bnms: List[String] = y.st.bl_nm;
+    return a64x_with_bl(y, list_push(bats, at), list_push(bnms, "#brk"));
+}
+
+pub fn a64x_continue(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "continue"), x0);
+    x = a64x_skip(x);
+    if a64_peek(a64x_as_p(x)) == 59 { x = a64x_from_p(a64_eat(a64x_as_p(x), 59), x); }
+    let top: Int = a64_lookup_parse(x.p.names, x.p.offs, "__loop_top");
+    if top < 0 { return a64x_fail(x, "ERR\ta64x_continue"); }
+    let at: Int = list_len(x.p.words);
+    return a64x_emit(x, arm64_word_b(top - at));
+}
+
+pub fn a64x_for_open(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "for"), x0);
+    x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+    let nm: String = x.p.text;
+    x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "in"), x);
+    x = a64x_expr(x);
+    x = a64x_skip(x);
+    let is_range: Bool = a64_peek(a64x_as_p(x)) == 46;
+    if is_range {
+        x = a64x_bind16(x, nm);
+        let ioff: Int = x.p.ival;
+        x = a64x_store_pair(x, ioff);
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 46), x);
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 46), x);
+        x = a64x_expr(x);
+        x = a64x_bind16(x, "__for_hi");
+        let hoff: Int = x.p.ival;
+        x = a64x_store_pair(x, hoff);
+        let prev: Int = a64_lookup_parse(x.p.names, x.p.offs, "__loop_top");
+        x = a64x_push_note(x, "__for_prev", prev);
+        let jmp: Int = list_len(x.p.words);
+        x = a64x_emit(x, arm64_word_b(0));
+        let incr: Int = list_len(x.p.words);
+        x = a64x_emit(x, arm64_word_ldr(0, abi_fp_reg(), ioff));
+        x = a64x_emit(x, arm64_word_add_imm(0, 0, 1));
+        x = a64x_emit(x, arm64_word_str(0, abi_fp_reg(), ioff));
+        let cond: Int = list_len(x.p.words);
+        x = a64x_set_words(x, a64_wset(x.p.words, jmp, arm64_word_b(cond - jmp)));
+        x = a64x_emit(x, arm64_word_ldr(0, abi_fp_reg(), ioff));
+        x = a64x_emit(x, arm64_word_ldr(1, abi_fp_reg(), hoff));
+        x = a64x_emit(x, arm64_word_cmp_reg(0, 1));
+        let br: Int = list_len(x.p.words);
+        x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0));
+        x = a64x_push_note(x, "__loop_top", incr);
+        x = a64x_push_note(x, "__for_br", br);
+        return a64x_push_note(x, "__for_incr", incr);
+    }
+    x = a64x_bind16(x, "__for_list");
+    let loff: Int = x.p.ival;
+    x = a64x_store_pair(x, loff);
+    x = a64x_bind16(x, "__for_idx");
+    let idx_off: Int = x.p.ival;
+    x = a64x_emit(x, arm64_word_movz(0, 0, 0));
+    x = a64x_emit(x, arm64_word_str(0, abi_fp_reg(), idx_off));
+    x = a64x_bind16(x, nm);
+    let elem_off: Int = x.p.ival;
+    let prev: Int = a64_lookup_parse(x.p.names, x.p.offs, "__loop_top");
+    x = a64x_push_note(x, "__for_prev", prev);
+    let jmp: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let incr: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_ldr(0, abi_fp_reg(), idx_off));
+    x = a64x_emit(x, arm64_word_add_imm(0, 0, 1));
+    x = a64x_emit(x, arm64_word_str(0, abi_fp_reg(), idx_off));
+    let cond: Int = list_len(x.p.words);
+    x = a64x_set_words(x, a64_wset(x.p.words, jmp, arm64_word_b(cond - jmp)));
+    x = a64x_emit(x, arm64_word_ldr(0, abi_fp_reg(), idx_off));
+    x = a64x_emit(x, arm64_word_ldr(1, abi_fp_reg(), loff));
+    x = a64x_emit(x, arm64_word_ldr(2, 1, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(0, 2));
+    let br: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 0));
+    x = a64x_emit(x, arm64_word_movz(2, 8, 0));
+    x = a64x_emit(x, arm64_word_mul(3, 0, 2));
+    x = a64x_emit(x, arm64_word_add_imm(3, 3, 16));
+    x = a64x_emit(x, arm64_word_add_reg(3, 1, 3));
+    x = a64x_emit(x, arm64_word_ldr(0, 3, 0));
+    x = a64x_emit(x, arm64_word_movz(1, 0, 0));
+    x = a64x_store_pair(x, elem_off);
+    x = a64x_push_note(x, "__loop_top", incr);
+    x = a64x_push_note(x, "__for_br", br);
+    return a64x_push_note(x, "__for_incr", incr);
+}
+
+pub fn a64x_for_close(x0: A64X, incr: Int, br: Int, prev: Int) -> A64X {
+    let mut x: A64X = x0;
+    let back: Int = incr - list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(back));
+    let off: Int = list_len(x.p.words) - br;
+    x = a64x_set_words(x, a64_wset(x.p.words, br, arm64_word_b_cond(arm64_cond_ge(), off)));
+    x = a64x_patch_brks(x, incr);
+    return a64x_push_note(x, "__loop_top", prev);
+}

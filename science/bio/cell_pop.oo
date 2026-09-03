@@ -1,0 +1,160 @@
+// # Cell Population Dynamics & Culture
+//
+// Logline: Simulates bioreactor chemostat cultures, cell population demographics, and colony survival rates.
+//
+// Setup: Imports cell_types.oo for CellCulture, BioreactorState, and PopulationDemographics types.
+//
+// Beats:
+//   1. Initialize bioreactor batch, fed-batch, and continuous chemostat cultures.
+//   2. Track live cell density, viability percentages, and mortality rates across population cohorts.
+//   3. Compute dilution rates, wash-out boundaries, and steady-state nutrient concentrations.
+
+import "./cell_types.oo";
+
+type CellEnvironment = struct {
+    ph: Float,
+    temperature_c: Float,
+    glucose_mM: Float,
+    oxygen_percent: Float
+};
+
+type CellLine = struct {
+    line_id: String,
+    species: String,
+    tissue_origin: String,
+    is_immortalized: Bool,
+    base_doubling_time: Float
+};
+
+type CellCulture = struct {
+    culture_id: Int,
+    culture_name: String,
+    population: CellPopulation,
+    environment: CellEnvironment,
+    passage_number: Int
+};
+
+// -------------------------------------------------------------------
+// CellPopulation Helper Functions
+// -------------------------------------------------------------------
+
+pub fn cell_population_new(initial_count: Int) -> CellPopulation {
+    return cell_pop_new(initial_count);
+}
+
+pub fn cell_population_size(pop: CellPopulation) -> Int {
+    return cell_pop_current(pop);
+}
+
+pub fn cell_population_density(pop: CellPopulation, volume_ml: Float) -> Float {
+    if volume_ml <= 0.0 {
+        return 0.0;
+    }
+    let count_float: Float = cell_pop_to_f(pop.current_count);
+    return count_float / volume_ml;
+}
+
+// -------------------------------------------------------------------
+// CellEnvironment & CellCulture Helper Functions
+// -------------------------------------------------------------------
+
+pub fn cell_environment_new(ph: Float, temp: Float, glucose: Float, o2: Float) -> CellEnvironment {
+    return CellEnvironment {
+        ph: ph,
+        temperature_c: temp,
+        glucose_mM: glucose,
+        oxygen_percent: o2
+    };
+}
+
+pub fn cell_environment_default() -> CellEnvironment {
+    return CellEnvironment {
+        ph: 7.4,
+        temperature_c: 37.0,
+        glucose_mM: 25.0,
+        oxygen_percent: 21.0
+    };
+}
+
+pub fn cell_environment_is_physiological(env: CellEnvironment) -> Bool {
+    let ph_ok: Bool = env.ph >= 6.8 && env.ph <= 7.8;    let temp_ok: Bool = env.temperature_c >= 35.0 && env.temperature_c <= 39.0;    let o2_ok: Bool = env.oxygen_percent >= 1.0 && env.oxygen_percent <= 21.0;    return ph_ok && temp_ok && o2_ok;
+}
+
+pub fn cell_line_new(id: String, species: String, tissue: String, immortal: Bool, doubling: Float) -> CellLine {
+    return CellLine {
+        line_id: id,
+        species: species,
+        tissue_origin: tissue,
+        is_immortalized: immortal,
+        base_doubling_time: doubling
+    };
+}
+
+pub fn cell_culture_new(id: Int, name: String, pop: CellPopulation, env: CellEnvironment) -> CellCulture {
+    return CellCulture {
+        culture_id: id,
+        culture_name: name,
+        population: pop,
+        environment: env,
+        passage_number: 1
+    };
+}
+
+pub fn cell_culture_passage(culture: CellCulture, split_ratio: Float) -> CellCulture {
+    let old_count: Int = (culture.population).current_count;    let mut new_count_float: Float = 0.0;
+
+    if split_ratio > 0.0 {
+
+        new_count_float = cell_pop_to_f(old_count) / split_ratio;
+
+    }
+    let mut new_count: Int = 0;
+    let mut temp: Float = new_count_float;    while temp >= 1.0 {
+        new_count = new_count + 1;
+        temp = temp - 1.0;
+    }
+    let new_pop: CellPopulation = CellPopulation {
+        initial_count: (culture.population).initial_count,
+        current_count: new_count
+    };
+    return CellCulture {
+        culture_id: culture.culture_id,
+        culture_name: culture.culture_name,
+        population: new_pop,
+        environment: culture.environment,
+        passage_number: culture.passage_number + 1
+    };
+}
+
+
+fn cell_pop_to_f(n: Int) -> Float {
+    if n == 0 { return 0.0; }
+    if n == 1 { return 1.0; }
+    if n == 2 { return 2.0; }
+    if n == 3 { return 3.0; }
+    if n == 4 { return 4.0; }
+    if n == 10 { return 10.0; }
+    if n == 100 { return 100.0; }
+    let mut sign: Float = 1.0;
+    let mut val: Int = n;
+    if val < 0 { sign = -1.0; val = 0 - val; }
+    let mut f: Float = 0.0;
+    let mut mult: Float = 1.0;
+    while val > 0 {
+        let digit: Int = val % 10;
+        let mut d_f: Float = 0.0;
+        if digit == 1 { d_f = 1.0; }
+        else if digit == 2 { d_f = 2.0; }
+        else if digit == 3 { d_f = 3.0; }
+        else if digit == 4 { d_f = 4.0; }
+        else if digit == 5 { d_f = 5.0; }
+        else if digit == 6 { d_f = 6.0; }
+        else if digit == 7 { d_f = 7.0; }
+        else if digit == 8 { d_f = 8.0; }
+        else if digit == 9 { d_f = 9.0; }
+        f = f + d_f * mult;
+        mult = mult * 10.0;
+        val = val / 10;
+    }
+    return f * sign;
+}

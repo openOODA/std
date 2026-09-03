@@ -1,0 +1,114 @@
+// # Time Value of Money Principle
+//
+// Logline: A dollar today is worth more than a dollar tomorrow because of expected interest and risk.
+//
+// Setup: Pure Int amounts and rates in basis points. Negative periods or rates return Err. Hosts econ_invariants.oo stem.
+//   0^n for n>0 is Ok(0); 0^0 is Ok(1). FV of 0 PV with valid rate/n is Ok(0).
+//
+// Beats:
+//   1. Future value FV = PV * (1 + r) ^ n with integer exponentiation.
+//   2. Present value PV = FV / (1 + r) ^ n.
+//   3. Discount factor (1 + r) ^ -n.
+//   4. Hosts econ_invariants.oo stem for cross-law correlation.
+
+import "std/science/econ/econ_invariants.oo";
+
+fn tvm_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Integer power: x^n for n >= 0. n < 0 returns Err. x == 0 and n == 0 returns Ok(1).
+pub fn tvm_pow(x: Int, n: Int) -> Result[Int, String] {
+    if n < 0 { return Err("ERR\ttvm\tn"); }
+    if n == 0 { return Ok(1); }
+    if x == 0 { return Ok(0); }
+    let mut result: Int = 1;
+    let mut i: Int = 0;
+    while i < n {
+        result = result * x;
+        i = i + 1;
+    }
+    return Ok(result);
+}
+
+// Future value FV = PV * (100 + r_pct) ^ n / 100 ^ n. r_pct is rate in integer percent.
+// PV < 0, r_pct < 0, or n < 0 returns Err. PV == 0 with valid rate/n is Ok(0).
+pub fn tvm_future_value(present_value: Int, rate_pct: Int, periods: Int) -> Result[Int, String] {
+    if present_value < 0 { return Err("ERR\ttvm\tpv"); }
+    if rate_pct < 0 { return Err("ERR\ttvm\trate"); }
+    if periods < 0 { return Err("ERR\ttvm\tn"); }
+    let rate_int: Int = 100 + rate_pct;
+    let num_r: Result[Int, String] = tvm_pow(rate_int, periods);
+    if num_r.is_ok() == false { return Err("ERR\ttvm\tpow"); }
+    let den_r: Result[Int, String] = tvm_pow(100, periods);
+    if den_r.is_ok() == false { return Err("ERR\ttvm\tpow"); }
+    let num: Int = tvm_got(num_r);
+    let den: Int = tvm_got(den_r);
+    if den == 0 { return Err("ERR\ttvm\tden"); }
+    return Ok((present_value * num) / den);
+}
+
+// Present value PV = FV * 100 ^ n / (100 + r_pct) ^ n. Out-of-range returns Err.
+pub fn tvm_present_value(future_value: Int, rate_pct: Int, periods: Int) -> Result[Int, String] {
+    if future_value < 0 { return Err("ERR\ttvm\tfv"); }
+    if rate_pct < 0 { return Err("ERR\ttvm\trate"); }
+    if periods < 0 { return Err("ERR\ttvm\tn"); }
+    let rate_int: Int = 100 + rate_pct;
+    let num_r: Result[Int, String] = tvm_pow(100, periods);
+    if num_r.is_ok() == false { return Err("ERR\ttvm\tpow"); }
+    let den_r: Result[Int, String] = tvm_pow(rate_int, periods);
+    if den_r.is_ok() == false { return Err("ERR\ttvm\tpow"); }
+    let num: Int = tvm_got(num_r);
+    let den: Int = tvm_got(den_r);
+    if den == 0 { return Err("ERR\ttvm\tden"); }
+    return Ok((future_value * num) / den);
+}
+
+// Discount factor numerator: (100 + r_pct) ^ n. The actual factor is num / 100^n.
+pub fn tvm_discount_factor_num(rate_pct: Int, periods: Int) -> Result[Int, String] {
+    if rate_pct < 0 { return Err("ERR\ttvm\trate"); }
+    if periods < 0 { return Err("ERR\ttvm\tn"); }
+    let rate_int: Int = 100 + rate_pct;
+    return tvm_pow(rate_int, periods);
+}
+
+// Discount factor in scaled units: 100^n. Caller divides numerator by this.
+pub fn tvm_discount_factor_den(periods: Int) -> Result[Int, String] {
+    if periods < 0 { return Err("ERR\ttvm\tn"); }
+    return tvm_pow(100, periods);
+}
+
+// KAT and hostile cases for the time-value principle.
+pub fn verify_time_value_principle() -> Bool {
+    let econ_inv_ok: Int = econ_qty_ok(1);
+    if econ_inv_ok != 1 { return false; }
+    if tvm_got(tvm_pow(2, 0)) != 1 { return false; }
+    if tvm_got(tvm_pow(2, 3)) != 8 { return false; }
+    if tvm_got(tvm_pow(10, 2)) != 100 { return false; }
+    if tvm_got(tvm_pow(0, 0)) != 1 { return false; }
+    if tvm_pow(0, 5).is_ok() == false { return false; }
+    if tvm_got(tvm_pow(0, 5)) != 0 { return false; }
+    if tvm_pow(2, 0 - 1).is_ok() { return false; }
+    if tvm_got(tvm_future_value(1000, 0, 1)) != 1000 { return false; }
+    if tvm_got(tvm_future_value(1000, 0, 3)) != 1000 { return false; }
+    if tvm_got(tvm_future_value(1000, 10, 1)) != 1100 { return false; }
+    if tvm_future_value(0, 10, 1).is_ok() == false { return false; }
+    if tvm_got(tvm_future_value(0, 10, 1)) != 0 { return false; }
+    if tvm_got(tvm_present_value(1100, 10, 1)) != 1000 { return false; }
+    if tvm_present_value(0, 10, 1).is_ok() == false { return false; }
+    if tvm_got(tvm_present_value(0, 10, 1)) != 0 { return false; }
+    if tvm_got(tvm_discount_factor_num(0, 3)) != 1000000 { return false; }
+    if tvm_got(tvm_discount_factor_den(3)) != 1000000 { return false; }
+    if tvm_got(tvm_discount_factor_num(10, 1)) != 110 { return false; }
+    if tvm_got(tvm_discount_factor_den(1)) != 100 { return false; }
+    if tvm_future_value(0 - 1, 10, 1).is_ok() { return false; }
+    if tvm_future_value(1000, 0 - 1, 1).is_ok() { return false; }
+    if tvm_future_value(1000, 10, 0 - 1).is_ok() { return false; }
+    if tvm_present_value(0 - 1, 10, 1).is_ok() { return false; }
+    if tvm_present_value(1000, 0 - 1, 1).is_ok() { return false; }
+    if tvm_present_value(1000, 10, 0 - 1).is_ok() { return false; }
+    if tvm_discount_factor_num(0 - 1, 1).is_ok() { return false; }
+    if tvm_discount_factor_num(10, 0 - 1).is_ok() { return false; }
+    if tvm_discount_factor_den(0 - 1).is_ok() { return false; }
+    return true;
+}

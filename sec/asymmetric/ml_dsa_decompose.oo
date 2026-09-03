@@ -1,0 +1,111 @@
+// # FIPS 204 ML-DSA Bit Decomposition & Rounding Operations
+//
+// Logline: Implements Power2Round, Decompose, HighBits, and LowBits algorithms for ML-DSA-87.
+//
+// Setup: FIPS 204 Algorithms 29-35 for modular rounding and hint reconstruction.
+//
+// Beats:
+//   1. Power2Round splitting r into (r1, r0) where r = r1 * 2^d + r0.
+//   2. Decompose splitting r into (r1, r0) with alpha = 2*gamma_2.
+//   3. HighBits extracting high-order bits of field elements.
+//   4. Vector-level decomposition over flat coefficient arrays.
+
+import "./ml_dsa_poly.oo";
+
+type MlDsaDecompPair = struct {
+    r1: Int,
+    r0: Int
+};
+
+pub fn ml_dsa_power2round(r: Int, d: Int) -> MlDsaDecompPair {
+    let q: Int = 8380417;
+    let mut r_mod: Int = r % q;
+    if r_mod < 0 { r_mod = r_mod + q; }
+
+    let two_d: Int = 8192;
+    let mut r0: Int = r_mod % two_d;
+    if r0 > (two_d / 2) {
+        r0 = r0 - two_d;
+    }
+    let r1: Int = (r_mod - r0) / two_d;
+    return MlDsaDecompPair { r1: r1, r0: r0 };
+}
+
+pub fn ml_dsa_decompose(r: Int, gamma2: Int) -> MlDsaDecompPair {
+    let q: Int = 8380417;
+    let mut r_mod: Int = r % q;
+    if r_mod < 0 { r_mod = r_mod + q; }
+
+    let alpha: Int = 2 * gamma2;
+    let mut r0: Int = r_mod % alpha;
+    if r0 > gamma2 {
+        r0 = r0 - alpha;
+    }
+    if (r_mod - r0) == (q - 1) {
+        return MlDsaDecompPair { r1: 0, r0: r0 - 1 };
+    }
+    let r1: Int = (r_mod - r0) / alpha;
+    return MlDsaDecompPair { r1: r1, r0: r0 };
+}
+
+pub fn ml_dsa_high_bits(r: Int, gamma2: Int) -> Int {
+    let pair: MlDsaDecompPair = ml_dsa_decompose(r, gamma2);
+    return pair.r1;
+}
+
+pub fn ml_dsa_low_bits(r: Int, gamma2: Int) -> Int {
+    let pair: MlDsaDecompPair = ml_dsa_decompose(r, gamma2);
+    return pair.r0;
+}
+
+pub fn ml_dsa_poly_power2round(p: MlDsaPoly, d: Int) -> List[MlDsaPoly] {
+    let mut c1: List[Int] = list_new();
+    let mut c0: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        let pair: MlDsaDecompPair = ml_dsa_power2round(list_get(p.coeffs, i), d);
+        c1 = list_push(c1, pair.r1);
+        c0 = list_push(c0, pair.r0);
+        i = i + 1;
+    }
+    let mut res: List[MlDsaPoly] = list_new();
+    let p1: MlDsaPoly = MlDsaPoly { coeffs: c1, degree: 256, modulus: 8380417 };
+    let p0: MlDsaPoly = MlDsaPoly { coeffs: c0, degree: 256, modulus: 8380417 };
+    res = list_push(res, p1);
+    res = list_push(res, p0);
+    return res;
+}
+
+pub fn ml_dsa_poly_high_bits(p: MlDsaPoly, gamma2: Int) -> MlDsaPoly {
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        c = list_push(c, ml_dsa_high_bits(list_get(p.coeffs, i), gamma2));
+        i = i + 1;
+    }
+    return MlDsaPoly { coeffs: c, degree: 256, modulus: 8380417 };
+}
+
+pub fn ml_dsa_poly_low_bits(p: MlDsaPoly, gamma2: Int) -> MlDsaPoly {
+    let mut c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 256 {
+        c = list_push(c, ml_dsa_low_bits(list_get(p.coeffs, i), gamma2));
+        i = i + 1;
+    }
+    return MlDsaPoly { coeffs: c, degree: 256, modulus: 8380417 };
+}
+
+pub fn ml_dsa_polyvec_high_bits(v: MlDsaPolyVec, gamma2: Int) -> MlDsaPolyVec {
+    let total: Int = 256 * v.dim;
+    let mut out_c: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < total {
+        out_c = list_push(out_c, ml_dsa_high_bits(list_get(v.coeffs, i), gamma2));
+        i = i + 1;
+    }
+    return MlDsaPolyVec {
+        coeffs: out_c,
+        dim: v.dim
+    };
+}

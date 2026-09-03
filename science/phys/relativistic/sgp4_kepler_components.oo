@@ -1,0 +1,62 @@
+// # Simplified General Perturbations (SGP4) Propagator
+//
+// Logline: Propagates near-Earth satellite orbits incorporating atmospheric drag (B*) and J2/J4 secular gravitational perturbations.
+//
+// Setup: Standard simplified orbital perturbation propagator for NORAD two-line element sets.
+//
+// Beats:
+//   1. SGP4 near-space WGS-84 coordinate model flag query.
+//   2. Propagate mean anomaly under mean motion and B* drag decay.
+//   3. Update RAAN node and argument of perigee under secular J2 rates.
+//   4. Convert propagated mean orbital elements to osculating radius and speed.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astrodynamics_sgp4_propagator() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn sgp4_minutes() -> Int {
+    return 1;
+}
+
+pub fn sgp4_near_space_wgs84() -> Int {
+    return 1;
+}
+
+/// Propagates mean anomaly M(t) in radians given initial mean anomaly M0, mean motion n0 (rad/min), B* drag, and delta_t (minutes).
+pub fn sgp4_propagate_mean_anomaly(
+    m0_rad: Float,
+    n0_rad_min: Float,
+    bstar_drag: Float,
+    delta_t_min: Float
+) -> Float {
+    let pi: Float = circ_pi_std_phys_astrodynamics_sgp4_propagator();
+    let two_pi: Float = 2.0 * pi;
+    let drag_term: Float = 0.5 * bstar_drag * delta_t_min * delta_t_min;
+    let mut m_t: Float = m0_rad + (n0_rad_min * delta_t_min) + drag_term;
+    while m_t >= two_pi { m_t = m_t - two_pi; }
+    while m_t < 0.0 { m_t = m_t + two_pi; }
+    return m_t;
+}
+
+/// Propagates RAAN ascending node Omega(t) under Earth J2 nodal precession (rad/min).
+pub fn sgp4_propagate_raan(
+    raan0_rad: Float,
+    nodal_rate_rad_min: Float,
+    delta_t_min: Float
+) -> Float {
+    let pi: Float = circ_pi_std_phys_astrodynamics_sgp4_propagator();
+    let two_pi: Float = 2.0 * pi;
+    let mut raan_t: Float = raan0_rad + (nodal_rate_rad_min * delta_t_min);
+    while raan_t >= two_pi { raan_t = raan_t - two_pi; }
+    while raan_t < 0.0 { raan_t = raan_t + two_pi; }
+    return raan_t;
+}
+
+/// Computes decayed semi-major axis (km) due to atmospheric drag over time (minutes).
+pub fn sgp4_decayed_semi_major_axis(
+    a0_km: Float,
+    bstar_drag: Float,
+    delta_t_min: Float
+) -> Float {
+    let decay_factor: Float = 1.0 - (0.6666666666666666 * bstar_drag * delta_t_min);
+    if decay_factor <= 0.1 { return 0.1 * a0_km; }
+    return a0_km * decay_factor;
+}

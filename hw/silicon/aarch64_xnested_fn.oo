@@ -1,0 +1,176 @@
+// # AArch64 Nested fn-as-Clause Lowering
+//
+// Logline: Lowers `fn name(params) -> RetType { body }` declarations that appear inside a function body into a heap-allocated closure value, with lexical captures from the parent frame.
+//
+// Setup: Dispatched from aarch64_xstmt.oo when a statement starts with the `fn` keyword. Encodes the closure the same way as the lambda path: trampoline that loads captures from x16, then heap-allocated [code_ptr, captures...] object whose pointer is bound to the function name in the parent scope.
+//
+// Beats:
+//   1. Parse the function header (name, params, optional return type).
+//   2. Scan the body tokens for free variable references to identify captures.
+//   3. Emit a forward jump over the trampoline, then the trampoline (sub sp; stp fp,lr; mov fp,sp; bind params; load captures from x16; parse body; epilogue).
+//   4. Patch the forward jump.
+//   5. Allocate a heap closure object via oo_a64_alloc, store the code pointer and captures, and bind the closure value to the function name in the parent frame.
+
+import "std/hw/silicon/aarch64_parse.oo";
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_mem.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xscan.oo";
+import "std/hw/silicon/aarch64_xfn.oo";
+import "std/hw/silicon/aarch64_xexpr.oo";
+import "std/hw/silicon/aarch64_xmark.oo";
+import "std/hw/silicon/aarch64_xclosure_scan.oo";
+import "std/hw/silicon/aarch64_xclosure.oo";
+
+// Closure-body statement parser. Handles return-stmt, let-binding, and bare expressions
+// using the c_prefix/c_alu/c_expr chain from aarch64_xclosure.oo.
+fn a64x_cf_ret(x0: A64X) -> A64X {
+    let mut y: A64X = a64x_from_p(a64_eat_kw(a64x_as_p(x0), "return"), x0);
+    y = a64x_skip(y);
+    if a64_peek(a64x_as_p(y)) != 59 {
+        y = a64x_c_expr(y);
+    }
+    y = a64x_emit(a64x_emit(y, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16)), arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), a64x_frame()));
+    y = a64x_emit(y, arm64_word_ret());
+    return a64x_from_p(a64_eat(a64x_as_p(y), 59), y);
+}
+
+fn a64x_cf_stmt(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    if a64_starts(a64x_as_p(x), "return") { return a64x_cf_ret(x); }
+    if a64_starts(a64x_as_p(x), "let") {
+        x = a64x_skip(a64x_from_p(a64_eat_kw(a64x_as_p(x), "let"), x));
+        if a64_starts(a64x_as_p(x), "mut") { x = a64x_skip(a64x_from_p(a64_eat_kw(a64x_as_p(x), "mut"), x)); }
+        x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+        let nm: String = x.p.text; x = a64x_skip(x);
+        if a64_peek(a64x_as_p(x)) == 58 { x = a64x_eat_type(a64x_from_p(a64_eat(a64x_as_p(x), 58), x)); }
+        x = a64x_from_p(a64_eat(a64x_as_p(a64x_c_expr(a64x_from_p(a64_eat(a64x_as_p(x), 61), x))), 59), x);
+        let hit: Int = (0 + a64_lookup_parse(x.p.names, x.p.offs, nm));
+        if hit >= 0 { return a64x_store_pair(x, hit); }
+        return a64x_store_pair(a64x_bind16(x, nm), x.p.ival);
+    }
+    let mut e: A64X = a64x_c_expr(x); e = a64x_skip(e);
+    if a64_peek(a64x_as_p(e)) == 59 { e = a64x_from_p(a64_eat(a64x_as_p(e), 59), e); }
+    return e;
+}
+
+fn a64x_cf_stmts(x0: A64X) -> A64X {
+    let mut x: A64X = x0; let mut n: Int = 0;
+    while x.st.err == "" {
+        n = n + 1;
+        if n > 8000 { return a64x_fail(x, "ERR\ta64x_cf_stmts\tloop"); }
+        x = a64x_skip(x);
+        let b: Int = a64_peek(a64x_as_p(x));
+        if b == 125 || b < 0 { return x; }
+        let i0: Int = x.p.i; x = a64x_cf_stmt(x);
+        if x.st.err == "" && x.p.i <= i0 { return a64x_fail(x, "ERR\ta64x_cf_stmts\tno_advance"); }
+    }
+    return x;
+}
+
+pub fn a64x_nested_fn(x0: A64X) -> A64X {
+    let mut x: A64X = a64x_skip(x0);
+    // Eat "fn"
+    x = a64x_from_p(a64_eat_kw(a64x_as_p(x), "fn"), x);
+    x = a64x_skip(x);
+    // Eat name
+    x = a64x_from_p(a64_ident(a64x_as_p(x)), x);
+    let nm: String = x.p.text;
+    // Eat params
+    x = a64x_eat_params(x);
+    let n_params: Int = x.p.ival;
+    x = a64x_skip(x);
+    // Save parent names so we can extract the param list
+    let parent_names: List[String] = x.p.names;
+    let n_total: Int = list_len(parent_names);
+    let mut param_names: List[String] = list_new();
+    let mut pi3: Int = 0;
+    while pi3 < n_params {
+        param_names = list_push(param_names, list_get(parent_names, n_total - n_params + pi3));
+        pi3 = pi3 + 1;
+    }
+    // Eat optional return type
+    if a64_peek(a64x_as_p(x)) == 45 {
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 45), x);
+        x = a64x_from_p(a64_eat(a64x_as_p(x), 62), x);
+        x = a64x_eat_type(x);
+    }
+    // Save parent frame state
+    let parent_offs: List[Int] = x.p.offs;
+    let parent_next_off: Int = x.p.next_off;
+    let parent_bl_at: List[Int] = x.st.bl_at;
+    let parent_bl_nm: List[String] = x.st.bl_nm;
+    let parent_flt: List[String] = x.st.flt;
+    // Scan for captures in the body
+    let scan_start: Int = x.p.i;
+    let caps: List[String] = a64x_scan_caps(x, param_names, scan_start);
+    let n_caps: Int = list_len(caps);
+    // Emit jump-over branch
+    let jmp_pc: Int = list_len(x.p.words);
+    x = a64x_emit(x, arm64_word_b(0));
+    let entry_pc: Int = list_len(x.p.words);
+    // Set up closure's frame
+    x = a64x_emit(a64x_emit(a64x_emit(x, arm64_word_sub_imm(abi_sp_reg(), abi_sp_reg(), a64x_frame())), arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16)), arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0));
+    // Reset locals but preserve bl_nm/bl_at so body can call top-level functions
+    x = a64x_reset_locals(x);
+    x = a64x_with_bl(x, parent_bl_at, parent_bl_nm);
+    // Bind params
+    let mut pi: Int = 0;
+    while pi < n_params {
+        let pname: String = list_get(param_names, pi);
+        x = a64x_bind16(x, pname);
+        let poff: Int = x.p.ival;
+        if pi < 8 {
+            x = a64x_emit(x, arm64_word_str(pi, abi_fp_reg(), poff));
+        } else {
+            x = a64x_emit(a64x_emit(x, arm64_word_ldr(9, abi_fp_reg(), 4016 + (pi - 8) * 16)), arm64_word_str(9, abi_fp_reg(), poff));
+        }
+        pi = pi + 1;
+    }
+    // Bind captures
+    let mut ci: Int = 0;
+    while ci < n_caps {
+        let cname: String = list_get(caps, ci);
+        x = a64x_bind16(x, cname);
+        let coff: Int = x.p.ival;
+        x = a64x_emit(a64x_emit(x, arm64_word_ldr(9, 16, 8 + 8 * ci)), arm64_word_str(9, abi_fp_reg(), coff));
+        ci = ci + 1;
+    }
+    // Eat the opening "{"
+    x = a64x_skip(x);
+    x = a64x_from_p(a64_eat(a64x_as_p(x), 123), x);
+    // Parse the body
+    x = a64x_cf_stmts(x);
+    // Eat the closing "}"
+    x = a64x_from_p(a64_eat(a64x_as_p(x), 125), x);
+    // Fall-through epilogue + ret
+    x = a64x_emit(a64x_emit(x, arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16)), arm64_word_add_imm(abi_sp_reg(), abi_sp_reg(), a64x_frame()));
+    x = a64x_emit(x, arm64_word_ret());
+    // Patch the forward jump
+    x = a64x_set_words(x, a64_wset(x.p.words, jmp_pc, arm64_word_b(list_len(x.p.words) - jmp_pc)));
+    // Allocate the closure object
+    let env_sz: Int = 16 * ((1 + n_caps + 1) / 2);
+    x = a64x_bl(a64x_emit(x, arm64_word_movz(0, env_sz, 0)), "oo_a64_alloc");
+    // Set the code pointer at [x0, 0]
+    x = a64x_emit(x, arm64_word_adr(1, (entry_pc - list_len(x.p.words)) * 4));
+    x = a64x_emit(x, arm64_word_str(1, 0, 0));
+    // Set captures
+    let mut ki: Int = 0;
+    while ki < n_caps {
+        let cap_name: String = list_get(caps, ki);
+        let p_off2: Int = (0 + a64_lookup_parse(parent_names, parent_offs, cap_name));
+        if p_off2 >= 0 {
+            x = a64x_emit(x, arm64_word_ldr(2, abi_fp_reg(), p_off2));
+            x = a64x_emit(x, arm64_word_str(2, 0, 8 + 8 * ki));
+        }
+        ki = ki + 1;
+    }
+    // Switch back to parent scope
+    x = a64x_with_scope(x, parent_names, parent_offs, parent_next_off, parent_flt);
+    // Bind the closure value in the parent scope
+    x = a64x_bind16(x, nm);
+    let nm_off: Int = x.p.ival;
+    x = a64x_emit(x, arm64_word_str(0, abi_fp_reg(), nm_off));
+    return x;
+}

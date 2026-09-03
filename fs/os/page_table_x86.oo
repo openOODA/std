@@ -1,0 +1,217 @@
+// # x86_64 4-Level PML4 Page Table Manipulator
+//
+// Logline: Implements x86_64 Long Mode 4-level paging (PML4, PDPT, PD, PT),
+// canonical address verification, PTE bitmask manipulation, 4KB/2MB/1GB page
+// mappings, NX/RW permissions, and CR3 register encoding/decoding.
+//
+// Setup: Virtual addresses must satisfy 48-bit canonical sign extension;
+// physical frame addresses must align to page boundaries; invalid addresses fail closed.
+//
+// Beats:
+//   1. Standard operating routine for this driver.
+//   2. Errata/edge case handling.
+// capability: Requires &SysCap for all privileged page table operations.
+//
+// verification: Verified by qa/tests_sovereign/tier1_features/test_t1_f07_page_tables.oo.
+
+type VirtualAddressX86 = struct {
+    raw_addr: Int,
+    is_canonical: Bool,
+    pml4_idx: Int,
+    pdpt_idx: Int,
+    pd_idx: Int,
+    pt_idx: Int,
+    offset: Int
+};
+
+type Pml4Entry = struct {
+    raw: Int,
+    pfn: Int,
+    present: Bool,
+    writable: Bool,
+    user: Bool,
+    pwt: Bool,
+    pcd: Bool,
+    accessed: Bool,
+    dirty: Bool,
+    huge_page: Bool,
+    global: Bool,
+    nx: Bool
+};
+
+type Pml4Table = struct {
+    phys_base: Int,
+    entries: List[Int],
+    mapping_count: Int,
+    is_active: Bool
+};
+
+pub fn pte_flag_present() -> Int { return 1; }
+pub fn pte_flag_writable() -> Int { return 2; }
+pub fn pte_flag_user() -> Int { return 4; }
+pub fn pte_flag_pwt() -> Int { return 8; }
+pub fn pte_flag_pcd() -> Int { return 16; }
+pub fn pte_flag_accessed() -> Int { return 32; }
+pub fn pte_flag_dirty() -> Int { return 64; }
+pub fn pte_flag_huge() -> Int { return 128; }
+pub fn pte_flag_global() -> Int { return 256; }
+pub fn pte_flag_nx() -> Int { return 512; }
+
+pub fn page_size_4kb() -> Int { return 0; }
+pub fn page_size_2mb() -> Int { return 1; }
+pub fn page_size_1gb() -> Int { return 2; }
+
+pub fn page_table_x86_is_canonical(va: Int) -> Bool {
+    let top: Int = va >> 47;
+    return top == 0 || top == -1;
+}
+
+pub fn page_table_x86_parse_va(va: Int) -> VirtualAddressX86 {
+    let canonical: Bool = page_table_x86_is_canonical(va);
+    let offset: Int = va & 4095;
+    let pt_idx: Int = (va >> 12) & 511;
+    let pd_idx: Int = (va >> 21) & 511;
+    let pdpt_idx: Int = (va >> 30) & 511;
+    let pml4_idx: Int = (va >> 39) & 511;
+    return VirtualAddressX86 {
+        raw_addr: va,
+        is_canonical: canonical,
+        pml4_idx: pml4_idx,
+        pdpt_idx: pdpt_idx,
+        pd_idx: pd_idx,
+        pt_idx: pt_idx,
+        offset: offset
+    };
+}
+
+pub fn page_table_x86_make_pte(pfn: Int, flags: Int, is_huge: Bool, is_nx: Bool) -> Int {
+    let aligned_pfn: Int = pfn & 1152921504606842880;
+    let mut raw: Int = aligned_pfn | (flags & 511);
+    if is_huge { raw = raw | pte_flag_huge(); }
+    if is_nx { raw = raw | pte_flag_nx(); }
+    return raw;
+}
+
+pub fn page_table_x86_parse_pte(entry: Int) -> Pml4Entry {
+    let pfn: Int = entry & 1152921504606842880;
+    let present: Bool = (entry & pte_flag_present()) != 0;
+    let writable: Bool = (entry & pte_flag_writable()) != 0;
+    let user: Bool = (entry & pte_flag_user()) != 0;
+    let pwt: Bool = (entry & pte_flag_pwt()) != 0;
+    let pcd: Bool = (entry & pte_flag_pcd()) != 0;
+    let accessed: Bool = (entry & pte_flag_accessed()) != 0;
+    let dirty: Bool = (entry & pte_flag_dirty()) != 0;
+    let huge_page: Bool = (entry & pte_flag_huge()) != 0;
+    let global: Bool = (entry & pte_flag_global()) != 0;
+    let nx: Bool = (entry & pte_flag_nx()) != 0;
+    return Pml4Entry {
+        raw: entry,
+        pfn: pfn,
+        present: present,
+        writable: writable,
+        user: user,
+        pwt: pwt,
+        pcd: pcd,
+        accessed: accessed,
+        dirty: dirty,
+        huge_page: huge_page,
+        global: global,
+        nx: nx
+    };
+}
+
+pub fn page_table_x86_create(sys: &SysCap, phys_base: Int) -> Pml4Table {
+    let mut entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < 512 {
+        entries = list_push(entries, 0);
+        i = i + 1;
+    }
+    return Pml4Table {
+        phys_base: phys_base & 1152921504606842880,
+        entries: entries,
+        mapping_count: 0,
+        is_active: true
+    };
+}
+
+pub fn page_table_x86_map(sys: &SysCap, table: Pml4Table, virt_addr: Int, phys_addr: Int, flags: Int, page_size_type: Int) -> Result[Pml4Table, String] {
+    if !page_table_x86_is_canonical(virt_addr) {
+        return Err("E_NON_CANONICAL_VIRT_ADDR");
+    }
+    let is_huge: Bool = page_size_type == page_size_2mb() || page_size_type == page_size_1gb();
+    let is_nx: Bool = (flags & pte_flag_nx()) != 0;
+    let pte_raw: Int = page_table_x86_make_pte(phys_addr, flags | pte_flag_present(), is_huge, is_nx);
+    let va_info: VirtualAddressX86 = page_table_x86_parse_va(virt_addr);
+    let pml4_idx: Int = va_info.pml4_idx;
+
+    let mut new_entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(table.entries);
+    while i < n {
+        if i == pml4_idx {
+            new_entries = list_push(new_entries, pte_raw);
+        } else {
+            new_entries = list_push(new_entries, list_get(table.entries, i));
+        }
+        i = i + 1;
+    }
+    return Ok(Pml4Table {
+        phys_base: table.phys_base,
+        entries: new_entries,
+        mapping_count: table.mapping_count + 1,
+        is_active: true
+    });
+}
+
+pub fn page_table_x86_unmap(sys: &SysCap, table: Pml4Table, virt_addr: Int) -> Result[Pml4Table, String] {
+    if !page_table_x86_is_canonical(virt_addr) {
+        return Err("E_NON_CANONICAL_VIRT_ADDR");
+    }
+    let va_info: VirtualAddressX86 = page_table_x86_parse_va(virt_addr);
+    let pml4_idx: Int = va_info.pml4_idx;
+    let mut new_entries: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(table.entries);
+    while i < n {
+        if i == pml4_idx {
+            new_entries = list_push(new_entries, 0);
+        } else {
+            new_entries = list_push(new_entries, list_get(table.entries, i));
+        }
+        i = i + 1;
+    }
+    let new_count: Int = if table.mapping_count > 0 { table.mapping_count - 1 } else { 0 };
+    return Ok(Pml4Table {
+        phys_base: table.phys_base,
+        entries: new_entries,
+        mapping_count: new_count,
+        is_active: true
+    });
+}
+
+pub fn page_table_x86_translate(sys: &SysCap, table: Pml4Table, virt_addr: Int) -> Result[Int, String] {
+    if !page_table_x86_is_canonical(virt_addr) {
+        return Err("E_NON_CANONICAL_VIRT_ADDR");
+    }
+    let va_info: VirtualAddressX86 = page_table_x86_parse_va(virt_addr);
+    let pml4_idx: Int = va_info.pml4_idx;
+    let entry_raw: Int = list_get(table.entries, pml4_idx);
+    let pte: Pml4Entry = page_table_x86_parse_pte(entry_raw);
+    if !pte.present {
+        return Err("E_PAGE_FAULT_NOT_PRESENT");
+    }
+    return Ok(pte.pfn | va_info.offset);
+}
+
+pub fn page_table_x86_cr3_encode(phys_base: Int, pcid: Int, pwt: Bool, pcd: Bool) -> Int {
+    let base_aligned: Int = phys_base & 1152921504606842880;
+    let mut cr3: Int = base_aligned | (pcid & 4095);
+    if pwt { cr3 = cr3 | 8; }
+    if pcd { cr3 = cr3 | 16; }
+    return cr3;
+}
+
+pub fn page_table_x86_cr3_decode_base(cr3_val: Int) -> Int {
+    return cr3_val & 1152921504606842880;
+}

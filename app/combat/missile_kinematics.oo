@@ -1,0 +1,94 @@
+// # Guided Missile Kinematics and Proportional Navigation
+//
+// Logline: Calculates line-of-sight closing rate and proportional navigation lateral acceleration commands.
+//
+// Setup: True proportional navigation guidance equations bounded by structural g-limits.
+//
+// Beats:
+//   1. Calculate relative closing velocity and line-of-sight angular rates.
+//   2. Compute proportional navigation lateral acceleration commands.
+//   3. Validate seeker field-of-view limits and missile launch envelopes.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_aero_missile_kinematics() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn missile_compute_closing_velocity(rx: Float, ry: Float, vrel_x: Float, vrel_y: Float) -> Float {
+    let r_sq: Float = (rx * rx) + (ry * ry);
+    if r_sq <= 1.0 {
+        return 0.0;
+    }
+    let r_mag: Float = sqrt(r_sq);
+    let dot: Float = (rx * vrel_x) + (ry * vrel_y);
+    return (0.0 - dot) / r_mag;
+}
+
+pub fn missile_compute_los_rate(rx: Float, ry: Float, vrel_x: Float, vrel_y: Float) -> Float {
+    let r_sq: Float = (rx * rx) + (ry * ry);
+    if r_sq <= 1.0 {
+        return 0.0;
+    }
+    return ((rx * vrel_y) - (ry * vrel_x)) / r_sq;
+}
+
+pub fn missile_compute_pronav_accel(
+    nav_ratio: Float,
+    closing_vel_mps: Float,
+    los_rate_rad_s: Float,
+    max_g: Float
+) -> Float {
+    let raw_accel: Float = nav_ratio * closing_vel_mps * los_rate_rad_s;
+    let max_accel_mps2: Float = max_g * 9.80665;
+    if raw_accel > max_accel_mps2 {
+        return max_accel_mps2;
+    }
+    if raw_accel < (0.0 - max_accel_mps2) {
+        return 0.0 - max_accel_mps2;
+    }
+    return raw_accel;
+}
+
+pub fn missile_check_rear_aspect_lock(
+    target_heading_rad: Float,
+    los_angle_rad: Float,
+    max_aspect_cone_deg: Float
+) -> Bool {
+    let diff_rad: Float = target_heading_rad - los_angle_rad;
+    let pi_val: Float = circ_pi_std_phys_aero_missile_kinematics();
+    let mut normalized_diff: Float = diff_rad;
+    if normalized_diff > pi_val {
+        normalized_diff = normalized_diff - (2.0 * pi_val);
+    }
+    if normalized_diff < (0.0 - pi_val) {
+        normalized_diff = normalized_diff + (2.0 * pi_val);
+    }
+    let mut abs_diff_deg: Float = (0.0 - normalized_diff) * 57.2957795;
+    if normalized_diff >= 0.0 {
+        abs_diff_deg = normalized_diff * 57.2957795;
+    }
+    return abs_diff_deg <= max_aspect_cone_deg;
+}
+
+pub fn verify_pronav() -> Bool {
+    let kat: Float = missile_compute_pronav_accel(3.0, 400.0, 0.01, 30.0);
+    let mut d: Float = kat - 12.0;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0001 {
+        return false;
+    }
+    let cap: Float = missile_compute_pronav_accel(4.0, 1000.0, 1.0, 1.0);
+    d = cap - 9.80665;
+    if d < 0.0 {
+        d = 0.0 - d;
+    }
+    if d > 0.0001 {
+        return false;
+    }
+    if missile_compute_closing_velocity(0.0, 0.0, 10.0, 0.0) != 0.0 {
+        return false;
+    }
+    if missile_compute_los_rate(0.0, 0.0, 10.0, 0.0) != 0.0 {
+        return false;
+    }
+    return true;
+}

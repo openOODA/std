@@ -1,0 +1,104 @@
+// # LZ77 match length law
+//
+// Logline: The match length at position i is the longest run of bytes equal to src[i..], bounded by the remaining source length and the max match length.
+//
+// Setup: Pure Int. window_pos is the start of the search window. max_match caps the run. Illegal max_match, i, or window_pos returns Err. No-match and window_pos==i are Ok(0).
+//
+// Beats:
+//   1. match_length returns Ok(0) when the candidate byte at window_pos does not match src[i].
+//   2. match_length returns the run length bounded by remaining and max_match.
+//   3. A run longer than max_match is capped at max_match.
+//   4. Out-of-range positions or non-positive max_match return Err. window_pos==i is Ok(0).
+
+fn lz77_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Longest match of src[i..] within the window src[window_pos..i).
+// Bounded by max_match and (n - i). Illegal input returns Err. No-match is Ok(0).
+pub fn compression_lz77_match_length(src: List[Int], i: Int, window_pos: Int, max_match: Int) -> Result[Int, String] {
+    let n: Int = list_len(src);
+    if max_match <= 0 { return Err("ERR\tlz77\tdomain"); }
+    if i < 0 { return Err("ERR\tlz77\tdomain"); }
+    if i >= n { return Err("ERR\tlz77\tdomain"); }
+    if window_pos < 0 { return Err("ERR\tlz77\tdomain"); }
+    if window_pos > i { return Err("ERR\tlz77\tdomain"); }
+    if window_pos == i { return Ok(0); }
+    let cap: Int = n - i;
+    let limit: Int = max_match;
+    let mut bound: Int = cap;
+    if limit < bound {
+        bound = limit;
+    }
+    let mut l: Int = 0;
+    while l < bound {
+        if list_get(src, window_pos + l) != list_get(src, i + l) {
+            return Ok(l);
+        }
+        l = l + 1;
+    }
+    return Ok(bound);
+}
+
+pub fn verify_lz77_match_length_law() -> Bool {
+    // Golden: src = [1, 1, 1, 1, 1]. Match length at i=2 with window_pos=0, max_match=16 is 3 (runs to end).
+    let mut g1: List[Int] = list_new();
+    g1 = list_push(g1, 1);
+    g1 = list_push(g1, 1);
+    g1 = list_push(g1, 1);
+    g1 = list_push(g1, 1);
+    g1 = list_push(g1, 1);
+    if lz77_got(compression_lz77_match_length(g1, 2, 0, 16)) != 3 { return false; }
+
+    // Golden: src = [1, 2, 3, 1, 2, 3, 1, 2]. Match at i=3 with window_pos=0, max_match=8 is 5.
+    let mut g2: List[Int] = list_new();
+    g2 = list_push(g2, 1);
+    g2 = list_push(g2, 2);
+    g2 = list_push(g2, 3);
+    g2 = list_push(g2, 1);
+    g2 = list_push(g2, 2);
+    g2 = list_push(g2, 3);
+    g2 = list_push(g2, 1);
+    g2 = list_push(g2, 2);
+    if lz77_got(compression_lz77_match_length(g2, 3, 0, 8)) != 5 { return false; }
+
+    // Identity: window_pos == i is Ok(0) (no preceding context).
+    let w_eq: Result[Int, String] = compression_lz77_match_length(g2, 3, 3, 8);
+    if w_eq.is_ok() == false { return false; }
+    if lz77_got(w_eq) != 0 { return false; }
+
+    // Golden: max_match caps the run. src = [1,1,1,1,1], i=1, window_pos=0 -> bounded to max_match=2.
+    if lz77_got(compression_lz77_match_length(g1, 1, 0, 2)) != 2 { return false; }
+
+    // Golden: remaining caps the run. src = [1,1,1,1,1], i=4, window_pos=0 -> bounded by remaining=1.
+    if lz77_got(compression_lz77_match_length(g1, 4, 0, 16)) != 1 { return false; }
+
+    // Hostile: max_match=0 returns Err.
+    if compression_lz77_match_length(g1, 2, 0, 0).is_ok() { return false; }
+
+    // Hostile: max_match<0 returns Err.
+    if compression_lz77_match_length(g1, 2, 0, 0 - 1).is_ok() { return false; }
+
+    // Hostile: i out of range returns Err.
+    if compression_lz77_match_length(g1, 0 - 1, 0, 8).is_ok() { return false; }
+    if compression_lz77_match_length(g1, 5, 0, 8).is_ok() { return false; }
+
+    // Hostile: window_pos > i returns Err.
+    if compression_lz77_match_length(g1, 2, 3, 8).is_ok() { return false; }
+
+    // Hostile: window_pos < 0 returns Err.
+    if compression_lz77_match_length(g1, 2, 0 - 1, 8).is_ok() { return false; }
+
+    // Identity: first byte mismatch is Ok(0). src = [1, 1, 2, 2, 2], i=2 vs window_pos=0 starts with 1 != 2.
+    let mut h1: List[Int] = list_new();
+    h1 = list_push(h1, 1);
+    h1 = list_push(h1, 1);
+    h1 = list_push(h1, 2);
+    h1 = list_push(h1, 2);
+    h1 = list_push(h1, 2);
+    let nomatch: Result[Int, String] = compression_lz77_match_length(h1, 2, 0, 8);
+    if nomatch.is_ok() == false { return false; }
+    if lz77_got(nomatch) != 0 { return false; }
+
+    return true;
+}

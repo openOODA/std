@@ -1,0 +1,236 @@
+// # AArch64 Fixed-Width Machine Instruction Encoder
+//
+// Logline: Encodes 32-bit fixed-length ARM64 integer ALU, logic, shift, and compare words into little-endian bytes.
+//
+// Setup: Pure ARMv8-A encoder. Register indices are 0..31. Imports aarch64_regs for range checks.
+//
+// Beats:
+//   1. Pack a 32-bit instruction word into four little-endian bytes.
+//   2. Encode RET, SVC, MOVZ, and register ADD/SUB/MUL/SDIV/NEG.
+//   3. Encode AND, ORR, EOR, LSL, LSR, ASR, SUBS, and CMP.
+//   4. Concatenate instruction byte lists for later stream builders.
+
+import "std/hw/silicon/aarch64_regs.oo";
+
+pub fn arm64_u32_to_le(word: Int) -> List[Int] {
+    let mut bytes: List[Int] = list_new();
+    bytes = list_push(bytes, word & 255);
+    bytes = list_push(bytes, (word >> 8) & 255);
+    bytes = list_push(bytes, (word >> 16) & 255);
+    bytes = list_push(bytes, (word >> 24) & 255);
+    return bytes;
+}
+
+pub fn arm64_concat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut out: List[Int] = a;
+    let n: Int = list_len(b);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn arm64_words_to_bytes(words: List[Int]) -> List[Int] {
+    let n: Int = list_len(words);
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        out = arm64_concat(out, arm64_u32_to_le(list_get(words, i)));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn arm64_word_ret() -> Int {
+    return (214 << 24) | (95 << 16) | (3 << 8) | 192;
+}
+
+pub fn arm64_encode_ret() -> List[Int] {
+    return arm64_u32_to_le(arm64_word_ret());
+}
+
+pub fn arm64_word_svc(imm16: Int) -> Int {
+    if imm16 < 0 || imm16 > 65535 { return 0 - 1; }
+    return (212 << 24) | (((imm16 & 65535) << 5) | 1);
+}
+
+pub fn arm64_encode_svc(imm16: Int) -> List[Int] {
+    if imm16 < 0 || imm16 > 65535 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_svc(imm16));
+}
+
+pub fn arm64_word_add_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (139 << 24) | ((xm & 31) << 16) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_add_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_add_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_sub_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (203 << 24) | ((xm & 31) << 16) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_sub_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_sub_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_movz(xd: Int, imm16: Int, shift_halfwords: Int) -> Int {
+    if xd < 0 || xd > 31 || imm16 < 0 || imm16 > 65535 || shift_halfwords < 0 || shift_halfwords > 3 { return 0 - 1; }
+    let hw: Int = (shift_halfwords & 3) << 21;
+    let imm: Int = (imm16 & 65535) << 5;
+    return (210 << 24) | (128 << 16) | hw | imm | (xd & 31);
+}
+
+pub fn arm64_encode_movz(xd: Int, imm16: Int, shift_halfwords: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || imm16 < 0 || imm16 > 65535 || shift_halfwords < 0 || shift_halfwords > 3 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_movz(xd, imm16, shift_halfwords));
+}
+
+pub fn arm64_word_mul(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (155 << 24) | ((xm & 31) << 16) | (124 << 8) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_mul(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_mul(xd, xn, xm));
+}
+
+pub fn arm64_word_sdiv(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (154 << 24) | (192 << 16) | ((xm & 31) << 16) | (3 << 10) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_sdiv(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_sdiv(xd, xn, xm));
+}
+
+pub fn arm64_word_neg(xd: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return arm64_word_sub_reg(xd, 31, xm);
+}
+
+pub fn arm64_encode_neg(xd: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_neg(xd, xm));
+}
+
+pub fn arm64_word_and_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (138 << 24) | ((xm & 31) << 16) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_and_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_and_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_orr_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (170 << 24) | ((xm & 31) << 16) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_orr_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_orr_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_eor_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (202 << 24) | ((xm & 31) << 16) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_eor_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_eor_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_lsl_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (154 << 24) | (192 << 16) | ((xm & 31) << 16) | (8 << 10) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_lsl_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_lsl_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_lsr_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (154 << 24) | (192 << 16) | ((xm & 31) << 16) | (9 << 10) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_lsr_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_lsr_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_asr_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (154 << 24) | (192 << 16) | ((xm & 31) << 16) | (10 << 10) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_asr_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_asr_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_subs_reg(xd: Int, xn: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return (235 << 24) | ((xm & 31) << 16) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_subs_reg(xd: Int, xn: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_subs_reg(xd, xn, xm));
+}
+
+pub fn arm64_word_cmp_reg(xn: Int, xm: Int) -> Int {
+    if xn < 0 || xn > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return arm64_word_subs_reg(31, xn, xm);
+}
+
+pub fn arm64_encode_cmp_reg(xn: Int, xm: Int) -> List[Int] {
+    if xn < 0 || xn > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_cmp_reg(xn, xm));
+}
+
+pub fn arm64_word_mov_reg(xd: Int, xm: Int) -> Int {
+    if xd < 0 || xd > 31 || xm < 0 || xm > 31 { return 0 - 1; }
+    return arm64_word_orr_reg(xd, 31, xm);
+}
+
+pub fn arm64_encode_mov_reg(xd: Int, xm: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xm < 0 || xm > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_mov_reg(xd, xm));
+}
+
+pub fn arm64_word_movk(xd: Int, imm16: Int, shift_halfwords: Int) -> Int {
+    if xd < 0 || xd > 31 || imm16 < 0 || imm16 > 65535 || shift_halfwords < 0 || shift_halfwords > 3 { return 0 - 1; }
+    let hw: Int = (shift_halfwords & 3) << 21;
+    let imm: Int = (imm16 & 65535) << 5;
+    return (242 << 24) | (128 << 16) | hw | imm | (xd & 31);
+}
+
+pub fn arm64_encode_movk(xd: Int, imm16: Int, shift_halfwords: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || imm16 < 0 || imm16 > 65535 || shift_halfwords < 0 || shift_halfwords > 3 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_movk(xd, imm16, shift_halfwords));
+}
+
+pub fn arm64_word_msub(xd: Int, xn: Int, xm: Int, xa: Int) -> Int {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 || xa < 0 || xa > 31 { return 0 - 1; }
+    return (155 << 24) | ((xm & 31) << 16) | (128 << 8) | ((xa & 31) << 10) | ((xn & 31) << 5) | (xd & 31);
+}
+
+pub fn arm64_encode_msub(xd: Int, xn: Int, xm: Int, xa: Int) -> List[Int] {
+    if xd < 0 || xd > 31 || xn < 0 || xn > 31 || xm < 0 || xm > 31 || xa < 0 || xa > 31 { return list_new(); }
+    return arm64_u32_to_le(arm64_word_msub(xd, xn, xm, xa));
+}

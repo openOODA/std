@@ -1,0 +1,75 @@
+// # Little's Law for Queuing Systems
+//
+// Logline: Long-run average number of items in a stable system equals arrival rate times average wait time.
+//
+// Setup: Pure Float. L = lambda * W. Negative lambda or W return Err.
+//
+// Beats:
+//   1. In-system count L from arrival rate lambda and wait time W.
+//   2. Arrival rate lambda from L and W.
+//   3. Average wait time W from L and lambda.
+//   4. Stability check: lambda < service rate.
+
+import "std/net/net_invariants.oo";
+
+pub fn little_in_system(arrival_rate: Float, avg_wait_time: Float) -> Result[Float, String] {
+    if arrival_rate < 0.0 { return Err("ERR\tlittle\tlambda"); }
+    if avg_wait_time < 0.0 { return Err("ERR\tlittle\tw"); }
+    return Ok(arrival_rate * avg_wait_time);
+}
+
+pub fn little_arrival_rate(in_system: Float, avg_wait_time: Float) -> Result[Float, String] {
+    if in_system < 0.0 { return Err("ERR\tlittle\tl"); }
+    if avg_wait_time <= 0.0 { return Err("ERR\tlittle\tw"); }
+    return Ok(in_system / avg_wait_time);
+}
+
+pub fn little_wait_time(in_system: Float, arrival_rate: Float) -> Result[Float, String] {
+    if in_system < 0.0 { return Err("ERR\tlittle\tl"); }
+    if arrival_rate <= 0.0 { return Err("ERR\tlittle\tlambda"); }
+    return Ok(in_system / arrival_rate);
+}
+
+pub fn little_stable(arrival_rate: Float, service_rate: Float) -> Bool {
+    if arrival_rate < 0.0 { return false; }
+    if service_rate <= 0.0 { return false; }
+    if arrival_rate >= service_rate { return false; }
+    return true;
+}
+
+fn little_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn verify_little_law() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    let l1: Float = little_got(little_in_system(10.0, 2.0));
+    let mut d: Float = l1 - 20.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let l2: Float = little_got(little_in_system(0.5, 4.0));
+    let mut d2: Float = l2 - 2.0;
+    if d2 < 0.0 { d2 = 0.0 - d2; }
+    if d2 > 0.0001 { return false; }
+    let lam: Float = little_got(little_arrival_rate(20.0, 2.0));
+    let mut dl: Float = lam - 10.0;
+    if dl < 0.0 { dl = 0.0 - dl; }
+    if dl > 0.0001 { return false; }
+    let w: Float = little_got(little_wait_time(20.0, 10.0));
+    let mut dw: Float = w - 2.0;
+    if dw < 0.0 { dw = 0.0 - dw; }
+    if dw > 0.0001 { return false; }
+    if little_stable(5.0, 10.0) == false { return false; }
+    if little_stable(10.0, 10.0) == true { return false; }
+    if little_stable(15.0, 10.0) == true { return false; }
+    if little_in_system(0.0 - 1.0, 2.0).is_ok() { return false; }
+    if little_in_system(10.0, 0.0 - 1.0).is_ok() { return false; }
+    if little_arrival_rate(20.0, 0.0).is_ok() { return false; }
+    if little_arrival_rate(20.0, 0.0 - 1.0).is_ok() { return false; }
+    if little_wait_time(20.0, 0.0).is_ok() { return false; }
+    if little_wait_time(20.0, 0.0 - 1.0).is_ok() { return false; }
+    if little_stable(0.0 - 1.0, 10.0) == true { return false; }
+    if little_stable(5.0, 0.0) == true { return false; }
+    return true;
+}

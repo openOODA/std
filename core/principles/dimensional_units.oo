@@ -1,0 +1,128 @@
+// # 7-Dimensional SI Base Units
+//
+// Logline: Dimensional algebra for Mass, Length, Time, Current, Temp, Amount, Lum.
+//
+// Setup: Enforces dimensional consistency and units conversion invariants.
+//
+// Beats:
+//   1. Exponents vector structure.
+//   2. Base unit builders (mass, length, time, etc.).
+//   3. Dimensional equality and operations.
+
+type DimensionVector = struct {
+    mass: Int,
+    length: Int,
+    time: Int,
+    current: Int,
+    temperature: Int,
+    amount: Int,
+    luminosity: Int
+};
+
+type Quantity = struct {
+    value: Float,
+    dim: DimensionVector
+};
+
+pub fn units_dim_dimensionless() -> DimensionVector {
+    return DimensionVector {
+        mass: 0, length: 0, time: 0, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_mass() -> DimensionVector {
+    return DimensionVector {
+        mass: 1, length: 0, time: 0, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_length() -> DimensionVector {
+    return DimensionVector {
+        mass: 0, length: 1, time: 0, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_time() -> DimensionVector {
+    return DimensionVector {
+        mass: 0, length: 0, time: 1, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_velocity() -> DimensionVector {
+    return DimensionVector {
+        mass: 0, length: 1, time: 0 - 1, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_acceleration() -> DimensionVector {
+    return DimensionVector {
+        mass: 0, length: 1, time: 0 - 2, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_force() -> DimensionVector {
+    return DimensionVector {
+        mass: 1, length: 1, time: 0 - 2, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_energy() -> DimensionVector {
+    return DimensionVector {
+        mass: 1, length: 2, time: 0 - 2, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_power() -> DimensionVector {
+    return DimensionVector {
+        mass: 1, length: 2, time: 0 - 3, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_pressure() -> DimensionVector {
+    return DimensionVector {
+        mass: 1, length: 0 - 1, time: 0 - 2, current: 0, temperature: 0, amount: 0, luminosity: 0
+    };
+}
+
+pub fn units_dim_eq(a: DimensionVector, b: DimensionVector) -> Bool {
+    let m: Bool = a.mass == b.mass;
+    let l: Bool = a.length == b.length;
+    let t: Bool = a.time == b.time;
+    let i: Bool = a.current == b.current;
+    let th: Bool = a.temperature == b.temperature;
+    let n: Bool = a.amount == b.amount;
+    let j: Bool = a.luminosity == b.luminosity;
+    return m && l && t && i && th && n && j;
+}
+
+pub fn units_quantity_mul(a: Quantity, b: Quantity) -> Quantity {
+    let new_dim: DimensionVector = DimensionVector {
+        mass: a.dim.mass + b.dim.mass,
+        length: a.dim.length + b.dim.length,
+        time: a.dim.time + b.dim.time,
+        current: a.dim.current + b.dim.current,
+        temperature: a.dim.temperature + b.dim.temperature,
+        amount: a.dim.amount + b.dim.amount,
+        luminosity: a.dim.luminosity + b.dim.luminosity
+    };
+    return Quantity {
+        value: a.value * b.value,
+        dim: new_dim
+    };
+}
+
+pub fn units_quantity_div(a: Quantity, b: Quantity) -> Quantity {
+    let new_dim: DimensionVector = DimensionVector {
+        mass: a.dim.mass - b.dim.mass,
+        length: a.dim.length - b.dim.length,
+        time: a.dim.time - b.dim.time,
+        current: a.dim.current - b.dim.current,
+        temperature: a.dim.temperature - b.dim.temperature,
+        amount: a.dim.amount - b.dim.amount,
+        luminosity: a.dim.luminosity - b.dim.luminosity
+    };
+    return Quantity {
+        value: a.value / b.value,
+        dim: new_dim
+    };
+}

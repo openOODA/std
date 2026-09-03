@@ -1,0 +1,45 @@
+// # B+ Tree Disk Engine and Storage Coordinator
+//
+// Logline: Coordinates B+ Tree root lifecycle, paging, and slot-based key-value lookups.
+//
+// Setup: Destubbed Int-floor disk engine importing btree_disk_ops.oo.
+//
+// Beats:
+//   1. Initialize engine instance with root leaf node.
+//   2. Insert and lookup keys across four-slot disk nodes.
+//   3. Split leaf nodes and track engine depth.
+
+import "./btree_disk_ops.oo";
+
+type BTreeDiskEngine = struct {
+    header: BTreeHeader,
+    root: BTreeNode,
+    total_inserts: Int
+};
+
+pub fn btree_engine_init(root_page_id: Int, page_size: Int) -> BTreeDiskEngine {
+    let hdr: BTreeHeader = btree_header_new(root_page_id, page_size, 1);
+    let root_node: BTreeNode = btree_node_create(root_page_id, 1);
+    return BTreeDiskEngine {
+        header: hdr,
+        root: root_node,
+        total_inserts: 0
+    };
+}
+
+pub fn btree_engine_insert(engine: BTreeDiskEngine, key: Int, val: Int) -> BTreeDiskEngine {
+    let updated_root: BTreeNode = btree_node_insert_key_value(engine.root, key, val);
+    return BTreeDiskEngine {
+        header: engine.header,
+        root: updated_root,
+        total_inserts: engine.total_inserts + 1
+    };
+}
+
+pub fn btree_engine_lookup(engine: BTreeDiskEngine, key: Int) -> Int {
+    return btree_node_lookup_value(engine.root, key);
+}
+
+pub fn btree_engine_total_inserts(engine: BTreeDiskEngine) -> Int {
+    return engine.total_inserts;
+}

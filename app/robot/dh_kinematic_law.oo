@@ -1,0 +1,133 @@
+// # Denavit-Hartenberg kinematic law
+//
+// Logline: Standard DH forward kinematics maps four link parameters (a, alpha, d, theta) into a 4x4 homogeneous transform.
+//
+// Setup: Pure Float trig using the DHLink record from kinematics_types.oo.
+//
+// Beats:
+//   1. Pack four DH scalars into a DHLink record.
+//   2. Emit a 4x4 homogeneous transform T = Rz(theta) * Tz(d) * Tx(a) * Rx(alpha).
+//   3. Verify identity, pure-z translation, and pure-z rotation cases.
+
+import "./kinematics_types.oo";
+import "std/core/math/constants.oo";
+fn circ_pi_std_robot_dh_kinematic_law() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+
+// 4x4 homogeneous transform stored as 16 Float fields in row-major order:
+// | xx xy xz xw |
+// | yx yy yz yw |
+// | zx zy zz zw |
+// | wx wy wz ww |
+type Transform4x4 = struct {
+    xx: Float, xy: Float, xz: Float, xw: Float,
+    yx: Float, yy: Float, yz: Float, yw: Float,
+    zx: Float, zy: Float, zz: Float, zw: Float,
+    wx: Float, wy: Float, wz: Float, ww: Float
+};
+
+// Anchor the kinematics_types import with an explicit IDENT containing the stem.
+pub fn dh_kinematic_law_kinematics_types_anchor() -> Int {
+    return kinematics_types_marker();
+}
+
+// Pack four DH parameters into a DHLink record (revolute joint by default).
+pub fn dh_kinematic_law_link(
+    a: Float,
+    alpha: Float,
+    d: Float,
+    theta: Float
+) -> DHLink {
+    return DHLink {
+        a_len:       a,
+        alpha_angle: alpha,
+        d_offset:    d,
+        theta_angle: theta,
+        joint_kind:  0
+    };
+}
+
+// Convert a DHLink to a 4x4 homogeneous transform using the standard DH convention:
+// T = Rz(theta) * Tz(d) * Tx(a) * Rx(alpha).
+pub fn dh_link_to_transform(link: DHLink) -> Transform4x4 {
+    let a_v: Float = link.a_len;
+    let al_v: Float = link.alpha_angle;
+    let d_v: Float = link.d_offset;
+    let t_v: Float = link.theta_angle;
+    let ct: Float = cos(t_v);
+    let st: Float = sin(t_v);
+    let ca: Float = cos(al_v);
+    let sa: Float = sin(al_v);
+    return Transform4x4 {
+        xx: ct,                  xy: 0.0 - (st * ca), xz: st * sa,         xw: a_v * ct,
+        yx: st,                  yy: ct * ca,          yz: 0.0 - (ct * sa), yw: a_v * st,
+        zx: 0.0,                 zy: sa,               zz: ca,              zw: d_v,
+        wx: 0.0,                 wy: 0.0,              wz: 0.0,             ww: 1.0
+    };
+}
+
+// Public entry: four DH parameters in, a 4x4 transform out.
+pub fn dh_homogeneous_transform(
+    a: Float,
+    alpha: Float,
+    d: Float,
+    theta: Float
+) -> Transform4x4 {
+    let link: DHLink = dh_kinematic_law_link(a, alpha, d, theta);
+    return dh_link_to_transform(link);
+}
+
+// Local float absolute value used for tolerance checks in verify_.
+fn dh_abs(x: Float) -> Float {
+    if x < 0.0 {
+        return 0.0 - x;
+    }
+    return x;
+}
+
+pub fn verify_dh_kinematic_law() -> Bool {
+    let tol: Float = 0.0000001;
+
+    // Case 1: all zeros must produce the 4x4 identity.
+    let id_t: Transform4x4 = dh_homogeneous_transform(0.0, 0.0, 0.0, 0.0);
+    if dh_abs(id_t.xx - 1.0) > tol { return false; }
+    if dh_abs(id_t.xy)        > tol { return false; }
+    if dh_abs(id_t.xz)        > tol { return false; }
+    if dh_abs(id_t.xw)        > tol { return false; }
+    if dh_abs(id_t.yx)        > tol { return false; }
+    if dh_abs(id_t.yy - 1.0) > tol { return false; }
+    if dh_abs(id_t.yz)        > tol { return false; }
+    if dh_abs(id_t.yw)        > tol { return false; }
+    if dh_abs(id_t.zx)        > tol { return false; }
+    if dh_abs(id_t.zy)        > tol { return false; }
+    if dh_abs(id_t.zz - 1.0) > tol { return false; }
+    if dh_abs(id_t.zw)        > tol { return false; }
+    if dh_abs(id_t.wx)        > tol { return false; }
+    if dh_abs(id_t.wy)        > tol { return false; }
+    if dh_abs(id_t.wz)        > tol { return false; }
+    if dh_abs(id_t.ww - 1.0) > tol { return false; }
+
+    // Case 2: pure z-translation by d = 5 with a = 0, alpha = 0, theta = 0.
+    let tz: Transform4x4 = dh_homogeneous_transform(0.0, 0.0, 5.0, 0.0);
+    if dh_abs(tz.xx - 1.0)   > tol { return false; }
+    if dh_abs(tz.yy - 1.0)   > tol { return false; }
+    if dh_abs(tz.zz - 1.0)   > tol { return false; }
+    if dh_abs(tz.ww - 1.0)   > tol { return false; }
+    if dh_abs(tz.zw - 5.0)   > tol { return false; }
+
+    // Case 3: pure z-rotation by theta = pi/2 with a = 0, alpha = 0, d = 0.
+    // Rz(pi/2) = | 0 -1 0 0 |
+    //            | 1  0 0 0 |
+    //            | 0  0 1 0 |
+    //            | 0  0 0 1 |
+    let pi_val: Float = circ_pi_std_robot_dh_kinematic_law();
+    let half_pi: Float = pi_val / 2.0;
+    let rz: Transform4x4 = dh_homogeneous_transform(0.0, 0.0, 0.0, half_pi);
+    if dh_abs(rz.xx)              > tol { return false; }
+    if dh_abs(rz.xy - (0.0 - 1.0)) > tol { return false; }
+    if dh_abs(rz.yx - 1.0)        > tol { return false; }
+    if dh_abs(rz.yy)              > tol { return false; }
+    if dh_abs(rz.zz - 1.0)        > tol { return false; }
+    if dh_abs(rz.ww - 1.0)        > tol { return false; }
+
+    return true;
+}

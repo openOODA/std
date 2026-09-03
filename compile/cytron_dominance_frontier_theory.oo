@@ -1,0 +1,162 @@
+// # Cytron dominance frontier theory
+//
+// Logline: A node Y is in DF(X) iff X dominates a predecessor of Y and X does not strictly dominate Y; phi-functions are placed at DF(X) to merge definitions on converging control flow.
+// Setup: Pure Int. dom_p is a length-n 0/1 list for a fixed X telling whether X dominates some predecessor of Y. strict_d is a length-n 0/1 list for a fixed X telling whether X strictly dominates Y. Self-predicts are excluded. Bad shapes fail closed to 0.
+// Beats:
+//   1. Ideal: diamond CFG with X=Entry -> DF(Entry) = {Join}; X=Left, Right, Join -> DF = {}.
+//   2. Non-ideal: reducible CFGs with back edges may need iterated DF for SSA minimality.
+//   3. Hostile: cyclic CFG (self-pred not excluded) fails closed to 0.
+//   4. Coupled: phi count at DF is minimal; the SSA phi law sees only DF members.
+
+// Reference: Cytron, Ferrante, Rosen, Sarkar, Zadeck 1991 TOPLAS 13(4), 451-453.
+// DF(X) = {Y | X dominates a predecessor of Y, and X does not strictly dominate Y}.
+
+import "std/core/domain_cert.oo";
+
+// Single-pair check: returns 1 iff Y is in DF(X). Per Cytron 1991, X strictly
+// dominates Y if every path from start to Y contains X and X != Y.
+pub fn compile_df_check(x_dom_pred: Int, x_strictly_dominates_y: Int) -> Int {
+    if x_dom_pred < 0 { return 0; }
+    if x_strictly_dominates_y < 0 { return 0; }
+    if x_dom_pred == 1 {
+        if x_strictly_dominates_y == 0 {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// |DF(X)| for a fixed X. xs and ys are length-n 0/1
+// lists for a fixed X. Returns 0 on shape mismatch. Ref: Cytron 1991 TOPLAS 13(4), 451.
+pub fn compile_df_size(dom_p: List[Int], strict_d: List[Int], n: Int) -> Int {
+    if n <= 0 { return 0; }
+    if list_len(dom_p) != n { return 0; }
+    if list_len(strict_d) != n { return 0; }
+    let mut c: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let dp: Int = list_get(dom_p, i);
+        let sd: Int = list_get(strict_d, i);
+        if compile_df_check(dp, sd) == 1 {
+            c = c + 1;
+        }
+        i = i + 1;
+    }
+    return c;
+}
+
+// Per-node DF membership for a fixed X. Returns a length-n 0/1 list.
+// Bad shapes return an empty list.
+pub fn compile_df_set(dom_p: List[Int], strict_d: List[Int], n: Int) -> List[Int] {
+    if n <= 0 { return list_new(); }
+    if list_len(dom_p) != n { return list_new(); }
+    if list_len(strict_d) != n { return list_new(); }
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let dp: Int = list_get(dom_p, i);
+        let sd: Int = list_get(strict_d, i);
+        out = list_push(out, compile_df_check(dp, sd));
+        i = i + 1;
+    }
+    return out;
+}
+
+// Coupled SSA minimality: phis are placed only at nodes in DF(X).
+pub fn compile_df_ssa_minimality(phis: Int, df_size: Int) -> Int {
+    if phis < 0 { return 0; }
+    if df_size < 0 { return 0; }
+    if phis <= df_size { return 1; }
+    return 0;
+}
+
+// Hostile: cyclic CFG with self-pred + strict dom fails closed.
+pub fn compile_df_cyclic_fails_closed(p: Int, sd: Int) -> Int {
+    if p == 1 {
+        if sd == 1 { return 0; }
+    }
+    return 1;
+}
+
+// Domain certificate for the Cytron dominance frontier theory.
+pub fn compile_df_cert(holds: Int) -> DomainCert {
+    return domain_cert("compile", "cytron_dominance_frontier", holds);
+}
+
+// KAT and hostile cases for the Cytron dominance frontier theory.
+// Diamond CFG: 4 nodes (Entry=0, Left=1, Right=2, Join=3).
+// For X=Entry: dom_pred={0,0,0,1}, strict_dom={0,0,0,0} -> |DF|=1 ({Join}).
+// For X=Left: dom_pred={0,0,0,0}, strict_dom={0,1,0,0} -> |DF|=0.
+// Reference: Cytron 1991 TOPLAS 13(4), 451.
+pub fn verify_cytron_dominance_frontier_theory() -> Bool {
+    // Single-pair check.
+    if compile_df_check(1, 0) != 1 { return false; }
+    if compile_df_check(0, 0) != 0 { return false; }
+    if compile_df_check(1, 1) != 0 { return false; }
+    if compile_df_check(0, 1) != 0 { return false; }
+    if compile_df_check(0 - 1, 0) != 0 { return false; }
+    if compile_df_check(0, 0 - 1) != 0 { return false; }
+    // Build X=Entry inputs: dom_pred={0,0,0,1}, strict_dom={0,0,0,0}.
+    let mut edp: List[Int] = list_new();
+    edp = list_push(edp, 0);
+    edp = list_push(edp, 0);
+    edp = list_push(edp, 0);
+    edp = list_push(edp, 1);
+    let mut esd: List[Int] = list_new();
+    esd = list_push(esd, 0);
+    esd = list_push(esd, 0);
+    esd = list_push(esd, 0);
+    esd = list_push(esd, 0);
+    // Golden: |DF(Entry)| = 1.
+    if compile_df_size(edp, esd, 4) != 1 { return false; }
+    // Build X=Left inputs: dom_pred={0,0,0,0}, strict_dom={0,1,0,0}.
+    let mut ldp: List[Int] = list_new();
+    ldp = list_push(ldp, 0);
+    ldp = list_push(ldp, 0);
+    ldp = list_push(ldp, 0);
+    ldp = list_push(ldp, 0);
+    let mut lsd: List[Int] = list_new();
+    lsd = list_push(lsd, 0);
+    lsd = list_push(lsd, 1);
+    lsd = list_push(lsd, 0);
+    lsd = list_push(lsd, 0);
+    // Golden: |DF(Left)| = 0. |DF(Right)| = 0 (same shape).
+    if compile_df_size(ldp, lsd, 4) != 0 { return false; }
+    // Build X=Join inputs: strict_dom={0,0,0,1}.
+    let mut jdp: List[Int] = list_new();
+    jdp = list_push(jdp, 0);
+    jdp = list_push(jdp, 0);
+    jdp = list_push(jdp, 0);
+    jdp = list_push(jdp, 0);
+    let mut jsd: List[Int] = list_new();
+    jsd = list_push(jsd, 0);
+    jsd = list_push(jsd, 0);
+    jsd = list_push(jsd, 0);
+    jsd = list_push(jsd, 1);
+    // Golden: |DF(Join)| = 0.
+    if compile_df_size(jdp, jsd, 4) != 0 { return false; }
+    // Hostile: shape mismatch fails closed.
+    let mut one: List[Int] = list_new();
+    one = list_push(one, 0);
+    if compile_df_size(one, esd, 4) != 0 { return false; }
+    if compile_df_size(edp, one, 4) != 0 { return false; }
+    if compile_df_size(edp, esd, 0) != 0 { return false; }
+    if compile_df_size(edp, esd, 0 - 1) != 0 { return false; }
+    // Hostile: cyclic CFG with self-pred + strict dom fails closed.
+    if compile_df_cyclic_fails_closed(1, 1) != 0 { return false; }
+    if compile_df_cyclic_fails_closed(1, 0) != 1 { return false; }
+    if compile_df_cyclic_fails_closed(0, 1) != 1 { return false; }
+    // Coupled SSA minimality: phis at DF are minimal.
+    if compile_df_ssa_minimality(1, 1) != 1 { return false; }
+    if compile_df_ssa_minimality(0, 1) != 1 { return false; }
+    if compile_df_ssa_minimality(2, 1) != 0 { return false; }
+    if compile_df_ssa_minimality(0 - 1, 1) != 0 { return false; }
+    // Certificate round-trip.
+    let c1: DomainCert = compile_df_cert(1);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = compile_df_cert(0);
+    if cert_holds(c0) != 0 { return false; }
+    let c5: DomainCert = compile_df_cert(5);
+    if cert_holds(c5) != 0 { return false; }
+    return true;
+}

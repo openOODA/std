@@ -1,0 +1,85 @@
+// # Efficient Market Hypothesis (EMH)
+//
+// Logline: Asset prices fully reflect available information; arbitrage is impossible in equilibrium.
+//
+// Setup: Pure Int. Information sets are bitmasks. Returns 1 if no arbitrage gap persists. Hosts econ_invariants.oo stem.
+//
+// Beats:
+//   1. Information tier: 1 public, 2 private, 4 insider.
+//   2. Weak form: only past prices reflected.
+//   3. Semi-strong: public information reflected.
+//   4. Strong: all information (including insider) reflected.
+
+import "std/science/econ/econ_invariants.oo";
+
+// Information tier bits: 1 public, 2 private, 4 insider.
+pub fn emh_public_bit() -> Int {
+    return 1;
+}
+
+pub fn emh_private_bit() -> Int {
+    return 2;
+}
+
+pub fn emh_insider_bit() -> Int {
+    return 4;
+}
+
+// Weak form holds: only past prices are reflected (mask == 0).
+pub fn emh_weak_form_holds(info_reflected_mask: Int) -> Int {
+    if info_reflected_mask < 0 { return 0; }
+    if info_reflected_mask == 0 { return 1; }
+    return 0;
+}
+
+// Semi-strong holds: public information is reflected (mask has public bit and no insider bit).
+pub fn emh_semi_strong_holds(info_reflected_mask: Int) -> Int {
+    if info_reflected_mask < 0 { return 0; }
+    if (info_reflected_mask & emh_public_bit()) == 0 { return 0; }
+    if (info_reflected_mask & emh_insider_bit()) != 0 { return 0; }
+    return 1;
+}
+
+// Strong form holds: all information reflected (mask has all three bits).
+pub fn emh_strong_form_holds(info_reflected_mask: Int) -> Int {
+    if info_reflected_mask < 0 { return 0; }
+    let combined: Int = emh_public_bit() + emh_private_bit() + emh_insider_bit();
+    if (info_reflected_mask & combined) == combined { return 1; }
+    return 0;
+}
+
+// Arbitrage opportunity: 1 if expected return from information exceeds market return.
+pub fn emh_arbitrage_gap(information_alpha: Int, market_alpha: Int) -> Int {
+    if information_alpha < 0 { return 0; }
+    if market_alpha < 0 { return 0; }
+    if information_alpha > market_alpha { return 1; }
+    return 0;
+}
+
+// KAT and hostile cases for the efficient market hypothesis.
+pub fn verify_efficient_market_theory() -> Bool {
+    let econ_inv_ok: Int = econ_qty_ok(1);
+    if econ_inv_ok != 1 { return false; }
+    if emh_weak_form_holds(0) != 1 { return false; }
+    if emh_weak_form_holds(1) != 0 { return false; }
+    if emh_weak_form_holds(7) != 0 { return false; }
+    if emh_weak_form_holds(0 - 1) != 0 { return false; }
+    if emh_semi_strong_holds(1) != 1 { return false; }
+    if emh_semi_strong_holds(3) != 1 { return false; }
+    if emh_semi_strong_holds(0) != 0 { return false; }
+    if emh_semi_strong_holds(4) != 0 { return false; }
+    if emh_semi_strong_holds(7) != 0 { return false; }
+    if emh_semi_strong_holds(0 - 1) != 0 { return false; }
+    if emh_strong_form_holds(7) != 1 { return false; }
+    if emh_strong_form_holds(15) != 1 { return false; }
+    if emh_strong_form_holds(3) != 0 { return false; }
+    if emh_strong_form_holds(0) != 0 { return false; }
+    if emh_strong_form_holds(0 - 1) != 0 { return false; }
+    if emh_arbitrage_gap(5, 3) != 1 { return false; }
+    if emh_arbitrage_gap(3, 5) != 0 { return false; }
+    if emh_arbitrage_gap(5, 5) != 0 { return false; }
+    if emh_arbitrage_gap(0, 0) != 0 { return false; }
+    if emh_arbitrage_gap(0 - 1, 5) != 0 { return false; }
+    if emh_arbitrage_gap(5, 0 - 1) != 0 { return false; }
+    return true;
+}

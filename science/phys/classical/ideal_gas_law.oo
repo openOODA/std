@@ -1,0 +1,89 @@
+// # Ideal Gas Law
+//
+// Logline: PV = nRT for an ideal gas with Boltzmann constant from constants.oo.
+//
+// Setup: Pure Float. n, V, T > 0 give P > 0. Non-physical n, V, or T return Err.
+//
+// Beats:
+//   1. Pressure from moles, volume, and absolute temperature.
+//   2. Volume from pressure, moles, and absolute temperature.
+//   3. Temperature from pressure, volume, and moles.
+//   4. Density and partial pressure helpers using the same constant.
+
+import "std/science/phys/classical/phys_constants.oo";
+
+fn ig_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn ideal_gas_constant() -> Float {
+    return 8.314462618;
+}
+
+pub fn ideal_gas_pressure(n_moles: Float, volume_m3: Float, temp_kelvin: Float) -> Result[Float, String] {
+    if n_moles <= 0.0 { return Err("ERR\tig\tn"); }
+    if volume_m3 <= 0.0 { return Err("ERR\tig\tV"); }
+    if temp_kelvin <= 0.0 { return Err("ERR\tig\tT"); }
+    let r: Float = ideal_gas_constant();
+    let phys_const_ok: Float = phys_boltzmann_constant();
+    if phys_const_ok <= 0.0 { return Err("ERR\tig\tconst"); }
+    return Ok((n_moles * r * temp_kelvin) / volume_m3);
+}
+
+pub fn ideal_gas_volume(n_moles: Float, pressure_pa: Float, temp_kelvin: Float) -> Result[Float, String] {
+    if n_moles <= 0.0 { return Err("ERR\tig\tn"); }
+    if pressure_pa <= 0.0 { return Err("ERR\tig\tP"); }
+    if temp_kelvin <= 0.0 { return Err("ERR\tig\tT"); }
+    let r: Float = ideal_gas_constant();
+    return Ok((n_moles * r * temp_kelvin) / pressure_pa);
+}
+
+pub fn ideal_gas_temperature(pressure_pa: Float, volume_m3: Float, n_moles: Float) -> Result[Float, String] {
+    if n_moles <= 0.0 { return Err("ERR\tig\tn"); }
+    if pressure_pa <= 0.0 { return Err("ERR\tig\tP"); }
+    if volume_m3 <= 0.0 { return Err("ERR\tig\tV"); }
+    let r: Float = ideal_gas_constant();
+    return Ok((pressure_pa * volume_m3) / (n_moles * r));
+}
+
+pub fn ideal_gas_density(n_moles: Float, molar_mass_kg: Float, volume_m3: Float) -> Result[Float, String] {
+    if n_moles <= 0.0 { return Err("ERR\tig\tn"); }
+    if molar_mass_kg <= 0.0 { return Err("ERR\tig\tM"); }
+    if volume_m3 <= 0.0 { return Err("ERR\tig\tV"); }
+    return Ok((n_moles * molar_mass_kg) / volume_m3);
+}
+
+// xi=0 is Ok(0). xi outside [0, 1] or P<0 is Err. P=0 is Ok(0).
+pub fn ideal_gas_partial_pressure(mole_fraction: Float, total_pressure_pa: Float) -> Result[Float, String] {
+    if mole_fraction < 0.0 { return Err("ERR\tig\txi"); }
+    if mole_fraction > 1.0 { return Err("ERR\tig\txi"); }
+    if total_pressure_pa < 0.0 { return Err("ERR\tig\tP"); }
+    return Ok(mole_fraction * total_pressure_pa);
+}
+
+pub fn verify_ideal_gas_law() -> Bool {
+    let p_one_mol: Float = ig_got(ideal_gas_pressure(1.0, 0.022414, 273.15));
+    let r: Float = ideal_gas_constant();
+    let p_target: Float = (1.0 * r * 273.15) / 0.022414;
+    let mut d: Float = p_one_mol - p_target;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let t_at_stp: Float = ig_got(ideal_gas_temperature(101325.0, 0.022414, 1.0));
+    let mut dt: Float = t_at_stp - 273.15;
+    if dt < 0.0 { dt = 0.0 - dt; }
+    if dt > 0.01 { return false; }
+    let v_known: Float = ig_got(ideal_gas_volume(2.0, 101325.0, 300.0));
+    let v_target: Float = (2.0 * r * 300.0) / 101325.0;
+    let mut dv: Float = v_known - v_target;
+    if dv < 0.0 { dv = 0.0 - dv; }
+    if dv > 0.000000001 { return false; }
+    if ideal_gas_pressure(0.0, 1.0, 300.0).is_ok() { return false; }
+    if ideal_gas_pressure(1.0, 0.0, 300.0).is_ok() { return false; }
+    if ideal_gas_pressure(1.0, 1.0, 0.0).is_ok() { return false; }
+    if ideal_gas_pressure(1.0, 1.0, 0.0 - 1.0).is_ok() { return false; }
+    if ig_got(ideal_gas_partial_pressure(0.5, 100000.0)) != 50000.0 { return false; }
+    if ig_got(ideal_gas_partial_pressure(0.0, 100000.0)) != 0.0 { return false; }
+    if ideal_gas_partial_pressure(1.5, 100000.0).is_ok() { return false; }
+    if ideal_gas_density(1.0, 0.0, 1.0).is_ok() { return false; }
+    return true;
+}

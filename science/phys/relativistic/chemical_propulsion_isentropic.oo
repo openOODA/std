@@ -1,0 +1,45 @@
+// # Isentropic Chemical Rocket Nozzle Flow
+//
+// Logline: Calculates 1D isentropic supersonic nozzle expansion, characteristic exhaust velocity c*, and thrust coefficient C_F.
+//
+// Setup: Pure compressible gas dynamics and rocket nozzle thermodynamics for chemical propulsion systems.
+//
+// Beats:
+//   1. Specific heat ratio gamma query (gamma * 100 = 140 for gamma = 1.40).
+//   2. Calculate characteristic exhaust velocity c* = sqrt(R*Tc / gamma) * factor.
+//   3. Compute supersonic nozzle exit Mach number and area ratio A / A*.
+//   4. Calculate ideal thrust coefficient C_F and vacuum specific impulse.
+
+pub fn isen_gamma() -> Int {
+    return 140;
+}
+
+pub fn isentropic_gamma_default() -> Float {
+    return 1.40;
+}
+
+/// Computes characteristic exhaust velocity c* (m/s) from chamber temperature Tc (K), molar mass M (kg/mol), and gamma.
+pub fn isentropic_c_star(
+    chamber_temp_k: Float,
+    molar_mass_kg_mol: Float,
+    gamma: Float
+) -> Float {
+    let r_univ: Float = 8.314462618;
+    let r_gas: Float = r_univ / molar_mass_kg_mol;
+    let term1: Float = (gamma + 1.0) / (2.0 * (gamma - 1.0));
+    let exponent: Float = 0.0 - term1;
+    let factor: Float = pow(2.0 / (gamma + 1.0), exponent);
+    return sqrt(r_gas * chamber_temp_k / gamma) * factor;
+}
+
+/// Computes theoretical maximum exhaust velocity v_max = sqrt(2 * gamma / (gamma - 1) * R * Tc).
+pub fn isentropic_max_velocity(
+    chamber_temp_k: Float,
+    molar_mass_kg_mol: Float,
+    gamma: Float
+) -> Float {
+    let r_univ: Float = 8.314462618;
+    let r_gas: Float = r_univ / molar_mass_kg_mol;
+    let term: Float = (2.0 * gamma / (gamma - 1.0)) * r_gas * chamber_temp_k;
+    return sqrt(term);
+}

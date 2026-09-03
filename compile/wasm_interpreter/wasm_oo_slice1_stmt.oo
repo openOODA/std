@@ -1,0 +1,57 @@
+// # .oo Source Compiler for slice1: Statement Lowering
+//
+// Logline: Lower let-binding and if/else statements to WASM bytecode. let enforces a single binding per scope (duplicate_local error) and an explicit type annotation followed by `=` and an expression. if/else emits the if opcode, lowers the body, optional else branch, and a closing end.
+//
+// Setup: Pure .oo statement lowering utilities operating on S1CC compiler state.
+//
+// Beats:
+//   1. Lower let-bindings and enforce single local binding scope.
+//   2. Lower if/else branching control flow into WASM opcode streams.
+
+import "std/compile/wasm_interpreter/wasm_oo_slice1_token.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_compile.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_expr.oo";
+import "std/core/str.oo";
+
+pub fn s1_lower_let(s: S1CC, total_user_count: Int) -> S1CC {
+    let s2: S1CC = s1cc_adv(s);
+    let s3: S1CC = if s1cc_t(s2) == "mut" { s1cc_adv(s2) } else { s2 };
+    let name: String = s1cc_t(s3);
+    if s1_local_idx(s, name) >= 0 {
+        let err_msg: String = "ERR\tcompile\tduplicate_local\t" + name;
+        return s1cc_err(s, err_msg);
+    }
+    let s4: S1CC = s1cc_adv(s3);
+    let mut s5: S1CC = s4;
+    if s1cc_t(s5) == ":" { s5 = s1cc_adv(s5); }
+    while !s1cc_end(s5) && s1cc_t(s5) != "=" && s1cc_t(s5) != ";" { s5 = s1cc_adv(s5); }
+    let s6: S1CC = if s1cc_t(s5) == "=" { s1cc_adv(s5) } else { s5 };
+    let cur_locs: List[String] = s.locals;
+    let new_idx: Int = list_len(cur_locs);
+    let new_locs: List[String] = list_push(cur_locs, name);
+    let s6_with_locs: S1CC = s1cc_setlocs(s6, new_locs);
+    let s8: S1CC = s1_lower_expr(s6_with_locs, 0, total_user_count);
+    let new_types: List[Int] = list_push(s.local_types, s8.last_ret);
+    let new_struct_ids: List[Int] = list_push(s.local_struct_ids, s8.last_struct_id);
+    let s9: S1CC = s1cc_setlocs_types_structids(s8, new_locs, new_types, new_struct_ids);
+    let s10: S1CC = s1cc_emit_set(s9, new_idx);
+    return if s1cc_t(s10) == ";" { s1cc_adv(s10) } else { s10 };
+}
+
+pub fn s1_lower_if(s: S1CC, total_user_count: Int) -> S1CC {
+    let s2: S1CC = s1cc_adv(s);
+    let s3: S1CC = s1_lower_expr(s2, 0, total_user_count);
+    let s4: S1CC = s1cc_emit_if(s3);
+    let s5: S1CC = if s1cc_t(s4) == "{" { s1cc_adv(s4) } else { s4 };
+    let s6: S1CC = s1_lower_body(s5, "}", total_user_count);
+    let s7: S1CC = if s1cc_t(s6) == "}" { s1cc_adv(s6) } else { s6 };
+    if s1cc_t(s7) == "else" {
+        let s8: S1CC = s1cc_adv(s7);
+        let s9: S1CC = s1cc_emit_else(s8);
+        let s10: S1CC = if s1cc_t(s9) == "{" { s1cc_adv(s9) } else { s9 };
+        let s11: S1CC = s1_lower_body(s10, "}", total_user_count);
+        let s12: S1CC = if s1cc_t(s11) == "}" { s1cc_adv(s11) } else { s11 };
+        return s1cc_emit_end(s12);
+    }
+    return s1cc_emit_end(s7);
+}

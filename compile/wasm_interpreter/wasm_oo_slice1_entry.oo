@@ -1,0 +1,79 @@
+// # .oo Source Compiler for slice1: Program Entry
+//
+// Logline: Compile a source string to WasmModuleV2 and run it. Callers import this file for s1_compile_program and s1_run_module.
+//
+// Setup: Imports match, program, token, engine run, and host runtime.
+//
+// Beats:
+//   1. s1_compile_program tokenizes, lowers functions, sets host names and entry.
+//   2. s1_run_module runs the module and folds negative exit codes.
+
+import "std/compile/wasm_interpreter/wasm_oo_slice1_token.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_compile.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_match.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_structs.oo";
+import "std/compile/wasm_interpreter/wasm_oo_slice1_program.oo";
+import "std/compile/wasm_interpreter/wasm_engine_v2.oo";
+import "std/compile/wasm_interpreter/wasm_engine_v2_run.oo";
+import "std/compile/wasm_interpreter/wasm_host_runtime.oo";
+
+pub fn verify_wasm_oo_slice1_entry() -> Bool { return true; }
+
+pub fn s1_compile_program(src: String) -> Result[WasmModuleV2, String] {
+    let toks: WfTokens = s1_tokenize(src);
+    let rt0: WasmHostRuntime = wasm_host_runtime_new();
+    let fns0: List[String] = list_new();
+    let s0: S1CC = s1cc_new(toks, rt0, fns0, 0);
+    let total_user_count: Int = s1_count_functions(s0);
+    let mut cur: S1CC = s0;
+    let mut mod: WasmModuleV2 = wasm_module_v2_new();
+    let mut user_count: Int = 0;
+    while !s1cc_end(cur) {
+        if s1cc_k(cur) == 220 {
+            let bad: String = s1cc_t(cur);
+            let err_msg: String = "ERR\tcompile\tunexpected_character\t" + bad;
+            let err_s: S1CC = s1cc_err(cur, err_msg);
+            return Err(s1cc_err_at(err_s, 0));
+        }
+        if s1cc_t(cur) == "import" {
+            cur = s1cc_skip_import(cur);
+        } else if s1_top_level_is_struct_decl(cur) {
+            cur = s1_parse_struct_decl(cur);
+        } else if s1cc_t(cur) == "pub" || s1cc_t(cur) == "fn" {
+            let arity: Int = s1_count_arity(cur);
+            let s2: S1CC = s1_lower_function(cur, total_user_count);
+            cur = s2;
+            if s1cc_err_count(cur) > 0 {
+                return Err(s1cc_err_at(cur, 0));
+            }
+            let body: List[Int] = s2.code;
+            let lcs: List[String] = s2.locals;
+            let locals_n: Int = list_len(lcs);
+            let wrapped: List[Int] = s1_wrap_body_with_locals(body, locals_n);
+            mod = wasm_module_v2_add_user(mod, wrapped, arity, locals_n);
+            user_count = user_count + 1;
+        } else { cur = s1cc_adv(cur); }
+    }
+    if s1cc_err_count(cur) > 0 {
+        return Err(s1cc_err_at(cur, 0));
+    }
+    let hn: List[String] = s1_host_name_list();
+    let entry_idx: Int = s1_user_fn("main", cur.fns, cur.fns_count);
+    mod = wasm_module_v2_set_host_names(mod, hn);
+    mod = wasm_module_v2_set_entry(mod, entry_idx);
+    mod = wasm_module_v2_set_runtime(mod, cur.rt);
+    return Ok(mod);
+}
+
+pub fn s1_run_module(mod: WasmModuleV2) -> Result[PairRuntimeInt, String] {
+    let r: Result[PairRuntimeInt, String] = wasm_engine_v2_run(mod);
+    if r.ok == 1 {
+        let p: PairRuntimeInt = r.val;
+        let v: Int = p.value;
+        let pv: Int = if v < 0 { 0 - v } else { v };
+        return Ok(PairRuntimeInt { rt: p.rt, value: pv });
+    } else {
+        let e: String = r.err;
+        return Err(e);
+    }
+}

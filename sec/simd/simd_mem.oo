@@ -1,0 +1,90 @@
+// # SIMD Capability-Bounded 32-Byte Aligned Memory Substrate Module
+//
+// Logline: 256-bit SIMD vector memory load and store primitives gated by AllocCap tokens and strict 32-byte alignment verification.
+//
+// Setup: Memory subsystem module. Gated by AllocCap capability tokens; enforces strict 32-byte boundary alignment and fail-closed traps.
+//
+// Beats:
+//   1. Check 32-byte memory alignment and capability requirements for vector transfers.
+//   2. Aligned load and store operations for 256-bit f32x8 float vectors.
+//   3. Aligned load and store operations for 256-bit f64x4 double vectors.
+//   4. Misaligned memory access fail-closed trap validation.
+
+import "std/core/primitives/list.oo";
+import "std/sec/simd/simd_vec8f.oo";
+import "std/sec/simd/simd_vec4d.oo";
+import "std/sec/simd/alignment_principle.oo";
+
+pub fn check_simd_alignment(alloc: &AllocCap, byte_addr: Int) -> Result[Int, String] {
+    if byte_addr < 0 { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    if (byte_addr % 32) != 0 { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    return Ok(byte_addr);
+}
+
+pub fn check_ptr_offset_alignment(alloc: &AllocCap, base_addr: Int, elem_offset: Int, elem_size: Int) -> Result[Int, String] {
+    if base_addr < 0 || elem_offset < 0 || elem_size < 1 {
+        return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT");
+    }
+    let total: Int = base_addr + (elem_offset * elem_size);
+    return check_simd_alignment(alloc, total);
+}
+
+pub fn f32x8_load_aligned(alloc: &AllocCap, buf: List[Float], byte_offset: Int) -> Result[f32x8, String] {
+    let chk = check_simd_alignment(alloc, byte_offset);
+    if chk.is_err() { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    let idx: Int = byte_offset / 4;
+    if (idx + 8) > list_len(buf) { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    return Ok(f32x8_new(
+        list_get(buf, idx),
+        list_get(buf, idx + 1),
+        list_get(buf, idx + 2),
+        list_get(buf, idx + 3),
+        list_get(buf, idx + 4),
+        list_get(buf, idx + 5),
+        list_get(buf, idx + 6),
+        list_get(buf, idx + 7)
+    ));
+}
+
+pub fn f32x8_store_aligned(alloc: &AllocCap, buf: List[Float], byte_offset: Int, v: f32x8) -> Result[List[Float], String] {
+    let chk = check_simd_alignment(alloc, byte_offset);
+    if chk.is_err() { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    let idx: Int = byte_offset / 4;
+    if (idx + 8) > list_len(buf) { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    let mut out: List[Float] = buf;
+    out = list_set(out, idx, v.v0);
+    out = list_set(out, idx + 1, v.v1);
+    out = list_set(out, idx + 2, v.v2);
+    out = list_set(out, idx + 3, v.v3);
+    out = list_set(out, idx + 4, v.v4);
+    out = list_set(out, idx + 5, v.v5);
+    out = list_set(out, idx + 6, v.v6);
+    out = list_set(out, idx + 7, v.v7);
+    return Ok(out);
+}
+
+pub fn f64x4_load_aligned(alloc: &AllocCap, buf: List[Float], byte_offset: Int) -> Result[f64x4, String] {
+    let chk = check_simd_alignment(alloc, byte_offset);
+    if chk.is_err() { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    let idx: Int = byte_offset / 8;
+    if (idx + 4) > list_len(buf) { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    return Ok(f64x4_new(
+        list_get(buf, idx),
+        list_get(buf, idx + 1),
+        list_get(buf, idx + 2),
+        list_get(buf, idx + 3)
+    ));
+}
+
+pub fn f64x4_store_aligned(alloc: &AllocCap, buf: List[Float], byte_offset: Int, v: f64x4) -> Result[List[Float], String] {
+    let chk = check_simd_alignment(alloc, byte_offset);
+    if chk.is_err() { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    let idx: Int = byte_offset / 8;
+    if (idx + 4) > list_len(buf) { return Err("TRAP_0x20_SIMD_ALIGNMENT_FAULT"); }
+    let mut out: List[Float] = buf;
+    out = list_set(out, idx, v.v0);
+    out = list_set(out, idx + 1, v.v1);
+    out = list_set(out, idx + 2, v.v2);
+    out = list_set(out, idx + 3, v.v3);
+    return Ok(out);
+}

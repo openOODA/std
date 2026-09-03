@@ -1,0 +1,74 @@
+// # Bell-LaPadula Confidentiality Law
+//
+// Logline: Subjects may not read up or write down across a security label lattice.
+//
+// Setup: Pure Int. Clearance and classification are levels 0..3. Hostile levels fail closed.
+//
+// Beats:
+//   1. Simple-security (ss) property: no read up.
+//   2. Star-property (*): no write down.
+//   3. Tranquility: subject and object labels are stable across the check.
+//   4. Hosts sec_invariants.oo stem for default-deny cross-link.
+
+import "std/sec/sec_invariants.oo";
+
+// Security levels: 0 UNCLASSIFIED, 1 CONFIDENTIAL, 2 SECRET, 3 TOP_SECRET.
+pub fn bell_lapadula_level_min() -> Int {
+    return 0;
+}
+
+pub fn bell_lapadula_level_max() -> Int {
+    return 3;
+}
+
+// True if clearance is a valid security level 0..3.
+pub fn bell_lapadula_valid_level(level: Int) -> Bool {
+    if level < 0 { return false; }
+    if level > 3 { return false; }
+    return true;
+}
+
+// Simple-security (ss) property: a subject may read an object only if
+// subject clearance >= object classification. Out-of-range returns false.
+pub fn bell_lapadula_can_read(subject_clearance: Int, object_classification: Int) -> Bool {
+    if bell_lapadula_valid_level(subject_clearance) == false { return false; }
+    if bell_lapadula_valid_level(object_classification) == false { return false; }
+    return subject_clearance >= object_classification;
+}
+
+// Star-property (*): a subject may write an object only if
+// subject clearance <= object classification (no write down).
+pub fn bell_lapadula_can_write(subject_clearance: Int, object_classification: Int) -> Bool {
+    if bell_lapadula_valid_level(subject_clearance) == false { return false; }
+    if bell_lapadula_valid_level(object_classification) == false { return false; }
+    return subject_clearance <= object_classification;
+}
+
+// Tranquility: level values are stable for a check; we return 1 if both levels are in range.
+pub fn bell_lapadula_tranquility(subject_clearance: Int, object_classification: Int) -> Int {
+    if bell_lapadula_valid_level(subject_clearance) == false { return 0; }
+    if bell_lapadula_valid_level(object_classification) == false { return 0; }
+    return 1;
+}
+
+// KAT and hostile cases for the Bell-LaPadula law.
+pub fn verify_bell_lapadula_law() -> Bool {
+    let sec_inv_ok: Int = sec_grant_ok(1);
+    if sec_inv_ok != 1 { return false; }
+    if bell_lapadula_can_read(3, 2) == false { return false; }
+    if bell_lapadula_can_read(2, 2) == false { return false; }
+    if bell_lapadula_can_read(0, 2) == true { return false; }
+    if bell_lapadula_can_read(2, 0) == false { return false; }
+    if bell_lapadula_can_write(2, 3) == false { return false; }
+    if bell_lapadula_can_write(2, 2) == false { return false; }
+    if bell_lapadula_can_write(3, 1) == true { return false; }
+    if bell_lapadula_can_write(1, 3) == false { return false; }
+    if bell_lapadula_can_read(0 - 1, 2) == true { return false; }
+    if bell_lapadula_can_read(2, 4) == true { return false; }
+    if bell_lapadula_can_write(0 - 1, 2) == true { return false; }
+    if bell_lapadula_can_write(2, 4) == true { return false; }
+    if bell_lapadula_tranquility(2, 2) != 1 { return false; }
+    if bell_lapadula_tranquility(0 - 1, 2) != 0 { return false; }
+    if bell_lapadula_tranquility(2, 5) != 0 { return false; }
+    return true;
+}

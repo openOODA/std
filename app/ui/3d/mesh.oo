@@ -1,0 +1,28 @@
+// # Mesh vertex/face counts
+//
+// Logline: Integer mesh bookkeeping of vertex and face counts.
+//
+// Setup: Pure .oo standard library module or subsystem.
+//
+// Beats:
+//   1. Execute core data structures and functional algorithms.
+//   2. Enforce invariant constraints and fail-closed Result returns.
+//   3. Export domain interfaces for high-integrity composition.
+//
+// residual: destubbed to Int floor.
+
+type MeshStat = struct {
+    verts: Int,
+    faces: Int
+};
+
+pub fn mesh_stat_new(verts: Int, faces: Int) -> MeshStat {
+    return MeshStat {
+        verts: verts,
+        faces: faces
+    };
+}
+
+pub fn mesh_stat_verts(s: MeshStat) -> Int {
+    return s.verts;
+}

@@ -1,0 +1,30 @@
+// # SHA-2 Known Answer Tests (FIPS 180-4)
+//
+// Logline: FIPS 180-4 published KAT vectors for SHA-256 and SHA-512 as pub fn constants for the smoke test to compare against the runtime crypto_sha256_internal digest.
+//
+// Setup: The runtime crypto_sha256_internal is the FIPS 180-4 one-shot implementation in runtime/chs_rt_crypto.c that returns a lowercase hex digest. This module embeds the four published KAT vectors. The smoke test calls crypto_sha256_internal directly and compares to these constants.
+//
+// Beats:
+//   1. Embed the FIPS 180-4 empty and abc KAT constants for SHA-256 (64 hex chars each).
+//   2. Embed the FIPS 180-4 empty and abc KAT constants for SHA-512 (128 hex chars each).
+//
+// SHA-256 empty: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+// SHA-256 "abc": ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+// SHA-512 empty: cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+// SHA-512 "abc": ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f
+
+pub fn sha_kat_sha256_empty_expected() -> String {
+    return "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+}
+
+pub fn sha_kat_sha256_abc_expected() -> String {
+    return "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+}
+
+pub fn sha_kat_sha512_empty_expected() -> String {
+    return "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e";
+}
+
+pub fn sha_kat_sha512_abc_expected() -> String {
+    return "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f";
+}

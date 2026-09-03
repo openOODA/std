@@ -1,0 +1,100 @@
+// # AI/ML Adam & AdamW Decoupled Weight Decay Optimizers
+//
+// Logline: Implements Adam and AdamW adaptive moment estimation with first/second moment tracking and bias correction.
+//
+// Setup: Imports tensor_types.oo and tensor_ops.oo for parameter state updates.
+//
+// Beats:
+//   1. Define AdamW configuration with learning rate, beta1, beta2, eps, and decoupled decay.
+//   2. Track exponential moving averages of gradients (m_t) and squared gradients (v_t).
+//   3. Apply analytical bias corrections and decoupled weight decay updates.
+
+import "tensor_types.oo";
+import "tensor_ops.oo";
+
+
+// -------------------------------------------------------------------
+// AdamW Configuration & Optimizer State
+// -------------------------------------------------------------------
+
+type AdamWConfig = struct {
+    lr: Float,
+    beta1: Float,
+    beta2: Float,
+    eps: Float,
+    weight_decay: Float
+};
+
+type AdamWOptimizer = struct {
+    config: AdamWConfig,
+    step_count: Int,
+    m: List[Float],
+    v: List[Float]
+};
+
+pub fn adamw_config_default(lr: Float) -> AdamWConfig {
+    return AdamWConfig {
+        lr: lr,
+        beta1: 0.9,
+        beta2: 0.999,
+        eps: 0.00000001,
+        weight_decay: 0.01
+    };
+}
+
+pub fn adamw_optimizer_new(config: AdamWConfig, param_count: Int) -> AdamWOptimizer {
+    let mut m_list: List[Float] = list_new();
+    let mut v_list: List[Float] = list_new();
+    let mut i: Int = 0;    while i < param_count {
+        m_list = list_push(m_list, 0.0);
+        v_list = list_push(v_list, 0.0);
+        i = i + 1;
+    }
+    return AdamWOptimizer {
+        config: config,
+        step_count: 0,
+        m: m_list,
+        v: v_list
+    };
+}
+
+// -------------------------------------------------------------------
+// AdamW Update Step: m_t = beta1*m + (1-beta1)*g, v_t = beta2*v + (1-beta2)*g^2
+// -------------------------------------------------------------------
+
+pub fn adamw_step_1d(opt: AdamWOptimizer, param: Tensor1D, grad: Tensor1D) -> Tensor1D {
+    let opt_m_list: List[Float] = opt.m;
+    let grad_data_list: List[Float] = grad.data;
+    let opt_v_list: List[Float] = opt.v;
+    let param_data_list: List[Float] = param.data;
+    let n: Int = param.size;    let lr: Float = (opt.config).lr;    let b1: Float = (opt.config).beta1;    let b2: Float = (opt.config).beta2;    let eps: Float = (opt.config).eps;    let wd: Float = (opt.config).weight_decay;
+    let step: Int = opt.step_count + 1;
+    // Bias correction factors: 1 - beta^step
+    let bias_cor1: Float = 1.0 - pow(b1, int_to_float(step));    let bias_cor2: Float = 1.0 - pow(b2, int_to_float(step));
+    let mut new_param: List[Float] = list_new();
+    let mut new_m: List[Float] = list_new();
+    let mut new_v: List[Float] = list_new();
+
+    let mut i: Int = 0;    while i < n {
+        let p: Float = list_get(param_data_list, i);        let g: Float = list_get(grad_data_list, i);
+        // Decoupled weight decay: p = p - lr * wd * p
+        let p_decayed: Float = p - ((lr * wd) * p);
+
+        // Update biased 1st and 2nd moment estimates
+        let m_prev: Float = list_get(opt_m_list, i);        let v_prev: Float = list_get(opt_v_list, i);        let m_t: Float = (b1 * m_prev) + ((1.0 - b1) * g);        let v_t: Float = (b2 * v_prev) + ((1.0 - b2) * (g * g));
+        new_m = list_push(new_m, m_t);
+        new_v = list_push(new_v, v_t);
+
+        // Compute bias-corrected estimates
+        let m_hat: Float = m_t / bias_cor1;        let v_hat: Float = v_t / bias_cor2;
+        let step_delta: Float = (lr * m_hat) / (sqrt(v_hat) + eps);
+        new_param = list_push(new_param, p_decayed - step_delta);
+        i = i + 1;
+    }
+
+    return Tensor1D { data: new_param, size: n };
+}
+
+pub fn opt_adamw_marker() -> Int {
+    return 1;
+}

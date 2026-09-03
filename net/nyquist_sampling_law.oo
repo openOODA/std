@@ -1,0 +1,80 @@
+// # Nyquist-Shannon Sampling Law
+//
+// Logline: A bandlimited signal must be sampled at strictly greater than twice its highest frequency to be reconstructed losslessly.
+//
+// Setup: Pure Float. f_max > 0. Sample rate below 2 f_max fails the aliasing check. Hosts net_invariants.oo stem.
+//   bandwidth<=0 or rates<=0 return Err (0 Hz is illegal, not a dummy rate).
+//
+// Beats:
+//   1. Minimum sample rate f_s_min = 2 * f_max.
+//   2. Sampling adequacy: sample rate >= 2 * f_max (strict bound is 2*f_max; for engineering use *).
+//   3. Required samples per period of the signal.
+//   4. Reconstruction bound: signal recovered iff f_s > 2 * f_max.
+
+import "std/net/net_invariants.oo";
+
+fn nq_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn nq_bit(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Minimum sample rate to avoid aliasing: 2 * f_max (Hz). f_max <= 0 returns Err.
+pub fn nyquist_min_sample_rate(signal_bandwidth_hz: Float) -> Result[Float, String] {
+    if signal_bandwidth_hz <= 0.0 { return Err("ERR\tnyquist\tbw"); }
+    return Ok(2.0 * signal_bandwidth_hz);
+}
+
+// Ok(1) if sample_rate is sufficient: sample_rate >= 2 * signal_bandwidth. Illegal rates Err.
+pub fn nyquist_adequate(sample_rate_hz: Float, signal_bandwidth_hz: Float) -> Result[Int, String] {
+    if sample_rate_hz <= 0.0 { return Err("ERR\tnyquist\tfs"); }
+    if signal_bandwidth_hz <= 0.0 { return Err("ERR\tnyquist\tbw"); }
+    let min_rate: Float = 2.0 * signal_bandwidth_hz;
+    if sample_rate_hz < min_rate { return Ok(0); }
+    return Ok(1);
+}
+
+// Samples per period of a sine at frequency f given sample rate f_s: n = f_s / f.
+pub fn nyquist_samples_per_period(sample_rate_hz: Float, signal_freq_hz: Float) -> Result[Float, String] {
+    if sample_rate_hz <= 0.0 { return Err("ERR\tnyquist\tfs"); }
+    if signal_freq_hz <= 0.0 { return Err("ERR\tnyquist\tf"); }
+    return Ok(sample_rate_hz / signal_freq_hz);
+}
+
+// Reconstructable: Ok(1) if the sample rate is at or above 2 * f_max.
+pub fn nyquist_reconstructable(sample_rate_hz: Float, signal_bandwidth_hz: Float) -> Result[Int, String] {
+    return nyquist_adequate(sample_rate_hz, signal_bandwidth_hz);
+}
+
+// KAT and hostile cases for the Nyquist sampling law.
+pub fn verify_nyquist_sampling_law() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    let f_min: Float = nq_got(nyquist_min_sample_rate(1000.0));
+    let mut d: Float = f_min - 2000.0;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    if nq_bit(nyquist_adequate(44100.0, 20000.0)) != 1 { return false; }
+    if nq_bit(nyquist_adequate(40000.0, 20000.0)) != 1 { return false; }
+    if nq_bit(nyquist_adequate(39999.0, 20000.0)) != 0 { return false; }
+    let n: Float = nq_got(nyquist_samples_per_period(8000.0, 1000.0));
+    let mut dn: Float = n - 8.0;
+    if dn < 0.0 { dn = 0.0 - dn; }
+    if dn > 0.0001 { return false; }
+    if nq_bit(nyquist_reconstructable(44100.0, 20000.0)) != 1 { return false; }
+    if nq_bit(nyquist_reconstructable(40000.0, 20000.0)) != 1 { return false; }
+    if nq_bit(nyquist_reconstructable(39999.0, 20000.0)) != 0 { return false; }
+    if nyquist_min_sample_rate(0.0).is_ok() { return false; }
+    if nyquist_min_sample_rate(0.0 - 1.0).is_ok() { return false; }
+    if nyquist_adequate(0.0, 1000.0).is_ok() { return false; }
+    if nyquist_adequate(44100.0, 0.0).is_ok() { return false; }
+    if nyquist_adequate(44100.0, 0.0 - 1.0).is_ok() { return false; }
+    if nyquist_samples_per_period(0.0, 1000.0).is_ok() { return false; }
+    if nyquist_samples_per_period(8000.0, 0.0).is_ok() { return false; }
+    if nyquist_samples_per_period(8000.0, 0.0 - 1.0).is_ok() { return false; }
+    if nyquist_reconstructable(0.0, 20000.0).is_ok() { return false; }
+    if nyquist_reconstructable(44100.0, 0.0).is_ok() { return false; }
+    return true;
+}

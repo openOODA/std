@@ -1,0 +1,227 @@
+// # .oo Source Tokenizer for slice1
+//
+// Logline: Hand-rolled tokenizer producing a flat list of (kind, text) tokens. Uses the same WfTokens type as wasm_oo_frontend.oo (which the OODA C codegen handles correctly) to avoid codegen bugs with new struct types.
+//
+// Setup: Pure .oo tokenizer. Each token is "K|text" where K is a single-letter kind code (I=int, D=ident, S=string, K=keyword, P=punct). Comments and whitespace are skipped.
+//
+// Beats:
+//   1. Skip space, tab, newline, // line comments.
+//   2. Scan integer literals (sequence of digits).
+//   3. Scan string literals (between double quotes).
+//   4. Scan identifiers and classify keywords (let, mut, fn, pub, if, else, match, return, true, false, Ok, Err, Int, String, Bool, List, Result).
+//   5. Scan single- and two-character punctuation (+ - * / % = == != < <= > >= ! ( ) { } [ ] , ; : . ->).
+
+import "std/core/str.oo";
+import "std/compile/wasm_interpreter/wasm_oo_frontend.oo";
+
+pub fn s1_tokenize(src: String) -> WfTokens {
+    let mut t: WfTokens = wf_tokens_new();
+    let n: Int = chars_len(src);
+    let mut i: Int = 0;
+    let mut running: Bool = true;
+    while running && i < n {
+        let ch: Int = byte_at(src, i);
+        if ch == 32 || ch == 9 || ch == 10 || ch == 13 {
+            i = i + 1;
+        } else if ch == 47 {
+            if i + 1 < n {
+                let nx: Int = byte_at(src, i + 1);
+                if nx == 47 {
+                    i = i + 2;
+                    while i < n && byte_at(src, i) != 10 { i = i + 1; }
+                } else {
+                    t = wf_push_byte(t, wf_tk_punct_slash(), "/");
+                    i = i + 1;
+                }
+            } else {
+                t = wf_push_byte(t, wf_tk_punct_slash(), "/");
+                i = i + 1;
+            }
+        } else if ch >= 48 && ch <= 57 {
+            let mut j: Int = i;
+            while j < n && byte_at(src, j) >= 48 && byte_at(src, j) <= 57 { j = j + 1; }
+            t = wf_push_byte(t, wf_tk_number(), str_slice(src, i, j));
+            i = j;
+        } else if ch == 34 {
+            let mut j: Int = i + 1;
+            while j < n && byte_at(src, j) != 34 { j = j + 1; }
+            let txt: String = str_slice(src, i + 1, j);
+            t = wf_push_byte(t, wf_tk_string(), txt);
+            i = j + 1;
+        } else if ch >= 65 && ch <= 90 {
+            let mut j: Int = i;
+            while j < n {
+                let cj: Int = byte_at(src, j);
+                if (cj >= 65 && cj <= 90) || (cj >= 97 && cj <= 122) || (cj >= 48 && cj <= 57) || cj == 95 { j = j + 1; } else { break; }
+            }
+            let txt2: String = str_slice(src, i, j);
+            t = wf_push_byte(t, s1_keyword_kind(txt2), txt2);
+            i = j;
+        } else if ch >= 97 && ch <= 122 {
+            let mut j: Int = i;
+            while j < n {
+                let cj2: Int = byte_at(src, j);
+                if (cj2 >= 65 && cj2 <= 90) || (cj2 >= 97 && cj2 <= 122) || (cj2 >= 48 && cj2 <= 57) || cj2 == 95 { j = j + 1; } else { break; }
+            }
+            let txt3: String = str_slice(src, i, j);
+            t = wf_push_byte(t, s1_keyword_kind(txt3), txt3);
+            i = j;
+        } else if ch == 95 {
+            let mut j: Int = i;
+            while j < n {
+                let cj3: Int = byte_at(src, j);
+                if (cj3 >= 65 && cj3 <= 90) || (cj3 >= 97 && cj3 <= 122) || (cj3 >= 48 && cj3 <= 57) || cj3 == 95 { j = j + 1; } else { break; }
+            }
+            let txt4: String = str_slice(src, i, j);
+            t = wf_push_byte(t, s1_keyword_kind(txt4), txt4);
+            i = j;
+        } else {
+            t = s1_emit_punct(t, src, ch, i);
+            i = s1_advance_punct(src, ch, i);
+        }
+    }
+    return t;
+}
+
+pub fn wf_tk_string() -> Int { return 100; }
+
+pub fn wf_tk_punct_slash() -> Int { return 200; }
+
+pub fn s1_keyword_kind(id: String) -> Int {
+    if id == "let" { return 21; }
+    if id == "mut" { return 22; }
+    if id == "fn" { return 23; }
+    if id == "pub" { return 24; }
+    if id == "if" { return 25; }
+    if id == "else" { return 26; }
+    if id == "match" { return 27; }
+    if id == "return" { return 28; }
+    if id == "true" { return 29; }
+    if id == "false" { return 30; }
+    if id == "Ok" { return 31; }
+    if id == "Err" { return 32; }
+    if id == "Int" { return 33; }
+    if id == "String" { return 34; }
+    if id == "Bool" { return 35; }
+    if id == "List" { return 36; }
+    if id == "Result" { return 37; }
+    if id == "type" { return 38; }
+    if id == "struct" { return 39; }
+    if id == "while" { return 40; }
+    if id == "for" { return 41; }
+    return 5;
+}
+
+pub fn s1_emit_punct(t: WfTokens, src: String, ch: Int, i0: Int) -> WfTokens {
+    let mut cur: WfTokens = t;
+    let mut i: Int = i0;
+    let n: Int = chars_len(src);
+    if ch == 43 { cur = wf_push_byte(cur, wf_tk_plus(), "+"); i = i + 1; }
+    else if ch == 45 {
+        if i + 1 < n && byte_at(src, i + 1) == 62 {
+            cur = wf_push_byte(cur, wf_tk_arrow(), "->"); i = i + 2;
+        } else {
+            cur = wf_push_byte(cur, wf_tk_minus(), "-"); i = i + 1;
+        }
+    }
+    else if ch == 42 { cur = wf_push_byte(cur, wf_tk_star(), "*"); i = i + 1; }
+    else if ch == 37 { cur = wf_push_byte(cur, wf_tk_punct_pct(), "%"); i = i + 1; }
+    else if ch == 61 {
+        if i + 1 < n && byte_at(src, i + 1) == 61 {
+            cur = wf_push_byte(cur, wf_tk_eqeq(), "=="); i = i + 2;
+        } else {
+            cur = wf_push_byte(cur, wf_tk_eq(), "="); i = i + 1;
+        }
+    }
+    else if ch == 33 {
+        if i + 1 < n && byte_at(src, i + 1) == 61 {
+            cur = wf_push_byte(cur, wf_tk_ne(), "!="); i = i + 2;
+        } else {
+            cur = wf_push_byte(cur, wf_tk_bang(), "!"); i = i + 1;
+        }
+    }
+    else if ch == 60 {
+        if i + 1 < n && byte_at(src, i + 1) == 61 {
+            cur = wf_push_byte(cur, wf_tk_le(), "<="); i = i + 2;
+        } else {
+            cur = wf_push_byte(cur, wf_tk_lt(), "<"); i = i + 1;
+        }
+    }
+    else if ch == 62 {
+        if i + 1 < n && byte_at(src, i + 1) == 61 {
+            cur = wf_push_byte(cur, wf_tk_ge(), ">="); i = i + 2;
+        } else {
+            cur = wf_push_byte(cur, wf_tk_gt(), ">"); i = i + 1;
+        }
+    }
+    else if ch == 40 { cur = wf_push_byte(cur, wf_tk_lparen(), "("); i = i + 1; }
+    else if ch == 41 { cur = wf_push_byte(cur, wf_tk_rparen(), ")"); i = i + 1; }
+    else if ch == 123 { cur = wf_push_byte(cur, wf_tk_lbrace(), "{"); i = i + 1; }
+    else if ch == 125 { cur = wf_push_byte(cur, wf_tk_rbrace(), "}"); i = i + 1; }
+    else if ch == 91 { cur = wf_push_byte(cur, wf_tk_lbracket(), "["); i = i + 1; }
+    else if ch == 93 { cur = wf_push_byte(cur, wf_tk_rbracket(), "]"); i = i + 1; }
+    else if ch == 44 { cur = wf_push_byte(cur, wf_tk_comma(), ","); i = i + 1; }
+    else if ch == 59 { cur = wf_push_byte(cur, wf_tk_semi(), ";"); i = i + 1; }
+    else if ch == 58 { cur = wf_push_byte(cur, wf_tk_colon(), ":"); i = i + 1; }
+    else if ch == 46 { cur = wf_push_byte(cur, wf_tk_dot(), "."); i = i + 1; }
+    else { cur = wf_push_byte(cur, wf_tk_unknown(), char_at(src, i0)); i = i + 1; }
+    return cur;
+}
+
+pub fn wf_tk_arrow() -> Int { return 201; }
+pub fn wf_tk_eqeq() -> Int { return 202; }
+pub fn wf_tk_ne() -> Int { return 203; }
+pub fn wf_tk_le() -> Int { return 204; }
+pub fn wf_tk_ge() -> Int { return 205; }
+pub fn wf_tk_lt() -> Int { return 206; }
+pub fn wf_tk_gt() -> Int { return 207; }
+pub fn wf_tk_bang() -> Int { return 208; }
+pub fn wf_tk_punct_pct() -> Int { return 209; }
+pub fn wf_tk_lparen() -> Int { return 210; }
+pub fn wf_tk_rparen() -> Int { return 211; }
+pub fn wf_tk_lbrace() -> Int { return 212; }
+pub fn wf_tk_rbrace() -> Int { return 213; }
+pub fn wf_tk_lbracket() -> Int { return 214; }
+pub fn wf_tk_rbracket() -> Int { return 215; }
+pub fn wf_tk_comma() -> Int { return 216; }
+pub fn wf_tk_colon() -> Int { return 217; }
+pub fn wf_tk_dot() -> Int { return 218; }
+pub fn wf_tk_unknown() -> Int { return 220; }
+
+pub fn s1_advance_punct(src: String, ch: Int, i0: Int) -> Int {
+    let n: Int = chars_len(src);
+    if ch == 43 { return i0 + 1; }
+    if ch == 45 {
+        if i0 + 1 < n && byte_at(src, i0 + 1) == 62 { return i0 + 2; }
+        return i0 + 1;
+    }
+    if ch == 42 { return i0 + 1; }
+    if ch == 37 { return i0 + 1; }
+    if ch == 61 {
+        if i0 + 1 < n && byte_at(src, i0 + 1) == 61 { return i0 + 2; }
+        return i0 + 1;
+    }
+    if ch == 33 {
+        if i0 + 1 < n && byte_at(src, i0 + 1) == 61 { return i0 + 2; }
+        return i0 + 1;
+    }
+    if ch == 60 {
+        if i0 + 1 < n && byte_at(src, i0 + 1) == 61 { return i0 + 2; }
+        return i0 + 1;
+    }
+    if ch == 62 {
+        if i0 + 1 < n && byte_at(src, i0 + 1) == 61 { return i0 + 2; }
+        return i0 + 1;
+    }
+    if ch == 40 { return i0 + 1; }
+    if ch == 41 { return i0 + 1; }
+    if ch == 123 { return i0 + 1; }
+    if ch == 125 { return i0 + 1; }
+    if ch == 91 { return i0 + 1; }
+    if ch == 93 { return i0 + 1; }
+    if ch == 44 { return i0 + 1; }
+    if ch == 59 { return i0 + 1; }
+    if ch == 58 { return i0 + 1; }
+    if ch == 46 { return i0 + 1; }
+    return i0 + 1;
+}

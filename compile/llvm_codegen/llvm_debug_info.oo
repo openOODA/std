@@ -1,0 +1,176 @@
+// # DWARF Debug Metadata Generator
+//
+// Logline: Generates LLVM DWARF debug metadata nodes mapping SSA instructions to source coordinates.
+//
+// Setup: Pure metadata generation module synthesizing valid DWARF5 DICompileUnit, DISubprogram, and DILocation nodes.
+//
+// Beats:
+//   1. Define DebugLocation and DebugContext structures.
+//   2. Create debug context and initialize compile unit and file descriptors.
+//   3. Allocate DISubprogram and DILocation metadata nodes with scoped IDs.
+//   4. Format and emit complete LLVM IR metadata block.
+
+type DebugLocation = struct {
+    line: Int,
+    col: Int,
+    scope_id: Int
+};
+
+type DebugContext = struct {
+    file_name: String,
+    dir_path: String,
+    cu_id: Int,
+    sp_id: Int,
+    next_id: Int,
+    nodes: List[String]
+};
+
+pub fn dbg_location_new(line: Int, col: Int, scope_id: Int) -> DebugLocation {
+    return DebugLocation {
+        line: line,
+        col: col,
+        scope_id: scope_id
+    };
+}
+
+pub fn debug_location_new(line: Int, col: Int, scope_id: Int) -> DebugLocation {
+    return dbg_location_new(line, col, scope_id);
+}
+
+pub fn dbg_create_context(file_name: String, dir_path: String) -> DebugContext {
+    let mut fn_str: String = file_name;
+    if chars_len(fn_str) == 0 {
+        fn_str = "openOODA.oo";
+    }
+    let mut dir_str: String = dir_path;
+    if chars_len(dir_str) == 0 {
+        dir_str = ".";
+    }
+    let empty_nodes: List[String] = list_new();
+    return DebugContext {
+        file_name: fn_str,
+        dir_path: dir_str,
+        cu_id: 0,
+        sp_id: 0,
+        next_id: 20,
+        nodes: empty_nodes
+    };
+}
+
+pub fn dbg_add_subprogram(ctx: DebugContext, func_name: String, line: Int) -> Int {
+    return ctx.next_id;
+}
+
+pub fn dbg_context_add_subprogram(ctx: DebugContext, func_name: String, line: Int) -> DebugContext {
+    let sp_id: Int = ctx.next_id;
+    let ls: String = line.to_string();
+    let id_s: String = sp_id.to_string();
+    let node_text: String = "!" + id_s + " = distinct !DISubprogram(name: \"" + func_name + "\", scope: !1, file: !1, line: " + ls + ", type: !6, scopeLine: " + ls + ", flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !15)";
+    let cur_nodes: List[String] = ctx.nodes;
+    let new_nodes: List[String] = list_push(cur_nodes, node_text);
+    return DebugContext {
+        file_name: ctx.file_name,
+        dir_path: ctx.dir_path,
+        cu_id: ctx.cu_id,
+        sp_id: sp_id,
+        next_id: sp_id + 1,
+        nodes: new_nodes
+    };
+}
+
+pub fn dbg_add_location(ctx: DebugContext, line: Int, col: Int, scope_id: Int) -> Int {
+    return ctx.next_id;
+}
+
+pub fn dbg_context_add_location(ctx: DebugContext, line: Int, col: Int, scope_id: Int) -> DebugContext {
+    let loc_id: Int = ctx.next_id;
+    let ls: String = line.to_string();
+    let cs: String = col.to_string();
+    let sc_s: String = scope_id.to_string();
+    let id_s: String = loc_id.to_string();
+    let node_text: String = "!" + id_s + " = !DILocation(line: " + ls + ", column: " + cs + ", scope: !" + sc_s + ")";
+    let cur_nodes: List[String] = ctx.nodes;
+    let new_nodes: List[String] = list_push(cur_nodes, node_text);
+    return DebugContext {
+        file_name: ctx.file_name,
+        dir_path: ctx.dir_path,
+        cu_id: ctx.cu_id,
+        sp_id: ctx.sp_id,
+        next_id: loc_id + 1,
+        nodes: new_nodes
+    };
+}
+
+pub fn dbg_format_location(ctx: DebugContext, line: Int, col: Int, scope_id: Int) -> String {
+    let loc_id: Int = ctx.next_id;
+    return ", !dbg !" + loc_id.to_string();
+}
+
+pub fn dbg_format_location_from_loc(ctx: DebugContext, loc: DebugLocation) -> String {
+    return dbg_format_location(ctx, loc.line, loc.col, loc.scope_id);
+}
+
+pub fn dbg_attach_tag(inst_str: String, loc_id: Int) -> String {
+    if loc_id <= 0 {
+        return inst_str;
+    }
+    return inst_str + ", !dbg !" + loc_id.to_string();
+}
+
+pub fn dbg_attach_tag_str(inst_str: String, tag: String) -> String {
+    if chars_len(tag) == 0 {
+        return inst_str;
+    }
+    if str_starts_with(tag, ", ") {
+        return inst_str + tag;
+    }
+    return inst_str + ", " + tag;
+}
+
+pub fn dbg_attach_fn_tag(fn_decl_str: String, sp_id: Int) -> String {
+    if sp_id <= 0 {
+        return fn_decl_str;
+    }
+    return fn_decl_str + " !dbg !" + sp_id.to_string();
+}
+
+pub fn dbg_count_nodes(ctx: DebugContext) -> Int {
+    let cur_nodes: List[String] = ctx.nodes;
+    return list_len(cur_nodes);
+}
+
+pub fn dbg_emit_metadata_block(ctx: DebugContext) -> String {
+    let mut out: String = "; --- DWARF Debug Metadata ---\n";
+    out = out + "!llvm.dbg.cu = !{!0}\n";
+    out = out + "!llvm.module.flags = !{!2, !3, !4, !5}\n";
+    out = out + "!llvm.ident = !{!16}\n\n";
+
+    let fn_name: String = ctx.file_name;
+    let dir_name: String = ctx.dir_path;
+
+    out = out + "!0 = distinct !DICompileUnit(language: DW_LANG_C, file: !1, producer: \"oodac\", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, splitDebugInlining: false, nameTableKind: None)\n";
+    out = out + "!1 = !DIFile(filename: \"" + fn_name + "\", directory: \"" + dir_name + "\")\n";
+    out = out + "!2 = !{i32 7, !\"Dwarf Version\", i32 5}\n";
+    out = out + "!3 = !{i32 2, !\"Debug Info Version\", i32 3}\n";
+    out = out + "!4 = !{i32 1, !\"wchar_size\", i32 4}\n";
+    out = out + "!5 = !{i32 7, !\"frame-pointer\", i32 2}\n";
+    out = out + "!6 = !DISubroutineType(types: !7)\n";
+    out = out + "!7 = !{!8}\n";
+    out = out + "!8 = !DIBasicType(name: \"int64\", size: 64, encoding: DW_ATE_signed)\n";
+    out = out + "!9 = !DIBasicType(name: \"int32\", size: 32, encoding: DW_ATE_signed)\n";
+    out = out + "!10 = !DIBasicType(name: \"double\", size: 64, encoding: DW_ATE_float)\n";
+    out = out + "!11 = !DIBasicType(name: \"bool\", size: 8, encoding: DW_ATE_boolean)\n";
+    out = out + "!12 = !DIBasicType(name: \"char\", size: 8, encoding: DW_ATE_signed_char)\n";
+    out = out + "!15 = !{}\n";
+    out = out + "!16 = !{!\"oodac openOODA compiler\"}\n\n";
+
+    let cur_nodes: List[String] = ctx.nodes;
+    let n: Int = list_len(cur_nodes);
+    let mut i: Int = 0;
+    while i < n {
+        let node_str: String = list_get(cur_nodes, i);
+        out = out + node_str + "\n";
+        i = i + 1;
+    }
+    return out;
+}

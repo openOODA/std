@@ -1,0 +1,224 @@
+// # RFC 8949 strict-form CBOR codec
+//
+// Logline: Encodes and minimally decodes RFC 8949 definite CBOR items in shortest form on a List[Int] byte buffer.
+//
+// Setup: Pure. Bytes are List[Int] 0..255. Indefinite-length items, tags, and floats are rejected. Array items and map pairs are pre-encoded child byte lists, and their outer list length supplies the header count.
+//
+// Beats:
+//   1. Emit the shortest-form major-type header for unsigned and negative integers.
+//   2. Wrap bytes and UTF-8 text as definite-length major-type 2 and 3 payloads.
+//   3. Concatenate pre-encoded child byte lists as definite-length arrays and maps.
+//   4. Emit the simple-value singletons for undef, null, true, and false.
+//   5. Decode a single top-level item and report bytes consumed.
+
+// residual: no float, no tag, no indefinite-length, no bignum; no stream framing
+
+import "std/core/primitives/result.oo";
+
+fn cbor9_arg(v: Int) -> List[Int] {
+    let mut o: List[Int] = list_new();
+    if v < 0 { return o; }
+    if v < 24 { o = list_push(o, v); return o; }
+    if v < 256 { o = list_push(o, 24); o = list_push(o, v); return o; }
+    if v < 65536 {
+        o = list_push(o, 25);
+        o = list_push(o, (v >> 8) & 255);
+        o = list_push(o, v & 255);
+        return o;
+    }
+    o = list_push(o, 26);
+    o = list_push(o, (v >> 24) & 255);
+    o = list_push(o, (v >> 16) & 255);
+    o = list_push(o, (v >> 8) & 255);
+    o = list_push(o, v & 255);
+    return o;
+}
+
+fn cbor9_cat(a: List[Int], b: List[Int]) -> List[Int] {
+    let mut o: List[Int] = a;
+    let mut i: Int = 0;
+    while i < list_len(b) {
+        o = list_push(o, list_get(b, i) & 255);
+        i = i + 1;
+    }
+    return o;
+}
+
+pub fn cbor9_major(major: Int) -> Int {
+    if major < 0 { return 0; }
+    if major > 7 { return 0; }
+    return major * 32;
+}
+
+pub fn cbor9_shortest_uint(v: Int) -> List[Int] {
+    if v < 0 { return list_new(); }
+    return cbor9_arg(v);
+}
+
+pub fn cbor9_encode_uint(v: Int) -> List[Int] {
+    if v < 0 { return list_new(); }
+    return cbor9_arg(v);
+}
+
+pub fn cbor9_encode_nint(v: Int) -> List[Int] {
+    if v >= 0 { return list_new(); }
+    let arg: Int = 0 - 1 - v;
+    let body: List[Int] = cbor9_arg(arg);
+    if list_len(body) < 1 { return list_new(); }
+    let mut o: List[Int] = list_new();
+    o = list_push(o, list_get(body, 0) | 32);
+    let mut i: Int = 1;
+    while i < list_len(body) {
+        o = list_push(o, list_get(body, i));
+        i = i + 1;
+    }
+    return o;
+}
+
+pub fn cbor9_encode_bstr(b: List[Int]) -> List[Int] {
+    let mut hdr: List[Int] = list_new();
+    let body: List[Int] = cbor9_arg(list_len(b));
+    let mut i: Int = 0;
+    while i < list_len(body) {
+        hdr = list_push(hdr, list_get(body, i) | 64);
+        i = i + 1;
+    }
+    hdr = cbor9_cat(hdr, b);
+    return hdr;
+}
+
+pub fn cbor9_encode_tstr(s: List[Int]) -> List[Int] {
+    let mut hdr: List[Int] = list_new();
+    let body: List[Int] = cbor9_arg(list_len(s));
+    let mut i: Int = 0;
+    while i < list_len(body) {
+        hdr = list_push(hdr, list_get(body, i) | 96);
+        i = i + 1;
+    }
+    hdr = cbor9_cat(hdr, s);
+    return hdr;
+}
+
+pub fn cbor9_encode_array(items: List[List[Int]]) -> List[Int] {
+    let n: Int = list_len(items);
+    let body: List[Int] = cbor9_arg(n);
+    let mut hdr: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < list_len(body) {
+        hdr = list_push(hdr, list_get(body, i) | 128);
+        i = i + 1;
+    }
+    let mut j: Int = 0;
+    while j < n {
+        hdr = cbor9_cat(hdr, list_get(items, j));
+        j = j + 1;
+    }
+    return hdr;
+}
+
+pub fn cbor9_encode_map(pairs: List[List[Int]]) -> List[Int] {
+    let n: Int = list_len(pairs);
+    let body: List[Int] = cbor9_arg(n);
+    let mut hdr: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < list_len(body) {
+        hdr = list_push(hdr, list_get(body, i) | 160);
+        i = i + 1;
+    }
+    let mut j: Int = 0;
+    while j < n {
+        hdr = cbor9_cat(hdr, list_get(pairs, j));
+        j = j + 1;
+    }
+    return hdr;
+}
+
+pub fn cbor9_encode_simple_undef() -> List[Int] {
+    let mut o: List[Int] = list_new();
+    o = list_push(o, 247);
+    return o;
+}
+
+pub fn cbor9_encode_simple_null() -> List[Int] {
+    let mut o: List[Int] = list_new();
+    o = list_push(o, 246);
+    return o;
+}
+
+pub fn cbor9_encode_simple_true() -> List[Int] {
+    let mut o: List[Int] = list_new();
+    o = list_push(o, 245);
+    return o;
+}
+
+pub fn cbor9_encode_simple_false() -> List[Int] {
+    let mut o: List[Int] = list_new();
+    o = list_push(o, 244);
+    return o;
+}
+
+pub fn cbor9_strict_form_enabled() -> Int { return 1; }
+
+fn cbor9_at(buf: List[Int], pos: Int) -> Int {
+    if pos < 0 { return 0 - 1; }
+    if pos >= list_len(buf) { return 0 - 1; }
+    return list_get(buf, pos) & 255;
+}
+
+fn cbor9_need(buf: List[Int], pos: Int, n: Int) -> Bool {
+    if pos + n > list_len(buf) { return false; }
+    return true;
+}
+
+fn cbor9_decode_arg(ai: Int) -> Int {
+    if ai < 24 { return 1; }
+    if ai == 24 { return 2; }
+    if ai == 25 { return 3; }
+    if ai == 26 { return 5; }
+    if ai == 27 { return 9; }
+    return 0;
+}
+
+fn cbor9_walk(buf: List[Int], pos: Int) -> Int {
+    if cbor9_need(buf, pos, 1) == false { return 0 - 1; }
+    let h: Int = cbor9_at(buf, pos);
+    let major: Int = h / 32;
+    let ai: Int = h - major * 32;
+    let w: Int = cbor9_decode_arg(ai);
+    if w < 1 { return 0 - 1; }
+    if major < 2 { return w; }
+    if major < 4 {
+        if ai < 24 { return w; }
+        if cbor9_need(buf, pos, w) == false { return 0 - 1; }
+        if ai == 24 { return 2 + cbor9_at(buf, pos + 1); }
+        if ai == 25 { return 3 + (cbor9_at(buf, pos + 1) * 256) + cbor9_at(buf, pos + 2); }
+        return 5 + ((cbor9_at(buf, pos + 1) * 256 + cbor9_at(buf, pos + 2)) * 256 + cbor9_at(buf, pos + 3)) * 256 + cbor9_at(buf, pos + 4);
+    }
+    if major < 6 {
+        if cbor9_need(buf, pos, w) == false { return 0 - 1; }
+        let mut count: Int = 0;
+        if ai < 24 { count = ai; }
+        else if ai == 24 { count = cbor9_at(buf, pos + 1); }
+        else if ai == 25 { count = (cbor9_at(buf, pos + 1) * 256) + cbor9_at(buf, pos + 2); }
+        else { return 0 - 1; }
+        let mul: Int = if major == 4 { 1 } else { 2 };
+        let mut total: Int = w;
+        let mut k: Int = 0;
+        while k < count * mul {
+            let nxt: Int = cbor9_walk(buf, pos + total);
+            if nxt < 0 { return 0 - 1; }
+            total = total + nxt;
+            k = k + 1;
+        }
+        return total;
+    }
+    return 0 - 1;
+}
+
+pub fn cbor9_decode_top(buf: List[Int]) -> Result[Int, String] {
+    let n: Int = cbor9_walk(buf, 0);
+    if n < 0 { return Err("ERR\tcbor9_decode_top\tmalformed"); }
+    if n != list_len(buf) { return Err("ERR\tcbor9_decode_top\textra_bytes"); }
+    return Ok(n);
+}
+

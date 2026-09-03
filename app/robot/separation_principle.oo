@@ -1,0 +1,79 @@
+// # LQG separation principle (estimator-controller independence)
+//
+// Logline: For a linear plant with Gaussian noise and certainty-equivalence control, the optimal LQG controller is the composition of the optimal Kalman filter and the optimal LQR; the two may be designed independently.
+//
+// Setup: Pure Int and Float. Each condition flag is 1 (true) or 0 (false); any other value fails closed to 0. Non-finite LQG inputs return Err. Zero control is Ok.
+//
+// Beats:
+//   1. Classify whether the three preconditions (linearity, Gaussian noise, certainty-equivalence) all hold.
+//   2. Compose an LQG control output from a Kalman state estimate, an LQR gain, and a tracking error.
+//   3. Report a DomainCert that names the law and records holds as 1 or 0.
+//   4. Hostile non-boolean flags fail closed to 0. Non-finite LQG inputs return Err.
+
+fn sep_finite(x: Float) -> Int {
+    if x * 0.0 != 0.0 { return 0; }
+    return 1;
+}
+
+fn sep_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn sep_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// LQG separation: optimal estimator and optimal controller can be designed
+// independently for a linear plant under Gaussian noise when certainty-
+// equivalence control is used. Returns 1 if all three preconditions are 1.
+// Any input other than 0 or 1 fails closed to 0.
+pub fn separation_holds(is_linear: Int, is_gaussian: Int, uses_ce: Int) -> Int {
+    if is_linear != 0 && is_linear != 1 { return 0; }
+    if is_gaussian != 0 && is_gaussian != 1 { return 0; }
+    if uses_ce != 0 && uses_ce != 1 { return 0; }
+    if is_linear == 1 {
+        if is_gaussian == 1 {
+            if uses_ce == 1 { return 1; }
+        }
+    }
+    return 0;
+}
+
+// Compose a one-step LQG control output: state estimate from the Kalman
+// filter combined with a proportional LQR correction on the tracking error.
+// Demonstrates the separation: the two contributions are independent.
+// Hostile non-finite inputs return Err. Negative gain is valid feedback.
+pub fn lqg_controller_state(kalman_state: Float, lqr_gain: Float, error: Float) -> Result[Float, String] {
+    if sep_finite(kalman_state) != 1 { return Err("ERR\tsep\tstate"); }
+    if sep_finite(lqr_gain) != 1 { return Err("ERR\tsep\tgain"); }
+    if sep_finite(error) != 1 { return Err("ERR\tsep\terr"); }
+    return Ok(kalman_state + (lqr_gain * error));
+}
+
+pub fn verify_separation_principle() -> Bool {
+    if separation_holds(1, 1, 1) != 1 { return false; }
+    if separation_holds(0, 1, 1) != 0 { return false; }
+    if separation_holds(1, 0, 1) != 0 { return false; }
+    if separation_holds(1, 1, 0) != 0 { return false; }
+    if separation_holds(0, 0, 0) != 0 { return false; }
+
+    if separation_holds(2, 1, 1) != 0 { return false; }
+    if separation_holds(1, 0 - 1, 1) != 0 { return false; }
+    if separation_holds(1, 1, 7) != 0 { return false; }
+    if separation_holds(100, 1, 1) != 0 { return false; }
+    if separation_holds(1, 1, 0 - 2) != 0 { return false; }
+
+    // LQG compose: estimate 1.0, gain 2.0, error 0.5 -> 1.0 + 1.0 = 2.0.
+    if sep_abs(sep_got(lqg_controller_state(1.0, 2.0, 0.5)) - 2.0) > 0.0000001 { return false; }
+
+    // LQG compose: zero error means control output equals the estimate.
+    if sep_abs(sep_got(lqg_controller_state(3.0, 2.0, 0.0)) - 3.0) > 0.0000001 { return false; }
+
+    // LQG compose: zero estimate means control output is gain * error.
+    if sep_abs(sep_got(lqg_controller_state(0.0, 4.0, 0.25)) - 1.0) > 0.0000001 { return false; }
+
+    // LQG compose: negative gain is allowed (sign of feedback), output signed.
+    if sep_abs(sep_got(lqg_controller_state(0.0, 0.0 - 2.0, 1.0)) - (0.0 - 2.0)) > 0.0000001 { return false; }
+    return true;
+}

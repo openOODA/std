@@ -1,0 +1,193 @@
+// # AArch64 QEMU User Execute Helper
+//
+// Logline: Writes a compiled AArch64 ELF to a temp path and runs qemu-aarch64 on those bytes.
+//
+// Setup: ProcessCap shells mkdir, printf octal escapes, chmod, and qemu-aarch64. CWD is ooda/.
+//
+// Beats:
+//   1. Fail closed when qemu-aarch64 is missing.
+//   2. Encode ELF bytes as POSIX octal escapes and materialize the executable image on disk.
+//   3. chmod +x and invoke qemu-aarch64 on that file.
+//   4. Require exit 0 with PASS and without FAIL for a qemu-required suite.
+
+import "std/fs/process/process.oo";
+import "std/fs/os/fs.oo";
+
+fn oct_digit(v: Int) -> Int {
+    return 48 + (v & 7);
+}
+
+pub fn a64_elf_to_octal(elf: List[Int]) -> String {
+    let n: Int = list_len(elf);
+    let mut hs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = list_get(elf, i) & 255;
+        hs = list_push(hs, 92); // '\\'
+        hs = list_push(hs, oct_digit((b / 64) % 8));
+        hs = list_push(hs, oct_digit((b / 8) % 8));
+        hs = list_push(hs, oct_digit(b % 8));
+        i = i + 1;
+    }
+    return bytes_to_str(hs);
+}
+
+pub fn a64_qemu_bin() -> String {
+    return "/usr/bin/qemu-aarch64";
+}
+
+pub fn a64_require_qemu(p: &ProcessCap) -> Int {
+    let r: Result[String, String] = process_exec(p, "test -x /usr/bin/qemu-aarch64");
+    match r {
+        Ok(s) => {
+            let _n: Int = bytes_len(s);
+            return 0;
+        }
+        Err(e) => {
+            println("FAIL qemu_missing " + e);
+            return 1;
+        }
+    }
+}
+
+pub fn a64_elf_dir() -> String {
+    return ".ooda-cache/a64qemu";
+}
+
+pub fn a64_write_and_chmod(p: &ProcessCap, elf: List[Int], path: String) -> Int {
+    let mk: Result[String, String] = process_exec(p, "mkdir -p " + a64_elf_dir());
+    match mk {
+        Ok(s) => {
+            let _n: Int = bytes_len(s);
+        }
+        Err(e) => {
+            println("FAIL mkdir " + e);
+            return 1;
+        }
+    }
+    let n: Int = list_len(elf);
+    if n == 0 {
+        println("FAIL write_elf " + path + " empty elf");
+        return 1;
+    }
+    let oct: String = a64_elf_to_octal(elf);
+    let on: Int = bytes_len(oct);
+    if on <= 32768 {
+        let cmd: String = "printf '" + oct + "' > " + path + " && chmod +x " + path;
+        let wr: Result[String, String] = process_exec(p, cmd);
+        match wr {
+            Ok(s) => {
+                let _m: Int = bytes_len(s);
+                return 0;
+            }
+            Err(e) => {
+                println("FAIL write_elf " + path + " " + e);
+                return 1;
+            }
+        }
+    }
+    let cl: Result[String, String] = process_exec(p, ": > " + path);
+    match cl {
+        Ok(s0) => {
+            let _z: Int = bytes_len(s0);
+        }
+        Err(e0) => {
+            println("FAIL write_elf " + path + " " + e0);
+            return 1;
+        }
+    }
+    let mut i: Int = 0;
+    while i < on {
+        let mut j: Int = i + 16384;
+        if j > on {
+            j = on;
+        }
+        let chunk: String = byte_slice(oct, i, j);
+        let ap: Result[String, String] = process_exec(p, "printf '" + chunk + "' >> " + path);
+        match ap {
+            Ok(s1) => {
+                let _a: Int = bytes_len(s1);
+            }
+            Err(e1) => {
+                println("FAIL write_elf " + path + " " + e1);
+                return 1;
+            }
+        }
+        i = j;
+    }
+    let ch: Result[String, String] = process_exec(p, "chmod +x " + path);
+    match ch {
+        Ok(s2) => {
+            let _b: Int = bytes_len(s2);
+            return 0;
+        }
+        Err(e2) => {
+            println("FAIL chmod " + path + " " + e2);
+            return 1;
+        }
+    }
+}
+
+pub fn a64_qemu_once(p: &ProcessCap, fs: &FsReadCap, path: String, outp: String) -> Result[String, String] {
+    let cmd: String = a64_qemu_bin() + " -cpu max " + path + " > " + outp + " 2>&1";
+    let r: Result[String, String] = process_exec(p, cmd);
+    match r {
+        Ok(s) => {
+            let _n: Int = bytes_len(s);
+            return fs_read_file(fs, outp);
+        }
+        Err(e) => {
+            let fr: Result[String, String] = fs_read_file(fs, outp);
+            match fr {
+                Ok(s) => {
+                    return Err(s + " " + e);
+                }
+                Err(e2) => {
+                    return Err(e);
+                }
+            }
+        }
+    }
+}
+
+pub fn a64_qemu_pass_text(out: String, tag: String) -> Bool {
+    if out.contains("FAIL") {
+        return false;
+    }
+    if !out.contains(tag + ": PASS") {
+        return false;
+    }
+    return true;
+}
+
+pub fn a64_qemu_twice(p: &ProcessCap, fs: &FsReadCap, path: String, tag: String) -> Int {
+    let outp: String = path + ".out";
+    let r1: Result[String, String] = a64_qemu_once(p, fs, path, outp);
+    match r1 {
+        Ok(s1) => {
+            if !a64_qemu_pass_text(s1, tag) {
+                println("FAIL qemu1 " + tag + " " + s1);
+                return 1;
+            }
+            let r2: Result[String, String] = a64_qemu_once(p, fs, path, path + ".out2");
+            match r2 {
+                Ok(s2) => {
+                    if !a64_qemu_pass_text(s2, tag) {
+                        println("FAIL qemu2 " + tag + " " + s2);
+                        return 1;
+                    }
+                    println(s1);
+                    return 0;
+                }
+                Err(e2) => {
+                    println("FAIL qemu2_exec " + tag + " " + e2);
+                    return 1;
+                }
+            }
+        }
+        Err(e1) => {
+            println("FAIL qemu1_exec " + tag + " " + e1);
+            return 1;
+        }
+    }
+}

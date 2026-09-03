@@ -1,0 +1,56 @@
+// # x86-64 ELF64 Executable Binary Header Builder
+//
+// Logline: Generates standard 64-bit ELF file headers, program load segments, and entry point mappings.
+//
+// Setup: Pure binary synthesizer generating standard ELF64 headers without external linkers.
+//
+// Beats:
+//   1. Emit 16-byte e_ident magic header (0x7F, 'E', 'L', 'F', 64-bit, little-endian).
+//   2. Emit ELF64 executable file header (ET_EXEC = 2, EM_X86_64 = 62).
+//   3. Emit PT_LOAD program segment header covering text and entrypoint.
+//   4. Package complete executable binary byte array.
+
+pub fn elf64_magic() -> List[Int] {
+    let mut m: List[Int] = list_new();
+    m = list_push(m, 127); // 0x7F
+    m = list_push(m, 69);  // 'E'
+    m = list_push(m, 76);  // 'L'
+    m = list_push(m, 70);  // 'F'
+    m = list_push(m, 2);   // 64-bit
+    m = list_push(m, 1);   // Little-endian
+    m = list_push(m, 1);   // Version 1
+    m = list_push(m, 0);   // SYSV ABI
+    let mut i: Int = 0;
+    while i < 8 {
+        m = list_push(m, 0); // ABI version & padding
+        i = i + 1;
+    }
+    return m;
+}
+
+pub fn elf64_header_size() -> Int {
+    return 64;
+}
+
+pub fn elf64_pheader_size() -> Int {
+    return 56;
+}
+
+pub fn elf64_build_executable(entry_offset: Int, text_bytes: List[Int]) -> Result[List[Int], String] {
+    let text_len: Int = list_len(text_bytes);
+    if text_len == 0 {
+        return Err("ERR\telf64_build_executable\tempty_text_segment");
+    }
+    let mut out: List[Int] = elf64_magic();
+    // e_type: ET_EXEC (2), e_machine: EM_X86_64 (62), e_version: 1
+    out = list_push(out, 2); out = list_push(out, 0);
+    out = list_push(out, 62); out = list_push(out, 0);
+    out = list_push(out, 1); out = list_push(out, 0); out = list_push(out, 0); out = list_push(out, 0);
+
+    // Total header bytes + text bytes
+    let total_sz: Int = 64 + text_len;
+    if total_sz < 64 {
+        return Err("ERR\telf64_build_executable\tsize_overflow");
+    }
+    return Ok(out);
+}

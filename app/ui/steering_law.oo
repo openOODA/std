@@ -1,0 +1,171 @@
+// # Accot-Zhai Steering Law
+//
+// Logline: Trajectory time scales as a power of (distance / width); c=1 is ideal, logistic c is non-ideal.
+//
+// Setup: Pure Float. a, b > 0. D >= 0, W > 0. width<=0, D<0, a<=0, b<=0 return Err. D=0 with W>0 may Ok ID 0.
+//
+// Beats:
+//   1. Steering time T = a + b * (D/W)^c.
+//   2. Ideal case: c = 1.0, T = a + b * (D/W).
+//   3. Non-ideal: logistic exponent c = 1.0 + k * sigmoid(D/W).
+//   4. Coupled with Fitts MT = a + b * log2(D/W + 1) shares the same monotonic direction.
+
+import "std/app/ui/ui_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+pub fn steering_min_a() -> Float {
+    return 0.05;
+}
+
+pub fn steering_min_b() -> Float {
+    return 0.05;
+}
+
+fn steering_exp_safe(x: Float) -> Float {
+    if x > 30.0 { return exp(30.0); }
+    if x < 0.0 - 30.0 { return exp(0.0 - 30.0); }
+    return exp(x);
+}
+
+fn steering_pow_safe(x: Float, c: Float) -> Float {
+    if x <= 0.0 { return 0.0; }
+    if c == 0.0 { return 1.0; }
+    let lx: Float = ln(x);
+    return steering_exp_safe(c * lx);
+}
+
+fn st_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn steering_law_time(a: Float, b: Float, distance: Float, width: Float, c: Float) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tsteer\ta"); }
+    if b <= 0.0 { return Err("ERR\tsteer\tb"); }
+    if distance < 0.0 { return Err("ERR\tsteer\td"); }
+    if width <= 0.0 { return Err("ERR\tsteer\tw"); }
+    if c < 0.0 { return Err("ERR\tsteer\tc"); }
+    let ratio: Float = distance / width;
+    let pw: Float = steering_pow_safe(ratio, c);
+    return Ok(a + (b * pw));
+}
+
+pub fn steering_law_ideal(a: Float, b: Float, distance: Float, width: Float) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tsteer\ta"); }
+    if b <= 0.0 { return Err("ERR\tsteer\tb"); }
+    if distance < 0.0 { return Err("ERR\tsteer\td"); }
+    if width <= 0.0 { return Err("ERR\tsteer\tw"); }
+    let ratio: Float = distance / width;
+    return Ok(a + (b * ratio));
+}
+
+pub fn steering_logistic_c(distance: Float, width: Float, k: Float) -> Result[Float, String] {
+    if distance < 0.0 { return Err("ERR\tsteer\td"); }
+    if width <= 0.0 { return Err("ERR\tsteer\tw"); }
+    if k < 0.0 { return Err("ERR\tsteer\tk"); }
+    let ratio: Float = distance / width;
+    let half: Float = ratio - 1.0;
+    let s: Float = 1.0 / (1.0 + steering_exp_safe(0.0 - half));
+    return Ok(1.0 + (k * s));
+}
+
+pub fn steering_law_nonideal(a: Float, b: Float, distance: Float, width: Float) -> Result[Float, String] {
+    let cr: Result[Float, String] = steering_logistic_c(distance, width, 0.2);
+    match cr {
+        Ok(c)  => { return steering_law_time(a, b, distance, width, c); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn steering_fitts_like_mt(a: Float, b: Float, distance: Float, width: Float) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tsteer\ta"); }
+    if b <= 0.0 { return Err("ERR\tsteer\tb"); }
+    if distance < 0.0 { return Err("ERR\tsteer\td"); }
+    if width <= 0.0 { return Err("ERR\tsteer\tw"); }
+    let ratio: Float = distance / width;
+    let arg: Float = 1.0 + ratio;
+    let ln2: Float = 0.6931471805599453;
+    let id: Float = ln(arg) / ln2;
+    return Ok(a + (b * id));
+}
+
+pub fn steering_monotonic(a: Float, b: Float, w: Float, d1: Float, d2: Float) -> Int {
+    if a <= 0.0 { return 0; }
+    if b <= 0.0 { return 0; }
+    if w <= 0.0 { return 0; }
+    if d1 < 0.0 { return 0; }
+    if d2 <= d1 { return 0; }
+    let t1: Float = st_got(steering_law_ideal(a, b, d1, w));
+    let t2: Float = st_got(steering_law_ideal(a, b, d2, w));
+    let f1: Float = st_got(steering_fitts_like_mt(a, b, d1, w));
+    let f2: Float = st_got(steering_fitts_like_mt(a, b, d2, w));
+    if t2 <= t1 { return 0; }
+    if f2 <= f1 { return 0; }
+    return 1;
+}
+
+pub fn steering_law_cert(a: Float, b: Float, distance: Float, width: Float) -> DomainCert {
+    let mut h: Int = 0;
+    if steering_law_ideal(a, b, distance, width).is_ok() { h = 1; }
+    return domain_cert("ui", "steering_law", h);
+}
+
+pub fn verify_steering_law() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    let t_ideal: Float = st_got(steering_law_ideal(0.2, 0.3, 400.0, 20.0));
+    let target: Float = 6.2;
+    let mut d: Float = t_ideal - target;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.031 { return false; }
+    let t_gen: Float = st_got(steering_law_time(0.2, 0.3, 400.0, 20.0, 1.0));
+    let mut dg: Float = t_gen - t_ideal;
+    if dg < 0.0 { dg = 0.0 - dg; }
+    if dg > 0.0001 { return false; }
+    let t_ni: Float = st_got(steering_law_nonideal(0.2, 0.3, 400.0, 20.0));
+    if t_ni <= 0.0 { return false; }
+    let lower: Float = st_got(steering_law_ideal(0.2, 0.3, 400.0, 20.0));
+    if t_ni < lower { return false; }
+    let c_lo: Float = st_got(steering_logistic_c(400.0, 20.0, 0.2));
+    if c_lo < 1.0 { return false; }
+    if c_lo > 1.21 { return false; }
+    if steering_law_ideal(0.0, 0.3, 400.0, 20.0).is_ok() { return false; }
+    if steering_law_ideal(0.2, 0.0, 400.0, 20.0).is_ok() { return false; }
+    if steering_law_ideal(0.2, 0.3, 0.0 - 1.0, 20.0).is_ok() { return false; }
+    if steering_law_ideal(0.2, 0.3, 400.0, 0.0).is_ok() { return false; }
+    if steering_law_ideal(0.2, 0.3, 400.0, 0.0 - 1.0).is_ok() { return false; }
+    if steering_law_time(0.2, 0.3, 400.0, 20.0, 0.0 - 0.1).is_ok() { return false; }
+    if steering_law_nonideal(0.0, 0.3, 400.0, 20.0).is_ok() { return false; }
+    if steering_law_nonideal(0.2, 0.3, 0.0 - 1.0, 20.0).is_ok() { return false; }
+    if steering_law_nonideal(0.2, 0.3, 400.0, 0.0).is_ok() { return false; }
+    if steering_logistic_c(0.0 - 1.0, 20.0, 0.2).is_ok() { return false; }
+    if steering_logistic_c(400.0, 0.0, 0.2).is_ok() { return false; }
+    if steering_logistic_c(400.0, 20.0, 0.0 - 0.1).is_ok() { return false; }
+    if steering_fitts_like_mt(0.0, 0.3, 400.0, 20.0).is_ok() { return false; }
+    if steering_fitts_like_mt(0.2, 0.0, 400.0, 20.0).is_ok() { return false; }
+    if steering_fitts_like_mt(0.2, 0.3, 0.0 - 1.0, 20.0).is_ok() { return false; }
+    if steering_fitts_like_mt(0.2, 0.3, 400.0, 0.0).is_ok() { return false; }
+    if steering_monotonic(0.0, 0.3, 20.0, 100.0, 400.0) != 0 { return false; }
+    if steering_monotonic(0.2, 0.0, 20.0, 100.0, 400.0) != 0 { return false; }
+    if steering_monotonic(0.2, 0.3, 0.0, 100.0, 400.0) != 0 { return false; }
+    if steering_monotonic(0.2, 0.3, 20.0, 400.0, 100.0) != 0 { return false; }
+    if steering_monotonic(0.2, 0.3, 20.0, 100.0, 400.0) != 1 { return false; }
+    let ts: Float = st_got(steering_law_ideal(0.2, 0.3, 400.0, 20.0));
+    let tf: Float = st_got(steering_fitts_like_mt(0.2, 0.3, 400.0, 20.0));
+    if ts <= 0.0 { return false; }
+    if tf <= 0.0 { return false; }
+    let lo: Float = ts / 10.0;
+    let hi: Float = ts * 10.0;
+    if tf < lo { return false; }
+    if tf > hi { return false; }
+    let id0: Float = st_got(steering_fitts_like_mt(0.2, 0.3, 0.0, 20.0));
+    if id0 != 0.2 { return false; }
+    let c1: DomainCert = steering_law_cert(0.2, 0.3, 400.0, 20.0);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = steering_law_cert(0.0, 0.3, 400.0, 20.0);
+    if cert_holds(c0) != 0 { return false; }
+    let c2: DomainCert = steering_law_cert(0.2, 0.3, 400.0, 0.0);
+    if cert_holds(c2) != 0 { return false; }
+    if steering_min_a() <= 0.0 { return false; }
+    if steering_min_b() <= 0.0 { return false; }
+    return true;
+}

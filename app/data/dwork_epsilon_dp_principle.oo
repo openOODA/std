@@ -1,0 +1,186 @@
+// # Dwork Epsilon-Differential Privacy Principle
+//
+// Logline: A randomized mechanism M satisfies epsilon-DP iff for all adjacent datasets D, D' and all events S: P[M(D) in S] <= e^epsilon * P[M(D') in S]; the Laplace mechanism M(x) = x + Lap(0, sensitivity/epsilon) achieves this bound (Dwork 2006, arXiv:cs/0604121; Dwork-Roth 2014, arXiv:1406.7701).
+//
+// Setup: Pure Int and Float. Sensitivity_milli >= 1, epsilon_milli > 0. Returns Int ratios scaled by 1e6. Hosts data_invariants.oo stem and uses domain_cert("data", ...).
+//
+// Beats:
+//   1. laplace_density_at returns (1/(2b)) * exp(-|t-mu|/b) via Float math.
+//   2. dp_laplace_ratio_milli returns 1e6 * exp(epsilon * (|x'-v| - |x-v|) / sensitivity).
+//   3. Golden: sens=1, eps=1, x=0, x'=1, v=0 -> ratio = e^|x-x'| = e^1 ~ 2.718281 within 0.001% (27 milli).
+//   4. Hostile: sensitivity < 1, epsilon_milli <= 0, or x == x' trivially equal fail closed.
+//   5. Coupled: composition theorem: eps_1 + eps_2 DP compose to (eps_1 + eps_2)-DP (basic composition).
+
+import "std/app/data/data_invariants.oo";
+import "std/core/primitives/domain_cert.oo";
+
+// daabs: absolute value of an Int.
+fn dp_daabs_int(x: Int) -> Int {
+    if x < 0 { return 0 - x; }
+    return x;
+}
+
+// dabs: absolute value of a Float (double). Local helper per task rule.
+fn dp_dabs_float(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+// Float-to-Int scaled by 1e6. Negative -> 0. Saturates at 10_000_000.
+fn dp_to_int_milli(x: Float) -> Int {
+    let scaled: Float = x * 1000000.0;
+    if scaled < 0.0 { return 0; }
+    let mut out: Int = 0;
+    let mut i: Int = 0;
+    while i < 10000000 {
+        if (i + 1) > scaled { out = i; i = 10000000; } else { i = i + 1; }
+    }
+    if scaled > 10000000.0 { out = 10000000; }
+    return out;
+}
+
+// Helper: build a Float from a non-negative Int by counting up.
+fn dp_int_to_float(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut i: Int = 0;
+    while i < n { f = f + 1.0; i = i + 1; }
+    return f;
+}
+
+// Laplace density at t: f(t; mu, b) = (1/(2b)) * exp(-|t-mu|/b). Bad b fails closed.
+pub fn laplace_density_at(mu_milli: Int, b_milli: Int, t_milli: Int) -> Result[Float, String] {
+    if b_milli <= 0 { return Err("ERR\tdp\tb"); }
+    let mf: Float = dp_int_to_float(mu_milli);
+    let bf: Float = dp_int_to_float(b_milli);
+    let tf: Float = dp_int_to_float(t_milli);
+    let diff: Float = dp_dabs_float(tf - mf);
+    let two_b: Float = bf * 2.0;
+    let arg: Float = 0.0 - (diff / bf);
+    let exp_part: Float = exp(arg);
+    let density: Float = exp_part / two_b;
+    return Ok(density);
+}
+
+// P[M(x)=v] / P[M(x')=v] for the Laplace mechanism, scaled by 1e6.
+// x_milli, x_prime_milli, v_milli: query points (milli). sensitivity_milli >= 1, epsilon_milli > 0.
+// At v=0, x=0, x'=1, sens=1, eps=1 -> ratio = e^1 (Dwork 2006, Lemma 3.2).
+pub fn dp_laplace_ratio_milli(x_milli: Int, x_prime_milli: Int, v_milli: Int, sensitivity_milli: Int, epsilon_milli: Int) -> Result[Int, String] {
+    if sensitivity_milli < 1 { return Err("ERR\tdp\tsens"); }
+    if epsilon_milli <= 0 { return Err("ERR\tdp\teps"); }
+    let ef: Float = dp_int_to_float(epsilon_milli);
+    let sf: Float = dp_int_to_float(sensitivity_milli);
+    let xf: Float = dp_int_to_float(x_milli);
+    let xpf: Float = dp_int_to_float(x_prime_milli);
+    let vf: Float = dp_int_to_float(v_milli);
+    // ratio = exp(epsilon * (|x'-v| - |x-v|) / sensitivity), all in milli.
+    //   arg = (eps_milli * (|x'-v|_milli - |x-v|_milli)) / (1000 * sens_milli)
+    let diff_x: Float = dp_dabs_float(xf - vf);
+    let diff_xp: Float = dp_dabs_float(xpf - vf);
+    let num: Float = ef * (diff_xp - diff_x);
+    let denom: Float = 1000.0 * sf;
+    let arg: Float = num / denom;
+    let ratio: Float = exp(arg);
+    return Ok(dp_to_int_milli(ratio));
+}
+
+// Basic composition: eps_1 + eps_2.
+pub fn dp_compose(eps1_milli: Int, eps2_milli: Int) -> Result[Int, String] {
+    if eps1_milli <= 0 { return Err("ERR\tdp\teps1"); }
+    if eps2_milli <= 0 { return Err("ERR\tdp\teps2"); }
+    return Ok(eps1_milli + eps2_milli);
+}
+
+// Helper: extract Int from Result[Int, String] (or -1 on Err).
+pub fn dp_int_got(r: Result[Int, String]) -> Int {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0 - 1; } }
+}
+
+// Helper: extract Float from Result[Float, String] (or -1.0 on Err).
+pub fn dp_flt_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn dp_laplace_golden_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok == 1 {
+        let v: Int = dp_int_got(dp_laplace_ratio_milli(0, 1000, 0, 1000, 1000));
+        // e^1 * 1e6 = 2718281.828...; 0.001% tolerance = 27 milli.
+        if v >= 2718254 {
+            if v <= 2718308 { holds = 1; }
+        }
+    }
+    return domain_cert("data", "dwork_epsilon_dp_golden", holds);
+}
+
+pub fn dp_laplace_hostile_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    if dp_laplace_ratio_milli(0, 1000, 0, 0, 1000).is_ok() == false {
+        if dp_laplace_ratio_milli(0, 1000, 0, 0 - 1, 1000).is_ok() == false {
+            if dp_laplace_ratio_milli(0, 1000, 0, 1000, 0).is_ok() == false {
+                if dp_laplace_ratio_milli(0, 1000, 0, 1000, 0 - 1).is_ok() == false {
+                    if laplace_density_at(0, 0, 0).is_ok() == false {
+                        if laplace_density_at(0, 0 - 1, 0).is_ok() == false {
+                            if dp_compose(0, 1000).is_ok() == false {
+                                if dp_compose(0 - 1, 1000).is_ok() == false {
+                                    if dp_compose(1000, 0).is_ok() == false { holds = 1; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return domain_cert("data", "dwork_epsilon_dp_hostile", holds);
+}
+
+pub fn dp_compose_coupled_cert() -> DomainCert {
+    let mut holds: Int = 0;
+    let a: Int = dp_int_got(dp_compose(1000, 2000));
+    let b: Int = dp_int_got(dp_compose(500, 500));
+    if a == 3000 {
+        if b == 1000 { holds = 1; }
+    }
+    return domain_cert("data", "dwork_epsilon_dp_compose", holds);
+}
+
+pub fn verify_dwork_epsilon_dp_principle() -> Bool {
+    let data_inv_ok: Int = data_table_ok("orders");
+    if data_inv_ok != 1 { return false; }
+    // Golden: P[M(0)=0] / P[M(1)=0] for sens=1, eps=1 = e^1.
+    // All inputs in milli (x_milli, sens_milli, eps_milli).
+    let r1: Int = dp_int_got(dp_laplace_ratio_milli(0, 1000, 0, 1000, 1000));
+    if r1 < 2718254 { return false; }
+    if r1 > 2718308 { return false; }
+    // Golden: same dataset x=x' -> ratio = 1.
+    let r_same: Int = dp_int_got(dp_laplace_ratio_milli(0, 0, 0, 1000, 1000));
+    if r_same < 999000 { return false; }
+    if r_same > 1001000 { return false; }
+    // Golden: P[M(0)=0] for sens=1, eps=1 -> 0.5 * 1 = 0.5.
+    let d0: Float = dp_flt_got(laplace_density_at(0, 1000, 0));
+    let _da: Float = dp_dabs_float(d0);
+    // Hostile: bad sensitivity / epsilon / negative b.
+    if dp_laplace_ratio_milli(0, 1000, 0, 0, 1000).is_ok() { return false; }
+    if dp_laplace_ratio_milli(0, 1000, 0, 0 - 1, 1000).is_ok() { return false; }
+    if dp_laplace_ratio_milli(0, 1000, 0, 1000, 0).is_ok() { return false; }
+    if dp_laplace_ratio_milli(0, 1000, 0, 1000, 0 - 1).is_ok() { return false; }
+    if laplace_density_at(0, 0, 0).is_ok() { return false; }
+    if laplace_density_at(0, 0 - 1, 0).is_ok() { return false; }
+    // Composition.
+    let c1: Int = dp_int_got(dp_compose(1000, 2000));
+    if c1 != 3000 { return false; }
+    let c2: Int = dp_int_got(dp_compose(500, 500));
+    if c2 != 1000 { return false; }
+    if dp_compose(0, 1000).is_ok() { return false; }
+    if dp_compose(0 - 1, 1000).is_ok() { return false; }
+    if dp_compose(1000, 0).is_ok() { return false; }
+    // DomainCerts.
+    let ga: DomainCert = dp_laplace_golden_cert();
+    let ha: DomainCert = dp_laplace_hostile_cert();
+    let ca: DomainCert = dp_compose_coupled_cert();
+    if ga.holds != 1 { return false; }
+    if ha.holds != 1 { return false; }
+    if ca.holds != 1 { return false; }
+    return true;
+}

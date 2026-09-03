@@ -1,0 +1,105 @@
+// # RTOS Task Control Block (TCB) Core
+//
+// Logline: Task Control Block data model, lifecycle state transitions, and state predicates.
+//
+// Setup: Pure data structures and lifecycle transitions for preemptive RTOS tasks.
+//
+// Beats:
+//   1. Define Task Control Block (TCB) state structure, stack bounds, and execution states.
+//   2. Initialize tasks with stack limits, entry points, and priority levels.
+//   3. Manage task state transitions and provide state-predicate queries.
+//   4. Expose stack high-watermark read for runtime diagnostics.
+
+type RtosTaskState = struct {
+    task_id: Int,
+    name: String,
+    priority: Int,
+    base_priority: Int,
+    state: Int,
+    stack_base: Int,
+    stack_size: Int,
+    stack_pointer: Int,
+    min_free_stack: Int,
+    delay_ticks: Int,
+    runtime_ticks: Int,
+    last_ok: Bool
+};
+
+pub fn rtos_tcb_new(
+    id: Int,
+    name: String,
+    priority: Int,
+    stack_base: Int,
+    stack_size: Int
+) -> RtosTaskState {
+    let mut bounded_prio: Int = priority;
+    if priority > 31 {
+        bounded_prio = 31;
+    }
+
+    if priority < 0 {
+
+        bounded_prio = 0;
+
+    }
+    return RtosTaskState {
+        task_id: id,
+        name: name,
+        priority: bounded_prio,
+        base_priority: bounded_prio,
+        state: 0,
+        stack_base: stack_base,
+        stack_size: stack_size,
+        stack_pointer: stack_base + stack_size,
+        min_free_stack: stack_size,
+        delay_ticks: 0,
+        runtime_ticks: 0,
+        last_ok: true
+    };
+}
+
+pub fn rtos_tcb_set_state(task: RtosTaskState, new_state: Int) -> RtosTaskState {
+    if new_state >= 0 {
+        if new_state <= 4 {
+            return RtosTaskState {
+                task_id: task.task_id,
+                name: task.name,
+                priority: task.priority,
+                base_priority: task.base_priority,
+                state: new_state,
+                stack_base: task.stack_base,
+                stack_size: task.stack_size,
+                stack_pointer: task.stack_pointer,
+                min_free_stack: task.min_free_stack,
+                delay_ticks: task.delay_ticks,
+                runtime_ticks: task.runtime_ticks,
+                last_ok: true
+            };
+        }
+    }
+    return task;
+}
+
+pub fn rtos_tcb_is_ready(task: RtosTaskState) -> Bool {
+    return task.state == 0;
+}
+
+pub fn rtos_tcb_is_running(task: RtosTaskState) -> Bool {
+    return task.state == 1;
+}
+
+pub fn rtos_tcb_is_blocked(task: RtosTaskState) -> Bool {
+    return task.state == 2;
+}
+
+pub fn rtos_tcb_is_suspended(task: RtosTaskState) -> Bool {
+    return task.state == 3;
+}
+
+pub fn rtos_tcb_is_terminated(task: RtosTaskState) -> Bool {
+    return task.state == 4;
+}
+
+pub fn rtos_tcb_get_stack_high_watermark(task: RtosTaskState) -> Int {
+    return task.min_free_stack;
+}

@@ -1,0 +1,114 @@
+// # Autonomic RASP Types & Gold Master Image Descriptors
+//
+// Logline: Defines sealed Gold Master image descriptors and RASP integrity status reports.
+//
+// Setup: Pure. Represents reference memory page checksums and integrity assessment records.
+//
+// Beats:
+//   1. Define CodeSegmentBackup holding reference bytes, target addresses, and expected SHA-256 digests.
+//   2. Define GoldMasterImage holding versioned collections of sealed code segments.
+//   3. Define RaspIntegrityReport holding corruption metrics and audit telemetry.
+
+type CodeSegmentBackup = struct {
+    segment_id: Int,
+    base_address: Int,
+    expected_sha256: String,
+    image_bytes: List[Int],
+    length: Int
+};
+
+type GoldMasterImage = struct {
+    version: Int,
+    segments: List[CodeSegmentBackup],
+    segment_count: Int,
+    master_hmac: String
+};
+
+type RaspIntegrityReport = struct {
+    is_intact: Bool,
+    corrupted_segments: List[Int],
+    corruption_count: Int,
+    details: String
+};
+
+pub fn code_segment_backup_new(
+    seg_id: Int,
+    addr: Int,
+    hash: String,
+    bytes: List[Int],
+    len: Int
+) -> CodeSegmentBackup {
+    return CodeSegmentBackup {
+        segment_id: seg_id,
+        base_address: addr,
+        expected_sha256: hash,
+        image_bytes: bytes,
+        length: len
+    };
+}
+
+pub fn gold_master_image_new(
+    ver: Int,
+    hmac: String
+) -> GoldMasterImage {
+    let empty_segments: List[CodeSegmentBackup] = list_new();
+    return GoldMasterImage {
+        version: ver,
+        segments: empty_segments,
+        segment_count: 0,
+        master_hmac: hmac
+    };
+}
+
+pub fn gold_master_add_segment(
+    master: GoldMasterImage,
+    seg: CodeSegmentBackup
+) -> GoldMasterImage {
+    let updated_segments: List[CodeSegmentBackup] = list_push(
+        master.segments,
+        seg
+    );
+    return GoldMasterImage {
+        version: master.version,
+        segments: updated_segments,
+        segment_count: master.segment_count + 1,
+        master_hmac: master.master_hmac
+    };
+}
+
+pub fn rasp_integrity_report_new(
+    intact: Bool,
+    corruptions: List[Int],
+    count: Int,
+    det: String
+) -> RaspIntegrityReport {
+    return RaspIntegrityReport {
+        is_intact: intact,
+        corrupted_segments: corruptions,
+        corruption_count: count,
+        details: det
+    };
+}
+
+pub fn gold_master_get_segment(
+    master: GoldMasterImage,
+    idx: Int
+) -> CodeSegmentBackup {
+    return list_get(master.segments, idx);
+}
+
+pub fn gold_master_find_segment(
+    master: GoldMasterImage,
+    seg_id: Int
+) -> Option[CodeSegmentBackup] {
+    let count: Int = master.segment_count;
+    let mut i: Int = 0;
+    while i < count {
+        let seg: CodeSegmentBackup = list_get(master.segments, i);
+        if seg.segment_id == seg_id {
+            return Some(seg);
+        }
+        i = i + 1;
+    }
+    return None;
+}

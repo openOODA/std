@@ -1,0 +1,19 @@
+// # Libfloor Gpu Launch
+//
+// Logline: Standard library verification and domain capabilities for Libfloor Gpu Launch.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn verify_libfloor_gpu_launch() -> Bool {
+    let r: Result[String, String] = gpu_launch(gpu, "shader0");
+    if r.is_ok() {
+        println("unexpected-ok");
+    } else {
+        println("gpu-residual-ok");
+    }
+    return true;
+}

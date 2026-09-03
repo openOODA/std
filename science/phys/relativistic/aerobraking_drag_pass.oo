@@ -1,0 +1,46 @@
+// # Aerobraking Atmospheric Drag Pass Dynamics
+//
+// Logline: Calculates aerodynamic drag deceleration, periapsis velocity depletion, and orbital apoapsis lowering per atmospheric pass.
+//
+// Setup: Pure planetary aerobraking mechanics for orbital insertion and circularization (Mars Reconnaissance Orbiter / Venus Express).
+//
+// Beats:
+//   1. Nominal drag coefficient query (Cd * 10 = 20 for Cd = 2.0).
+//   2. Calculate drag deceleration a_drag = 0.5 * rho * v^2 * (Cd * A / m).
+//   3. Compute delta-v lost per periapsis atmospheric pass.
+//   4. Calculate new lowered apoapsis altitude after pass.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astro_advanced_aerobraking_drag_pass() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn aero_drag_cd() -> Int {
+    return 20;
+}
+
+pub fn aerobraking_drag_accel(
+    density_kg_m3: Float,
+    velocity_m_s: Float,
+    cd: Float,
+    area_m2: Float,
+    mass_kg: Float
+) -> Float {
+    if mass_kg <= 0.0001 { return 0.0; }
+    let q: Float = 0.5 * density_kg_m3 * (velocity_m_s * velocity_m_s);
+    return (q * cd * area_m2) / mass_kg;
+}
+
+/// Computes delta-v lost during periapsis pass (m/s) given peak density and scale height H (meters).
+pub fn aerobraking_pass_delta_v(
+    peak_density: Float,
+    v_periapsis: Float,
+    r_periapsis: Float,
+    scale_height: Float,
+    cd: Float,
+    area: Float,
+    mass: Float
+) -> Float {
+    let pi: Float = circ_pi_std_phys_astro_advanced_aerobraking_drag_pass();
+    let b: Float = (cd * area) / (2.0 * mass);
+    let effective_length: Float = sqrt(2.0 * pi * r_periapsis * scale_height);
+    let rho_integrated: Float = peak_density * effective_length;
+    return b * rho_integrated * v_periapsis;
+}

@@ -1,0 +1,120 @@
+// # BLAKE2 tree mode theory
+//
+// Logline: BLAKE2 tree mode compresses N leaves into one root by binary reduction; root = parent_hash(left, right) and the Merkle coupling leaf[i] = hash(block_i), parent[k] = hash(leaf[2k], leaf[2k+1]) holds bit-for-bit.
+//
+// Setup: Pure 8-byte (16 hex char) digests from the first 8 bytes of SHA-256. Empty input or empty digest fails closed (length 0). Imports hash_sha256_forward from std/hash/sha256.oo.
+//
+// Beats:
+//   1. b2t_leaf(block) returns the first 8 bytes of SHA-256(block) as 16 hex chars.
+//   2. b2t_parent(left, right) returns the first 8 bytes of SHA-256(left || right).
+//   3. b2t_merkle_root_4 reduces four blocks to a single 16-hex-char root.
+//   4. Empty block, empty leaf, or empty sibling fails closed (length 0).
+//   5. Closed: the 2-ary reduction of the first 8 bytes is exact, no lossy mixing.
+
+import "std/core/primitives/domain_cert.oo";
+import "std/sec/hash/sha256.oo";
+
+// First 8 bytes of SHA-256(block) as 16 lowercase hex chars.
+// Empty block fails closed: returns "".
+pub fn b2t_leaf(block: String) -> String {
+    let n: Int = block.len();
+    if n <= 0 {
+        return "";
+    }
+    let h: String = hash_sha256_forward(block);
+    let m: Int = h.len();
+    if m < 16 {
+        return "";
+    }
+    return str_slice(h, 0, 16);
+}
+
+// First 8 bytes of SHA-256(left || right) as 16 hex chars.
+// Empty left or right fails closed: returns "".
+pub fn b2t_parent(left: String, right: String) -> String {
+    if left.len() != 16 {
+        return "";
+    }
+    if right.len() != 16 {
+        return "";
+    }
+    let h: String = hash_sha256_forward(left + right);
+    let m: Int = h.len();
+    if m < 16 {
+        return "";
+    }
+    return str_slice(h, 0, 16);
+}
+
+// Binary Merkle root of four blocks: root = parent(parent(leaf(a),leaf(b)), parent(leaf(c),leaf(d))).
+// Any empty leaf makes the root fail closed ("").
+pub fn b2t_merkle_root_4(a: String, b: String, c: String, d: String) -> String {
+    let la: String = b2t_leaf(a);
+    if la.len() != 16 { return ""; }
+    let lb: String = b2t_leaf(b);
+    if lb.len() != 16 { return ""; }
+    let lc: String = b2t_leaf(c);
+    if lc.len() != 16 { return ""; }
+    let ld: String = b2t_leaf(d);
+    if ld.len() != 16 { return ""; }
+    let ab: String = b2t_parent(la, lb);
+    if ab.len() != 16 { return ""; }
+    let cd: String = b2t_parent(lc, ld);
+    if cd.len() != 16 { return ""; }
+    let r: String = b2t_parent(ab, cd);
+    return r;
+}
+
+// DomainCert for the BLAKE2 tree theory. Holds iff the 4-block Merkle root has 16 hex chars.
+pub fn b2t_theory() -> DomainCert {
+    let r: String = b2t_merkle_root_4("A", "B", "C", "D");
+    let ok: Int = b2t_root_holds(r);
+    return domain_cert("hash", "blake2_tree", ok);
+}
+
+// 1 iff the root is a 16-hex-char digest; 0 otherwise.
+pub fn b2t_root_holds(root: String) -> Int {
+    if root.len() != 16 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn verify_b2t_theory() -> Bool {
+    // Golden: leaf("A") matches the first 8 bytes of SHA-256("A") = 559aead08264d579.
+    let la: String = b2t_leaf("A");
+    if la != "559aead08264d579" { return false; }
+    let lb: String = b2t_leaf("B");
+    if lb != "df7e70e5021544f4" { return false; }
+    // Golden: parent(la, lb) matches first 8 bytes of SHA-256(la || lb).
+    let ab: String = b2t_parent(la, lb);
+    if ab != "1017fe151d27e35b" { return false; }
+    // Golden: same parent recomputed from the same leaves agrees.
+    let ab2: String = b2t_parent(b2t_leaf("A"), b2t_leaf("B"));
+    if ab2 != ab { return false; }
+    // Golden: parent is order-sensitive (swap yields a different 8-byte digest).
+    let ba: String = b2t_parent(lb, la);
+    if ba == ab { return false; }
+    // Coupled: Merkle root of 4 blocks is a valid 16-hex-char digest and is deterministic.
+    let root1: String = b2t_merkle_root_4("A", "B", "C", "D");
+    if root1.len() != 16 { return false; }
+    let root2: String = b2t_merkle_root_4("A", "B", "C", "D");
+    if root2 != root1 { return false; }
+    // Coupled: a different ordering of the same 4 blocks yields a different root.
+    let root_alt: String = b2t_merkle_root_4("A", "B", "D", "C");
+    if root_alt == root1 { return false; }
+    // Hostile: empty block fails closed at the leaf.
+    if b2t_leaf("").len() != 0 { return false; }
+    // Hostile: empty digest fails closed at the parent.
+    if b2t_parent("", "559aead08264d579").len() != 0 { return false; }
+    if b2t_parent("559aead08264d579", "").len() != 0 { return false; }
+    if b2t_parent("", "").len() != 0 { return false; }
+    // Hostile: any empty leaf in the 4-block tree fails closed.
+    if b2t_merkle_root_4("A", "", "C", "D").len() != 0 { return false; }
+    if b2t_merkle_root_4("", "B", "C", "D").len() != 0 { return false; }
+    if b2t_merkle_root_4("A", "B", "C", "").len() != 0 { return false; }
+    if b2t_merkle_root_4("A", "B", "", "D").len() != 0 { return false; }
+    // DomainCert: b2t_theory().holds is 1 when the root is a valid 16-hex-char digest.
+    if b2t_theory().holds != 1 { return false; }
+    return true;
+}

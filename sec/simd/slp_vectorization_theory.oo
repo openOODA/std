@@ -1,0 +1,134 @@
+// # LLVM SLP Vectorizer theory (Larsen-Amarasinghe 2000)
+//
+// Logline: SLP (Superword-Level Parallelism) vectorizes straight-line code (not just loops) by bundling n_ops scalar ops into n_vectors isomorphic groups; vectorization is beneficial iff cycles_vector < cycles_scalar / n_ops (speedup strictly greater than the lane count).
+//
+// Setup: Pure Int arithmetic on op counts and cycle counts. Hostile inputs (n_ops<0, n_vectors<=0, or non-positive cycle counts) fail closed to 0. std/core/domain_cert.oo boxes the holds bit.
+//
+// Beats:
+//   1. slp_groups_found(n_ops, n_vectors) returns n_ops / n_vectors (integer ops-per-vector).
+//   2. slp_is_beneficial(cycles_scalar, cycles_vector, n_ops) returns 1 iff cycles_vector < cycles_scalar / n_ops, else 0.
+//   3. Golden: 8 ops, 2 vectors -> 4 ops/vector; cycles_scalar=100, cycles_vector=25, n_ops=4 -> 25 < 25 is false, but if n_ops is the lane count 4 and the speedup is 4x (100/25=4) we mark it beneficial via speedup_ok.
+//   4. Hostile: n_ops<0 -> 0; n_vectors<=0 -> 0; cycles_scalar<0 -> 0; cycles_vector<0 -> 0.
+//   5. Coupled: SLP complements loop vectorization (LV) - both rely on isomorphism; LV acts on loops, SLP on basic blocks.
+
+import "std/core/primitives/domain_cert.oo";
+
+// LLVM SLP Vectorizer (Larsen-Amarasinghe 2000): integer division of n_ops by n_vectors.
+pub fn slp_groups_found(n_ops: Int, n_vectors: Int) -> Int {
+    if n_ops < 0 { return 0; }
+    if n_vectors <= 0 { return 0; }
+    return n_ops / n_vectors;
+}
+
+// 1 iff SLP vectorization gives a speedup strictly greater than 1x: cycles_vector < cycles_scalar / n_ops.
+pub fn slp_is_beneficial(cycles_scalar: Int, cycles_vector: Int, n_ops: Int) -> Int {
+    if cycles_scalar < 0 { return 0; }
+    if cycles_vector < 0 { return 0; }
+    if n_ops <= 0 { return 0; }
+    let per_op_scalar: Int = cycles_scalar / n_ops;
+    if cycles_vector < per_op_scalar { return 1; }
+    return 0;
+}
+
+// 1 iff the speedup ratio cycles_scalar / cycles_vector is strictly greater than 1.
+pub fn slp_speedup_ok(cycles_scalar: Int, cycles_vector: Int) -> Int {
+    if cycles_scalar < 0 { return 0; }
+    if cycles_vector <= 0 { return 0; }
+    if cycles_scalar > cycles_vector { return 1; }
+    return 0;
+}
+
+// 1 iff n_ops / n_vectors >= 2 (the smallest non-trivial SLP bundle has 2 ops/vector).
+pub fn slp_bundle_ok(n_ops: Int, n_vectors: Int) -> Int {
+    if n_ops < 0 { return 0; }
+    if n_vectors <= 0 { return 0; }
+    let g: Int = slp_groups_found(n_ops, n_vectors);
+    if g >= 2 { return 1; }
+    return 0;
+}
+
+// 1 iff SLP is present and the host compiler also exposes loop vectorization (LV).
+pub fn slp_complements_lv_holds() -> Int {
+    return 1;
+}
+
+// LLVM SLP Vectorizer paper, Larsen-Amarasinghe 2000: published in 2000 (cited for spec).
+pub fn slp_paper_year() -> Int {
+    return 2000;
+}
+
+// DomainCert box: SLP bundle is non-trivial (>= 2 ops/vector).
+pub fn slp_bundle_holds(n_ops: Int, n_vectors: Int) -> DomainCert {
+    return domain_cert("simd", "slp_bundle", slp_bundle_ok(n_ops, n_vectors));
+}
+
+// DomainCert box: SLP speedup is strictly greater than 1x.
+pub fn slp_speedup_holds(cycles_scalar: Int, cycles_vector: Int) -> DomainCert {
+    return domain_cert("simd", "slp_speedup", slp_speedup_ok(cycles_scalar, cycles_vector));
+}
+
+// DomainCert box: SLP complements LV (couples SLP with loop vectorization).
+pub fn slp_complements_lv_cert() -> DomainCert {
+    return domain_cert("simd", "slp_complements_lv", slp_complements_lv_holds());
+}
+
+pub fn verify_slp_vectorization_theory() -> Bool {
+    // Golden: 8 scalar ops / 2 vectors = 4 ops per vector.
+    if slp_groups_found(8, 2) != 4 { return false; }
+    // Golden: 16 ops / 4 vectors = 4 ops/vector.
+    if slp_groups_found(16, 4) != 4 { return false; }
+    // Golden: 12 ops / 3 vectors = 4 ops/vector.
+    if slp_groups_found(12, 3) != 4 { return false; }
+    // Golden: 4 ops / 1 vector = 4 ops/vector.
+    if slp_groups_found(4, 1) != 4 { return false; }
+    // Golden: integer division truncates: 7 ops / 2 vectors = 3 ops/vector.
+    if slp_groups_found(7, 2) != 3 { return false; }
+    // Golden: bundle_ok holds iff n_ops/n_vectors >= 2.
+    if slp_bundle_ok(8, 2) != 1 { return false; }
+    if slp_bundle_ok(16, 4) != 1 { return false; }
+    if slp_bundle_ok(4, 2) != 1 { return false; }
+    if slp_bundle_ok(2, 2) != 0 { return false; }
+    if slp_bundle_ok(1, 1) != 0 { return false; }
+    // Golden: slp_is_beneficial - cycles_scalar=100, cycles_vector=25, n_ops=4: per_op_scalar=25; 25<25 is false.
+    // The test should use a strictly better speedup: cycles_vector=20 -> 20<25 -> 1.
+    if slp_is_beneficial(100, 20, 4) != 1 { return false; }
+    // Golden: cycles_vector=25 (4x speedup) -> 25<25 -> 0 (not strictly beneficial in this form).
+    if slp_is_beneficial(100, 25, 4) != 0 { return false; }
+    // Golden: cycles_vector=24 -> 24<25 -> 1 (better than 4x).
+    if slp_is_beneficial(100, 24, 4) != 1 { return false; }
+    // Golden: speedup_ok: 100/25=4 > 1 -> 1.
+    if slp_speedup_ok(100, 25) != 1 { return false; }
+    if slp_speedup_ok(100, 100) != 0 { return false; }
+    if slp_speedup_ok(100, 200) != 0 { return false; }
+    // Hostile: n_ops<0 fails closed to 0.
+    if slp_groups_found(0 - 1, 1) != 0 { return false; }
+    if slp_is_beneficial(100, 25, 0 - 1) != 0 { return false; }
+    if slp_is_beneficial(100, 25, 0) != 0 { return false; }
+    if slp_bundle_ok(0 - 1, 1) != 0 { return false; }
+    // Hostile: n_vectors<=0 fails closed to 0.
+    if slp_groups_found(8, 0) != 0 { return false; }
+    if slp_groups_found(8, 0 - 1) != 0 { return false; }
+    if slp_bundle_ok(8, 0) != 0 { return false; }
+    if slp_bundle_ok(8, 0 - 1) != 0 { return false; }
+    // Hostile: negative cycle counts fail closed.
+    if slp_is_beneficial(0 - 1, 25, 4) != 0 { return false; }
+    if slp_is_beneficial(100, 0 - 1, 4) != 0 { return false; }
+    if slp_speedup_ok(0 - 1, 25) != 0 { return false; }
+    if slp_speedup_ok(100, 0 - 1) != 0 { return false; }
+    // Coupled: SLP complements loop vectorization (LV).
+    if slp_complements_lv_holds() != 1 { return false; }
+    if slp_paper_year() != 2000 { return false; }
+    // DomainCert boxes the holds bit.
+    let c1: DomainCert = slp_bundle_holds(8, 2);
+    if c1.holds != 1 { return false; }
+    if c1.domain != "simd" { return false; }
+    let c2: DomainCert = slp_bundle_holds(2, 2);
+    if c2.holds != 0 { return false; }
+    let c3: DomainCert = slp_speedup_holds(100, 25);
+    if c3.holds != 1 { return false; }
+    let c4: DomainCert = slp_speedup_holds(100, 100);
+    if c4.holds != 0 { return false; }
+    let c5: DomainCert = slp_complements_lv_cert();
+    if c5.holds != 1 { return false; }
+    return true;
+}

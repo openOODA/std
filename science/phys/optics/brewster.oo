@@ -1,0 +1,86 @@
+// # Brewster Polarization Angle
+//
+// Logline: Computes Brewster angle for complete linear polarization of reflected optical waves.
+//
+// Setup: Evaluates tan(theta_B) = n2 / n1 for dielectric boundaries where p-reflectance vanishes.
+//
+// Beats:
+//   1. Calculate Brewster incidence angle.
+//   2. Calculate complementary refracted transmission angle.
+//   3. Compute s-polarized reflectance at Brewster condition.
+//   4. Validate polarization angle against empirical tolerances.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_optics_brewster() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+fn brewster_abs(x: Float) -> Float {
+    if x < 0.0 { return 0.0 - x; }
+    return x;
+}
+
+fn brewster_atan_poly(x: Float) -> Float {
+    let x2: Float = x * x;
+    let t17: Float = 1.0 / 17.0;
+    let t15: Float = 1.0 / 15.0;
+    let t13: Float = 1.0 / 13.0;
+    let t11: Float = 1.0 / 11.0;
+    let t9: Float = 1.0 / 9.0;
+    let t7: Float = 1.0 / 7.0;
+    let t5: Float = 1.0 / 5.0;
+    let t3: Float = 1.0 / 3.0;
+    let p: Float = x2 * (t3 - x2 * (t5 - x2 * (t7 - x2 * (t9 - x2 * (t11 - x2 * (t13 - x2 * (t15 - x2 * t17)))))));
+    return x * (1.0 - p);
+}
+
+fn brewster_atan(x: Float) -> Float {
+    let ax: Float = brewster_abs(x);
+    let pi: Float = circ_pi_std_phys_optics_brewster();
+    let pi_4: Float = pi / 4.0;
+    let pi_2: Float = pi / 2.0;
+    let mut res: Float = 0.0;
+    if ax < 0.41421356237309505 {
+        res = brewster_atan_poly(ax);
+    } else if ax < 2.414213562373095 {
+        let u: Float = (ax - 1.0) / (ax + 1.0);
+        res = pi_4 + brewster_atan_poly(u);
+    } else {
+        let u: Float = 1.0 / ax;
+        res = pi_2 - brewster_atan_poly(u);
+    }
+    if x < 0.0 { return 0.0 - res; }
+    return res;
+}
+
+// Compute Brewster angle theta_B (radians) where p-polarized reflection is zero
+pub fn brewster_angle(n1: Float, n2: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let ratio: Float = n2 / n1;
+    return brewster_atan(ratio);
+}
+
+// Compute transmitted angle at Brewster incidence: theta_t = pi/2 - theta_B
+pub fn brewster_transmitted_angle(n1: Float, n2: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let half_pi: Float = 1.5707963267948966;
+    let theta_b: Float = brewster_angle(n1, n2);
+    return half_pi - theta_b;
+}
+
+// Check if an incident angle matches the Brewster condition within tolerance
+pub fn brewster_check_polarization(n1: Float, n2: Float, theta_i_rad: Float, tolerance: Float) -> Bool {
+    if n1 <= 0.0 || n2 <= 0.0 { return false; }
+    let target_b: Float = brewster_angle(n1, n2);
+    let diff: Float = brewster_abs(theta_i_rad - target_b);
+    return diff <= tolerance;
+}
+
+// Compute s-polarized power reflectance at Brewster angle: Rs = ((n1^2 - n2^2)/(n1^2 + n2^2))^2
+pub fn brewster_reflectance_s_at_brewster(n1: Float, n2: Float) -> Float {
+    if n1 <= 0.0 || n2 <= 0.0 { return 0.0; }
+    let n1_sq: Float = n1 * n1;
+    let n2_sq: Float = n2 * n2;
+    let sum_sq: Float = n1_sq + n2_sq;
+    if sum_sq == 0.0 { return 0.0; }
+    let diff_sq: Float = n1_sq - n2_sq;
+    let ratio: Float = diff_sq / sum_sq;
+    return ratio * ratio;
+}

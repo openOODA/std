@@ -1,0 +1,20 @@
+// # Contract Arith Req Fail
+//
+// Logline: Standard library verification and domain capabilities for Contract Arith Req Fail.
+//
+// Setup: Pure .oo standard library module.
+//
+// Beats:
+//   1. Execute domain operations.
+//   2. Verify invariants and return typed results.
+
+pub fn shifted(x: Int) -> Int
+    requires x + 1 > 0
+{
+    return x + 1;
+}
+
+pub fn verify_contract_arith_req_fail() -> Bool {
+    println(shifted(-1));
+    return true;
+}

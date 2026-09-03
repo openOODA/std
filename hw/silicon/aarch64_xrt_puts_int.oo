@@ -1,0 +1,105 @@
+// # AArch64 __puts_int runtime
+//
+// Logline: Emits __puts_int which writes the decimal representation of an Int in x0 to stdout followed by a newline, using the heap at x28+0x40 as a digit buffer.
+//
+// Setup: Split from aarch64_xrt.oo to keep that file under the 256-line cap. Imported from aarch64_program.oo.
+//
+// Beats:
+//   1. Save the int in x9; set x10 to heap+64, x11 to 0 (digit count).
+//   2. Special case 0: write '0' at [x10, x11], x11++, jump to write setup.
+//   3. Loop: sdiv/msub extract lowest decimal digit, store as ASCII, x11++, loop while x9 != 0.
+//   4. Write buffer reversed (x1 = x10 + x11 - 1, x2 = x11), then newline via a64x_intern+str_ref.
+
+import "std/hw/silicon/aarch64_encoder.oo";
+import "std/hw/silicon/aarch64_encode_fp.oo";
+import "std/hw/silicon/aarch64_abi.oo";
+import "std/hw/silicon/aarch64_xstate.oo";
+import "std/hw/silicon/aarch64_xrt.oo";
+
+pub fn a64rt_puts_int(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__puts_int");
+    let mut x: A64X = a64rt_prol(r.x);
+    // x9 = int to print; x17 = 1 if negative
+    x = a64x_emit(x, arm64_word_mov_reg(9, 0));
+    x = a64x_emit(x, arm64_word_movz(17, 0, 0));
+    x = a64x_emit(x, arm64_word_movz(15, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(9, 15));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ge(), 3));
+    x = a64x_emit(x, arm64_word_movz(17, 1, 0));
+    x = a64x_emit(x, arm64_word_neg(9, 9));
+    // x10 = buffer base = x28 + 64 (past the 16-byte heap header)
+    x = a64x_emit(x, arm64_word_mov_reg(10, 28));
+    x = a64x_emit(x, arm64_word_add_imm(10, 10, 64));
+    // x11 = digit count, starts at 0
+    x = a64x_emit(x, arm64_word_movz(11, 0, 0));
+    // Special case: 0
+    x = a64x_emit(x, arm64_word_movz(15, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(9, 15));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), 5));
+    // Zero: store '0', set count to 1
+    x = a64x_emit(x, arm64_word_movz(0, 48, 0));
+    x = a64x_emit(x, arm64_word_strb_reg(0, 10, 11));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    x = a64x_emit(x, arm64_word_b(8));
+    // Nonzero: first count digits (save x9 in x14, divide by 10 until 0)
+    x = a64x_emit(x, arm64_word_mov_reg(14, 9));
+    x = a64x_emit(x, arm64_word_movz(13, 10, 0));
+    // .Lpi_count: x14 = sdiv(x14, 10), x11++. Loop while x14 != 0.
+    x = a64x_emit(x, arm64_word_sdiv(14, 14, 13));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    x = a64x_emit(x, arm64_word_movz(15, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(14, 15));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), -4));
+    // x11 = count. Use x16 as the write position, starting at count - 1.
+    x = a64x_emit(x, arm64_word_mov_reg(16, 11));
+    x = a64x_emit(x, arm64_word_sub_imm(16, 16, 1));
+    // .Lpi_loop: x14 = sdiv(x9, 10), x12 = msub(x9, 10, x14), x12 += 48, strb x12 at [x10, x16], x16--, x9 = x14, if x9 != 0 goto .Lpi_loop
+    x = a64x_emit(x, arm64_word_sdiv(14, 9, 13));
+    x = a64x_emit(x, arm64_word_msub(12, 14, 13, 9));
+    x = a64x_emit(x, arm64_word_add_imm(12, 12, 48));
+    x = a64x_emit(x, arm64_word_strb_reg(12, 10, 16));
+    x = a64x_emit(x, arm64_word_mov_reg(9, 14));
+    x = a64x_emit(x, arm64_word_sub_imm(16, 16, 1));
+    x = a64x_emit(x, arm64_word_movz(15, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(9, 15));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_ne(), -8));
+    // Prepend '-' when x17 is set.
+    x = a64x_emit(x, arm64_word_movz(15, 0, 0));
+    x = a64x_emit(x, arm64_word_cmp_reg(17, 15));
+    x = a64x_emit(x, arm64_word_b_cond(arm64_cond_eq(), 5));
+    x = a64x_emit(x, arm64_word_sub_imm(10, 10, 1));
+    x = a64x_emit(x, arm64_word_movz(0, 45, 0));
+    x = a64x_emit(x, arm64_word_strb_reg(0, 10, 15));
+    x = a64x_emit(x, arm64_word_add_imm(11, 11, 1));
+    // Write buffer forward: x1 = x10, x2 = count
+    x = a64x_emit(x, arm64_word_mov_reg(1, 10));
+    x = a64x_emit(x, arm64_word_mov_reg(2, 11));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    x = a64x_emit(x, arm64_word_movz(abi_sys_reg(), 64, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    // Write newline: str_ref puts the addr in x0; copy to x1 before clobbering x0.
+    x = a64x_intern(x, "\n");
+    x = a64x_str_ref(x);
+    x = a64x_emit(x, arm64_word_mov_reg(1, 0));
+    x = a64x_emit(x, arm64_word_movz(0, 1, 0));
+    x = a64x_emit(x, arm64_word_movz(2, 1, 0));
+    x = a64x_emit(x, arm64_word_movz(abi_sys_reg(), 64, 0));
+    x = a64x_emit(x, arm64_word_svc(0));
+    return a64rt_setx(r, a64rt_epi(x));
+}
+
+fn a64rt_imm64(x0: A64X, rd: Int, bits: Int) -> A64X {
+    let mut x: A64X = a64x_emit(x0, arm64_word_movz(rd, bits & 65535, 0));
+    x = a64x_emit(x, arm64_word_movk(rd, (bits / 65536) & 65535, 1));
+    x = a64x_emit(x, arm64_word_movk(rd, (bits / 4294967296) & 65535, 2));
+    return a64x_emit(x, arm64_word_movk(rd, (bits / 281474976710656) & 65535, 3));
+}
+
+pub fn a64rt_puts_float(r0: A64R) -> A64R {
+    let mut r: A64R = a64rt_fn(r0, "__puts_float");
+    let mut x: A64X = a64rt_prol(r.x);
+    x = a64x_emit(x, arm64_word_fmov_d_x(0, 0));
+    x = a64x_emit(x, arm64_word_fcvtzs_x_d(0, 0));
+    x = a64x_bl(x, "__puts_int");
+    return a64rt_setx(r, a64rt_epi(x));
+}

@@ -1,0 +1,57 @@
+// # HFT Fail-Closed Stubs
+//
+// Logline: Fail-closed process_exit residuals for FPGA DMA, lock-free SPSC, DPDK, RDTSC, and zero-copy decode.
+//
+// Setup: Default-deny per RULES.oot 1.4. oodac lacks FPGA PCIe kernel-bypass, hardware atomics, DPDK bindings, and x86_64 RDTSC / arm64 cntvct_el0 FFI.
+//
+// Beats:
+//   1. hft_fpga_dma_stream_ticks: refuse raw DMA ring buffer access.
+//   2. hft_lockfree_spsc_enqueue: refuse hardware CAS / memory fence SPSC enqueue.
+//   3. hft_dpdk_recv_packet_burst: refuse kernel-bypass packet burst receive.
+//   4. hft_rdtsc_hardware_timestamp: refuse inline-assembly RDTSC / cntvct_el0 timestamp.
+//   5. hft_zero_copy_sbe_decode: refuse raw pointer reinterpret-cast SBE decode.
+//   6. hft_calibrate_optical_fiber_delay: refuse GPIO optical-fiber calibration.
+//
+// residual: not a real HFT engine; integrate a vetted trading stack.
+
+import "./hft_tick_order.oo";
+
+// -------------------------------------------------------------------
+// Fail-Closed Stubs (Compiler & Runtime Limitations)
+// -------------------------------------------------------------------
+
+pub fn hft_fpga_dma_stream_ticks(dma_channel_id: Int, ring_buffer_ptr: Int) -> Int {
+    // COMPILER LIMITATION: openOODA lacks native FPGA PCIe kernel-bypass DMA register access and hardware ring buffer FFI bindings.
+    process_exit(1);
+    return 0;
+}
+
+pub fn hft_lockfree_spsc_enqueue(ring_ptr: Int, order_ptr: Int) -> Bool {
+    // COMPILER LIMITATION: openOODA lacks hardware atomic CAS instructions, memory barrier fences, and lock-free concurrency primitives.
+    process_exit(1);
+    return false;
+}
+
+pub fn hft_dpdk_recv_packet_burst(sys: &SysCap, port_id: Int, rx_queue_id: Int, mbuf_ptr: Int) -> Int {
+    // COMPILER LIMITATION: openOODA lacks low-level DPDK driver bindings, zero-copy packet mbuf allocation, and kernel-bypass network stack primitives.
+    process_exit(1);
+    return 0;
+}
+
+pub fn hft_rdtsc_hardware_timestamp() -> Int {
+    // COMPILER LIMITATION: openOODA lacks direct x86_64 rdtsc/rdtscp CPU instructions and arm64 cntvct_el0 counter register access.
+    process_exit(1);
+    return 0;
+}
+
+pub fn hft_zero_copy_sbe_decode(raw_buf_ptr: Int, buf_len: Int) -> TickData {
+    // COMPILER LIMITATION: openOODA lacks raw memory pointer reinterpret-casts and SIMD-accelerated zero-copy binary parser primitives.
+    process_exit(1);
+    return tick_data_create("", 0, 0, 0, 0, 0, 0, 0, 0, "", false);
+}
+
+pub fn hft_calibrate_optical_fiber_delay(tx_pin: Int, rx_pin: Int) -> Int {
+    // COMPILER LIMITATION: openOODA lacks hardware GPIO timing pin manipulation and optical laser signal reflection calibration routines.
+    process_exit(1);
+    return 0;
+}

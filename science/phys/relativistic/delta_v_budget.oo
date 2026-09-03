@@ -1,0 +1,61 @@
+// # Space Mission Delta-V Budget & Losses
+//
+// Logline: Calculates space mission delta-v allocations, orbital maneuver requirements, and launch losses.
+//
+// Setup: Pure space trajectory delta-v budgeting for launch, LEO, GTO, GEO, and translunar injection.
+//
+// Beats:
+//   1. Nominal LEO ascent delta-v budget queries.
+//   2. Calculate orbital insertion delta-v with gravity, drag, and steering losses.
+//   3. Compute LEO to GTO (Geostationary Transfer Orbit) delta-v.
+//   4. Compute GTO to GEO circularization and plane change delta-v.
+
+import "std/core/math/constants.oo";
+fn circ_pi_std_phys_astrodynamics_delta_v_budget() -> Float { let pack: CircleConstants = circle_constants(); return pack.pi; }
+pub fn leo_dv() -> Int {
+    return 9400;
+}
+
+pub fn delta_v_budget_leo() -> Int {
+    return 9400;
+}
+
+/// Computes total ascent delta-v including losses: v_circ + dv_gravity + dv_drag + dv_steering + margin
+pub fn launch_ascent_delta_v(
+    v_orbital_target: Float,
+    gravity_loss: Float,
+    drag_loss: Float,
+    steering_loss: Float,
+    margin_fraction: Float
+) -> Float {
+    let raw_dv: Float = v_orbital_target + gravity_loss + drag_loss + steering_loss;
+    return raw_dv * (1.0 + margin_fraction);
+}
+
+/// Delta-v required from 300 km LEO (r=6678 km) to GTO (r_per=6678 km, r_apo=42164 km) around Earth.
+pub fn delta_v_leo_to_gto(r_leo_km: Float, mu_km3_s2: Float) -> Float {
+    let r1: Float = r_leo_km;
+    let r2: Float = 42164.0;
+    let a_gto: Float = 0.5 * (r1 + r2);
+    let v_leo: Float = sqrt(mu_km3_s2 / r1);
+    let v_gto_per: Float = sqrt(mu_km3_s2 * ((2.0 / r1) - (1.0 / a_gto)));
+    let mut dv: Float = v_gto_per - v_leo;
+    if dv < 0.0 { dv = 0.0 - dv; }
+    return dv * 1000.0; // Return in m/s
+}
+
+/// Delta-v required at GTO apoapsis to circularize into GEO and perform inclination plane change.
+pub fn delta_v_gto_to_geo_plane_change(
+    v_gto_apo: Float,
+    v_geo: Float,
+    inc_deg: Float
+) -> Float {
+    let pi: Float = circ_pi_std_phys_astrodynamics_delta_v_budget();
+    let inc_rad: Float = (inc_deg * pi) / 180.0;
+    let cos_inc: Float = cos(inc_rad);
+    let t1: Float = v_gto_apo * v_gto_apo;
+    let t2: Float = v_geo * v_geo;
+    let t3: Float = (2.0 * v_gto_apo * v_geo) * cos_inc;
+    let dv_sq: Float = (t1 + t2) - t3;
+    return sqrt(dv_sq);
+}

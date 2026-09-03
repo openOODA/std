@@ -1,0 +1,227 @@
+// # Central dogma of molecular biology
+//
+// Logline: Genetic information flows DNA -> RNA -> Protein. Reverse flow is not allowed; invalid bases or empty sequences fail closed to 0.
+//
+// Setup: Pure String. Bases are 'A','T','G','C' for DNA and 'A','U','G','C' for RNA; the theory is unit-agnostic.
+//
+// Beats:
+//   1. Validate a DNA sequence contains only valid DNA bases.
+//   2. Validate an RNA sequence contains only valid RNA bases.
+//   3. Transcribe DNA to RNA (T -> U).
+//   4. Translate RNA codon to amino acid one-letter code.
+//   5. Hostile empty, invalid bases, or unknown codons return "" or 0.
+
+import "std/core/primitives/str.oo";
+
+pub fn central_dna_is_valid(seq: String) -> Int {
+    let n: Int = seq.len();
+    if n == 0 {
+        return 0;
+    }
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(seq, i);
+        if ch != "A" && ch != "T" && ch != "G" && ch != "C" {
+            return 0;
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+pub fn central_rna_is_valid(seq: String) -> Int {
+    let n: Int = seq.len();
+    if n == 0 {
+        return 0;
+    }
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(seq, i);
+        if ch != "A" && ch != "U" && ch != "G" && ch != "C" {
+            return 0;
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+pub fn central_transcribe(dna_seq: String) -> String {
+    if central_dna_is_valid(dna_seq) != 1 {
+        return "";
+    }
+    let n: Int = dna_seq.len();
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(dna_seq, i);
+        if ch == "T" {
+            out = out + "U";
+        } else {
+            out = out + ch;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn central_reverse_transcribe(rna_seq: String) -> String {
+    if central_rna_is_valid(rna_seq) != 1 {
+        return "";
+    }
+    let n: Int = rna_seq.len();
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(rna_seq, i);
+        if ch == "U" {
+            out = out + "T";
+        } else {
+            out = out + ch;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn central_translate_codon(codon: String) -> String {
+    if codon.len() != 3 {
+        return "";
+    }
+    if central_rna_is_valid(codon) != 1 {
+        return "";
+    }
+    if codon == "UUU" || codon == "UUC" { return "F"; }
+    if codon == "UUA" || codon == "UUG" { return "L"; }
+    if codon == "UCU" || codon == "UCC" || codon == "UCA" || codon == "UCG" { return "S"; }
+    if codon == "UAU" || codon == "UAC" { return "Y"; }
+    if codon == "UAA" || codon == "UAG" { return "*"; }
+    if codon == "UGU" || codon == "UGC" { return "C"; }
+    if codon == "UGA" { return "*"; }
+    if codon == "UGG" { return "W"; }
+    if codon == "CUU" || codon == "CUC" || codon == "CUA" || codon == "CUG" { return "L"; }
+    if codon == "CCU" || codon == "CCC" || codon == "CCA" || codon == "CCG" { return "P"; }
+    if codon == "CAU" || codon == "CAC" { return "H"; }
+    if codon == "CAA" || codon == "CAG" { return "Q"; }
+    if codon == "CGU" || codon == "CGC" || codon == "CGA" || codon == "CGG" { return "R"; }
+    if codon == "AUU" || codon == "AUC" || codon == "AUA" { return "I"; }
+    if codon == "AUG" { return "M"; }
+    if codon == "ACU" || codon == "ACC" || codon == "ACA" || codon == "ACG" { return "T"; }
+    if codon == "AAU" || codon == "AAC" { return "N"; }
+    if codon == "AAA" || codon == "AAG" { return "K"; }
+    if codon == "AGU" || codon == "AGC" { return "S"; }
+    if codon == "AGA" || codon == "AGG" { return "R"; }
+    if codon == "GUU" || codon == "GUC" || codon == "GUA" || codon == "GUG" { return "V"; }
+    if codon == "GCU" || codon == "GCC" || codon == "GCA" || codon == "GCG" { return "A"; }
+    if codon == "GAU" || codon == "GAC" { return "D"; }
+    if codon == "GAA" || codon == "GAG" { return "E"; }
+    if codon == "GGU" || codon == "GGC" || codon == "GGA" || codon == "GGG" { return "G"; }
+    return "";
+}
+
+pub fn central_translate(rna_seq: String) -> String {
+    if central_rna_is_valid(rna_seq) != 1 {
+        return "";
+    }
+    let n: Int = rna_seq.len();
+    if (n % 3) != 0 {
+        return "";
+    }
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let codon: String = str_sub(rna_seq, i, i + 3);
+        let aa: String = central_translate_codon(codon);
+        if aa == "" {
+            return "";
+        }
+        out = out + aa;
+        i = i + 3;
+    }
+    return out;
+}
+
+pub fn verify_central_dogma_theory() -> Bool {
+    // Valid DNA and RNA.
+    if central_dna_is_valid("ATGCATGC") != 1 {
+        return false;
+    }
+    if central_rna_is_valid("AUGCAUGC") != 1 {
+        return false;
+    }
+
+    // Transcribe: DNA with T -> RNA with U.
+    let rna: String = central_transcribe("ATGCATGC");
+    if rna != "AUGCAUGC" {
+        return false;
+    }
+
+    // Reverse transcribe: RNA with U -> DNA with T.
+    let dna: String = central_reverse_transcribe("AUGCAUGC");
+    if dna != "ATGCATGC" {
+        return false;
+    }
+
+    // Identity: round-trip DNA -> RNA -> DNA.
+    let rt: String = central_reverse_transcribe(central_transcribe("ATGCATGC"));
+    if rt != "ATGCATGC" {
+        return false;
+    }
+
+    // Codon table sanity: AUG (start) = M, UUU = F, UAA = stop.
+    if central_translate_codon("AUG") != "M" {
+        return false;
+    }
+    if central_translate_codon("UUU") != "F" {
+        return false;
+    }
+    if central_translate_codon("UAA") != "*" {
+        return false;
+    }
+    if central_translate_codon("UGG") != "W" {
+        return false;
+    }
+    if central_translate_codon("GCU") != "A" {
+        return false;
+    }
+
+    // Full translation: AUG UUU GCU -> M F A.
+    let protein: String = central_translate("AUGUUUGCU");
+    if protein != "MFA" {
+        return false;
+    }
+
+    // Stop codon translation produces *.
+    if central_translate("AUGUAA") != "M*" {
+        return false;
+    }
+
+    // Hostile inputs fail closed.
+    if central_dna_is_valid("") != 0 {
+        return false;
+    }
+    if central_dna_is_valid("ATBN") != 0 {
+        return false;
+    }
+    if central_rna_is_valid("ATGC") != 0 {
+        return false;
+    }
+    if central_transcribe("ATBN") != "" {
+        return false;
+    }
+    if central_transcribe("") != "" {
+        return false;
+    }
+    if central_translate_codon("AU") != "" {
+        return false;
+    }
+    if central_translate_codon("AUGX") != "" {
+        return false;
+    }
+    if central_translate("AUGUU") != "" {
+        return false;
+    }
+    if central_translate("") != "" {
+        return false;
+    }
+    return true;
+}

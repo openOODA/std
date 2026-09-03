@@ -1,0 +1,30 @@
+// # SIMD lane-count law
+//
+// Logline: Lane count must be 4 or 8 or 16; any other width fails closed.
+//
+// Setup: Pure Int width check. No hardware SIMD.
+//
+// Beats:
+//   1. simd_lanes_ok(3) holds=0.
+//   2. simd_lanes_ok(4) holds=1; 8 and 16 also hold.
+//   3. domain_cert boxes the holds bit for the simd domain.
+//
+// residual: width gate only; not a vector op
+
+import "std/core/primitives/domain_cert.oo";
+pub fn simd_lanes_ok(lanes: Int) -> Int {
+    if lanes == 4 {
+        return 1;
+    }
+    if lanes == 8 {
+        return 1;
+    }
+    if lanes == 16 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn simd_lanes_law(lanes: Int) -> DomainCert {
+    return domain_cert("simd", "lanes_ok", simd_lanes_ok(lanes));
+}

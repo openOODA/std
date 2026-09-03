@@ -1,0 +1,95 @@
+// # Fitts's Law
+//
+// Logline: Movement time to a target scales as log2 of (distance / width + 1).
+//
+// Setup: Pure Float. a, b > 0. Distance >= 0, width > 0. Illegal width/coeffs return Err.
+//
+// Beats:
+//   1. Index of difficulty ID = log2(D/W + 1). D=0 is Ok(0).
+//   2. Movement time MT = a + b * ID.
+//   3. Throughput: bits per second = ID / MT.
+//   4. Hosts ui_invariants.oo stem for cross-law correlation.
+
+import "std/app/ui/ui_invariants.oo";
+
+pub fn fitts_min_a() -> Float {
+    return 0.05;
+}
+
+pub fn fitts_min_b() -> Float {
+    return 0.05;
+}
+
+pub fn log2_safe(x: Float) -> Result[Float, String] {
+    let tiny: Float = 0.0000001;
+    if x < tiny { return Err("ERR\tfitts\tlog"); }
+    let ln2: Float = 0.6931471805599453;
+    return Ok(ln(x) / ln2);
+}
+
+pub fn fitts_index_of_difficulty(distance: Float, width: Float) -> Result[Float, String] {
+    if distance < 0.0 { return Err("ERR\tfitts\td"); }
+    if width <= 0.0 { return Err("ERR\tfitts\tw"); }
+    let ratio: Float = distance / width;
+    let arg: Float = 1.0 + ratio;
+    return log2_safe(arg);
+}
+
+pub fn fitts_movement_time(a: Float, b: Float, distance: Float, width: Float) -> Result[Float, String] {
+    if a <= 0.0 { return Err("ERR\tfitts\ta"); }
+    if b <= 0.0 { return Err("ERR\tfitts\tb"); }
+    let idr: Result[Float, String] = fitts_index_of_difficulty(distance, width);
+    match idr {
+        Ok(id) => { return Ok(a + (b * id)); },
+        Err(e) => { return Err(e); }
+    }
+}
+
+pub fn fitts_throughput(a: Float, b: Float, distance: Float, width: Float) -> Result[Float, String] {
+    let mtr: Result[Float, String] = fitts_movement_time(a, b, distance, width);
+    let idr: Result[Float, String] = fitts_index_of_difficulty(distance, width);
+    match mtr {
+        Ok(mt)         => {
+            if mt <= 0.0 { return Err("ERR\tfitts\tmt"); }
+            match idr {
+                Ok(id) => { return Ok(id / mt); },
+                Err(e) => { return Err(e); }
+            }
+        },
+        Err(e) => { return Err(e); }
+    }
+}
+
+fn fitts_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+pub fn verify_fitts_law() -> Bool {
+    let ui_inv_ok: Int = ui_size_ok(8, 8);
+    if ui_inv_ok != 1 { return false; }
+    let id_1: Float = fitts_got(fitts_index_of_difficulty(100.0, 10.0));
+    let target: Float = fitts_got(log2_safe(11.0));
+    let mut d: Float = id_1 - target;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let id_eq: Float = fitts_got(fitts_index_of_difficulty(0.0, 10.0));
+    if id_eq != 0.0 { return false; }
+    let mt: Float = fitts_got(fitts_movement_time(0.1, 0.2, 100.0, 10.0));
+    let target_mt: Float = 0.1 + (0.2 * fitts_got(log2_safe(11.0)));
+    let mut dm: Float = mt - target_mt;
+    if dm < 0.0 { dm = 0.0 - dm; }
+    if dm > 0.0001 { return false; }
+    if fitts_movement_time(0.0, 0.2, 100.0, 10.0).is_ok() { return false; }
+    if fitts_movement_time(0.1, 0.0, 100.0, 10.0).is_ok() { return false; }
+    if fitts_movement_time(0.1, 0.2, 0.0 - 1.0, 10.0).is_ok() { return false; }
+    if fitts_movement_time(0.1, 0.2, 100.0, 0.0).is_ok() { return false; }
+    if fitts_movement_time(0.1, 0.2, 100.0, 0.0 - 1.0).is_ok() { return false; }
+    if fitts_index_of_difficulty(0.0 - 1.0, 10.0).is_ok() { return false; }
+    if fitts_index_of_difficulty(100.0, 0.0).is_ok() { return false; }
+    if fitts_index_of_difficulty(100.0, 0.0 - 1.0).is_ok() { return false; }
+    if fitts_throughput(0.0, 0.2, 100.0, 10.0).is_ok() { return false; }
+    if fitts_throughput(0.1, 0.2, 100.0, 0.0).is_ok() { return false; }
+    if fitts_min_a() <= 0.0 { return false; }
+    if fitts_min_b() <= 0.0 { return false; }
+    return true;
+}

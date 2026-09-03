@@ -1,0 +1,110 @@
+// # Test isolation principle
+//
+// Logline: Each test record carries its own id, pass count, and fail count; mutating one test never touches another.
+//
+// Setup: Pure Int arithmetic on an IsolatedTest record. No FS, net, env.
+//
+// Beats:
+//   1. New test has id, pass=0, fail=0.
+//   2. record_pass adds one to pass without touching fail.
+//   3. record_fail adds one to fail without touching pass.
+//   4. Two tests with different ids stay independent across passes and fails.
+
+import "std/core/primitives/domain_cert.oo";
+
+type IsolatedTest = struct {
+    id: Int,
+    pass_count: Int,
+    fail_count: Int
+};
+
+pub fn isolated_test_new(id: Int) -> IsolatedTest {
+    return IsolatedTest {
+        id: id,
+        pass_count: 0,
+        fail_count: 0
+    };
+}
+
+pub fn isolated_test_record_pass(t: IsolatedTest) -> IsolatedTest {
+    return IsolatedTest {
+        id: t.id,
+        pass_count: t.pass_count + 1,
+        fail_count: t.fail_count
+    };
+}
+
+pub fn isolated_test_record_fail(t: IsolatedTest) -> IsolatedTest {
+    return IsolatedTest {
+        id: t.id,
+        pass_count: t.pass_count,
+        fail_count: t.fail_count + 1
+    };
+}
+
+// Count the number of tests that pass in a 2-test set.
+pub fn isolated_pair_passes(a: IsolatedTest, b: IsolatedTest) -> Int {
+    let mut n: Int = 0;
+    if a.fail_count == 0 {
+        n = n + 1;
+    }
+    if b.fail_count == 0 {
+        n = n + 1;
+    }
+    return n;
+}
+
+pub fn verify_test_isolation_principle() -> Bool {
+    // Golden: two distinct tests stay independent.
+    let t_a0: IsolatedTest = isolated_test_new(1);
+    let t_b0: IsolatedTest = isolated_test_new(2);
+    if t_a0.pass_count != 0 || t_a0.fail_count != 0 {
+        return false;
+    }
+    if t_b0.pass_count != 0 || t_b0.fail_count != 0 {
+        return false;
+    }
+    let t_a1: IsolatedTest = isolated_test_record_pass(t_a0);
+    if t_a1.pass_count != 1 {
+        return false;
+    }
+    if t_a1.fail_count != 0 {
+        return false;
+    }
+    // Test b must remain untouched after mutating test a.
+    if t_b0.pass_count != 0 {
+        return false;
+    }
+    if t_b0.fail_count != 0 {
+        return false;
+    }
+    // Id is preserved through mutations.
+    if t_a1.id != 1 {
+        return false;
+    }
+    // Hostile: failing test a does not affect test b.
+    let t_a2: IsolatedTest = isolated_test_record_fail(t_a1);
+    if t_a2.fail_count != 1 {
+        return false;
+    }
+    if t_a2.pass_count != 1 {
+        return false;
+    }
+    if t_b0.fail_count != 0 {
+        return false;
+    }
+    if t_b0.pass_count != 0 {
+        return false;
+    }
+    // Pair with a=passed, b=passed reports 2.
+    let p: Int = isolated_pair_passes(t_a1, t_b0);
+    if p != 2 {
+        return false;
+    }
+    // Pair with a=failed reports 1.
+    let q: Int = isolated_pair_passes(t_a2, t_b0);
+    if q != 1 {
+        return false;
+    }
+    return true;
+}

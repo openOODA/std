@@ -1,0 +1,67 @@
+// # Math Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard math domain library. Re-exports a stable math_mod_* surface for the most-used public API (stats, bigint, complex, matrix, polynomial, fraction, prime). Private siblings (theories, laws, invariants, KATs, simulation helpers) remain non-public.
+//
+// Setup: Imports private math siblings; no caps required for pure functions. SIMD-bound ops take AllocCap at the call site.
+//
+// Beats:
+//   1. Re-export the Stats and BigInt surface as math_mod_stats_* and math_mod_bigint_*.
+//   2. Re-export the Complex and Matrix surface as math_mod_complex_* and math_mod_matrix_*.
+//   3. Re-export the Polynomial, Fraction, FFT, and prime-sieve surface as math_mod_poly_*, math_mod_frac_*, math_mod_fft_*, math_mod_prime_*.
+//   4. Re-export the Linear-Algebra BLAS helpers and constants as math_mod_blas_* and math_mod_const_*.
+//   5. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _literature_kat, and the SIMD/internal helpers.
+
+import "stats.oo";
+import "bigint.oo";
+import "complex.oo";
+import "matrix.oo";
+import "polynomial.oo";
+import "fraction.oo";
+import "fft_radix2.oo";
+import "trig.oo";
+import "prime_sieve_atkin.oo";
+import "blas_level1.oo";
+import "constants.oo";
+
+// Public stats surface: math_mod_stats_*
+pub fn math_mod_stats_sum(xs: List[Int]) -> Int { return stats_sum(xs); }
+pub fn math_mod_stats_mean(xs: List[Int]) -> Int { return stats_mean(xs); }
+pub fn math_mod_stats_min(xs: List[Int]) -> Int { return stats_min(xs); }
+pub fn math_mod_stats_max(xs: List[Int]) -> Int { return stats_max(xs); }
+
+// Public bigint surface: math_mod_bigint_*
+pub fn math_mod_bigint_zero() -> BigInt { return bigint_zero(); }
+pub fn math_mod_bigint_one() -> BigInt { return bigint_one(); }
+
+// Public complex surface: math_mod_complex_*
+pub fn math_mod_complex_new(re: Float, im: Float) -> Complex { return complex_new(re, im); }
+pub fn math_mod_complex_zero() -> Complex { return complex_zero(); }
+pub fn math_mod_complex_one() -> Complex { return complex_one(); }
+pub fn math_mod_complex_add(a: Complex, b: Complex) -> Complex { return complex_add(a, b); }
+
+// Public matrix surface: math_mod_matrix_*
+pub fn math_mod_matrix_zeros(rows: Int, cols: Int) -> Matrix { return matrix_zeros(rows, cols); }
+pub fn math_mod_matrix_identity(n: Int) -> Matrix { return matrix_identity(n); }
+
+// Public constants surface: math_mod_const_*
+pub fn math_mod_const_pi() -> Float { return math_pi(); }
+pub fn math_mod_const_two_pi() -> Float { return math_two_pi(); }
+pub fn math_mod_const_half_pi() -> Float { return math_half_pi(); }
+
+// Public trig/log surface: math_mod_trig_*
+pub fn math_mod_sin(x: Float) -> Float { return math_sin(x); }
+pub fn math_mod_cos(x: Float) -> Float { return math_cos(x); }
+pub fn math_mod_ln(x: Float) -> Float { return math_ln(x); }
+pub fn math_mod_exp(x: Float) -> Float { return math_exp(x); }
+pub fn math_mod_sqrt(x: Float) -> Float { return math_sqrt(x); }
+pub fn math_mod_pow(base: Float, expn: Float) -> Float { return math_pow(base, expn); }
+
+// Private sibling inventory (DO NOT IMPORT DIRECTLY):
+//   _law files (e.g. cauchy_schwarz_law.oo, shannon_entropy_law.oo, prime_gap_zhang_law.oo, fraction_reciprocal_law.oo, fft_parseval_law.oo, group_inverse_law.oo, mat3_inverse_law.oo, complex_modulus_law.oo)
+//   _theory files (e.g. algebraic_invariants.oo, gauss_newton_theory.oo, kadison_singer_theory.oo, nash_mixed_theory.oo, leapfrog_energy_theory.oo, rkf45_step_theory.oo, simpsons_rule_theory.oo, welford_online_variance_theory.oo, blake3_tree_theory.oo, hamt_complexity_theory.oo, fp_field_theory.oo, euclidean_distance_law.oo)
+//   _principle files (e.g. central_limit_principle.oo, norm_nonneg_principle.oo, zero_not_unit_principle.oo, int_trichotomy_principle.oo, probability_simplex_principle.oo, sensitivity_huang_principle.oo)
+//   _kat files (e.g. lattice_qcd_kat.oo)
+//   _literature_kat files
+//   _ops helper files (e.g. bigdecimal_ops.oo, bigint_ops.oo, bigint_str.oo, matrix_ops.oo, quaternion_ops.oo, complex_polar.oo, complex_polar_div.oo)
+//   Internal SIMD/vector files (e.g. simd_vec.oo, simd_matrix.oo, fast_math_invsqrt.oo, fast_trig.oo, fixed_point_q16_16.oo, fixed_point_q32_32.oo)
+// External callers must import this mod.oo and use the math_mod_* surface.

@@ -1,0 +1,100 @@
+// # M/M/1 Queueing Theory
+//
+// Logline: Single-server Poisson-arrival exponential-service queue: utilization, mean length, mean wait.
+//
+// Setup: Pure Float. arrival_rate < service_rate for stability. Hostile rates return 0. Hosts net_invariants.oo stem.
+//
+// Beats:
+//   1. Utilization rho = lambda / mu.
+//   2. Mean number in system L = rho / (1 - rho).
+//   3. Mean time in system W = 1 / (mu - lambda).
+//   4. Mean number in queue Lq = rho^2 / (1 - rho).
+
+import "std/net/net_invariants.oo";
+
+// Utilization rho = lambda / mu. mu <= 0 returns 0.
+pub fn mm1_utilization(arrival_rate: Float, service_rate: Float) -> Result[Float, String] {
+    if arrival_rate < 0.0 { return Err("ERR\tmm1\tlambda"); }
+    if service_rate <= 0.0 { return Err("ERR\tmm1\tmu"); }
+    return Ok(arrival_rate / service_rate);
+}
+
+// Stable if 0 <= rho < 1.
+pub fn mm1_stable(arrival_rate: Float, service_rate: Float) -> Bool {
+    if arrival_rate < 0.0 { return false; }
+    if service_rate <= 0.0 { return false; }
+    if arrival_rate >= service_rate { return false; }
+    return true;
+}
+
+// Mean number in system L = rho / (1 - rho). Unstable returns 0.
+pub fn mm1_mean_in_system(arrival_rate: Float, service_rate: Float) -> Result[Float, String] {
+    if mm1_stable(arrival_rate, service_rate) == false { return Err("ERR\tmm1\tunstable"); }
+    let rr: Result[Float, String] = mm1_utilization(arrival_rate, service_rate);
+    match rr {
+        Ok(rho) => {
+            let denom: Float = 1.0 - rho;
+            if denom <= 0.0 { return Err("ERR\tmm1\tunstable"); }
+            return Ok(rho / denom);
+        },
+        Err(e)  => { return Err(e); }
+    }
+}
+
+pub fn mm1_mean_time_in_system(arrival_rate: Float, service_rate: Float) -> Result[Float, String] {
+    if mm1_stable(arrival_rate, service_rate) == false { return Err("ERR\tmm1\tunstable"); }
+    let diff: Float = service_rate - arrival_rate;
+    if diff <= 0.0 { return Err("ERR\tmm1\tunstable"); }
+    return Ok(1.0 / diff);
+}
+
+pub fn mm1_mean_in_queue(arrival_rate: Float, service_rate: Float) -> Result[Float, String] {
+    if mm1_stable(arrival_rate, service_rate) == false { return Err("ERR\tmm1\tunstable"); }
+    let rr: Result[Float, String] = mm1_utilization(arrival_rate, service_rate);
+    match rr {
+        Ok(rho) => {
+            let denom: Float = 1.0 - rho;
+            if denom <= 0.0 { return Err("ERR\tmm1\tunstable"); }
+            return Ok((rho * rho) / denom);
+        },
+        Err(e)  => { return Err(e); }
+    }
+}
+
+fn mm1_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+// KAT and hostile cases for the M/M/1 queue theory.
+pub fn verify_mm1_queue_theory() -> Bool {
+    let net_inv_ok: Bool = net_host_ok("example.com").holds == 1;
+    if net_inv_ok == false { return false; }
+    let rho: Float = mm1_got(mm1_utilization(5.0, 10.0));
+    let mut d: Float = rho - 0.5;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > 0.0001 { return false; }
+    let l: Float = mm1_got(mm1_mean_in_system(5.0, 10.0));
+    let mut dl: Float = l - 1.0;
+    if dl < 0.0 { dl = 0.0 - dl; }
+    if dl > 0.0001 { return false; }
+    let w: Float = mm1_got(mm1_mean_time_in_system(5.0, 10.0));
+    let mut dw: Float = w - 0.2;
+    if dw < 0.0 { dw = 0.0 - dw; }
+    if dw > 0.0001 { return false; }
+    let lq: Float = mm1_got(mm1_mean_in_queue(5.0, 10.0));
+    let mut dlq: Float = lq - 0.5;
+    if dlq < 0.0 { dlq = 0.0 - dlq; }
+    if dlq > 0.0001 { return false; }
+    if mm1_stable(1.0, 10.0) == false { return false; }
+    if mm1_stable(10.0, 10.0) == true { return false; }
+    if mm1_stable(15.0, 10.0) == true { return false; }
+    if mm1_stable(0.0 - 1.0, 10.0) == true { return false; }
+    if mm1_stable(5.0, 0.0) == true { return false; }
+    if mm1_utilization(0.0 - 1.0, 10.0).is_ok() { return false; }
+    if mm1_utilization(5.0, 0.0).is_ok() { return false; }
+    if mm1_utilization(5.0, 0.0 - 1.0).is_ok() { return false; }
+    if mm1_mean_in_system(10.0, 10.0).is_ok() { return false; }
+    if mm1_mean_in_system(15.0, 10.0).is_ok() { return false; }
+    if mm1_mean_in_queue(15.0, 10.0).is_ok() { return false; }
+    return true;
+}

@@ -1,0 +1,29 @@
+// # Cellular Biology Facade
+//
+// Logline: Re-exports cell agent models, population counts, and metabolic helpers.
+//
+// Setup: Pure module shim importing companion cell biology modules.
+//
+// Beats:
+//   1. Import cellular data types and cell agent behaviors.
+//   2. Re-export public symbols with typed shim markers.
+//   3. Maintain backwards compatibility with biological simulation pipelines.
+
+import "./cell_types.oo";
+import "./cell_agent.oo";
+
+pub fn cell_agent_create(id: Int, cell_type: String, viability: Float, atp: Float) -> AgentCell {
+    return agent_cell_new(id, cell_type, viability, atp);
+}
+
+pub fn cell_agent_alive(c: AgentCell) -> Bool {
+    return agent_cell_is_alive(c);
+}
+
+pub fn cell_population_create(initial_count: Int) -> CellPopulation {
+    return cell_pop_new(initial_count);
+}
+
+pub fn cell_population_count(p: CellPopulation) -> Int {
+    return cell_pop_current(p);
+}

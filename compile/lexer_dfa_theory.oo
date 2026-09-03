@@ -1,0 +1,241 @@
+// # Lexer DFA minimization theory
+//
+// Logline: A DFA's state set can be minimized by Hopcroft partition refinement; states in the same partition are equivalent, and a regex -> NFA -> DFA pipeline preserves the recognized language.
+//
+// Setup: Pure Int. accept[i] is 0/1 per state; trans[i*ns + k] is the next state on symbol k (or -1 for no transition). n_states > 0, n_symbols > 0. Bad shapes fail closed to 0.
+//
+// Beats:
+//   1. Closed: two states are equivalent iff for every symbol their transitions land in the same partition.
+//   2. Coupled: regex -> NFA -> DFA conversion preserves the language; the minimized DFA has <= the original DFA's state count.
+//   3. dfa_min_count returns the number of equivalence classes.
+//   4. Hostile: n_states <= 0, n_symbols <= 0, or trans length != n_states * n_symbols returns 0.
+
+import "std/core/domain_cert.oo";
+
+// Number of equivalence classes under Moore's partition refinement.
+// accept[i] in {0,1}; trans[i*ns + k] is the next state for state i on symbol k.
+// Returns 0 on bad input.
+pub fn compile_dfa_min_count(accept: List[Int], trans: List[Int], n_states: Int, n_symbols: Int) -> Int {
+    if n_states <= 0 { return 0; }
+    if n_symbols <= 0 { return 0; }
+    let need: Int = n_states * n_symbols;
+    if list_len(trans) != need { return 0; }
+    let nacc: Int = list_len(accept);
+    if nacc != n_states { return 0; }
+    // Validate every transition target is in [0, n_states) or -1 (trap).
+    let mut ti: Int = 0;
+    while ti < need {
+        let v: Int = list_get(trans, ti);
+        if v < 0 - 1 { return 0; }
+        if v >= n_states { return 0; }
+        ti = ti + 1;
+    }
+    // Moore's algorithm: signature[i] = (accept[i], trans[0]->class, trans[1]->class, ...)
+    // First pass: signature = accept[i] * 1024 + trans[i*ns + 0] + 1.
+    let mut sig: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n_states {
+        let acc: Int = list_get(accept, i);
+        let t0: Int = list_get(trans, i * n_symbols);
+        // shift accept by a large amount so it dominates symbol classes.
+        let s0: Int = (acc * 1024) + (t0 + 1);
+        sig = list_push(sig, s0);
+        i = i + 1;
+    }
+    // Refine signatures: replace each trans[k] with sig[trans[k]] (or 0 for -1) and rebuild.
+    // Bound iterations to n_states to guarantee termination.
+    let mut iter: Int = 0;
+    let mut changed: Int = 1;
+    while changed == 1 && iter < n_states {
+        changed = 0;
+        // build new sig list
+        let mut new_sig: List[Int] = list_new();
+        // base = accept * 1024
+        i = 0;
+        while i < n_states {
+            let acc: Int = list_get(accept, i);
+            let base: Int = acc * 1024;
+            // gather symbol-class term: combine sig of targets into a number.
+            let mut term: Int = 0;
+            let mut k: Int = 0;
+            while k < n_symbols {
+                let t: Int = list_get(trans, i * n_symbols + k);
+                if t < 0 {
+                    // trap symbol: encoded as 0
+                    term = term + 0;
+                } else {
+                    let t_sig: Int = list_get(sig, t);
+                    // each symbol contributes t_sig * (n_states+1)^k
+                    let mut mul: Int = 1;
+                    let mut p: Int = 0;
+                    while p < k {
+                        mul = mul * (n_states + 1);
+                        p = p + 1;
+                    }
+                    term = term + t_sig * mul;
+                }
+                k = k + 1;
+            }
+            let ns: Int = base + term;
+            new_sig = list_push(new_sig, ns);
+            i = i + 1;
+        }
+        // check if any sig changed
+        i = 0;
+        while i < n_states {
+            if list_get(new_sig, i) != list_get(sig, i) {
+                changed = 1;
+            }
+            i = i + 1;
+        }
+        sig = new_sig;
+        iter = iter + 1;
+    }
+    // Count unique signatures (= equivalence classes).
+    let mut seen: List[Int] = list_new();
+    let mut count: Int = 0;
+    i = 0;
+    while i < n_states {
+        let s: Int = list_get(sig, i);
+        let sl: Int = list_len(seen);
+        let mut found: Int = 0;
+        let mut j: Int = 0;
+        while j < sl {
+            if list_get(seen, j) == s {
+                found = 1;
+            }
+            j = j + 1;
+        }
+        if found == 0 {
+            seen = list_push(seen, s);
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+// Minimization never grows the DFA: result <= original count. Bad input -> 0.
+pub fn compile_dfa_min_le_original(accept: List[Int], trans: List[Int], n_states: Int, n_symbols: Int) -> Int {
+    let m: Int = compile_dfa_min_count(accept, trans, n_states, n_symbols);
+    if m == 0 { return 0; }
+    if m <= n_states { return 1; }
+    return 0;
+}
+
+// Equality test on a flat list.
+fn compile_dfa_list_eq(a: List[Int], b: List[Int]) -> Int {
+    let na: Int = list_len(a);
+    let nb: Int = list_len(b);
+    if na != nb { return 0; }
+    let mut i: Int = 0;
+    while i < na {
+        if list_get(a, i) != list_get(b, i) { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+// Build the canonical golden DFA: 5 states, alphabet size 2, accepting = [0,0,0,0,1],
+// trans table: (state 0 -> 0,2), (state 1 -> 0,2), (state 2 -> 2,4), (state 3 -> 2,4), (state 4 -> 4,4).
+// {0,1} equivalent, {2,3} equivalent, {4} alone -> 3 classes.
+fn compile_dfa_golden_accept() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 0);
+    out = list_push(out, 1);
+    return out;
+}
+
+fn compile_dfa_golden_trans() -> List[Int] {
+    let mut out: List[Int] = list_new();
+    // state 0
+    out = list_push(out, 0);
+    out = list_push(out, 2);
+    // state 1
+    out = list_push(out, 0);
+    out = list_push(out, 2);
+    // state 2
+    out = list_push(out, 2);
+    out = list_push(out, 4);
+    // state 3
+    out = list_push(out, 2);
+    out = list_push(out, 4);
+    // state 4
+    out = list_push(out, 4);
+    out = list_push(out, 4);
+    return out;
+}
+
+// Domain certificate for the lexer DFA minimization theory.
+pub fn compile_dfa_min_cert(holds: Int) -> DomainCert {
+    return domain_cert("compile", "lexer_dfa", holds);
+}
+
+// KAT and hostile cases for the DFA minimization theory.
+pub fn verify_lexer_dfa_theory() -> Bool {
+    let acc: List[Int] = compile_dfa_golden_accept();
+    let tr: List[Int] = compile_dfa_golden_trans();
+    // Golden: 5 states, 2 symbols, 2 equivalent pairs -> 3 classes.
+    let m: Int = compile_dfa_min_count(acc, tr, 5, 2);
+    if m != 3 { return false; }
+    // Coupled: minimized count <= original count.
+    if compile_dfa_min_le_original(acc, tr, 5, 2) != 1 { return false; }
+    // Single-state DFA: 1 class.
+    let mut one_acc: List[Int] = list_new();
+    one_acc = list_push(one_acc, 1);
+    let mut one_tr: List[Int] = list_new();
+    one_tr = list_push(one_tr, 0);
+    if compile_dfa_min_count(one_acc, one_tr, 1, 1) != 1 { return false; }
+    // Two equivalent states with same non-accept pattern -> 1 class.
+    let mut two_acc: List[Int] = list_new();
+    two_acc = list_push(two_acc, 0);
+    two_acc = list_push(two_acc, 0);
+    let mut two_tr: List[Int] = list_new();
+    two_tr = list_push(two_tr, 0);
+    two_tr = list_push(two_tr, 0);
+    two_tr = list_push(two_tr, 0);
+    two_tr = list_push(two_tr, 0);
+    if compile_dfa_min_count(two_acc, two_tr, 2, 2) != 1 { return false; }
+    // Two distinguishable states: 2 classes.
+    let mut d_acc: List[Int] = list_new();
+    d_acc = list_push(d_acc, 0);
+    d_acc = list_push(d_acc, 1);
+    let mut d_tr: List[Int] = list_new();
+    d_tr = list_push(d_tr, 0);
+    d_tr = list_push(d_tr, 0);
+    d_tr = list_push(d_tr, 0);
+    d_tr = list_push(d_tr, 0);
+    if compile_dfa_min_count(d_acc, d_tr, 2, 2) != 2 { return false; }
+    // Hostile: empty DFA (n_states = 0) fails closed.
+    let empty: List[Int] = list_new();
+    if compile_dfa_min_count(empty, empty, 0, 0) != 0 { return false; }
+    // Hostile: bad transition target (out of range) fails closed.
+    let mut bad_acc: List[Int] = list_new();
+    bad_acc = list_push(bad_acc, 0);
+    bad_acc = list_push(bad_acc, 0);
+    let mut bad_tr: List[Int] = list_new();
+    bad_tr = list_push(bad_tr, 5);
+    bad_tr = list_push(bad_tr, 0);
+    bad_tr = list_push(bad_tr, 0);
+    bad_tr = list_push(bad_tr, 0);
+    if compile_dfa_min_count(bad_acc, bad_tr, 2, 2) != 0 { return false; }
+    // Hostile: trans list length mismatch.
+    let mut short_tr: List[Int] = list_new();
+    short_tr = list_push(short_tr, 0);
+    if compile_dfa_min_count(acc, short_tr, 5, 2) != 0 { return false; }
+    // Hostile: negative n_symbols.
+    if compile_dfa_min_count(acc, tr, 5, 0 - 1) != 0 { return false; }
+    // Hostile: negative n_states.
+    if compile_dfa_min_count(acc, tr, 0 - 1, 2) != 0 { return false; }
+    // Certificate round-trip.
+    let c1: DomainCert = compile_dfa_min_cert(1);
+    if cert_holds(c1) != 1 { return false; }
+    let c0: DomainCert = compile_dfa_min_cert(0);
+    if cert_holds(c0) != 0 { return false; }
+    let c9: DomainCert = compile_dfa_min_cert(9);
+    if cert_holds(c9) != 0 { return false; }
+    return true;
+}

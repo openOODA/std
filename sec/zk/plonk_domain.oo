@@ -1,0 +1,54 @@
+// # PLONK Evaluation Domain & Roots of Unity
+//
+// Logline: Implements multiplicative subgroups, roots of unity, vanishing polynomial Z_H, and Lagrange polynomial evaluations.
+//
+// Setup: Multiplicative subgroup H = {1, omega, ..., omega^{n-1}} over the BN254 scalar field.
+//
+// Beats:
+//   1. Represent evaluation domain size n and primitive n-th root of unity omega.
+//   2. Compute vanishing polynomial evaluation Z_H(zeta) = zeta^n - 1.
+//   3. Compute first Lagrange polynomial L_1(zeta) = omega * (zeta^n - 1) / (n * (zeta - omega)).
+//   4. Define coset permutation shifts k1 and k2 for copy constraints.
+
+import "./bn254_fp.oo";
+
+type PlonkDomain = struct {
+    size: Int,
+    omega: Bn254Fp,
+    k1: Bn254Fp,
+    k2: Bn254Fp
+};
+
+pub fn plonk_domain_new(n: Int) -> PlonkDomain {
+    let k1: Bn254Fp = bn254_fp_from_int(5);
+    let k2: Bn254Fp = bn254_fp_from_int(7);
+    let omega: Bn254Fp = bn254_fp_from_int(1910788);
+    return PlonkDomain {
+        size: n,
+        omega: omega,
+        k1: k1,
+        k2: k2
+    };
+}
+
+pub fn plonk_eval_vanishing(domain: PlonkDomain, zeta: Bn254Fp) -> Bn254Fp {
+    let mut zeta_n: Bn254Fp = bn254_fp_one();
+    let mut i: Int = 0;
+    while i < domain.size {
+        zeta_n = bn254_fp_mul(zeta_n, zeta);
+        i = i + 1;
+    }
+    return bn254_fp_sub(zeta_n, bn254_fp_one());
+}
+
+pub fn plonk_eval_lagrange_1(domain: PlonkDomain, zeta: Bn254Fp) -> Bn254Fp {
+    let zh: Bn254Fp = plonk_eval_vanishing(domain, zeta);
+    let num: Bn254Fp = bn254_fp_mul(domain.omega, zh);
+
+    let n_fp: Bn254Fp = bn254_fp_from_int(domain.size);
+    let zeta_sub_om: Bn254Fp = bn254_fp_sub(zeta, domain.omega);
+    let den: Bn254Fp = bn254_fp_mul(n_fp, zeta_sub_om);
+
+    let inv_den: Bn254Fp = bn254_fp_inv(den);
+    return bn254_fp_mul(num, inv_den);
+}

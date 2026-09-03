@@ -1,0 +1,110 @@
+// # Path Ranking Algorithm (PRA) for Knowledge Graphs
+//
+// Logline: Discovers multi-hop relation paths and calculates bounded random walk path-constrained probabilities.
+//
+// Setup: Relational inference framework extracting symbolic graph paths as features for link prediction classifiers.
+//
+// Beats:
+//   1. Define bounded multi-hop relation sequences P = (r1, r2, ..., r_k).
+//   2. Compute random-walk transition probabilities along relation path chains.
+//   3. Aggregate path feature matrix to train logistic regression weights per relation target.
+
+type PRAGraph = struct {
+    num_nodes: Int,
+    edge_src: List[Int],
+    edge_rel: List[Int],
+    edge_dst: List[Int]
+};
+
+pub fn pra_graph_new(num_nodes: Int) -> PRAGraph {
+    return PRAGraph {
+        num_nodes: num_nodes,
+        edge_src: list_new(),
+        edge_rel: list_new(),
+        edge_dst: list_new()
+    };
+}
+
+pub fn pra_graph_add_edge(g: PRAGraph, src: Int, rel: Int, dst: Int) -> PRAGraph {
+    let s: List[Int] = list_push(g.edge_src, src);
+    let r: List[Int] = list_push(g.edge_rel, rel);
+    let d: List[Int] = list_push(g.edge_dst, dst);
+    return PRAGraph {
+        num_nodes: g.num_nodes,
+        edge_src: s,
+        edge_rel: r,
+        edge_dst: d
+    };
+}
+
+pub fn pra_random_walk_step(
+    g: PRAGraph,
+    current_dist: List[Float],
+    target_rel: Int
+) -> List[Float] {
+    let n: Int = g.num_nodes;
+    let total_edges: Int = list_len(g.edge_src);
+
+    let mut next_dist: List[Float] = list_new();
+    let mut target_v: Int = 0;
+    while target_v < n {
+        let mut prob_accum: Float = 0.0;
+        let mut e_idx: Int = 0;
+        while e_idx < total_edges {
+            let dst_node: Int = list_get(g.edge_dst, e_idx);
+            let rel_type: Int = list_get(g.edge_rel, e_idx);
+            if dst_node == target_v && rel_type == target_rel {
+                let u: Int = list_get(g.edge_src, e_idx);
+                let p_u: Float = list_get(current_dist, u);
+                if p_u > 0.000001 {
+                    let mut deg_u_r: Int = 0;
+                    let mut k: Int = 0;
+                    while k < total_edges {
+                        let src_k: Int = list_get(g.edge_src, k);
+                        let rel_k: Int = list_get(g.edge_rel, k);
+                        if src_k == u && rel_k == target_rel {
+                            deg_u_r = deg_u_r + 1;
+                        }
+                        k = k + 1;
+                    }
+                    if deg_u_r > 0 {
+                        prob_accum = prob_accum + (p_u / gnn_int_to_float(deg_u_r));
+                    }
+                }
+            }
+            e_idx = e_idx + 1;
+        }
+        next_dist = list_push(next_dist, prob_accum);
+        target_v = target_v + 1;
+    }
+    return next_dist;
+}
+
+pub fn pra_evaluate_path(
+    g: PRAGraph,
+    source_node: Int,
+    relation_path: List[Int]
+) -> List[Float] {
+    let n: Int = g.num_nodes;
+    let mut dist: List[Float] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if i == source_node {
+            dist = list_push(dist, 1.0);
+        } else {
+            dist = list_push(dist, 0.0);
+        }
+        i = i + 1;
+    }
+
+    let path_len: Int = list_len(relation_path);
+    let mut step: Int = 0;
+    while step < path_len {
+        let rel: Int = list_get(relation_path, step);
+        dist = pra_random_walk_step(g, dist, rel);
+        step = step + 1;
+    }
+    return dist;
+}
+
+

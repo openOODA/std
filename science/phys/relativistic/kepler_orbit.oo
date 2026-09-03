@@ -1,0 +1,90 @@
+// # Two-Body Keplerian Orbital Mechanics
+//
+// Logline: Computes apsidal radii, orbital speeds, and periods for elliptic and hyperbolic two-body trajectories with fail-closed domain validation.
+//
+// Setup: Pure celestial mechanics. No capability tokens. All fallible operations return Result[Float, String].
+//
+// Beats:
+//   1. Publish Earth gravitational parameter constants.
+//   2. Validate conic geometry for apsis and period queries.
+//   3. Compute vis-viva, circular, and escape speeds with fail-closed checks.
+//   4. Compute orbital period for bound orbits.
+// residual: Parabolic case (e == 1.0) requires a dedicated Barker solver.
+
+import "std/core/math/constants.oo";
+
+/// Earth gravitational parameter in km^3/s^2.
+pub fn kepler_mu_earth() -> Int {
+    return 398600;
+}
+
+/// Earth gravitational parameter in m^3/s^2.
+pub fn kepler_mu_earth_si() -> Float {
+    return 398600441800000.0;
+}
+
+pub fn kepler_periapsis_radius(semi_major_axis_m: Float, eccentricity: Float) -> Result[Float, String] {
+    if eccentricity < 0.0 || eccentricity == 1.0 {
+        return Err("ERR\tkepler_periapsis_radius\tinvalid_eccentricity");
+    }
+    let one_minus_e: Float = 1.0 - eccentricity;
+    if semi_major_axis_m == 0.0 || (eccentricity < 1.0 && semi_major_axis_m <= 0.0) || (eccentricity > 1.0 && semi_major_axis_m >= 0.0) {
+        return Err("ERR\tkepler_periapsis_radius\tinvalid_semi_major_axis");
+    }
+    let rp: Float = semi_major_axis_m * one_minus_e;
+    if rp < 0.0 {
+        return Err("ERR\tkepler_periapsis_radius\tradius_negative");
+    }
+    return Ok(rp);
+}
+
+pub fn kepler_apoapsis_radius(semi_major_axis_m: Float, eccentricity: Float) -> Result[Float, String] {
+    if eccentricity < 0.0 || eccentricity >= 1.0 {
+        return Err("ERR\tkepler_apoapsis_radius\tnot_elliptic");
+    }
+    if semi_major_axis_m <= 0.0 {
+        return Err("ERR\tkepler_apoapsis_radius\tinvalid_semi_major_axis");
+    }
+    let ra: Float = semi_major_axis_m * (1.0 + eccentricity);
+    if ra < 0.0 {
+        return Err("ERR\tkepler_apoapsis_radius\tradius_negative");
+    }
+    return Ok(ra);
+}
+
+pub fn kepler_vis_viva(r_m: Float, semi_major_axis_m: Float, mu: Float) -> Result[Float, String] {
+    if r_m <= 0.0 || mu <= 0.0 {
+        return Err("ERR\tkepler_vis_viva\tinvalid_radius_or_mu");
+    }
+    if semi_major_axis_m == 0.0 {
+        return Err("ERR\tkepler_vis_viva\tinvalid_semi_major_axis");
+    }
+    let term: Float = (2.0 / r_m) - (1.0 / semi_major_axis_m);
+    if term < 0.0 {
+        return Err("ERR\tkepler_vis_viva\timaginary_speed");
+    }
+    return Ok(sqrt(mu * term));
+}
+
+pub fn kepler_circular_speed(r_m: Float, mu: Float) -> Result[Float, String] {
+    if r_m <= 0.0 || mu <= 0.0 {
+        return Err("ERR\tkepler_circular_speed\tinvalid_domain");
+    }
+    return Ok(sqrt(mu / r_m));
+}
+
+pub fn kepler_escape_speed(r_m: Float, mu: Float) -> Result[Float, String] {
+    if r_m <= 0.0 || mu <= 0.0 {
+        return Err("ERR\tkepler_escape_speed\tinvalid_domain");
+    }
+    return Ok(sqrt((2.0 * mu) / r_m));
+}
+
+pub fn kepler_orbital_period(semi_major_axis_m: Float, mu: Float) -> Result[Float, String] {
+    if semi_major_axis_m <= 0.0 || mu <= 0.0 {
+        return Err("ERR\tkepler_orbital_period\tnot_bound");
+    }
+    let pi: Float = math_pi();
+    let a3: Float = (semi_major_axis_m * semi_major_axis_m) * semi_major_axis_m;
+    return Ok(2.0 * pi * sqrt(a3 / mu));
+}

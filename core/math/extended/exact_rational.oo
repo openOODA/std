@@ -1,0 +1,78 @@
+// # Exact Rational Number Arithmetic
+//
+// Logline: Canonical fractional representation with greatest common divisor normalization and exact division-by-zero prevention.
+//
+// Setup: Pure arbitrary-precision rational arithmetic without floating-point rounding errors.
+//
+// Beats:
+//   1. Implement Euclidean algorithm for Greatest Common Divisor (GCD).
+//   2. Canonicalize numerator and denominator with sign normalization.
+//   3. Implement exact addition, subtraction, multiplication, and division.
+//   4. Implement fractional equality and ordering comparisons.
+
+type Rational = struct {
+    num: Int,
+    den: Int
+};
+
+pub fn math_gcd(a: Int, b: Int) -> Int {
+    let mut x: Int = if a < 0 { 0 - a } else { a };
+    let mut y: Int = if b < 0 { 0 - b } else { b };
+    while y != 0 {
+        let t: Int = y;
+        y = x % y;
+        x = t;
+    }
+    return if x == 0 { 1 } else { x };
+}
+
+pub fn rational_new(n: Int, d: Int) -> Result[Rational, String] {
+    if d == 0 {
+        return Err("ERR\trational_new\tdivision_by_zero");
+    }
+    let g: Int = math_gcd(n, d);
+    let mut canonical_n: Int = n / g;
+    let mut canonical_d: Int = d / g;
+    if canonical_d < 0 {
+        canonical_n = 0 - canonical_n;
+        canonical_d = 0 - canonical_d;
+    }
+    return Ok(Rational {
+        num: canonical_n,
+        den: canonical_d
+    });
+}
+
+pub fn rational_add(a: Rational, b: Rational) -> Result[Rational, String] {
+    let n: Int = (a.num * b.den) + (b.num * a.den);
+    let d: Int = a.den * b.den;
+    return rational_new(n, d);
+}
+
+pub fn rational_sub(a: Rational, b: Rational) -> Result[Rational, String] {
+    let n: Int = (a.num * b.den) - (b.num * a.den);
+    let d: Int = a.den * b.den;
+    return rational_new(n, d);
+}
+
+pub fn rational_mul(a: Rational, b: Rational) -> Result[Rational, String] {
+    let n: Int = a.num * b.num;
+    let d: Int = a.den * b.den;
+    return rational_new(n, d);
+}
+
+pub fn rational_div(a: Rational, b: Rational) -> Result[Rational, String] {
+    if b.num == 0 {
+        return Err("ERR\trational_div\tdivision_by_zero");
+    }
+    let n: Int = a.num * b.den;
+    let d: Int = a.den * b.num;
+    return rational_new(n, d);
+}
+
+pub fn rational_cmp(a: Rational, b: Rational) -> Int {
+    let diff: Int = (a.num * b.den) - (b.num * a.den);
+    if diff < 0 { return -1; }
+    if diff > 0 { return 1; }
+    return 0;
+}

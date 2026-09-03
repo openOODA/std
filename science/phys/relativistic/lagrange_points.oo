@@ -1,0 +1,59 @@
+// # Three-Body Circular Restricted Lagrange Points
+//
+// Logline: Calculates equilibrium libration points (L1-L5) in the Circular Restricted Three-Body Problem (CR3BP).
+//
+// Setup: Pure celestial mechanics equilibrium point solver for Sun-Earth and Earth-Moon systems.
+//
+// Beats:
+//   1. Collinear Lagrange equilibrium points count query.
+//   2. Calculate L1 and L2 collinear libration distances from secondary body.
+//   3. Calculate L3 collinear position opposite to secondary body.
+//   4. Calculate L4 and L5 triangular equilateral equilibrium coordinates.
+
+type LagrangePoint2D = struct {
+    x: Float,
+    y: Float
+};
+
+pub fn lagrange_count() -> Int {
+    return 5;
+}
+
+pub fn collinear_lagrange_count() -> Int {
+    return 3;
+}
+
+/// Computes approximate L1 distance gamma from secondary body in normalized CR3BP coordinates.
+pub fn lagrange_l1_distance(mass_ratio_mu: Float) -> Float {
+    let mu3: Float = mass_ratio_mu / 3.0;
+    let gamma: Float = pow(mu3, 0.3333333333333333);
+    return gamma;
+}
+
+/// Computes normalized (x, y) coordinates of L1 point: x = 1 - mu - gamma, y = 0.
+pub fn lagrange_l1_position(mass_ratio_mu: Float) -> LagrangePoint2D {
+    let gamma: Float = lagrange_l1_distance(mass_ratio_mu);
+    let x: Float = (1.0 - mass_ratio_mu) - gamma;
+    return LagrangePoint2D { x: x, y: 0.0 };
+}
+
+/// Computes normalized (x, y) coordinates of L2 point: x = 1 - mu + gamma, y = 0.
+pub fn lagrange_l2_position(mass_ratio_mu: Float) -> LagrangePoint2D {
+    let gamma: Float = lagrange_l1_distance(mass_ratio_mu);
+    let x: Float = (1.0 - mass_ratio_mu) + gamma;
+    return LagrangePoint2D { x: x, y: 0.0 };
+}
+
+/// Computes normalized (x, y) coordinates of L4 equilateral triangular point.
+pub fn lagrange_l4_position(mass_ratio_mu: Float) -> LagrangePoint2D {
+    let x: Float = 0.5 - mass_ratio_mu;
+    let sqrt3_over_2: Float = 0.8660254037844386;
+    return LagrangePoint2D { x: x, y: sqrt3_over_2 };
+}
+
+/// Computes normalized (x, y) coordinates of L5 equilateral triangular point.
+pub fn lagrange_l5_position(mass_ratio_mu: Float) -> LagrangePoint2D {
+    let x: Float = 0.5 - mass_ratio_mu;
+    let sqrt3_over_2: Float = 0.8660254037844386;
+    return LagrangePoint2D { x: x, y: 0.0 - sqrt3_over_2 };
+}
