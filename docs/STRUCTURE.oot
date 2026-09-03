@@ -1,5 +1,101 @@
-# std/STRUCTURE — Documentation Stub
+# std/STRUCTURE — How the Repo Is Organized
 
 File: std/docs/STRUCTURE.oot
 
-(Stub. Real doc lands in a follow-up phase.)
+This file describes the layout of the openOODA standard library at
+v1.0.0. Read it before you import anything.
+
+## 1. Top-level layout
+
+The repository has one tree. There is no monorepo sub-module. Every
+file lives under the root, with a stable path freeze declared in
+README.oot. After the 1.0.0 cut, no new top-level directories will
+appear.
+
+The root contains:
+
+  - ANCHOR.oo        Front door for agents. Re-exports the 8 domain hubs.
+  - README.oot       Top-level map. States the 6 laws and the domain tree.
+  - VERSION          Version and compatibility contract (semver, plus
+                     api_surface=8 as a structural check).
+  - LICENSE          Dual MIT / Apache-2.0 license.
+  - docs/            This directory. 4 .oot files plus the index.
+  - examples/        Small programs that exercise one or two modules.
+  - qa/              Invariants, KATs, adversarial vectors, caps tests.
+  - audit/           Out-of-band audit state (not part of the API).
+  - scripts/         Local helper scripts.
+  - app/             Functional domain: applied software.
+  - core/            Functional domain: universal primitives.
+  - fs/              Functional domain: filesystem, OS, time.
+  - hw/              Functional domain: hardware theory.
+  - meta/            Functional domain: test and diagnostic infrastructure.
+  - net/             Functional domain: network, transport, sync, actor.
+  - science/         Functional domain: physics, chem, bio, econ, comm.
+  - sec/             Functional domain: security.
+
+The eight functional domains are the load-bearing structure. Each one
+is a self-contained subtree. Every domain ships its own ANCHOR.oo
+that re-exports its sub-hubs.
+
+## 2. The 8 domains, and why exactly 8
+
+The 8-domain split reflects functional alignment. One concept lives
+in one place. No "misc", no "utils", no "common".
+
+  - core/    Universal primitives. Every other domain depends on it.
+  - fs/      Filesystem, OS surface, time, archive, compression.
+  - net/     Network protocols, transport, sync, actor, telemetry.
+  - sec/     Security primitives, laws, attestation, capability.
+  - science/ Physics, chemistry, biology, economics, communications.
+  - app/     AI, robotics, UI, data, agents, combat.
+  - hw/      Hardware theory: cache, branch, memory, GPU, silicon.
+  - meta/    Test and diagnostic infrastructure.
+
+This is the Pillar 6 surface. The VERSION file declares
+`api_surface=8`. The loader asserts that the std ANCHOR.oo exposes
+exactly 8 public subdirectories. If a future change adds a 9th, the
+loader fails closed. If a future change removes one, the loader
+fails closed. The contract is structural, not behavioral.
+
+## 3. ANCHOR.oo per directory
+
+Every domain has an ANCHOR.oo at its root. Every sub-hub has its
+own ANCHOR.oo. The pattern is the same at every level:
+
+  1. Title (// # ...).
+  2. Logline (// Logline: ...).
+  3. Setup (// Setup: ...). One line. Lists required caps.
+  4. Beats (// Beats: ...). A numbered list of the public surface.
+  5. import statements that pull in the next level.
+  6. Public functions re-exported as `<domain>_mod_*`.
+
+External callers import the top-level ANCHOR.oo for the domain they
+need. They do not import private siblings directly. Private siblings
+follow a naming convention: `_law`, `_theory`, `_principle`,
+`_invariants`, `_kat`, `_stubs`. These are the certification and
+verification files. They are not part of the public API.
+
+## 4. The 256-line cap
+
+Every file in this repo is capped at 256 lines. The cap is enforced
+by the loader, not by review. Two reasons:
+
+  1. Reviewable surface. A 256-line file fits on one screen. An
+     agent can read it, understand it, and verify it in one pass.
+  2. Decomposition pressure. When a file grows past 256 lines, the
+     right answer is to split, not to expand the cap. The cap is a
+     forcing function for clean decomposition.
+
+The cap applies to .oo source files, .oot doc files, README.oot, and
+ANCHOR.oo alike. No file in the tree may exceed it.
+
+## 5. What does not live in std/
+
+  - The compiler (oodac). It is its own repo.
+  - The package manager (opm). It is its own repo.
+  - The CLI. It is its own repo.
+  - The LSP and MCP servers. They are their own repos.
+  - The website. It pulls from these docs but does not live here.
+
+If you are looking for the toolchain, you are in the wrong repo.
+If you are looking for a library, you are in the right place.

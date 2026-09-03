@@ -1,5 +1,173 @@
-# std/DOMAINS — Documentation Stub
+# std/DOMAINS — The 8 Functional Domains
 
 File: std/docs/DOMAINS.oot
 
-(Stub. Real doc lands in a follow-up phase.)
+This file describes each of the 8 functional domains in the
+openOODA standard library. For every domain we list: scope,
+sub-hubs, and one or two example .oo modules.
+
+A domain is a self-contained subtree under std/. Each one ships its
+own ANCHOR.oo at the root. Import that ANCHOR.oo to pull in the full
+public surface for that domain.
+
+## 1. core/ — universal primitives
+
+Scope: the foundation layer. Every other domain imports from core/.
+Nothing in core/ imports from any other domain.
+
+  Sub-hubs:
+    primitives/   Option, Result, List, Str, byte, ast, macro, semver
+    math/         stats, bigint, complex, matrix, polynomial, fraction
+    text/         regex, KMP, Levenshtein, UTF-8, diff, rope
+    encoding/     hex, base64/32/58, varint, msgpack, cbor, bencode
+    collection/   Vec, Queue, HashMap, HashSet, List, BitSet, Trie
+    io/           Reader, Writer, Cursor, Buffered, Pipe, BitReader
+    format/       print, parse, verify, config, normalize
+    markup/       JSON, XML, YAML, TOML, Protobuf wire
+    cli/          CliCommand, parser, completion, prompts, style
+    principles/   CODATA 2022 constants, units, zero-ambient cap
+    proofs/       formal_proofs and proof_verifiers
+
+  Examples:
+    std/core/primitives/option.oo
+    std/core/math/algebraic.oo
+
+## 2. fs/ — filesystem, OS, time, archive
+
+Scope: the disk, the operating system, the clock, and the byte
+streams that move through them. Pure compute lives in core/.
+
+  Sub-hubs:
+    file/         Path, FileInfo, FileReader/Writer, Glob, Watch, Jail
+    os/           terminal, cpu, gpu, microvm, cgroups, eBPF, scheduler
+    process/      cmd, env, process, signal, rlimit, python
+    time/         chrono (durations, instants, calendars, monotonic)
+    archive/      archive, gzip, tar, zip, zstd, pcap reader
+    compression/  huffman, lz4, lz77, brotli, neural image
+
+  Examples:
+    std/fs/file/dir_entry.oo
+    std/fs/compression/huffman.oo
+
+## 3. net/ — network, transport, sync, actor
+
+Scope: anything that crosses a process or machine boundary, plus
+the concurrency primitives that orchestrate it.
+
+  Sub-hubs:
+    protocol/     wire, app protocols, http, http2, http3, quic
+    transport/    telecom, 5G, 6G
+    mesh/         p2p, edge
+    telemetry/    packet capture, ids, dpi
+    sync/         concurrency primitives (was std/sync)
+    actor/        actor model (was std/actor)
+
+  Examples:
+    std/net/protocol/http_client.oo
+    std/net/sync/mutex.oo (illustrative; check current surface)
+
+## 4. sec/ — security
+
+Scope: the security surface. Cryptography, capability, attestation,
+TEE, threat modeling, fuzz, redteam, policy.
+
+  Sub-hubs:
+    hash/         blake2, blake3, sha2, sha3, adler32
+    symmetric/    aes, chacha20
+    asymmetric/   rsa, ed25519, x25519
+    mac/          hmac, poly1305
+    zk/           zero-knowledge proofs
+    enclave/      SGX, SEV-SNP, TDX, TrustZone
+    capability/   object capabilities, rights masks, dim/unforge
+    control/      access control engines
+    exploit/      catalog and verification of known weakness classes
+    ct/           constant-time primitives
+    ai/           model and prompt security
+    net/          net-facing policy
+    cps/          cyber-physical security
+    defense/      intrusion detection, hardening
+    rasp/         runtime application self-protection
+    string_encrypt/  string-level encryption helpers
+    sys/          OS-level security helpers
+    laws/         security laws and theories (private siblings)
+
+  Examples:
+    std/sec/hash/blake3_codec.oo
+    std/sec/capability/capability.oo
+
+## 5. science/ — physics, chem, bio, econ, comm
+
+Scope: the natural and social sciences that the rest of the system
+relies on. Laws, theories, and computations, not data.
+
+  Sub-hubs:
+    phys/         mechanics, EM, optics, thermodyne, relativity, gnc
+    chem/         reactions, periodic trends, spectra
+    bio/          genetics, neuroscience, ecology, immunology
+    econ/         markets, finance, fintech, DeFi
+    comm/         satellite (DVB-S2/S2X, GNSS, ISL)
+
+  Examples:
+    std/science/phys/newton.oo (illustrative)
+    std/science/econ/black_scholes.oo (illustrative)
+
+## 6. app/ — applied software
+
+Scope: the user-facing applications. AI, robotics, UI, data,
+agents, combat.
+
+  Sub-hubs:
+    ai/           tensors, transformer, quant, GGUF, scaling law
+    robot/        robotics, ros2, mpc, lidar, iiot, digital_twin
+    ui/           3d, gui, tui, wui, game_engine, media, codecs
+    data/         db, dataframe, columnar, graph, vector_ann, cloud
+    agent/        synthesizer, repair, evolution, pair_programmer, repl
+    combat/       military combat, missiles, formation, air combat
+
+  Examples:
+    std/app/ai/tensor.oo (illustrative)
+    std/app/data/connection.oo (illustrative)
+
+## 7. hw/ — hardware theory
+
+Scope: the laws, theories, and principles of computer architecture.
+This domain is a theoretical-foundation library. It exposes no
+public API code. The directory is documentation and verification
+rules, used by audit harnesses and hardware-correctness proofs.
+
+  Sub-hubs:
+    silicon/      aarch64, riscv, x86 ABI, alu, bind, bool
+    gpu/          GPU architectures and the bandwidth model
+    mem/          memory subsystem theory
+    bare_metal/   bare-metal boot and runtime theory
+    runtime/      runtime / kernel boundary theory
+    drivers_hal/  driver and HAL theory
+
+  Top-level files (no sub-hub):
+    amdahls_law_hw.oo, branch_predictor_principle.oo,
+    cache_associativity_law.oo, cache_line_law.oo,
+    cxl_3_0_law.oo, dram_refresh_theory.oo,
+    endianness_law.oo, memory_bandwidth_law.oo,
+    moesi_protocol_theory.oo, page_offset_law.oo,
+    tage_predictor_principle.oo, twos_complement_law.oo
+
+  Example:
+    std/hw/amdahls_law_hw.oo
+    std/hw/silicon/aarch64_abi.oo
+
+## 8. meta/ — test and diagnostic infrastructure
+
+Scope: the scaffolding used to verify the other 7 domains. Test
+harnesses, fuzzers, mutation, diagnostic types, log levels, metrics,
+telemetry, tracer.
+
+  Sub-hubs:
+    test/         fuzz, fault_injection, multi_compiler, mutation,
+                  GPU cross-validation, scenario, runner
+    diag/         backtrace, breadcrumb, event_timeline, health,
+                  invariant eval, log levels, metrics, panic hook,
+                  stopwatch, telemetry, tracer
+
+  Examples:
+    std/meta/test/fault_injection.oo
+    std/meta/diag/event_timeline.oo (illustrative)

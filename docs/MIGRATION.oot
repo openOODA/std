@@ -1,5 +1,115 @@
-# std/MIGRATION — Documentation Stub
+# std/MIGRATION — Moving to the v1.0.0 Layout
 
 File: std/docs/MIGRATION.oot
 
-(Stub. Real doc lands in a follow-up phase.)
+This file describes how to migrate code from the old monorepo
+layout to the std/ v1.0.0 layout. The 1.0.0 cut is a hard cut.
+There is no compat layer. There are no shims. Old paths are dead.
+
+## 1. The old layout
+
+Before 1.0.0, the standard library lived inside the compiler
+monorepo. The compiler was at the top of the tree, and the standard
+library sat next to it under `std/`. There was no separate package.
+There was no `api_surface` check. Some modules lived at the top
+level (`std/ai/`, `std/robot/`, `std/bio/`, `std/chem/`, ...) and
+some lived nested (`std/phys/`, `std/sec/`, ...).
+
+## 2. The new layout
+
+At 1.0.0, the standard library is a separate repo:
+`openOODA/std`. The compiler stays in its own repo. The package
+manager (`opm`) installs std/ as a dependency. The 8 domains
+(`app/`, `core/`, `fs/`, `hw/`, `meta/`, `net/`, `science/`,
+`sec/`) sit at the top of the repo. The `compile/` directory was
+removed; its contents now live in the compiler repo, not in std/.
+
+## 3. The path changes that matter
+
+The reorg took 7 phases. Each phase is named inside the ANCHOR.oo
+of the affected domain. The headline moves are:
+
+  - std/cli/                  -> std/core/cli/
+  - std/collection/           -> std/core/collection/
+  - std/encoding/             -> std/core/encoding/
+  - std/format/ and std/fmt/  -> std/core/format/
+  - std/io/                   -> std/core/io/
+  - std/markup/ and std/json/ -> std/core/markup/
+  - std/math/                 -> std/core/math/
+  - std/core/                 -> std/core/primitives/
+  - std/principles/           -> std/core/principles/
+  - std/proofs/               -> std/core/proofs/
+  - std/text/                 -> std/core/text/
+
+  - std/test/                 -> std/meta/test/
+  - std/diag/                 -> std/meta/diag/
+
+  - std/ai/                   -> std/app/ai/
+  - std/robot/                -> std/app/robot/
+  - std/ui/                   -> std/app/ui/
+  - std/data/                 -> std/app/data/
+  - std/ai/{synthesizer, repair, evolution, pair_programmer, repl_engine}.oo
+                              -> std/app/agent/
+  - std/phys/weapons/ + std/phys/aero/
+                              -> std/app/combat/
+
+  - std/bio/                  -> std/science/bio/
+  - std/chem/                 -> std/science/chem/
+  - std/phys/satellite_dvb/   -> std/science/comm/
+  - std/econ/                 -> std/science/econ/
+  - std/phys/                 -> std/science/phys/
+
+  - net/wire/ + net/web_protocols/ + net/http3/ + net/advanced/
+                              -> net/protocol/
+  - net/telecom/ + net/telecom_5g/ + net/telecom_6g/
+                              -> net/transport/
+  - net/p2p_mesh/ + net/edge/ -> net/mesh/
+  - net/{packet_capture, ids, dpi}  -> net/telemetry/
+  - std/sync/                 -> std/net/sync/
+  - std/actor/                -> std/net/actor/
+
+  - std/wire/                 -> std/core/encoding/wire/
+  - ml_lib/                   -> std/app/ai/  (merged into ml/)
+
+## 4. How to update your imports
+
+Three steps:
+
+  1. Find every `import "std/..."` in your code.
+  2. Rewrite the path to the new location. Use the table above.
+  3. Run the loader. It will fail closed if any path is wrong or
+     if a private sibling is imported by mistake.
+
+The recommended pattern: import the top-level ANCHOR.oo for the
+domain you need, not a deep file. Example:
+
+  import "std/core/ANCHOR.oo";
+  import "std/net/ANCHOR.oo";
+
+This pulls in the full public surface and keeps the api_surface=8
+contract intact. Do not import `_law`, `_theory`, `_principle`,
+`_invariants`, `_kat`, or `_stubs` files. Those are private and the
+loader will reject them from outside the repo.
+
+## 5. The api_surface=8 contract
+
+The VERSION file in this repo declares `api_surface=8`. This is a
+structural check, not a behavioral one. At load time the loader
+reads std/ANCHOR.oo and counts the public sub-directories that it
+re-exports. If the count is not 8, the loader fails closed. This
+guarantees that no future patch can quietly add a 9th domain or
+remove one of the 8. The contract is binary: 8 or fail.
+
+Consumers of std/ do not need to re-implement this check. The
+loader does it for them. But consumers should still pin the std
+version in their own lockfile. See INSTALL.oot for the version
+compatibility contract.
+
+## 6. What to do if a module is missing
+
+If a path you used to import no longer exists, the table in
+section 3 is the first place to look. If the module is still
+listed there as having moved, follow the move. If it is not in the
+table, the module was removed. The removal is intentional. Check
+the audit/ directory and the qa/ directory for the replacement or
+for the formal proof that the removed surface was redundant.

@@ -1,0 +1,98 @@
+# std/INSTALL — Installing the Standard Library
+
+File: std/docs/INSTALL.oot
+
+This file describes how to install the openOODA standard library
+via opm, and what version compatibility contract you must respect.
+
+## 1. Install via opm
+
+The standard library is a separate package. Install it with opm:
+
+  opm install openOODA/std
+
+This pulls the current v1.0.0 release into your local opm cache
+and registers it in the lockfile. The compiler (oodac) resolves
+`import "std/..."` paths against this cache. There is no
+environment variable to set. There is no path to add. opm handles
+the rest.
+
+To pin a specific version:
+
+  opm install openOODA/std@1.0.0
+
+To upgrade within the same major:
+
+  opm update openOODA/std
+
+To verify the install:
+
+  opm list | grep openOODA/std
+  opm show openOODA/std
+
+The `show` command prints the resolved version, the sha pin, and
+the cap set that was negotiated at install time.
+
+## 2. The version compatibility contract
+
+The VERSION file at the root of std/ declares the contract. It is
+not a hint. It is enforced by the loader.
+
+  std=1.0.0         The std library release. Semver.
+  ooda=2.10.0       The minimum ooda toolchain version that works.
+  ooda_max=2.99.0   The maximum ooda toolchain version that works.
+  oodac=2.10.0      The minimum oodac compiler version that works.
+  api_surface=8     The structural check: std/ANCHOR.oo exposes
+                    exactly 8 public sub-directories.
+
+The rule is simple. std/ refuses to load if the installed ooda
+toolchain is below 2.10.0, above 2.99.0, or if oodac is below
+2.10.0. The api_surface check is independent of the toolchain
+version: it is a property of the std release itself, and the
+loader asserts it on every load.
+
+The range [2.10.0, 2.99.0] is inclusive. 2.10.0 works. 2.99.0
+works. 3.0.0 does not. If you upgrade ooda past 2.99.0, you must
+also wait for the next major std release that lifts the cap. Do
+not bypass this check. The cap exists to keep the public surface
+stable.
+
+## 3. What consumers should check
+
+Before you ship a program that depends on std/, verify four things:
+
+  1. opm show openOODA/std. The version must be 1.0.0 or a
+     compatible 1.x.y patch. Different majors are not compatible.
+  2. ooda --version. The version must be in [2.10.0, 2.99.0]. If
+     it is not, upgrade or downgrade your toolchain to land in
+     range. Do not edit the VERSION file in std/ to bypass the
+     check; the loader reads the shipped VERSION, not a local copy.
+  3. oodac --version. Must be at least 2.10.0. Newer patch
+     versions are fine.
+  4. The api_surface check. Run any program that imports std/.
+     If the loader reports "api_surface mismatch", your std
+     install is corrupted. Reinstall with `opm install --force`.
+
+## 4. The pin in your project
+
+In your own opm.toml, declare the dependency explicitly:
+
+  [dependencies]
+  std = "1.0.0"
+
+The semver range resolves to the highest 1.x.y with x=0 and y up
+to the latest patch. To lock to the exact release, use:
+
+  [dependencies]
+  std = "=1.0.0"
+
+Commit the resulting opm.lock file. The lockfile is the source of
+truth for what your build actually used. Without it, two builds of
+the same code can pull different std patch versions and disagree
+on invariants.
+
+## 5. Where to go next
+
+  - STRUCTURE.oot: how the repo is organized.
+  - DOMAINS.oot: what each of the 8 domains contains.
+  - MIGRATION.oot: how to move from the old monorepo layout.
