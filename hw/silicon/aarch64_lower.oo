@@ -16,9 +16,8 @@ import "std/hw/silicon/aarch64_encode_mem.oo";
 import "std/hw/silicon/aarch64_regs.oo";
 import "std/hw/silicon/aarch64_abi.oo";
 
-fn a64_frame() -> Int {
-    return 64;
-}
+fn a64_frame() -> Int { return 64; }
+fn a64_is_err(p: A64P) -> Bool { return str_starts_with(p.text, "ERR\t"); }
 
 fn a64_binop_word(op: Int, xd: Int, xn: Int, xm: Int) -> Int {
     if op < 1 || op > 9 { return 0 - 1; }
@@ -37,7 +36,7 @@ fn a64_binop_word(op: Int, xd: Int, xn: Int, xm: Int) -> Int {
 
 fn a64_take_binop(p0: A64P) -> A64P {
     let p: A64P = a64_skip(p0);
-    if p.err != "" { return p; }
+    if a64_is_err(p) { return p; }
     let b: Int = a64_peek(p);
     let mut b2: Int = -1;
     if p.i + 1 < bytes_len(p.src) {
@@ -90,12 +89,12 @@ fn a64_take_relop(p0: A64P) -> A64P {
 
 fn a64_primary(p0: A64P) -> A64P {
     let mut p: A64P = a64_skip(p0);
-    if p.err != "" { return p; }
+    if a64_is_err(p) { return p; }
     let b: Int = a64_peek(p);
     if b == 45 {
         p = a64_at(p, p.i + 1);
         p = a64_primary(p);
-        if p.err != "" { return p; }
+        if a64_is_err(p) { return p; }
         let w: Int = arm64_word_neg(0, 0);
         if w == 0 - 1 { return a64_fail(p, "ERR\ta64_neg_range"); }
         return a64_emit(p, w);
@@ -126,7 +125,7 @@ fn a64_primary(p0: A64P) -> A64P {
 
 fn a64_expr(p0: A64P) -> A64P {
     let mut p: A64P = a64_primary(p0);
-    while p.err == "" {
+    while !a64_is_err(p) {
         let q: A64P = a64_take_binop(p);
         if q.ival == 0 { return p; }
         let op: Int = q.ival;
@@ -156,7 +155,7 @@ fn a64_let_stmt(p0: A64P) -> A64P {
     p = a64_eat(p, 61);
     p = a64_expr(p);
     p = a64_eat(p, 59);
-    if p.err != "" { return p; }
+    if a64_is_err(p) { return p; }
     if p.next_off < 16 || p.next_off + 8 > a64_frame() { return a64_fail(p, "ERR\ta64_frame_overflow"); }
     p = a64_bind(p, name);
     if p.ival < 0 || p.ival > 504 { return a64_fail(p, "ERR\ta64_bind_range"); }
@@ -181,7 +180,7 @@ fn a64_if_stmt(p0: A64P) -> A64P {
     p = a64_eat(p, 123);
     p = a64_stmts(p);
     p = a64_eat(p, 125);
-    if p.err != "" { return p; }
+    if a64_is_err(p) { return p; }
     let off: Int = list_len(p.words) - br;
     if off < 0 || off > 524287 { return a64_fail(p, "ERR\ta64_bcond_off"); }
     let w: Int = 0 + arm64_word_b_cond(inv, off);
@@ -206,7 +205,7 @@ fn a64_stmt(p0: A64P) -> A64P {
 
 fn a64_stmts(p0: A64P) -> A64P {
     let mut p: A64P = p0;
-    while p.err == "" {
+    while !a64_is_err(p) {
         p = a64_skip(p);
         let b: Int = a64_peek(p);
         if b == 125 || b < 0 { return p; }
@@ -234,7 +233,7 @@ pub fn aarch64_lower_main(src: String) -> List[Int] {
     }
     p = a64_eat_kw(p, "fn");
     p = a64_ident(p);
-    if p.err != "" || p.text != "main" { return list_new(); }
+    if a64_is_err(p) || p.text != "main" { return list_new(); }
     p = a64_eat(p, 40);
     p = a64_eat(p, 41);
     p = a64_skip(p);
@@ -247,7 +246,7 @@ pub fn aarch64_lower_main(src: String) -> List[Int] {
     p = a64_prologue(p);
     p = a64_stmts(p);
     p = a64_eat(p, 125);
-    if p.err != "" { return list_new(); }
+    if a64_is_err(p) { return list_new(); }
     if list_len(p.words) == 0 { return list_new(); }
     p = a64_skip(p);
     if a64_peek(p) != -1 { return list_new(); }

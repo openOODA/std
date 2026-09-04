@@ -146,7 +146,8 @@ fn a64p_emit_rt(x0: A64X, fnames0: List[String], foffs0: List[Int], nfn0: Int) -
     while pass < 5 {
         let n0: Int = r.nfn;
         let rx: A64X = r.x;
-        let bl: List[String] = rx.st.bl_nm;
+        let st0: A64S = rx.st;
+        let bl: List[String] = st0.bl_nm;
         let fnm: List[String] = r.fnames;
         if a64p_any(bl, fnm, "__strlen") { r = a64rt_strlen(r); }
         if a64p_any(bl, fnm, "__puts") { r = a64rt_puts(r); }
@@ -172,7 +173,8 @@ fn a64p_emit_rt(x0: A64X, fnames0: List[String], foffs0: List[Int], nfn0: Int) -
 pub fn aarch64_compile_program_elf(src: String) -> List[Int] {
     if bytes_len(src) == 0 { return list_new(); }
     let scanned: A64X = a64x_scan_types(src);
-    if scanned.st.err != "" { return list_new(); }
+    let sc_st: A64S = scanned.st;
+    if sc_st.err != "" { return list_new(); }
     let mut x: A64X = a64p_emit_start(a64x_keep_fields(src, scanned));
     let mut fnames: List[String] = list_new();
     let mut foffs: List[Int] = list_new();
