@@ -1,0 +1,27 @@
+// # LLM Tool-Use Schema Manifest Emitters
+//
+// Logline: Emit OpenAI, Anthropic, and raw JSON Schema manifests describing the ooda token surface for agent frameworks.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) L2 schema layer.
+//
+// Beats:
+//   1. Emit OpenAI tool-call manifest.
+//   2. Emit Anthropic tool-use manifest.
+//   3. Emit raw JSON Schema (vendor-neutral).
+//   4. Emit the subcommand list shared across all three.
+
+pub fn schema_subcommand_list() -> String {
+    return "[{\"name\":\"ooda_token_status\",\"desc\":\"Print live session token consumption, thinking overhead, and efficiency multiplier.\",\"args\":[]},{\"name\":\"ooda_token_report\",\"desc\":\"Export detailed token audit breakdown by slice and agent.\",\"args\":[]},{\"name\":\"ooda_token_audit\",\"desc\":\"Scan source files and suggest token-saving optimizations.\",\"args\":[{\"name\":\"dir\",\"type\":\"string\",\"required\":true}]},{\"name\":\"ooda_token_query\",\"desc\":\"Resolve a dot-notation selector against the active ledger.\",\"args\":[{\"name\":\"selector\",\"type\":\"string\",\"required\":true}]},{\"name\":\"ooda_token_ask\",\"desc\":\"Keyword-routed natural-language query over the ledger.\",\"args\":[{\"name\":\"question\",\"type\":\"string\",\"required\":true}]},{\"name\":\"ooda_token_diff\",\"desc\":\"Compare two ledgers and print regression delta.\",\"args\":[{\"name\":\"before\",\"type\":\"string\",\"required\":true},{\"name\":\"after\",\"type\":\"string\",\"required\":true}]},{\"name\":\"ooda_token_schema\",\"desc\":\"Emit this manifest.\",\"args\":[{\"name\":\"target\",\"type\":\"string\",\"enum\":[\"openai\",\"anthropic\",\"raw\",\"all\"]}]}]";
+}
+
+pub fn schema_openai_manifest() -> String {
+    return "{\"name\":\"ooda_token\",\"description\":\"Token telemetry, counterfactual savings, and context optimization. Returns versioned JSON envelopes (schema_version 1.0).\",\"parameters\":{\"type\":\"object\",\"properties\":{\"subcommand\":{\"type\":\"string\",\"enum\":[\"status\",\"report\",\"audit\",\"query\",\"ask\",\"diff\",\"schema\",\"tail\",\"fix\"]},\"dir\":{\"type\":\"string\"},\"selector\":{\"type\":\"string\"},\"question\":{\"type\":\"string\"},\"before\":{\"type\":\"string\"},\"after\":{\"type\":\"string\"},\"target\":{\"type\":\"string\"},\"format\":{\"type\":\"string\",\"enum\":[\"json\",\"human\"]},\"operations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"subcommands\":" + schema_subcommand_list() + "},\"required\":[\"subcommand\"]}}";
+}
+
+pub fn schema_anthropic_manifest() -> String {
+    return "{\"name\":\"ooda_token\",\"description\":\"Token telemetry and context optimization suite. JSON in, JSON out. Never mutates user code without an explicit --apply flag.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"subcommand\":{\"type\":\"string\",\"enum\":[\"status\",\"report\",\"audit\",\"query\",\"ask\",\"diff\",\"schema\",\"tail\",\"fix\"]},\"dir\":{\"type\":\"string\"},\"selector\":{\"type\":\"string\"},\"question\":{\"type\":\"string\"},\"before\":{\"type\":\"string\"},\"after\":{\"type\":\"string\"},\"target\":{\"type\":\"string\"},\"format\":{\"type\":\"string\",\"enum\":[\"json\",\"human\"]}},\"required\":[\"subcommand\"]}}";
+}
+
+pub fn schema_raw_manifest() -> String {
+    return "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"ooda_token\",\"type\":\"object\",\"properties\":{\"subcommand\":{\"type\":\"string\"},\"dir\":{\"type\":\"string\"},\"selector\":{\"type\":\"string\"},\"question\":{\"type\":\"string\"},\"format\":{\"type\":\"string\"}},\"required\":[\"subcommand\"]}";
+}

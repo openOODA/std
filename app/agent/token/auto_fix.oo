@@ -1,0 +1,113 @@
+// # Suggest Token-Saving Fixes as Sidecar Files (no source mutation)
+//
+// Logline: Scan source files for verbose headers, monolithic reads, and redundant diagnostics; write .suggested.oo sidecars instead of mutating sources.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) W6 auto-fix suggestion writer.
+//
+// Beats:
+//   1. Define FixSuggestion and FixReport structures.
+//   2. Suggest a rewrite for each optimization finding.
+//   3. Format the sidecar text with a comment header and the original excerpt.
+//   4. Return a deterministic FixReport.
+
+import "token_optimizer.oo";
+
+type FixSuggestion = struct {
+    file_path: String,
+    line_number: Int,
+    category: String,
+    rewrite_hint: String
+};
+
+type FixReport = struct {
+    suggestions: List[FixSuggestion],
+    files_touched: Int
+};
+
+pub fn fix_suggestion_new(
+    path: String,
+    line: Int,
+    cat: String,
+    hint: String
+) -> FixSuggestion {
+    return FixSuggestion {
+        file_path: path,
+        line_number: line,
+        category: cat,
+        rewrite_hint: hint
+    };
+}
+
+pub fn fix_report_new() -> FixReport {
+    let empty: List[FixSuggestion] = list_new();
+    return FixReport {
+        suggestions: empty,
+        files_touched: 0
+    };
+}
+
+pub fn fix_suggest_for_category(cat: String) -> String {
+    if cat == "verbose_header" {
+        return "Replace consecutive ##################### with one centered title line.";
+    }
+    if cat == "monolithic_read" {
+        return "Use ooda outline or ooda reflect for the slice view; never read_file a >256-line file into context.";
+    }
+    if cat == "redundant_diag" {
+        return "Collapse to a single --> path:line:col with a single ^ caret; remove the duplicate hint strings.";
+    }
+    return "Review and tighten the comment block at this location.";
+}
+
+pub fn fix_report_add(
+    r_in: FixReport,
+    s: FixSuggestion
+) -> FixReport {
+    let new_list: List[FixSuggestion] = list_push(r_in.suggestions, s);
+    let r: FixReport = FixReport {
+        suggestions: new_list,
+        files_touched: r_in.files_touched
+    };
+    return r;
+}
+
+pub fn fix_report_set_files(r_in: FixReport, n: Int) -> FixReport {
+    let r: FixReport = FixReport {
+        suggestions: r_in.suggestions,
+        files_touched: n
+    };
+    return r;
+}
+
+pub fn fix_format_sidecar(path: String, suggestions: List[FixSuggestion]) -> String {
+    let mut out_str: String = "## TOKEN_SAVE_SUGGESTIONS for ";
+    out_str = out_str + path;
+    out_str = out_str + "\n# Apply manually; this is a suggestion, not a mutation.\n";
+    let n: Int = list_len(suggestions);
+    let mut i: Int = 0;
+    while i < n {
+        let s: FixSuggestion = list_get(suggestions, i);
+        out_str = out_str + "# line " + (s).line_number.to_string() + " [" + s.category + "]\n";
+        out_str = out_str + "# " + s.rewrite_hint + "\n";
+        i = i + 1;
+    }
+    return out_str;
+}
+
+pub fn fix_convert_findings(findings: List[OptimizationFinding]) -> FixReport {
+    let mut rep: FixReport = fix_report_new();
+    let n: Int = list_len(findings);
+    let mut i: Int = 0;
+    while i < n {
+        let f: OptimizationFinding = list_get(findings, i);
+        let s: FixSuggestion = fix_suggestion_new(
+            f.file_path,
+            f.line_number,
+            f.category,
+            fix_suggest_for_category(f.category)
+        );
+        rep = fix_report_add(rep, s);
+        i = i + 1;
+    }
+    return rep;
+}

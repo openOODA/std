@@ -1,0 +1,243 @@
+// # Token Waste and Context Optimization Linter
+//
+// Logline: Detect verbose headers, monolithic reads, and redundant diagnostic strings in source files; suggest token-saving rewrites.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) sovereign context optimizer.
+//
+// Beats:
+//   1. Define OptimizationFinding and OptimizationReport structures.
+//   2. Scan source lines for verbose repetitive header comments.
+//   3. Detect oversized file reads exceeding line thresholds.
+//   4. Detect redundant diagnostic strings in compiler failure reports.
+//   5. Aggregate findings and compute potential token savings.
+
+type OptimizationFinding = struct {
+    finding_id: Int, file_path: String, line_number: Int, category: String, severity: String, message: String, tokens_wasted: Int
+};
+
+type OptimizationReport = struct {
+    findings: List[OptimizationFinding], total_tokens_wasted: Int, files_scanned: Int, suggestions_count: Int
+};
+
+pub fn optimization_finding_new(fid: Int, path: String, line: Int, cat: String, sev: String, msg: String, wasted: Int) -> OptimizationFinding {
+    return OptimizationFinding {
+        finding_id: fid, file_path: path, line_number: line, category: cat, severity: sev, message: msg, tokens_wasted: wasted
+    };
+}
+
+pub fn optimization_report_new() -> OptimizationReport {
+    let empty: List[OptimizationFinding] = list_new();
+    return OptimizationReport { findings: empty, total_tokens_wasted: 0, files_scanned: 0, suggestions_count: 0 };
+}
+
+pub fn optimization_estimate_tokens(s: String) -> Int {
+    let n: Int = s.len();
+    if n < 0 {
+        return 0;
+    }
+    return (n / 4) + 1;
+}
+
+pub fn optimization_is_verbose_header(line: String) -> Bool {
+    if str_ends_with(line, "##############################") {
+        return true;
+    }
+    if str_ends_with(line, "==============================") {
+        return true;
+    }
+    if str_ends_with(line, "------------------------------") {
+        return true;
+    }
+    return false;
+}
+
+pub fn optimization_count_consecutive_banner(
+    lines: List[String],
+    start: Int
+) -> Int {
+    if start >= list_len(lines) {
+        return 0;
+    }
+    let first: String = list_get(lines, start);
+    if !optimization_is_verbose_header(first) {
+        return 0;
+    }
+    let mut count: Int = 1;
+    let n: Int = list_len(lines);
+    let mut i: Int = start + 1;
+    while i < n {
+        let cur: String = list_get(lines, i);
+        if optimization_is_verbose_header(cur) {
+            count = count + 1;
+            i = i + 1;
+        } else {
+            i = n;
+        }
+    }
+    return count;
+}
+
+pub fn optimization_check_verbose_headers(
+    report: OptimizationReport,
+    path: String,
+    lines: List[String]
+) -> OptimizationReport {
+    let mut fs: List[OptimizationFinding] = report.findings;
+    let n: Int = list_len(lines);
+    let mut i: Int = 0;
+    while i < n {
+        let count: Int = optimization_count_consecutive_banner(lines, i);
+        if count > 2 {
+            let wasted: Int = count * 3;
+            let find: OptimizationFinding = optimization_finding_new(
+                list_len(fs),
+                path,
+                i + 1,
+                "verbose_header",
+                "low",
+                "consecutive banner lines: use one centered title instead",
+                wasted
+            );
+            fs = list_push(fs, find);
+            i = i + count;
+        } else {
+            i = i + 1;
+        }
+    }
+    return OptimizationReport {
+        findings: fs,
+        total_tokens_wasted: report.total_tokens_wasted,
+        files_scanned: report.files_scanned,
+        suggestions_count: report.suggestions_count
+    };
+}
+
+pub fn optimization_is_monolithic_read_line(line: String) -> Bool {
+    if line.contains("read_file(") {
+        return true;
+    }
+    if line.contains("oo_fs_read_dir(") {
+        return true;
+    }
+    return false;
+}
+
+pub fn optimization_check_monolithic_reads(
+    report: OptimizationReport,
+    path: String,
+    lines: List[String],
+    threshold_lines: Int
+) -> OptimizationReport {
+    let total: Int = list_len(lines);
+    if total <= threshold_lines {
+        return report;
+    }
+    let mut fs: List[OptimizationFinding] = report.findings;
+    let mut i: Int = 0;
+    while i < total {
+        let cur: String = list_get(lines, i);
+        if optimization_is_monolithic_read_line(cur) {
+            let wasted: Int = (total - threshold_lines) / 10;
+            let find: OptimizationFinding = optimization_finding_new(
+                list_len(fs),
+                path,
+                i + 1,
+                "monolithic_read",
+                "medium",
+                "file exceeds slice threshold; use outline/reflect for slice view",
+                wasted
+            );
+            fs = list_push(fs, find);
+        }
+        i = i + 1;
+    }
+    return OptimizationReport {
+        findings: fs,
+        total_tokens_wasted: report.total_tokens_wasted,
+        files_scanned: report.files_scanned,
+        suggestions_count: report.suggestions_count
+    };
+}
+
+pub fn optimization_is_redundant_diag_line(line: String) -> Bool {
+    if line.contains("Expected one of") {
+        return true;
+    }
+    if line.contains("but got") && line.contains("expected") {
+        return true;
+    }
+    if line.contains("Try:") && line.contains("Hint:") {
+        return true;
+    }
+    return false;
+}
+
+pub fn optimization_check_redundant_diags(
+    report: OptimizationReport,
+    path: String,
+    lines: List[String]
+) -> OptimizationReport {
+    let total: Int = list_len(lines);
+    let mut fs: List[OptimizationFinding] = report.findings;
+    let mut i: Int = 0;
+    while i < total {
+        let cur: String = list_get(lines, i);
+        if optimization_is_redundant_diag_line(cur) {
+            let wasted: Int = 8;
+            let find: OptimizationFinding = optimization_finding_new(
+                list_len(fs),
+                path,
+                i + 1,
+                "redundant_diag",
+                "low",
+                "redundant diagnostic string; collapse to a single --caret line",
+                wasted
+            );
+            fs = list_push(fs, find);
+        }
+        i = i + 1;
+    }
+    return OptimizationReport {
+        findings: fs,
+        total_tokens_wasted: report.total_tokens_wasted,
+        files_scanned: report.files_scanned,
+        suggestions_count: report.suggestions_count
+    };
+}
+
+pub fn optimization_finalize(
+    report: OptimizationReport,
+    files_scanned: Int
+) -> OptimizationReport {
+    let n: Int = list_len(report.findings);
+    let mut total: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let f: OptimizationFinding = list_get(report.findings, i);
+        total = total + f.tokens_wasted;
+        i = i + 1;
+    }
+    return OptimizationReport {
+        findings: report.findings,
+        total_tokens_wasted: total,
+        files_scanned: files_scanned,
+        suggestions_count: n
+    };
+}
+
+pub fn optimization_format_report(report: OptimizationReport) -> String {
+    let mut out: String = "";
+    out = out + "Files scanned:       " + (report).files_scanned.to_string() + "\n";
+    out = out + "Suggestions:         " + (report).suggestions_count.to_string() + "\n";
+    out = out + "Tokens wasted (est): " + (report).total_tokens_wasted.to_string() + "\n";
+    let n: Int = list_len(report.findings);
+    let mut i: Int = 0;
+    while i < n {
+        let f: OptimizationFinding = list_get(report.findings, i);
+        out = out + "  " + f.file_path + ":" + (f).line_number.to_string() + " ";
+        out = out + "[" + f.category + "/" + f.severity + "] ";
+        out = out + f.message + " (-" + (f).tokens_wasted.to_string() + " tok)\n";
+        i = i + 1;
+    }
+    return out;
+}

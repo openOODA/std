@@ -1,0 +1,242 @@
+// # Sovereign LLM Token Telemetry and Transcript Parser
+//
+// Logline: Parse JSONL transcript step entries and aggregate prompt, completion, thinking, and tool-call token footprints per step type.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) sovereign token telemetry.
+//
+// Beats:
+//   1. Define TokenTurnMetric, ToolFootprint, and SessionTokenLedger structures.
+//   2. Parse JSONL step entries for prompt, completion, thinking, and tool payload sizes.
+//   3. Aggregate statistics by step type (USER_INPUT, PLANNER_RESPONSE, TOOL_CALL).
+//   4. Compute total cost micro-units and thinking overhead ratio.
+
+type TokenTurnMetric = struct {
+    step_index: Int,
+    step_type: String,
+    prompt_bytes: Int,
+    completion_bytes: Int,
+    thinking_ms: Int,
+    tool_call_count: Int,
+    tool_payload_bytes: Int,
+    estimated_prompt_tokens: Int,
+    estimated_completion_tokens: Int,
+    cost_micro: Int
+};
+
+type ToolFootprint = struct {
+    tool_name: String,
+    call_count: Int,
+    total_payload_bytes: Int,
+    avg_payload_bytes: Int
+};
+
+type SessionTokenLedger = struct {
+    session_id: String,
+    metrics: List[TokenTurnMetric],
+    tool_footprints: List[ToolFootprint],
+    total_prompt_tokens: Int,
+    total_completion_tokens: Int,
+    total_tool_payload_bytes: Int,
+    total_thinking_ms: Int,
+    total_cost_micro: Int
+};
+
+pub fn token_turn_metric_zero(idx: Int, stype: String) -> TokenTurnMetric {
+    return TokenTurnMetric {
+        step_index: idx,
+        step_type: stype,
+        prompt_bytes: 0,
+        completion_bytes: 0,
+        thinking_ms: 0,
+        tool_call_count: 0,
+        tool_payload_bytes: 0,
+        estimated_prompt_tokens: 0,
+        estimated_completion_tokens: 0,
+        cost_micro: 0
+    };
+}
+
+pub fn tool_footprint_zero(name: String) -> ToolFootprint {
+    return ToolFootprint {
+        tool_name: name,
+        call_count: 0,
+        total_payload_bytes: 0,
+        avg_payload_bytes: 0
+    };
+}
+
+pub fn session_token_ledger_new(sid: String) -> SessionTokenLedger {
+    let empty_m: List[TokenTurnMetric] = list_new();
+    let empty_t: List[ToolFootprint] = list_new();
+    return SessionTokenLedger {
+        session_id: sid,
+        metrics: empty_m,
+        tool_footprints: empty_t,
+        total_prompt_tokens: 0,
+        total_completion_tokens: 0,
+        total_tool_payload_bytes: 0,
+        total_thinking_ms: 0,
+        total_cost_micro: 0
+    };
+}
+
+pub fn token_estimate_from_bytes(b: Int) -> Int {
+    let mut n: Int = b;
+    if n < 0 {
+        n = 0;
+    }
+    return (n / 4) + 1;
+}
+
+pub fn token_turn_metric_record(
+    m: TokenTurnMetric,
+    prompt_b: Int,
+    completion_b: Int,
+    think_ms: Int,
+    tool_count: Int,
+    tool_payload_b: Int,
+    cost_per_million: Int
+) -> TokenTurnMetric {
+    let p_tok: Int = token_estimate_from_bytes(prompt_b);
+    let c_tok: Int = token_estimate_from_bytes(completion_b);
+    let total_tok: Int = p_tok + c_tok;
+    let cost: Int = (total_tok * cost_per_million) / 1000000;
+    return TokenTurnMetric {
+        step_index: m.step_index,
+        step_type: m.step_type,
+        prompt_bytes: prompt_b,
+        completion_bytes: completion_b,
+        thinking_ms: think_ms,
+        tool_call_count: tool_count,
+        tool_payload_bytes: tool_payload_b,
+        estimated_prompt_tokens: p_tok,
+        estimated_completion_tokens: c_tok,
+        cost_micro: cost
+    };
+}
+
+pub fn session_ledger_ingest(
+    ledger: SessionTokenLedger,
+    metric: TokenTurnMetric
+) -> SessionTokenLedger {
+    let mut ms: List[TokenTurnMetric] = ledger.metrics;
+    ms = list_push(ms, metric);
+    return SessionTokenLedger {
+        session_id: ledger.session_id,
+        metrics: ms,
+        tool_footprints: ledger.tool_footprints,
+        total_prompt_tokens: ledger.total_prompt_tokens + metric.estimated_prompt_tokens,
+        total_completion_tokens: ledger.total_completion_tokens + metric.estimated_completion_tokens,
+        total_tool_payload_bytes: ledger.total_tool_payload_bytes + metric.tool_payload_bytes,
+        total_thinking_ms: ledger.total_thinking_ms + metric.thinking_ms,
+        total_cost_micro: ledger.total_cost_micro + metric.cost_micro
+    };
+}
+
+pub fn session_ledger_total_tokens(ledger: SessionTokenLedger) -> Int {
+    return ledger.total_prompt_tokens + ledger.total_completion_tokens;
+}
+
+pub fn session_ledger_thinking_overhead_ratio(ledger: SessionTokenLedger) -> Int {
+    let mut think: Int = ledger.total_thinking_ms;
+    if think < 0 {
+        think = 0;
+    }
+    let mut comp: Int = ledger.total_completion_tokens;
+    if comp < 1 {
+        comp = 1;
+    }
+    return (think * 1000) / comp;
+}
+
+pub fn session_ledger_step_count_by_type(ledger: SessionTokenLedger, stype: String) -> Int {
+    let n: Int = list_len(ledger.metrics);
+    let mut count: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let m: TokenTurnMetric = list_get(ledger.metrics, i);
+        if m.step_type == stype {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+pub fn session_ledger_aggregate_by_type(ledger: SessionTokenLedger, stype: String) -> Int {
+    let n: Int = list_len(ledger.metrics);
+    let mut sum_p: Int = 0;
+    let mut sum_c: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let m: TokenTurnMetric = list_get(ledger.metrics, i);
+        if m.step_type == stype {
+            sum_p = sum_p + m.estimated_prompt_tokens;
+            sum_c = sum_c + m.estimated_completion_tokens;
+        }
+        i = i + 1;
+    }
+    return sum_p + sum_c;
+}
+
+pub fn tool_footprint_update(
+    fp: ToolFootprint,
+    payload_b: Int
+) -> ToolFootprint {
+    let new_count: Int = fp.call_count + 1;
+    let new_total: Int = fp.total_payload_bytes + payload_b;
+    let mut avg: Int = 0;
+    if new_count > 0 {
+        avg = new_total / new_count;
+    }
+    return ToolFootprint {
+        tool_name: fp.tool_name,
+        call_count: new_count,
+        total_payload_bytes: new_total,
+        avg_payload_bytes: avg
+    };
+}
+
+pub fn session_ledger_record_tool(
+    ledger: SessionTokenLedger,
+    tool_name: String,
+    payload_b: Int
+) -> SessionTokenLedger {
+    let n: Int = list_len(ledger.tool_footprints);
+    let mut found_idx: Int = -1;
+    let mut i: Int = 0;
+    while i < n {
+        let fp: ToolFootprint = list_get(ledger.tool_footprints, i);
+        if fp.tool_name == tool_name {
+            found_idx = i;
+            i = n;
+        }
+        i = i + 1;
+    }
+    let mut new_list: List[ToolFootprint] = list_new();
+    let mut k: Int = 0;
+    while k < n {
+        let fp: ToolFootprint = list_get(ledger.tool_footprints, k);
+        if k == found_idx {
+            new_list = list_push(new_list, tool_footprint_update(fp, payload_b));
+        } else {
+            new_list = list_push(new_list, fp);
+        }
+        k = k + 1;
+    }
+    if found_idx == -1 {
+        let mut new_fp: ToolFootprint = tool_footprint_zero(tool_name);
+        new_fp = tool_footprint_update(new_fp, payload_b);
+        new_list = list_push(new_list, new_fp);
+    }
+    return SessionTokenLedger {
+        session_id: ledger.session_id,
+        metrics: ledger.metrics,
+        tool_footprints: new_list,
+        total_prompt_tokens: ledger.total_prompt_tokens,
+        total_completion_tokens: ledger.total_completion_tokens,
+        total_tool_payload_bytes: ledger.total_tool_payload_bytes,
+        total_thinking_ms: ledger.total_thinking_ms,
+        total_cost_micro: ledger.total_cost_micro
+    };
+}

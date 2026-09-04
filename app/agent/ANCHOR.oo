@@ -9,12 +9,14 @@
 //   2. Re-export the repair surface as agent_mod_repair_*.
 //   3. Re-export the pair-programmer surface as agent_mod_pair_*.
 //   4. Re-export the evolution surface as agent_mod_evolution_*.
+//   5. Token ledger library lives in token/ (LLM context counts, not Cap tokens).
 
 import "synthesizer.oo";
 import "repair.oo";
 import "repl_engine.oo";
 import "pair_programmer.oo";
 import "evolution.oo";
+import "token/ANCHOR.oo";
 
 // Public synthesizer surface: agent_mod_synth_*
 pub fn agent_mod_synth_from_contract(spec: SynthSpec) -> Result[SynthResult, String] { return synthesize_from_contract(spec); }

@@ -1,0 +1,188 @@
+// # Counterfactual Token Savings Calculator
+//
+// Logline: Compute empirical token savings comparing OpenOODA native C verification against naive full-context LLM simulation; estimator and pricing are caller-supplied.
+//
+// Setup: Pure .oo standard library module — Chronos (Mcode #2) sovereign savings engine.
+//
+// Beats:
+//   1. Define CounterfactualInputs and CounterfactualResult structures.
+//   2. Take a Pricing and a TokenEstimator from the caller; never hardcode constants.
+//   3. Compute monolith in-context simulation cost.
+//   4. Compute full file rewrite cost.
+//   5. Record pricing and estimator provenance in the result.
+
+import "token_estimator.oo";
+import "pricing.oo";
+
+type CounterfactualInputs = struct {
+    lines_of_code: Int,
+    avg_bytes_per_line: Int,
+    context_size_bytes: Int,
+    rewrite_full_files: Int,
+    micro_diff_bytes: Int,
+    native_verify_bytes: Int,
+    cost_per_million_prompt: Int,
+    cost_per_million_completion: Int,
+    monolith_overhead_multiplier_x1000: Int,
+    pricing_name: String,
+    pricing_source: String,
+    estimator_name: String,
+    estimator_bpt_x1000: Int,
+    estimator_samples: Int
+};
+
+type CounterfactualResult = struct {
+    monolith_simulation_tokens: Int,
+    monolith_simulation_cost_micro: Int,
+    full_rewrite_tokens: Int,
+    full_rewrite_cost_micro: Int,
+    ooda_micro_diff_tokens: Int,
+    ooda_native_verify_tokens: Int,
+    ooda_total_tokens: Int,
+    ooda_total_cost_micro: Int,
+    tokens_saved: Int,
+    efficiency_multiplier_x1000: Int,
+    cost_saved_micro: Int,
+    pricing_name: String,
+    pricing_source: String,
+    estimator_name: String,
+    estimator_bpt_x1000: Int,
+    estimator_samples: Int
+};
+
+pub fn counterfactual_inputs_default(loc: Int, ctx_b: Int, pricing: Pricing, mult_x1000: Int) -> CounterfactualInputs {
+    let e: TokenEstimator = token_estimator_default();
+    return CounterfactualInputs {
+        lines_of_code: loc,
+        avg_bytes_per_line: 40,
+        context_size_bytes: ctx_b,
+        rewrite_full_files: 1,
+        micro_diff_bytes: 256,
+        native_verify_bytes: 512,
+        cost_per_million_prompt: pricing.prompt_per_million,
+        cost_per_million_completion: pricing.completion_per_million,
+        monolith_overhead_multiplier_x1000: mult_x1000,
+        pricing_name: pricing.name,
+        pricing_source: pricing.source,
+        estimator_name: e.name,
+        estimator_bpt_x1000: e.bytes_per_token_x1000,
+        estimator_samples: e.sample_count
+    };
+}
+
+pub fn counterfactual_inputs_with_estimator(loc: Int, ctx_b: Int, pricing: Pricing, mult_x1000: Int, e: TokenEstimator) -> CounterfactualInputs {
+    return CounterfactualInputs {
+        lines_of_code: loc,
+        avg_bytes_per_line: 40,
+        context_size_bytes: ctx_b,
+        rewrite_full_files: 1,
+        micro_diff_bytes: 256,
+        native_verify_bytes: 512,
+        cost_per_million_prompt: pricing.prompt_per_million,
+        cost_per_million_completion: pricing.completion_per_million,
+        monolith_overhead_multiplier_x1000: mult_x1000,
+        pricing_name: pricing.name,
+        pricing_source: pricing.source,
+        estimator_name: e.name,
+        estimator_bpt_x1000: e.bytes_per_token_x1000,
+        estimator_samples: e.sample_count
+    };
+}
+
+pub fn counterfactual_compute(inp: CounterfactualInputs) -> CounterfactualResult {
+    let loc: Int = inp.lines_of_code;
+    let avg: Int = inp.avg_bytes_per_line;
+    let ctx_b: Int = inp.context_size_bytes;
+    let bpt: Int = inp.estimator_bpt_x1000;
+
+    let e: TokenEstimator = TokenEstimator {
+        name: inp.estimator_name,
+        bytes_per_token_x1000: bpt,
+        sample_count: inp.estimator_samples,
+        source: "embedded"
+    };
+
+    let total_source_bytes: Int = loc * avg;
+    let monolith_raw: Int = total_source_bytes + ctx_b;
+    let monolith_overhead: Int = (monolith_raw * inp.monolith_overhead_multiplier_x1000) / 1000;
+    let monolith_tokens: Int = token_estimator_estimate(e, monolith_overhead);
+
+    let rewrite_bytes: Int = total_source_bytes * inp.rewrite_full_files;
+    let rewrite_tokens: Int = token_estimator_estimate(e, rewrite_bytes);
+
+    let micro_diff_tokens: Int = token_estimator_estimate(e, inp.micro_diff_bytes);
+    let native_verify_tokens: Int = token_estimator_estimate(e, inp.native_verify_bytes);
+    let ooda_total_tokens: Int = micro_diff_tokens + native_verify_tokens;
+
+    let monolith_cost: Int = (monolith_tokens * inp.cost_per_million_prompt) / 1000000;
+    let rewrite_cost: Int = (rewrite_tokens * inp.cost_per_million_completion) / 1000000;
+    let monolith_total_cost: Int = monolith_cost + rewrite_cost;
+
+    let ooda_cost: Int = (ooda_total_tokens * inp.cost_per_million_prompt) / 1000000;
+    let baseline_total: Int = monolith_total_cost;
+    let mut saved: Int = 0;
+    if baseline_total > ooda_cost {
+        saved = baseline_total - ooda_cost;
+    }
+    let mut mult: Int = 0;
+    if ooda_total_tokens > 0 {
+        mult = monolith_tokens / ooda_total_tokens;
+    }
+    let cost_saved: Int = monolith_total_cost - ooda_cost;
+    let mut cost_saved_pos: Int = cost_saved;
+    if cost_saved_pos < 0 {
+        cost_saved_pos = 0;
+    }
+
+    return CounterfactualResult {
+        monolith_simulation_tokens: monolith_tokens,
+        monolith_simulation_cost_micro: monolith_total_cost,
+        full_rewrite_tokens: rewrite_tokens,
+        full_rewrite_cost_micro: rewrite_cost,
+        ooda_micro_diff_tokens: micro_diff_tokens,
+        ooda_native_verify_tokens: native_verify_tokens,
+        ooda_total_tokens: ooda_total_tokens,
+        ooda_total_cost_micro: ooda_cost,
+        tokens_saved: saved,
+        efficiency_multiplier_x1000: mult,
+        cost_saved_micro: cost_saved_pos,
+        pricing_name: inp.pricing_name,
+        pricing_source: inp.pricing_source,
+        estimator_name: inp.estimator_name,
+        estimator_bpt_x1000: inp.estimator_bpt_x1000,
+        estimator_samples: inp.estimator_samples
+    };
+}
+
+pub fn counterfactual_format_multiplier(x1000: Int) -> String {
+    let whole: Int = x1000 / 1000;
+    let frac: Int = x1000 - (whole * 1000);
+    let frac3: Int = (frac / 100);
+    let frac2: Int = ((frac - (frac3 * 100)) / 10);
+    let frac1: Int = frac - (frac3 * 100) - (frac2 * 10);
+    return whole.to_string() + "." + frac3.to_string() + frac2.to_string() + frac1.to_string() + "x";
+}
+
+pub fn counterfactual_format_report(r: CounterfactualResult) -> String {
+    let mut out: String = "";
+    let sim: Int = r.monolith_simulation_tokens;
+    let full: Int = r.full_rewrite_tokens;
+    let ooda_tot: Int = r.ooda_total_tokens;
+    let saved: Int = r.tokens_saved;
+    let cost: Int = r.cost_saved_micro;
+    out = out + "Monolith in-context simulation: " + sim.to_string() + " tokens\n";
+    out = out + "Full file rewrite:               " + full.to_string() + " tokens\n";
+    out = out + "OODA micro-diff + native binary: " + ooda_tot.to_string() + " tokens\n";
+    out = out + "Tokens saved:                    " + saved.to_string() + "\n";
+    out = out + "Efficiency multiplier:           " + counterfactual_format_multiplier(r.efficiency_multiplier_x1000) + "\n";
+    out = out + "Cost saved (micro):              " + cost.to_string() + "\n";
+    return out;
+}
+
+pub fn token_estimate_from_bytes_cf(b: Int) -> Int {
+    let mut n: Int = b;
+    if n < 0 {
+        n = 0;
+    }
+    return (n / 4) + 1;
+}
