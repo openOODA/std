@@ -2,7 +2,7 @@
 //
 // Logline: FIPS 180-4 published KAT vectors for SHA-256 and SHA-512 as pub fn constants for the smoke test to compare against the runtime crypto_sha256_internal digest.
 //
-// Setup: The runtime crypto_sha256_internal is the FIPS 180-4 one-shot implementation in runtime/chs_rt_crypto.c that returns a lowercase hex digest. This module embeds the four published KAT vectors. The smoke test calls crypto_sha256_internal directly and compares to these constants.
+// Setup: The runtime crypto_sha256_internal is the FIPS 180-4 one-shot implementation in oodar/sec/crypto/crypto.c (previously ooda/runtime/chs_rt_crypto.c). In v2.0.0 the 22 crypto_*_internal primitives moved from the public oodar.h to the private header sec/crypto/crypto_internal.h; this smoke test reaches in via the FFI-style #include of that header. The test embeds the four published KAT vectors and compares to the digest.
 //
 // Beats:
 //   1. Embed the FIPS 180-4 empty and abc KAT constants for SHA-256 (64 hex chars each).
