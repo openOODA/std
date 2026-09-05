@@ -1,10 +1,21 @@
-// # std/qa/probe_hw — Self-Test Stub
+// # std/qa/probe_hw — Hardware Domain Verification
 //
-// Logline: Stub for std/qa/probe_hw. Real impl lands in a follow-up phase.
+// Logline: Verify hardware domain multi-core speedup computation.
+//
+// Setup: Pure verification of hw Amdahl law computation.
+//
+// Beats:
+//   1. Compute Amdahl speedup for 50% parallel on 2 cores.
+//   2. Assert fixed-point result is 1333 (1.333x).
+//   3. Print probe success.
 
-import "../hw/ANCHOR.oo";
+import "hw/amdahls_law_hw.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/hw (stub — not yet implemented)");
+    let s: Int = amdahls_hw_speedup(500, 2);
+    if s != 1333 {
+        return Err("hw: Amdahl speedup mismatch");
+    }
+    println("probe: std/hw: ok");
     return Ok(0);
 }

@@ -102,7 +102,7 @@ pub fn cursor_seek(cursor: Cursor, new_pos: Int) -> Result[Cursor, String] {
 }
 
 // Seek relative to current position.
-pub fn cursor_seek_relative(cursor: Cursor, delta: Int) -> Cursor {
+pub fn cursor_seek_relative(cursor: Cursor, delta: Int) -> Result[Cursor, String] {
     let cur_pos: Int = cursor.position;
     return cursor_seek(cursor, cur_pos + delta);
 }

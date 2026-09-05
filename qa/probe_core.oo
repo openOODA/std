@@ -1,10 +1,33 @@
-// # std/qa/probe_core — Self-Test Stub
+// # std/qa/probe_core — Core Domain Verification
 //
-// Logline: Stub for std/qa/probe_core. Real impl lands in a follow-up phase.
+// Logline: Verify core domain semantic version parsing and validation.
+//
+// Setup: Pure verification of core standard library semver primitives.
+//
+// Beats:
+//   1. Parse semantic version components (major, minor, patch).
+//   2. Validate semantic version structure.
+//   3. Reject invalid versions and assert core compliance.
 
-import "../core/ANCHOR.oo";
+import "core/primitives/semver_string.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/core (stub — not yet implemented)");
+    let s: String = "1.2.3";
+    if semver_major(s) != "1" {
+        return Err("core: semver major mismatch");
+    }
+    if semver_minor(s) != "2" {
+        return Err("core: semver minor mismatch");
+    }
+    if semver_patch(s) != "3" {
+        return Err("core: semver patch mismatch");
+    }
+    if !semver_is_valid(s) {
+        return Err("core: semver 1.2.3 should be valid");
+    }
+    if semver_is_valid("invalid-version") {
+        return Err("core: invalid version should fail");
+    }
+    println("probe: std/core: ok");
     return Ok(0);
 }

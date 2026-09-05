@@ -1,15 +1,13 @@
-// # XXH32 facade + XXH64
+// # XXH64 Hash Implementation
 //
-// Logline: Re-export one-shot xxhash32; XXH64 mixes 64-bit lanes as 32-bit halves.
+// Logline: Pure XXH64 implementation mixing 64-bit lanes as 32-bit halves.
 //
-// Setup: 32-bit impl lives in perf/xxhash32.oo. XXH64 is local. Seed argument.
+// Setup: Pure compute, seed argument, no caps required.
 //
 // Beats:
-//   1. Import the perf implementation.
-//   2. 32-byte stripes, 8/4/1-byte tail, official primes and avalanche.
+//   1. 32-byte stripes, 8/4/1-byte tail, official primes and avalanche.
+//   2. xxhash64 returns integer digest.
 //   3. xxhash64_hex returns 16 lowercase chars (empty has the high bit set).
-
-import "std/compile/perf/xxhash32.oo";
 
 type Xh64 = struct {
     hi: Int,

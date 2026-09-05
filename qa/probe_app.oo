@@ -1,10 +1,23 @@
-// # std/qa/probe_app — Self-Test Stub
+// # std/qa/probe_app — Application Domain Verification
 //
-// Logline: Stub for std/qa/probe_app. Real impl lands in a follow-up phase.
+// Logline: Verify application domain agent coding assistant and proposal verification.
+//
+// Setup: Pure verification of app layer agent structures and rules.
+//
+// Beats:
+//   1. Instantiate agent context with active development stage.
+//   2. Propose compliant source code module.
+//   3. Verify proposal against contract and size limits.
 
-import "../app/ANCHOR.oo";
+import "app/agent/pair_programmer.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/app (stub — not yet implemented)");
+    let ctx: AgentContext = pair_programmer_context_new(2);
+    let prop: CodeProposal = pair_programmer_propose_module(ctx, "qa_probe.oo");
+    let v: Result[Bool, String] = pair_programmer_verify_proposal(prop);
+    if v.is_err() {
+        return Err("app: code proposal verification failed");
+    }
+    println("probe: std/app: ok");
     return Ok(0);
 }

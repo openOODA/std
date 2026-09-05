@@ -1,10 +1,20 @@
-// # std/qa/probe_science — Self-Test Stub
+// # std/qa/probe_science — Science Domain Verification
 //
-// Logline: Stub for std/qa/probe_science. Real impl lands in a follow-up phase.
+// Logline: Verify science domain ideal gas physics equations and state relations.
+//
+// Setup: Pure verification of science physical laws and constants.
+//
+// Beats:
+//   1. Verify ideal gas law calculation across pressure, volume, and temperature.
+//   2. Check partial pressure computation.
+//   3. Assert known thermodynamic reference points.
 
-import "../science/ANCHOR.oo";
+import "science/phys/classical/ideal_gas_law.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/science (stub — not yet implemented)");
+    if !verify_ideal_gas_law() {
+        return Err("science: ideal gas law verification failed");
+    }
+    println("probe: std/science: ok");
     return Ok(0);
 }

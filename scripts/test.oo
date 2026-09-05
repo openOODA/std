@@ -1,8 +1,70 @@
-// # std/scripts/test — Stub
+// # Test Standard Library — Run QA Probes Twice
 //
-// Logline: Stub for std/scripts/test. Real impl lands in a follow-up phase.
+// Logline: Run each qa probe twice under sovereign compiler. Fail closed on miss.
+//
+// Setup: Double-run law. Builds and executes all 8 domain probes plus api_surface.
+//
+// Beats:
+//   1. Resolve sovereign compiler binary.
+//   2. Compile and execute each probe twice.
+//   3. Clean up temporary probe binaries immediately.
+//   4. Exit 0 only when all probes pass both runs.
 
-pub fn main() -> Result[Int, String] {
-    println("std/scripts/test (stub — not yet implemented)");
+import "std/fs/process/env.oo";
+
+fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
+    let tmp_bin: String = path + ".tmp.bin";
+    let b: Result[String, String] = sys_exec(p, oodac, "build", path, "-o", tmp_bin);
+    if b.is_err() {
+        let e: String = match b { Ok(_) => "", Err(m) => m };
+        return Err("compile fail " + path + ": " + e);
+    }
+    let r: Result[String, String] = sys_exec(p, tmp_bin);
+    let _del: Result[String, String] = sys_exec(p, "rm", "-f", tmp_bin);
+    if r.is_err() {
+        let e: String = match r { Ok(_) => "", Err(m) => m };
+        return Err("exec fail " + path + ": " + e);
+    }
+    return Ok(0);
+}
+
+fn run_probe_twice(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
+    let r1: Result[Int, String] = run_probe_once(p, oodac, path);
+    if r1.is_err() {
+        return r1;
+    }
+    let r2: Result[Int, String] = run_probe_once(p, oodac, path);
+    if r2.is_err() {
+        return r2;
+    }
+    return Ok(0);
+}
+
+pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) -> Result[Int, String] {
+    let cr: Result[String, String] = env_get(env, "OODA_COMPILER");
+    let mut oodac: String = match cr { Ok(s) => s, Err(_) => "" };
+    if oodac == "" {
+        oodac = "/home/jeryd/.local/bin/oodac";
+    }
+    let probes: List[String] = list_new();
+    let mut ps: List[String] = list_push(probes, "qa/probe_api_surface.oo");
+    ps = list_push(ps, "qa/probe_core.oo");
+    ps = list_push(ps, "qa/probe_fs.oo");
+    ps = list_push(ps, "qa/probe_net.oo");
+    ps = list_push(ps, "qa/probe_sec.oo");
+    ps = list_push(ps, "qa/probe_science.oo");
+    ps = list_push(ps, "qa/probe_app.oo");
+    ps = list_push(ps, "qa/probe_hw.oo");
+    ps = list_push(ps, "qa/probe_meta.oo");
+
+    let mut i: Int = 0;
+    while i < list_len(ps) {
+        let path: String = list_get(ps, i);
+        println("  Running " + path);
+        let r: Result[Int, String] = run_probe_twice(p, oodac, path);
+        if r.is_err() { return r; }
+        i = i + 1;
+    }
+    println("std test suite: ALL PROBES PASSED (double-run verified)");
     return Ok(0);
 }

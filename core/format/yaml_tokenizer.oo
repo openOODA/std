@@ -68,7 +68,8 @@ fn yaml_measure_indent(src: String, mut pos: Int, n: Int) -> Int {
     return ind;
 }
 
-pub fn yaml_tokenizer_next(mut yt: YamlTokenizer) -> YamlToken {
+pub fn yaml_tokenizer_next(yt: YamlTokenizer) -> YamlToken {
+    let mut yt: YamlTokenizer = yt;
     let n: Int = yt.total_len;
     let mut p: Int = yt.pos;
     if p >= n {

@@ -97,7 +97,8 @@ pub fn utf8_decode_rune_at(s: String, offset: Int) -> Utf8DecodeResult {
     return Utf8DecodeResult { codepoint: 0, byte_length: 1, is_valid: false };
 }
 
-pub fn utf8_read_next(mut r: Utf8Reader) -> Utf8DecodeResult {
+pub fn utf8_read_next(r: Utf8Reader) -> Utf8DecodeResult {
+    let mut r: Utf8Reader = r;
     let res: Utf8DecodeResult = utf8_decode_rune_at(r.raw_data, r.byte_offset);
     if res.byte_length > 0 {
         r.byte_offset = r.byte_offset + res.byte_length;

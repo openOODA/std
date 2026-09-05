@@ -44,7 +44,8 @@ pub fn json_escape_str(s: String) -> String {
     return out;
 }
 
-fn json_write_indent(mut w: JsonWriter) -> JsonWriter {
+fn json_write_indent(w: JsonWriter) -> JsonWriter {
+    let mut w: JsonWriter = w;
     let is_pretty: Bool = w.pretty;
     if !is_pretty {
         return w;
@@ -146,7 +147,8 @@ pub fn json_writer_int(mut w: JsonWriter, val: Int) -> JsonWriter {
     if comma {
         w.buf = w.buf + ",";
     }
-    w.buf = w.buf + val.to_string();
+    let s: String = val.to_string();
+    w.buf = w.buf + s;
     w.need_comma = true;
     return w;
 }

@@ -11,7 +11,6 @@
 // RULES.oot 1.4: Pure data module, zero ambient effects.
 // RULES.oot 1.7: Under 256 lines.
 
-type DfaTable = String;
 
 fn dfa_find(hay: String, needle: String) -> Int {
     let hn: Int = chars_len(hay);
@@ -91,15 +90,15 @@ fn dfa_class_end(pattern: String, open_idx: Int) -> Int {
     return -1;
 }
 
-pub fn dfa_table_new() -> DfaTable {
+pub fn dfa_table_new() -> String {
     return "";
 }
 
-pub fn dfa_add_transition(table: DfaTable, from_state: Int, symbol: String, to_state: Int) -> DfaTable {
+pub fn dfa_add_transition(table: String, from_state: Int, symbol: String, to_state: Int) -> String {
     return table + int_to_str(from_state) + ":" + symbol + "=" + int_to_str(to_state) + ";";
 }
 
-pub fn dfa_set_terminal(table: DfaTable, state: Int) -> DfaTable {
+pub fn dfa_set_terminal(table: String, state: Int) -> String {
     let tag: String = "T:" + int_to_str(state) + ";";
     if dfa_find(table, tag) >= 0 {
         return table;
@@ -107,11 +106,11 @@ pub fn dfa_set_terminal(table: DfaTable, state: Int) -> DfaTable {
     return table + tag;
 }
 
-pub fn dfa_is_terminal(table: DfaTable, state: Int) -> Bool {
+pub fn dfa_is_terminal(table: String, state: Int) -> Bool {
     return dfa_find(table, "T:" + int_to_str(state) + ";") >= 0;
 }
 
-pub fn dfa_step(table: DfaTable, current_state: Int, symbol: String) -> Int {
+pub fn dfa_step(table: String, current_state: Int, symbol: String) -> Int {
     let target_prefix: String = int_to_str(current_state) + ":" + symbol + "=";
     let idx: Int = dfa_find(table, target_prefix);
     if idx < 0 {
@@ -129,7 +128,7 @@ pub fn dfa_step(table: DfaTable, current_state: Int, symbol: String) -> Int {
     return dfa_parse_int(str_slice(table, after_idx, end_idx));
 }
 
-pub fn dfa_simulate(table: DfaTable, text: String, start_state: Int) -> Bool {
+pub fn dfa_simulate(table: String, text: String, start_state: Int) -> Bool {
     let n: Int = chars_len(text);
     let mut current_state: Int = start_state;
     let mut i: Int = 0;
@@ -144,12 +143,12 @@ pub fn dfa_simulate(table: DfaTable, text: String, start_state: Int) -> Bool {
     return dfa_is_terminal(table, current_state);
 }
 
-pub fn dfa_from_simple_literal(pattern: String) -> DfaTable {
+pub fn dfa_from_simple_literal(pattern: String) -> String {
     return dfa_compile(pattern);
 }
 
-pub fn dfa_compile(pattern: String) -> DfaTable {
-    let mut table: DfaTable = "";
+pub fn dfa_compile(pattern: String) -> String {
+    let mut table: String = "";
     let n: Int = chars_len(pattern);
     if n == 0 {
         return dfa_set_terminal(table, 0);

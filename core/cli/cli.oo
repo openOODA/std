@@ -10,6 +10,7 @@
 //   3. Expose interactive prompt helper.
 //   4. Expose shell completion generator.
 
+import "cli_arg_parser.oo";
 import "std/core/cli/cli_completion.oo";
 import "std/core/cli/cli_style.oo";
 import "std/core/cli/cli_prompt.oo";
@@ -24,5 +25,43 @@ pub fn cli_quick_style_render(text: String, fg_name: String, bold: Bool) -> Stri
 }
 
 pub fn cli_quick_prompt_text(prompt: String) -> String { return cli_prompt_text_format(prompt, ""); }
+
+pub fn cli_completion_bash_command(cmd: CliCommand) -> String {
+    let mut sub_str: String = "";
+    let n_sub: Int = list_len(cmd.subcommands);
+    let mut i: Int = 0;
+    while i < n_sub {
+        let sub: String = list_get(cmd.subcommands, i);
+        if i == 0 {
+            sub_str = sub;
+        } else {
+            sub_str = sub_str + " " + sub;
+        }
+        i = i + 1;
+    }
+    let mut flg_str: String = "--help --version";
+    let n_opt: Int = list_len(cmd.options);
+    let mut j: Int = 0;
+    while j < n_opt {
+        let opt: CliOption = list_get(cmd.options, j);
+        if opt.long_name != "" {
+            if byte_at(opt.long_name, 0) == 45 {
+                flg_str = flg_str + " " + opt.long_name;
+            } else {
+                flg_str = flg_str + " --" + opt.long_name;
+            }
+        }
+        if opt.short_name != "" {
+            if byte_at(opt.short_name, 0) == 45 {
+                flg_str = flg_str + " " + opt.short_name;
+            } else {
+                flg_str = flg_str + " -" + opt.short_name;
+            }
+        }
+        j = j + 1;
+    }
+    let gen: CliCompletionGenerator = cli_completion_generator_new(cmd.name, sub_str, flg_str);
+    return cli_completion_render_bash(gen);
+}
 
 pub fn cli_quick_completion_bash(cmd: CliCommand) -> String { return cli_completion_bash_command(cmd); }

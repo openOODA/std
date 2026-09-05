@@ -42,7 +42,8 @@ pub fn xml_tokenizer_has_more(t: XmlTokenizer) -> Bool {
     return p < n;
 }
 
-pub fn xml_tokenizer_next(mut t: XmlTokenizer) -> XmlToken {
+pub fn xml_tokenizer_next(t: XmlTokenizer) -> XmlToken {
+    let mut t: XmlTokenizer = t;
     let n: Int = t.total_len;
     let p: Int = t.pos;
     if p >= n {

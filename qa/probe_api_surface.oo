@@ -1,11 +1,26 @@
-// # std/qa/probe_api_surface — Self-Test Stub
+// # std/qa/probe_api_surface — API Surface Verification
 //
-// Logline: Stub for std/qa/probe_api_surface. Real impl lands in a follow-up phase.
-// Asserts std/ANCHOR.oo exposes exactly 8 public subdirs (api_surface=8).
+// Logline: Assert standard library exposes the 8 functional domains and legacy compile stays deleted.
+//
+// Setup: FsReadCap checks existence of domain anchors and killed legacy compile tree.
+//
+// Beats:
+//   1. Assert all 8 domain directories exist.
+//   2. Assert root ANCHOR.oo exists.
+//   3. Assert forbidden compile/ remains deleted.
+//   4. Exit 0 on verified compliance.
 
-import "../ANCHOR.oo";
-
-pub fn main() -> Result[Int, String] {
-    println("probe: std/api_surface (stub — not yet implemented)");
+pub fn main(p: &ProcessCap, fs_r: &FsReadCap, sys: &SysCap, env: &EnvCap, time: &TimeCap, fs_w: &FsWriteCap, alloc: &AllocCap, args: List[String]) -> Result[Int, String] {
+    if !path_exists(fs_r, "core") { return Err("api_surface: missing core/"); }
+    if !path_exists(fs_r, "fs") { return Err("api_surface: missing fs/"); }
+    if !path_exists(fs_r, "net") { return Err("api_surface: missing net/"); }
+    if !path_exists(fs_r, "sec") { return Err("api_surface: missing sec/"); }
+    if !path_exists(fs_r, "science") { return Err("api_surface: missing science/"); }
+    if !path_exists(fs_r, "app") { return Err("api_surface: missing app/"); }
+    if !path_exists(fs_r, "hw") { return Err("api_surface: missing hw/"); }
+    if !path_exists(fs_r, "meta") { return Err("api_surface: missing meta/"); }
+    if !path_exists(fs_r, "ANCHOR.oo") { return Err("api_surface: missing ANCHOR.oo"); }
+    if path_exists(fs_r, "compile") { return Err("api_surface: forbidden compile/ exists"); }
+    println("probe: std/api_surface: ok");
     return Ok(0);
 }

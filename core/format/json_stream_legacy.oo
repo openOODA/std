@@ -64,7 +64,8 @@ fn json_stream_skip_ws(src: String, mut pos: Int, n: Int) -> Int {
     return pos;
 }
 
-pub fn json_stream_next(mut s: JsonStream) -> JsonToken {
+pub fn json_stream_next(s: JsonStream) -> JsonToken {
+    let mut s: JsonStream = s;
     let n: Int = s.total_len;
     let p: Int = json_stream_skip_ws(s.src, s.pos, n);
     if p >= n {

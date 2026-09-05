@@ -1,10 +1,30 @@
-// # std/qa/probe_sec — Self-Test Stub
+// # std/qa/probe_sec — Security Domain Verification
 //
-// Logline: Stub for std/qa/probe_sec. Real impl lands in a follow-up phase.
+// Logline: Verify security domain fuel budget accounting and cost enforcement.
+//
+// Setup: Pure verification of sec fuel budget primitives.
+//
+// Beats:
+//   1. Construct fuel budget with initial capacity.
+//   2. Check remaining fuel accounting.
+//   3. Enforce cost deduction and boundary conditions.
 
-import "../sec/ANCHOR.oo";
+import "sec/fuel_budget.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/sec (stub — not yet implemented)");
+    let b: FuelBudget = fuel_new(100);
+    if fuel_left(b) != 100 {
+        return Err("sec: initial fuel must be 100");
+    }
+    if !fuel_can(b, 50) {
+        return Err("sec: fuel budget must permit cost 50");
+    }
+    if fuel_can(b, 150) {
+        return Err("sec: fuel budget must reject cost 150");
+    }
+    if fuel_after(b, 50) != 50 {
+        return Err("sec: fuel_after deduction mismatch");
+    }
+    println("probe: std/sec: ok");
     return Ok(0);
 }

@@ -1,10 +1,36 @@
-// # std/qa/probe_fs — Self-Test Stub
+// # std/qa/probe_fs — Filesystem Domain Verification
 //
-// Logline: Stub for std/qa/probe_fs. Real impl lands in a follow-up phase.
+// Logline: Verify filesystem domain path manipulation, join, and extension extraction.
+//
+// Setup: Pure verification of fs standard library path primitives.
+//
+// Beats:
+//   1. Test path joining and relative/absolute classification.
+//   2. Extract basename, parent directory, and file extension.
+//   3. Assert normalized filesystem semantics.
 
-import "../fs/ANCHOR.oo";
+import "fs/file/path.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/fs (stub — not yet implemented)");
+    let joined: String = path_join("usr", "bin");
+    if joined != "usr/bin" {
+        return Err("fs: path_join mismatch");
+    }
+    if !path_is_absolute("/etc/hosts") {
+        return Err("fs: /etc/hosts must be absolute");
+    }
+    if !path_is_relative("local/config") {
+        return Err("fs: local/config must be relative");
+    }
+    if path_basename("/home/user/doc.txt") != "doc.txt" {
+        return Err("fs: path_basename mismatch");
+    }
+    if path_extension("archive.tar.gz") != ".gz" {
+        return Err("fs: path_extension mismatch");
+    }
+    if path_parent("/home/user/doc.txt") != "/home/user" {
+        return Err("fs: path_parent mismatch");
+    }
+    println("probe: std/fs: ok");
     return Ok(0);
 }

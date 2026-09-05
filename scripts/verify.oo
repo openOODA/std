@@ -1,8 +1,28 @@
-// # std/scripts/verify — Stub
+// # Verify Standard Library — Surface Invariants
 //
-// Logline: Stub for std/scripts/verify. Real impl lands in a follow-up phase.
+// Logline: Assert 8 domain subdirs exist and zero forbidden files remain.
+//
+// Setup: FsReadCap. Paths relative to repo root.
+//
+// Beats:
+//   1. Assert all 8 domain directories exist.
+//   2. Assert ANCHOR.oo exists.
+//   3. Assert compile/ directory remains deleted.
+//   4. Exit 0 on compliance.
 
-pub fn main() -> Result[Int, String] {
-    println("std/scripts/verify (stub — not yet implemented)");
+import "std/fs/file/path.oo";
+
+pub fn main(p: &ProcessCap, fs_r: &FsReadCap, args: List[String]) -> Result[Int, String] {
+    if !path_exists(fs_r, "core") { return Err("missing core/"); }
+    if !path_exists(fs_r, "fs") { return Err("missing fs/"); }
+    if !path_exists(fs_r, "net") { return Err("missing net/"); }
+    if !path_exists(fs_r, "sec") { return Err("missing sec/"); }
+    if !path_exists(fs_r, "science") { return Err("missing science/"); }
+    if !path_exists(fs_r, "app") { return Err("missing app/"); }
+    if !path_exists(fs_r, "hw") { return Err("missing hw/"); }
+    if !path_exists(fs_r, "meta") { return Err("missing meta/"); }
+    if !path_exists(fs_r, "ANCHOR.oo") { return Err("missing ANCHOR.oo"); }
+    if path_exists(fs_r, "compile") { return Err("forbidden compile/ exists"); }
+    println("std verify: 8 domains verified, compile/ deleted, clean surface");
     return Ok(0);
 }

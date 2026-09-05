@@ -1,10 +1,33 @@
-// # std/qa/probe_net — Self-Test Stub
+// # std/qa/probe_net — Network Domain Verification
 //
-// Logline: Stub for std/qa/probe_net. Real impl lands in a follow-up phase.
+// Logline: Verify network domain URL composition, parsing, and default port resolution.
+//
+// Setup: Pure verification of net standard library URL primitives.
+//
+// Beats:
+//   1. Verify protocol standard port mapping.
+//   2. Construct and inspect structured URL records.
+//   3. Validate HTTPS and HTTP scheme predicates.
 
-import "../net/ANCHOR.oo";
+import "net/url.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/net (stub — not yet implemented)");
+    if url_default_port("http") != 80 {
+        return Err("net: http default port must be 80");
+    }
+    if url_default_port("https") != 443 {
+        return Err("net: https default port must be 443");
+    }
+    if url_default_port("ssh") != 22 {
+        return Err("net: ssh default port must be 22");
+    }
+    let u: ParsedUrl = url_new("https", "openooda.org", 443, "/index.html");
+    if !url_is_https(u) {
+        return Err("net: url must be identified as https");
+    }
+    if url_is_http(u) {
+        return Err("net: https url must not be http");
+    }
+    println("probe: std/net: ok");
     return Ok(0);
 }

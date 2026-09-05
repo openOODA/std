@@ -1,10 +1,29 @@
-// # std/qa/probe_meta — Self-Test Stub
+// # std/qa/probe_meta — Meta Domain Verification
 //
-// Logline: Stub for std/qa/probe_meta. Real impl lands in a follow-up phase.
+// Logline: Verify meta domain diagnostic metrics counter accumulation.
+//
+// Setup: Pure verification of meta diagnostic counters.
+//
+// Beats:
+//   1. Construct monotonic counter with metric name.
+//   2. Perform increment and delta addition operations.
+//   3. Assert cumulative value matches expected count.
 
-import "../meta/ANCHOR.oo";
+import "meta/diag/metrics_counter.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("probe: std/meta (stub — not yet implemented)");
+    let c0: MetricsCounter = metrics_counter_new("probe_events");
+    if metrics_counter_get(c0) != 0 {
+        return Err("meta: initial counter must be 0");
+    }
+    let c1: MetricsCounter = metrics_counter_inc(c0);
+    if metrics_counter_get(c1) != 1 {
+        return Err("meta: counter after inc must be 1");
+    }
+    let c2: MetricsCounter = metrics_counter_add(c1, 5);
+    if metrics_counter_get(c2) != 6 {
+        return Err("meta: counter after add 5 must be 6");
+    }
+    println("probe: std/meta: ok");
     return Ok(0);
 }
