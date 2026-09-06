@@ -1,8 +1,24 @@
-// # std/examples/core_example — Usage Stub
+// # std/examples/core_example — Core Primitives Demo
 //
-// Logline: Stub for std/examples/core_example. Real example lands in a follow-up phase.
+// Logline: Canonical usage of core primitives (semver, list, result).
+// Setup: Pure, no caps. Demonstrates Option/Result and semver parsing.
+// Beats:
+//   1. Parse and validate semver.
+//   2. Demonstrate Result/Option handling.
+//   3. Exercise list operations.
+
+import "core/primitives/semver_string.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("example: std (stub)");
+    let v: String = "1.2.3";
+    if semver_major(v) != "1" { return Err("major"); }
+    if semver_minor(v) != "2" { return Err("minor"); }
+    if semver_patch(v) != "3" { return Err("patch"); }
+    if !semver_is_valid(v) { return Err("valid"); }
+    let mut xs: List[String] = list_new();
+    xs = list_push(xs, "a");
+    xs = list_push(xs, "b");
+    if list_len(xs) != 2 { return Err("len"); }
+    println("core: semver " + v + " ok, list len " + list_len(xs).to_string());
     return Ok(0);
 }

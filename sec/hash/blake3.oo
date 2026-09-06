@@ -12,7 +12,7 @@
 import "./blake3_codec.oo";
 
 pub fn blake3(data: String) -> String {
-    let n: Int = data.len();
+    let n: Int = bytes_len(data);
     if n <= 1024 {
         return b3_hex(b3_chunk(data, n, 0, 8));
     }

@@ -52,9 +52,9 @@ pub fn b3p_chunk(data: String, n: Int, chunk_i: Int, extra: Int) -> B16 {
         if blen > 64 { blen = 64; }
         if blen < 0 { blen = 0; }
         if clen == 0 { blen = 0; }
-        let mut flags: Int = extra;
+        let mut flags: Int = 0;
         if bi == 0 { flags = flags + 1; }
-        if bi == nblocks - 1 { flags = flags + 2; }
+        if bi == nblocks - 1 { flags = flags + 2 + extra; }
         let m: B16 = b3p_load(data, n, base);
         cv = b3_compress(cv, m, b3_mask(chunk_i), b3_mask(chunk_i >> 32), blen, flags);
         bi = bi + 1;
@@ -122,7 +122,7 @@ pub fn b3p_substr(s: String, start: Int, end: Int) -> String {
 
 // One-shot unkeyed BLAKE3: returns 64-char lowercase hex digest.
 pub fn blake3_pure(data: String) -> String {
-    let n: Int = data.len();
+    let n: Int = bytes_len(data);
     if n <= 1024 {
         return b3p_hex(b3p_chunk(data, n, 0, 8));
     }

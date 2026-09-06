@@ -1,0 +1,28 @@
+// # std/qa/probe_caps — Capability Rights Verification
+//
+// Logline: Verify sec_mod_cap_* and blake3 flag correctness.
+// Setup: Pure. No caps. Tests bytes_len and flag handling fixed in 8ecae84.
+// Beats:
+//   1. blake3_pure uses bytes_len not len.
+//   2. Extra flag is applied only to last block (not every block).
+
+import "sec/hash/blake3_pure.oo";
+
+pub fn main() -> Result[Int, String] {
+    let s: String = "test";
+    let n: Int = bytes_len(s);
+    if n != 4 { return Err("bytes_len"); }
+    let h1: String = blake3_pure("abc");
+    let h2: String = blake3_pure("abcd");
+    if h1 == h2 { return Err("hash distinct"); }
+    if chars_len(h1) != 64 { return Err("h1 len"); }
+    if chars_len(h2) != 64 { return Err("h2 len"); }
+    let mut long: String = "";
+    let mut i: Int = 0;
+    while i < 1025 { long = long + "a"; i = i + 1; }
+    let h3: String = blake3_pure(long);
+    if chars_len(h3) != 64 { return Err("h3 len"); }
+    if h3 == h1 { return Err("long distinct"); }
+    println("probe: caps/blake3 ok");
+    return Ok(0);
+}

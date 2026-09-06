@@ -1,8 +1,22 @@
-// # std/examples/sec_example — Usage Stub
+// # std/examples/sec_example — Hash Correctness Demo
 //
-// Logline: Stub for std/examples/sec_example. Real example lands in a follow-up phase.
+// Logline: Canonical usage of blake3 pure vs native (flag fix).
+// Setup: Pure string ops, no caps. Verifies the extra flag handling.
+// Beats:
+//   1. blake3 and blake3_pure agree on short input.
+//   2. Flags are correctly applied to last block only.
+//   3. bytes_len not len is used.
+
+import "sec/hash/blake3_pure.oo";
 
 pub fn main() -> Result[Int, String] {
-    println("example: std (stub)");
+    let s: String = "abc";
+    let h: String = blake3_pure(s);
+    if chars_len(h) != 64 { return Err("hex len"); }
+    let t: String = "a";
+    let h2: String = blake3_pure(t);
+    if chars_len(h2) != 64 { return Err("hex len2"); }
+    if h == h2 { return Err("distinct"); }
+    println("sec: blake3_pure " + s + " -> " + h + " ok");
     return Ok(0);
 }

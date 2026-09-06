@@ -71,12 +71,12 @@ pub fn b3_chunk(data: String, n: Int, chunk_i: Int, extra: Int) -> B16 {
         if clen == 0 {
             blen = 0;
         }
-        let mut flags: Int = extra;
+        let mut flags: Int = 0;
         if bi == 0 {
             flags = flags + 1;
         }
         if bi == nblocks - 1 {
-            flags = flags + 2;
+            flags = flags + 2 + extra;
         }
         let m: B16 = b3_load(data, n, base);
         cv = b3_compress(cv, m, b3_mask(chunk_i), b3_mask(chunk_i >> 32), blen, flags);
