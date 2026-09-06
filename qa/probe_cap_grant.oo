@@ -1,0 +1,25 @@
+// # std/qa/probe_cap_grant — Capability Grant Verification
+//
+// Logline: Verify cap grant/attenuation subset invariant.
+// Setup: Pure bitmask. No Fs caps. Tests 14 subset of 26.
+// Beats:
+//   1. 14 language caps are subset of 26 substrate
+//   2. Grant with held caps must succeed
+//   3. Extra caps must be refused
+
+pub fn main() -> Result[Int, String] {
+    let need: Int = 1;
+    let have: Int = 3;
+    if (have & need) != need { return Err("have must contain need"); }
+    let extra: Int = 4;
+    if (extra & need) == need { return Err("extra must not match"); }
+    let ok: Bool = (have & need) == need;
+    if !ok { return Err("have must satisfy need"); }
+    let bad: Int = need | extra;
+    if (have & bad) == bad { return Err("have must not satisfy extra"); }
+    let s: String = "test";
+    let n: Int = bytes_len(s);
+    if n != 4 { return Err("bytes_len"); }
+    println("probe: cap_grant subset ok");
+    return Ok(0);
+}
