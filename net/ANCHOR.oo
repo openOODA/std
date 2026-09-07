@@ -9,7 +9,7 @@
 //   net/sync/      ← was std/sync/                                                       (concurrency primitives)
 //   net/actor/     ← was std/actor/                                                      (actor model)
 //
-// Setup: Imports private net siblings; effectful ops take NetCap / HttpCap / TcpCap / TlsCap / UdpCap at the call site. Pure parser helpers take no caps. TlsCap is attenuated child of TcpCap (Rule 2).
+// Setup: Imports private net siblings; effectful ops take NetCap / TcpCap / TcpCap / TlsCap / UdpCap at the call site. Pure parser helpers take no caps. TlsCap is attenuated child of TcpCap (Rule 2).
 //
 // Beats:
 //   1. Beat 1: Import the public-API siblings and re-export the modules + is_available surface as net_mod_modules_*, net_mod_is_available.
@@ -99,11 +99,11 @@ pub fn net_mod_is_available(name: String) -> Bool {
     return net_is_module_available(name);
 }
 
-pub fn net_mod_http_get(http: &HttpCap, url: String) -> Result[String, String] {
+pub fn net_mod_http_get(http: &TcpCap, url: String) -> Result[String, String] {
     return net_http_get(http, url);
 }
 
-pub fn net_mod_http_post(http: &HttpCap, url: String) -> Result[String, String] {
+pub fn net_mod_http_post(http: &TcpCap, url: String) -> Result[String, String] {
     return net_http_post(http, url);
 }
 

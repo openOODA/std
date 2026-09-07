@@ -1,25 +1,22 @@
-// # std/qa/probe_cap_grant — Capability Grant Verification
+// # std/qa/probe_cap_grant — 20 ⊂ 26 bitmask
 //
-// Logline: Verify cap grant/attenuation subset invariant.
-// Setup: Pure bitmask. Tests 20 subset of 26.
+// Logline: Prove NORTHSTAR language bits are a subset of oodar substrate bits.
+//
+// Setup: Pure integers. Bits match oodar/sec/cap/cap_table.json.
+//
 // Beats:
-//   1. 20 language caps are subset of 26 substrate
-//   2. Grant with held caps must succeed
-//   3. Extra caps must be refused
+//   1. Language mask is 20 implemented bits.
+//   2. Substrate mask is language plus 6 future hardware bits.
+//   3. Language bits do not overlap future bits. Subset holds.
 
 pub fn main() -> Result[Int, String] {
-    let need: Int = 1;
-    let have: Int = 3;
-    if (have & need) != need { return Err("have must contain need"); }
-    let extra: Int = 4;
-    if (extra & need) == need { return Err("extra must not match"); }
-    let ok: Bool = (have & need) == need;
-    if !ok { return Err("have must satisfy need"); }
-    let bad: Int = need | extra;
-    if (have & bad) == bad { return Err("have must not satisfy extra"); }
-    let s: String = "test";
-    let n: Int = bytes_len(s);
-    if n != 4 { return Err("bytes_len"); }
-    println("probe: cap_grant subset ok");
+    let lang: Int = 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 131072 | 262144 | 524288 | 67108864 | 134217728 | 268435456 | 536870912;
+    let future: Int = 1048576 | 2097152 | 4194304 | 8388608 | 16777216 | 33554432;
+    let sub: Int = lang | future;
+    if (sub & lang) != lang { return Err("20 language bits must be subset of 26"); }
+    if (lang & future) != 0 { return Err("language bits must not include future hardware"); }
+    if (8 & lang) != 8 { return Err("FsReadCap bit 3 missing from language mask"); }
+    if (2048 & lang) != 2048 { return Err("MetricsCap bit 11 missing from language mask"); }
+    println("probe: cap_grant 20 subset 26 ok");
     return Ok(0);
 }

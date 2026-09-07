@@ -29,14 +29,14 @@ pub fn net_is_module_available(name: String) -> Bool {
 }
 
 // HTTP request dispatch under HttpCap.
-pub fn net_http_get(http: &HttpCap, url: String) -> Result[String, String] {
+pub fn net_http_get(http: &TcpCap, url: String) -> Result[String, String] {
     if chars_len(url) == 0 {
         return Err("NET_ERR: empty url");
     }
     return fetch(http, url);
 }
 
-pub fn net_http_post(http: &HttpCap, url: String) -> Result[String, String] {
+pub fn net_http_post(http: &TcpCap, url: String) -> Result[String, String] {
     if chars_len(url) == 0 {
         return Err("NET_ERR: empty url");
     }

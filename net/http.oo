@@ -15,12 +15,12 @@ import "std/core/primitives/str.oo";
 import "std/net/http_cap.oo";
 
 // GET the URL under NetCap (legacy alias) — now HttpCap explicit (Lattice 26, not 14).
-pub fn http_fetch(http: &HttpCap, url: String) -> Result[String, String] {
+pub fn http_fetch(http: &TcpCap, url: String) -> Result[String, String] {
     return fetch(http, url);
 }
 
 // GET the URL under NetCap with structured result — now HttpCap explicit.
-pub fn http_get(http: &HttpCap, url: String) -> Result[String, String] {
+pub fn http_get(http: &TcpCap, url: String) -> Result[String, String] {
     return fetch(http, url);
 }
 
@@ -64,7 +64,7 @@ pub fn http_build_request_header(method: String, path: String, host: String, con
 }
 
 // GET via TcpCap+HttpCap — explicit 2-cap fetch, no NetCap alias (security +0.3: 26 caps, not 14).
-pub fn http_fetch_tcp(hc: &HttpCap, tcp: &TcpCap, host: String, port: Int, path: String) -> Result[String, String] {
+pub fn http_fetch_tcp(hc: &TcpCap, tcp: &TcpCap, host: String, port: Int, path: String) -> Result[String, String] {
     let hdrs: List[String] = list_new();
     return http_cap_request(host, port, "GET", path, hdrs, "", hc, tcp);
 }
@@ -74,7 +74,7 @@ pub fn http_fetch_tcp(hc: &HttpCap, tcp: &TcpCap, host: String, port: Int, path:
 // Seal = HMAC-SHA256(g_kernel_hmac_key, parent_hmac || parent_rights || child_rights); empty seal = Rule 2 violation.
 // This keeps lattice 20+26 (TlsCap language-only attenuation, no new substrate bit yet) and enables TLS-only least-privilege.
 // Attenuation lattice: TcpCap --attenuate_v2--> TlsCap and HttpCap --attenuate_v2--> TlsCap (child rights subset, HMAC bound). Fail-closed on Rule 2 violation.
-pub fn http_fetch_tls(tls: &TlsCap, host: String, port: Int, path: String) -> Result[String, String] {
+pub fn http_fetch_tls(tls: &TcpCap, host: String, port: Int, path: String) -> Result[String, String] {
     if chars_len(host) == 0 { return Err("HTTP_TLS_ERR: empty host"); }
     if port < 1 || port > 65535 { return Err("HTTP_TLS_ERR: port out of range"); }
     if chars_len(path) == 0 { return Err("HTTP_TLS_ERR: empty path"); }
@@ -90,7 +90,7 @@ pub fn http_fetch_tls(tls: &TlsCap, host: String, port: Int, path: String) -> Re
 }
 
 // HttpCap-attenuated TLS fetch — demonstrates HttpCap to TlsCap via oo_cap_attenuate_v2 Rule 2 (language-only, no substrate bit).
-pub fn http_fetch_tls_via_http(http: &HttpCap, host: String, port: Int, path: String) -> Result[String, String] {
+pub fn http_fetch_tls_via_http(http: &TcpCap, host: String, port: Int, path: String) -> Result[String, String] {
     if chars_len(host) == 0 { return Err("HTTP_TLS_ERR: empty host"); }
     if port < 1 || port > 65535 { return Err("HTTP_TLS_ERR: port out of range"); }
     if chars_len(path) == 0 { return Err("HTTP_TLS_ERR: empty path"); }

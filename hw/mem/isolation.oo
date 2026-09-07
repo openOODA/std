@@ -9,7 +9,7 @@
 //   2. Execute speculative mutations within protected transaction scope.
 //   3. Intercept errors and invariant breaches, triggering automatic undo rollback.
 //   4. Commit validated state transitions to persistent memory pool.
-// RULES.oot 1.4: Explicit &MemCap required.
+// RULES.oot 1.4: Explicit &AllocCap required.
 // RULES.oot 1.7: Under 256 lines.
 
 import "undoram.oo";
@@ -22,7 +22,7 @@ type IsolationBubble = struct {
     fault_count: Int
 };
 
-pub fn isolation_bubble_create(mem: &MemCap, ram: UndoRam, auto_rollback: Bool) -> IsolationBubble {
+pub fn isolation_bubble_create(mem: &AllocCap, ram: UndoRam, auto_rollback: Bool) -> IsolationBubble {
     return IsolationBubble {
         bubble_id: 1,
         ram: ram,
@@ -33,7 +33,7 @@ pub fn isolation_bubble_create(mem: &MemCap, ram: UndoRam, auto_rollback: Bool) 
 }
 
 pub fn isolation_execute_safe(
-    mem: &MemCap,
+    mem: &AllocCap,
     bubble: IsolationBubble,
     target_addr: Int,
     new_val: Int,
@@ -96,7 +96,7 @@ pub fn isolation_execute_safe(
 }
 
 pub fn isolation_assert_invariant(
-    mem: &MemCap,
+    mem: &AllocCap,
     bubble: IsolationBubble,
     condition: Bool,
     err_msg: String

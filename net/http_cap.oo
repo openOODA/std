@@ -10,7 +10,7 @@
 //   3. Provide method, port, and header terminator constants for callers.
 //   4. Parse the status line and count headers and body length of a response.
 //
-// RULES.oot 1.4: Default-deny for network effects. &HttpCap and &TcpCap required.
+// RULES.oot 1.4: Default-deny for network effects. &TcpCap and &TcpCap required.
 // RULES.oot 1.7: Under 256 lines.
 
 pub fn http_cap_method_get() -> String {
@@ -59,10 +59,10 @@ pub fn http_cap_build_request(host: String, port: Int, method: String, path: Str
     return req;
 }
 
-// Capability-gated facade. The &HttpCap and &TcpCap tokens are required by the
+// Capability-gated facade. The &TcpCap and &TcpCap tokens are required by the
 // signature so call sites must obtain both grants. The body validates the port
 // and returns the deterministic request as Ok or a fail-closed Err.
-pub fn http_cap_request(host: String, port: Int, method: String, path: String, headers: List[String], body: String, &hc: &HttpCap, &tc: &TcpCap) -> Result[String, String] {
+pub fn http_cap_request(host: String, port: Int, method: String, path: String, headers: List[String], body: String, &hc: &TcpCap, &tc: &TcpCap) -> Result[String, String] {
     if chars_len(host) == 0 {
         return Err("HTTP_CAP_ERR: empty host");
     }

@@ -8,7 +8,7 @@
 //   1. Define HttpClient configuration struct with user agent and timeout settings.
 //   2. Dispatch GET, POST, and custom HTTP method requests via fetch under HttpCap.
 //   3. Format HTTP/1.1 wire request headers and payload envelopes.
-// RULES.oot 1.4: Default-deny for network effects. Explicit &HttpCap required.
+// RULES.oot 1.4: Default-deny for network effects. Explicit &TcpCap required.
 // RULES.oot 1.7: Under 256 lines.
 
 type HttpClient = struct {
@@ -45,14 +45,14 @@ pub fn http_client_with_timeout(client: HttpClient, timeout_ms: Int) -> HttpClie
     };
 }
 
-pub fn http_client_get(http: &HttpCap, url: String) -> Result[String, String] {
+pub fn http_client_get(http: &TcpCap, url: String) -> Result[String, String] {
     if chars_len(url) == 0 {
         return Err("HTTP_CLIENT_ERR: empty url");
     }
     return fetch(http, url);
 }
 
-pub fn http_client_post(http: &HttpCap, url: String, content_type: String, body: String) -> Result[String, String] {
+pub fn http_client_post(http: &TcpCap, url: String, content_type: String, body: String) -> Result[String, String] {
     if chars_len(url) == 0 {
         return Err("HTTP_CLIENT_ERR: empty url");
     }

@@ -1,15 +1,15 @@
 // # Undo-RAM Transactional Memory Engine
 //
-// Logline: Transactional memory engine with ACID properties, rollback journaling, and checkpointing under MemCap.
+// Logline: Transactional memory engine with ACID properties, rollback journaling, and checkpointing under AllocCap.
 //
 // Setup: Capability-gated transactional RAM with automatic undo unwinding.
 //
 // Beats:
-//   1. Initialize UndoRam cell storage with capacity bounds under MemCap.
+//   1. Initialize UndoRam cell storage with capacity bounds under AllocCap.
 //   2. Begin, commit, and abort transactional memory scopes.
 //   3. Record before-images in undo log on cell writes.
 //   4. Rollback uncommitted writes to pre-transaction or checkpoint states.
-// RULES.oot 1.4: Explicit &MemCap required.
+// RULES.oot 1.4: Explicit &AllocCap required.
 // RULES.oot 1.7: Under 256 lines.
 
 import "txn_log.oo";

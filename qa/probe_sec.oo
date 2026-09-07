@@ -1,30 +1,29 @@
-// # std/qa/probe_sec — Security Domain Verification
+// # std/qa/probe_sec — SHA3-256 Known Answer
 //
-// Logline: Verify security domain fuel budget accounting and cost enforcement.
+// Logline: Verify sec/hash SHA3-256 against the empty-string NIST KAT.
 //
-// Setup: Pure verification of sec fuel budget primitives.
+// Setup: Pure hash. No filesystem. Fail closed if digest drifts.
 //
 // Beats:
-//   1. Construct fuel budget with initial capacity.
-//   2. Check remaining fuel accounting.
-//   3. Enforce cost deduction and boundary conditions.
+//   1. Hash the empty string with sha3_256.
+//   2. Require the NIST SHA3-256("") digest.
+//   3. Hash a non-empty string and refuse equality with the empty digest.
 
-import "sec/fuel_budget.oo";
+import "sec/hash/sha3.oo";
 
 pub fn main() -> Result[Int, String] {
-    let b: FuelBudget = fuel_new(100);
-    if fuel_left(b) != 100 {
-        return Err("sec: initial fuel must be 100");
+    let empty: String = sha3_256("");
+    let kat: String = "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a";
+    if empty != kat {
+        return Err("sec: sha3_256 empty KAT mismatch got " + empty);
     }
-    if !fuel_can(b, 50) {
-        return Err("sec: fuel budget must permit cost 50");
+    let abc: String = sha3_256("abc");
+    if abc == empty {
+        return Err("sec: sha3_256 abc must differ from empty");
     }
-    if fuel_can(b, 150) {
-        return Err("sec: fuel budget must reject cost 150");
+    if chars_len(abc) != 64 {
+        return Err("sec: sha3_256 must return 64 hex chars");
     }
-    if fuel_after(b, 50) != 50 {
-        return Err("sec: fuel_after deduction mismatch");
-    }
-    println("probe: std/sec: ok");
+    println("probe: std/sec sha3 kat ok");
     return Ok(0);
 }
