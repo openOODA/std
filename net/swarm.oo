@@ -36,14 +36,14 @@ pub fn swarm_node_create(net: &NetCap, local_id: String, port: Int) -> SwarmNode
     };
 }
 
-pub fn swarm_node_listen(net: &NetCap, node: SwarmNode) -> Result[SwarmNode, String] {
+pub fn swarm_node_listen(udp: &UdpCap, node: SwarmNode) -> Result[SwarmNode, String] {
     if node.bound_port <= 0 || node.bound_port > 65535 {
         return Err("Invalid port number for swarm listen");
     }
     // Fail-closed: bind the UDP socket via the runtime. is_listening reflects
     // whether the underlying bind actually succeeded; never claim "listening"
-    // without a live socket.
-    let bind_res: Result[String, String] = oo_bind_udp(net, node.bound_port);
+    // without a live socket. UdpCap least-privilege (not NetCap) per lattice 20+26.
+    let bind_res: Result[String, String] = bind_udp(udp, node.bound_port);
     let bound_ok: Bool = match bind_res {
         Ok(_)  => true,
         Err(_) => false
