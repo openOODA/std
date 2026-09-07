@@ -1,15 +1,15 @@
 // # TLS Session Management and Secure Transport Module
 //
-// Logline: TLS session initiation, secure read/write transmission, and session teardown under TcpCap.
+// Logline: TLS session initiation, secure read/write transmission, and session teardown under TcpCap/TlsCap.
 //
-// Setup: Bridges native OpenSSL / TLS socket handshake primitives with safe session state transitions.
+// Setup: Bridges native OpenSSL / TLS socket handshake primitives with safe session state transitions (TlsCap attested in http.oo:76).
 //
 // Beats:
 //   1. Define TlsConfig and TlsSession structures.
-//   2. Initiate TLS handshake and connection under TcpCap via tls_connect.
+//   2. Initiate TLS handshake and connection under TcpCap via tls_connect (TlsCap attenuation at http.oo:76).
 //   3. Perform secure encrypted socket writes and reads on active sessions.
 //   4. Teardown active TLS socket sessions.
-// RULES.oot 1.4: Default-deny for network effects. Explicit &TcpCap required.
+// RULES.oot 1.4: Default-deny for network effects. Explicit &TcpCap required (TlsCap future).
 // RULES.oot 1.7: Under 256 lines.
 
 type TlsConfig = struct {

@@ -61,7 +61,7 @@ pub fn net_udp_bind(udp: &UdpCap, port: Int) -> Result[String, String] {
     return bind_udp(udp, port);
 }
 
-// TLS connection under TcpCap.
+// TLS connection under TcpCap (current) + TlsCap attenuated child (http.oo:76).
 pub fn net_tls_connect(tcp: &TcpCap, host: String, port: Int) -> Result[String, String] {
     if chars_len(host) == 0 {
         return Err("NET_ERR: empty host name");

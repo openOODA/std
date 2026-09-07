@@ -1,15 +1,15 @@
 // # Net TLS ◈ ZERO-DRAG
 //
-// Logline: Flat-prefix TLS wrapper with minimal TcpCap.
+// Logline: Flat-prefix TLS wrapper with minimal TcpCap (now also TlsCap attested).
 //
-// Setup: Requires &TcpCap for tls_connect.
+// Setup: Requires &TcpCap for tls_connect; TlsCap is attenuated child via Rule 2 (future).
 //
 // Beats:
-//   1. Connect TLS via TcpCap.
+//   1. Connect TLS via TcpCap (current) / TlsCap (attenuated future, no fallback).
 //   2. Return Result, no fallback to plain TCP.
 
 // ## CAPs
-//   TcpCap:  tls_connect
+//   TcpCap:  tls_connect (current) — TlsCap attenuation documented in http.oo:76
 
 pub fn net_tls_connect(
   tcp: &TcpCap,
