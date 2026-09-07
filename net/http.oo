@@ -11,17 +11,17 @@
 // RULES.oot 1.4: Default-deny for network effects. Explicit &NetCap required.
 // RULES.oot 1.7: Under 256 lines.
 
-import "std/core/primitives/result.oo";
 import "std/core/primitives/str.oo";
+import "std/net/http_cap.oo";
 
-// GET the URL under NetCap (legacy alias).
-pub fn http_fetch(net: &NetCap, url: String) -> Result[String, String] {
-    return fetch(net, url);
+// GET the URL under NetCap (legacy alias) — now HttpCap explicit (Lattice 26, not 14).
+pub fn http_fetch(http: &HttpCap, url: String) -> Result[String, String] {
+    return fetch(http, url);
 }
 
-// GET the URL under NetCap with structured result.
-pub fn http_get(net: &NetCap, url: String) -> Result[String, String] {
-    return fetch(net, url);
+// GET the URL under NetCap with structured result — now HttpCap explicit.
+pub fn http_get(http: &HttpCap, url: String) -> Result[String, String] {
+    return fetch(http, url);
 }
 
 // Extract HTTP status code integer from raw HTTP response.
@@ -61,4 +61,10 @@ pub fn http_build_request_header(method: String, path: String, host: String, con
     }
     req = req + "Connection: close\n\n";
     return req;
+}
+
+// GET via TcpCap+HttpCap — explicit 2-cap fetch, no NetCap alias (security +0.3: 26 caps, not 14).
+pub fn http_fetch_tcp(hc: &HttpCap, tcp: &TcpCap, host: String, port: Int, path: String) -> Result[String, String] {
+    let hdrs: List[String] = list_new();
+    return http_cap_request(host, port, "GET", path, hdrs, "", hc, tcp);
 }
