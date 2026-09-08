@@ -1,0 +1,140 @@
+// # Integer 3D triangle rasterizer with depth buffer
+//
+// Logline: Screen-space triangles with per-pixel depth test over Canvas.
+// Callers project world points (raster_project) and feed screen ints here.
+//
+// Setup: Pure compute, no caps. Integer-only edge functions and depth
+// interpolation; no float. Same-dir Canvas/QoiRgba resolve without import.
+// Depth values grow away from the viewer; smaller depth wins. Ties keep
+// the earlier triangle (strict less-than).
+//
+// Beats:
+//   1. raster_depth_new builds a cleared canvas plus a far-plane z-buffer.
+//   2. raster_project does the perspective divide; z <= 0 fails closed.
+//   3. raster_tri fills with depth test; degenerate tris are a no-op.
+//   4. raster_wire draws unfilled triangle edges through canvas_line.
+
+type ProjPt = struct {
+    sx: Int,
+    sy: Int,
+    depth: Int
+};
+
+type DepthCanvas = struct {
+    cv: Canvas,
+    zb: List[Int]
+};
+
+pub fn raster_depth_new(rw: Int, rh: Int, bg: QoiRgba) -> Result[DepthCanvas, String] {
+    let rz_cv: Result[Canvas, String] = canvas_new(rw, rh, bg);
+    if rz_cv.is_err() {
+        return Err("ERR\traster_depth_new: bad dimensions");
+    }
+    let rz_plain: Canvas = match rz_cv { Ok(a) => a, Err(_) => Canvas { width: rw, height: rh, px: list_new() } };
+    let mut rz_zb: List[Int] = list_new();
+    let mut rz_i: Int = 0;
+    let rz_n: Int = rw * rh;
+    while rz_i < rz_n {
+        rz_zb = list_push(rz_zb, 2000000000);
+        rz_i = rz_i + 1;
+    }
+    return Ok(DepthCanvas { cv: rz_plain, zb: rz_zb });
+}
+
+pub fn raster_project(px: Int, py: Int, pz: Int, focal: Int, cx: Int, cy: Int) -> Result[ProjPt, String] {
+    if pz <= 0 {
+        return Err("ERR\traster_project: non-positive depth");
+    }
+    let rp_sx: Int = cx + (px * focal) / pz;
+    let rp_sy: Int = cy - (py * focal) / pz;
+    return Ok(ProjPt { sx: rp_sx, sy: rp_sy, depth: pz });
+}
+
+pub fn raster_area2(ax: Int, ay: Int, bx: Int, by: Int, cx: Int, cy: Int) -> Int {
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+
+pub fn raster_tri(rd: DepthCanvas, ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int, cx: Int, cy: Int, cz: Int, c: QoiRgba) -> DepthCanvas {
+    // NOTE: no `let base: Canvas = rd.cv` here. The C backend skips the
+    // entry retain for struct copies from fields but still releases at
+    // exit (net -1, heap corruption at scale). Ints are safe to bind, and
+    // canvas_set returns retained, so seed the accumulator with an
+    // out-of-bounds no-op call instead.
+    let rt_w: Int = rd.cv.width;
+    let rt_h: Int = rd.cv.height;
+    let mut rt_ax: Int = ax;
+    let mut rt_ay: Int = ay;
+    let mut rt_az: Int = az;
+    let mut rt_bx: Int = bx;
+    let mut rt_by: Int = by;
+    let mut rt_bz: Int = bz;
+    let mut rt_cx: Int = cx;
+    let mut rt_cy: Int = cy;
+    let mut rt_cz: Int = cz;
+    let rt_area: Int = raster_area2(rt_ax, rt_ay, rt_bx, rt_by, rt_cx, rt_cy);
+    if rt_area == 0 {
+        return rd;
+    }
+    if rt_area < 0 {
+        let rt_tx: Int = rt_bx;
+        let rt_ty: Int = rt_by;
+        let rt_tz: Int = rt_bz;
+        rt_bx = rt_cx;
+        rt_by = rt_cy;
+        rt_bz = rt_cz;
+        rt_cx = rt_tx;
+        rt_cy = rt_ty;
+        rt_cz = rt_tz;
+    }
+    let rt_span: Int = raster_area2(rt_ax, rt_ay, rt_bx, rt_by, rt_cx, rt_cy);
+    let mut rt_x0: Int = rt_ax;
+    if rt_bx < rt_x0 { rt_x0 = rt_bx; }
+    if rt_cx < rt_x0 { rt_x0 = rt_cx; }
+    let mut rt_x1: Int = rt_ax;
+    if rt_bx > rt_x1 { rt_x1 = rt_bx; }
+    if rt_cx > rt_x1 { rt_x1 = rt_cx; }
+    let mut rt_y0: Int = rt_ay;
+    if rt_by < rt_y0 { rt_y0 = rt_by; }
+    if rt_cy < rt_y0 { rt_y0 = rt_cy; }
+    let mut rt_y1: Int = rt_ay;
+    if rt_by > rt_y1 { rt_y1 = rt_by; }
+    if rt_cy > rt_y1 { rt_y1 = rt_cy; }
+    if rt_x0 < 0 { rt_x0 = 0; }
+    if rt_y0 < 0 { rt_y0 = 0; }
+    if rt_x1 >= rt_w { rt_x1 = rt_w - 1; }
+    if rt_y1 >= rt_h { rt_y1 = rt_h - 1; }
+    let mut rt_out: Canvas = canvas_set(rd.cv, 0 - 1, 0, c);
+    let mut rt_zb: List[Int] = rd.zb;
+    let mut rt_ry: Int = rt_y0;
+    while rt_ry <= rt_y1 {
+        let mut rt_rx: Int = rt_x0;
+        while rt_rx <= rt_x1 {
+            let rt_w0: Int = (rt_bx - rt_ax) * (rt_ry - rt_ay) - (rt_by - rt_ay) * (rt_rx - rt_ax);
+            let rt_w1: Int = (rt_cx - rt_bx) * (rt_ry - rt_by) - (rt_cy - rt_by) * (rt_rx - rt_bx);
+            let rt_w2: Int = (rt_ax - rt_cx) * (rt_ry - rt_cy) - (rt_ay - rt_cy) * (rt_rx - rt_cx);
+            if rt_w0 >= 0 {
+                if rt_w1 >= 0 {
+                    if rt_w2 >= 0 {
+                        let rt_dep: Int = (rt_w0 * rt_az + rt_w1 * rt_bz + rt_w2 * rt_cz) / rt_span;
+                        let rt_zi: Int = rt_ry * rt_w + rt_rx;
+                        if rt_dep < list_get(rt_zb, rt_zi) {
+                            rt_zb = list_set(rt_zb, rt_zi, rt_dep);
+                            rt_out = canvas_set(rt_out, rt_rx, rt_ry, c);
+                        }
+                    }
+                }
+            }
+            rt_rx = rt_rx + 1;
+        }
+        rt_ry = rt_ry + 1;
+    }
+    return DepthCanvas { cv: rt_out, zb: rt_zb };
+}
+
+pub fn raster_wire(rd: DepthCanvas, ax: Int, ay: Int, bx: Int, by: Int, cx: Int, cy: Int, c: QoiRgba) -> DepthCanvas {
+    let rw_base: Canvas = canvas_set(rd.cv, 0 - 1, 0, c);
+    let rw_one: Canvas = canvas_line(rw_base, ax, ay, bx, by, c);
+    let rw_two: Canvas = canvas_line(rw_one, bx, by, cx, cy, c);
+    let rw_three: Canvas = canvas_line(rw_two, cx, cy, ax, ay, c);
+    return DepthCanvas { cv: rw_three, zb: rd.zb };
+}

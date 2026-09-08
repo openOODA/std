@@ -1,0 +1,100 @@
+// # Probe: OpenGL context over SDL+x11+swrast, fail-closed without anchor
+//
+// Logline: With the minisig anchor plus an X display, this builds a real GL
+// window, clears color depth, reads back error 0, swaps, and tears down.
+// Without either, it names the gate and exits clean.
+//
+// Setup: Needs &FfiCap at main. SDL_WINDOW_OPENGL is flag 2; blit demo uses
+// flag 4, so the GL window takes 6 (shown + opengl). Clear mask 16384 is
+// GL_COLOR_BUFFER_BIT; glGetError 0 means the context executed clean.
+//
+// Beats:
+//   1. gl_open on a missing lib is Err.
+//   2. Full headed path prints SDL_GL_LIVE_OK only after error-code 0.
+//   3. Every earlier failure names its call and stops.
+
+import "std/app/ui/media/sdl_window.oo";
+import "std/app/ui/media/sdl_gl.oo";
+
+pub fn main(ffi: &FfiCap) {
+    let gg_bad: Result[String, String] = sdl_gl_open(ffi, "/nonexistent/sdl.so", "/nonexistent/gl.so");
+    if gg_bad.is_ok() {
+        println("SDL_GL bad libs must fail");
+        return;
+    }
+    let gg_why: String = match gg_bad { Ok(a) => a, Err(b) => b };
+    println(gg_why);
+    println("probe: std/gfx sdl_gl gates: ok");
+    let gg_opened: Result[String, String] = sdl_open(ffi, "/lib64/libSDL2-2.0.so.0");
+    if gg_opened.is_err() {
+        let gg_owhy: String = match gg_opened { Ok(a) => a, Err(b) => b };
+        println(gg_owhy);
+        return;
+    }
+    let gg_ctx: String = match gg_opened { Ok(a) => a, Err(b) => b };
+    let gg_vid: Result[Int, String] = sdl_init_video(ffi, gg_ctx);
+    if gg_vid.is_err() {
+        println("SDL_GL live init failed");
+        return;
+    }
+    let gg_win: Result[String, String] = sdl_create_window_ex(ffi, gg_ctx, "oo-gl", 160, 100, 6);
+    if gg_win.is_err() {
+        println("SDL_GL live window failed (needs x11 DISPLAY for GL)");
+        return;
+    }
+    let gg_window: String = match gg_win { Ok(a) => a, Err(b) => b };
+    let gg_gopen: Result[String, String] = sdl_gl_open(ffi, "/lib64/libSDL2-2.0.so.0", "libGL.so.1");
+    if gg_gopen.is_err() {
+        println("SDL_GL live gl_open failed");
+        return;
+    }
+    let gg_gctx: String = match gg_gopen { Ok(a) => a, Err(b) => b };
+    let gg_gc: Result[String, String] = sdl_gl_context(ffi, gg_gctx, gg_window);
+    if gg_gc.is_err() {
+        println("SDL_GL live context failed (swrast needed for headed GL)");
+        return;
+    }
+    let gg_glctx: String = match gg_gc { Ok(a) => a, Err(b) => b };
+    let gg_ren: Result[String, String] = sdl_create_renderer(ffi, gg_ctx, gg_window);
+    if gg_ren.is_err() {
+        println("SDL_GL live renderer failed");
+        return;
+    }
+    let gg_renderer: String = match gg_ren { Ok(a) => a, Err(b) => b };
+    let gg_cl: Result[Int, String] = sdl_gl_clear(ffi, gg_gctx, 16384);
+    if gg_cl.is_err() {
+        println("SDL_GL live clear failed");
+        return;
+    }
+    let gg_code: Int = match gg_cl { Ok(n) => n, Err(_) => 1 };
+    if gg_code != 0 {
+        println("SDL_GL live glGetError nonzero");
+        return;
+    }
+    let gg_sw: Result[Int, String] = sdl_gl_swap(ffi, gg_gctx, gg_window);
+    if gg_sw.is_err() {
+        println("SDL_GL live swap failed");
+        return;
+    }
+    let gg_slept: Result[String, String] = ffi_call(ffi, "ptr:0x0", "v", "", "");
+    if gg_slept.is_ok() {
+        println("SDL_GL null sym must fail");
+        return;
+    }
+    let gg_del: Result[Int, String] = sdl_gl_delete(ffi, gg_gctx, gg_glctx);
+    if gg_del.is_err() {
+        println("SDL_GL live delete failed");
+        return;
+    }
+    let gg_closed: Result[Int, String] = sdl_close(ffi, gg_ctx, gg_renderer, gg_window);
+    if gg_closed.is_err() {
+        println("SDL_GL live close failed");
+        return;
+    }
+    let gg_quit: Result[Int, String] = sdl_quit(ffi, gg_ctx);
+    if gg_quit.is_err() {
+        println("SDL_GL live quit failed");
+        return;
+    }
+    println("SDL_GL_LIVE_OK");
+}

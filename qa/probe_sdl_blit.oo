@@ -1,0 +1,144 @@
+// # Probe: blit run-length encoding plus fail-closed FFI dots
+//
+// Logline: sdl_blit_runs encodes exact run triples; open/dot/color against
+// a bad lib fail closed with named errors; with an anchor present the live
+// path draws real points.
+//
+// Setup: Needs &FfiCap at main like probe_sdl_window. Pure RLE asserts run
+// everywhere; the window half names its policy gate without the anchor.
+//
+// Beats:
+//   1. [red,red,blue] encodes to [255,0,0,2, 0,0,255,1]; empty is empty.
+//   2. blit_open on a missing lib is Err; dot/color on garbage is Err.
+//   3. With SDL open, blit_open resolves and one dot lands without error.
+
+import "std/app/ui/media/sdl_window.oo";
+import "std/app/ui/media/sdl_blit.oo";
+
+pub fn main(ffi: &FfiCap) {
+    let mut bp_flat: List[Int] = list_new();
+    bp_flat = list_push(bp_flat, 255);
+    bp_flat = list_push(bp_flat, 0);
+    bp_flat = list_push(bp_flat, 0);
+    bp_flat = list_push(bp_flat, 255);
+    bp_flat = list_push(bp_flat, 255);
+    bp_flat = list_push(bp_flat, 0);
+    bp_flat = list_push(bp_flat, 0);
+    bp_flat = list_push(bp_flat, 255);
+    bp_flat = list_push(bp_flat, 0);
+    bp_flat = list_push(bp_flat, 0);
+    bp_flat = list_push(bp_flat, 255);
+    bp_flat = list_push(bp_flat, 255);
+    let bp_runs: List[Int] = sdl_blit_runs(bp_flat, 3);
+    if list_len(bp_runs) != 8 {
+        println("SDL_BLIT runs length wrong");
+        return;
+    }
+    if list_get(bp_runs, 0) != 255 {
+        println("SDL_BLIT runs r wrong");
+        return;
+    }
+    if list_get(bp_runs, 3) != 2 {
+        println("SDL_BLIT runs count wrong");
+        return;
+    }
+    if list_get(bp_runs, 4) != 0 {
+        println("SDL_BLIT second run r wrong");
+        return;
+    }
+    if list_get(bp_runs, 7) != 1 {
+        println("SDL_BLIT second run count wrong");
+        return;
+    }
+    let bp_empty: List[Int] = sdl_blit_runs(list_new(), 0);
+    if list_len(bp_empty) != 0 {
+        println("SDL_BLIT empty runs wrong");
+        return;
+    }
+    let bp_one: List[Int] = sdl_blit_runs(bp_flat, 1);
+    if list_len(bp_one) != 4 {
+        println("SDL_BLIT single runs wrong");
+        return;
+    }
+    if list_get(bp_one, 3) != 1 {
+        println("SDL_BLIT single count wrong");
+        return;
+    }
+    println("probe: std/gfx sdl_blit runs: ok");
+    let bp_bad: Result[String, String] = sdl_blit_open(ffi, "/nonexistent/libSDL2.so");
+    if bp_bad.is_err() {
+        let bp_why: String = match bp_bad { Ok(a) => a, Err(b) => b };
+        println(bp_why);
+    }
+    if bp_bad.is_ok() {
+        println("SDL_BLIT bad lib must fail");
+        return;
+    }
+    let bp_dot: Result[Int, String] = sdl_blit_dot(ffi, "ptr:0x0", "a\tb\tc\td", 1, 1);
+    if bp_dot.is_ok() {
+        println("SDL_BLIT garbage dot must fail");
+        return;
+    }
+    let bp_col: Result[Int, String] = sdl_blit_color(ffi, "a\tb\tc\td\te", 255, 0, 0);
+    if bp_col.is_ok() {
+        println("SDL_BLIT garbage color must fail");
+        return;
+    }
+    println("probe: std/gfx sdl_blit gates: ok");
+    let bp_opened: Result[String, String] = sdl_open(ffi, "/lib64/libSDL2-2.0.so.0");
+    if bp_opened.is_err() {
+        let bp_owhy: String = match bp_opened { Ok(a) => a, Err(b) => b };
+        println(bp_owhy);
+        return;
+    }
+    let bp_ctx: String = match bp_opened { Ok(a) => a, Err(b) => b };
+    let bp_pts: Result[String, String] = sdl_blit_open(ffi, "/lib64/libSDL2-2.0.so.0");
+    if bp_pts.is_err() {
+        println("SDL_BLIT live blit_open failed");
+        return;
+    }
+    let bp_ptsym: String = match bp_pts { Ok(a) => a, Err(b) => b };
+    let bp_vid: Result[Int, String] = sdl_init_video(ffi, bp_ctx);
+    if bp_vid.is_err() {
+        println("SDL_BLIT live init failed");
+        return;
+    }
+    let bp_win: Result[String, String] = sdl_create_window(ffi, bp_ctx, "oo-blit", 160, 100);
+    if bp_win.is_err() {
+        println("SDL_BLIT live window failed");
+        return;
+    }
+    let bp_window: String = match bp_win { Ok(a) => a, Err(b) => b };
+    let bp_ren: Result[String, String] = sdl_create_renderer(ffi, bp_ctx, bp_window);
+    if bp_ren.is_err() {
+        println("SDL_BLIT live renderer failed");
+        return;
+    }
+    let bp_renderer: String = match bp_ren { Ok(a) => a, Err(b) => b };
+    let bp_cfg: Result[Int, String] = sdl_blit_color(ffi, bp_ctx, 50, 200, 200);
+    if bp_cfg.is_err() {
+        println("SDL_BLIT live color failed");
+        return;
+    }
+    let bp_d1: Result[Int, String] = sdl_blit_dot(ffi, bp_ptsym, bp_ctx, 10, 10);
+    if bp_d1.is_err() {
+        println("SDL_BLIT live dot failed");
+        return;
+    }
+    let bp_shown: Result[Int, String] = sdl_show_color(ffi, bp_ctx, bp_renderer, 0, 0, 0);
+    if bp_shown.is_err() {
+        println("SDL_BLIT live present failed");
+        return;
+    }
+    let bp_closed: Result[Int, String] = sdl_close(ffi, bp_ctx, bp_renderer, bp_window);
+    if bp_closed.is_err() {
+        println("SDL_BLIT live close failed");
+        return;
+    }
+    let bp_quit: Result[Int, String] = sdl_quit(ffi, bp_ctx);
+    if bp_quit.is_err() {
+        println("SDL_BLIT live quit failed");
+        return;
+    }
+    println("SDL_BLIT_LIVE_OK");
+}

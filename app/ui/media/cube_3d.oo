@@ -1,0 +1,234 @@
+// # Turntable cube: hardcoded mesh, Y rotation, project, cull, fill
+//
+// Logline: Twelve colored triangles become a spinning cube on a DepthCanvas.
+//
+// Setup: Pure compute, no caps. Cube half-size 60 centered on the origin;
+// the caller places it with dist and aims it with focal/cx/cy. Same-dir
+// spin/raster helpers resolve without import. Camera looks along +z from
+// the origin; world +y is up. Visible faces project to negative area2
+// (clockwise on a y-down screen), so area2 >= 0 culls.
+//
+// Beats:
+//   1. cube_vert/cube_face_tri/cube_face_color describe the mesh.
+//   2. cube_frame rotates, translates, projects, culls, and fills.
+
+type CubePt = struct {
+    x: Int,
+    y: Int,
+    z: Int
+};
+
+type TriIdx = struct {
+    a: Int,
+    b: Int,
+    c: Int
+};
+
+pub fn cube_vert(k: Int) -> CubePt {
+    if k == 1 {
+        return CubePt { x: 60, y: 0 - 60, z: 0 - 60 };
+    }
+    if k == 2 {
+        return CubePt { x: 60, y: 60, z: 0 - 60 };
+    }
+    if k == 3 {
+        return CubePt { x: 0 - 60, y: 60, z: 0 - 60 };
+    }
+    if k == 4 {
+        return CubePt { x: 0 - 60, y: 0 - 60, z: 60 };
+    }
+    if k == 5 {
+        return CubePt { x: 60, y: 0 - 60, z: 60 };
+    }
+    if k == 6 {
+        return CubePt { x: 60, y: 60, z: 60 };
+    }
+    if k == 7 {
+        return CubePt { x: 0 - 60, y: 60, z: 60 };
+    }
+    return CubePt { x: 0 - 60, y: 0 - 60, z: 0 - 60 };
+}
+
+pub fn cube_face_tri(f: Int) -> TriIdx {
+    if f == 1 {
+        return TriIdx { a: 0, b: 2, c: 3 };
+    }
+    if f == 2 {
+        return TriIdx { a: 4, b: 5, c: 6 };
+    }
+    if f == 3 {
+        return TriIdx { a: 4, b: 6, c: 7 };
+    }
+    if f == 4 {
+        return TriIdx { a: 0, b: 1, c: 5 };
+    }
+    if f == 5 {
+        return TriIdx { a: 0, b: 5, c: 4 };
+    }
+    if f == 6 {
+        return TriIdx { a: 3, b: 2, c: 6 };
+    }
+    if f == 7 {
+        return TriIdx { a: 3, b: 6, c: 7 };
+    }
+    if f == 8 {
+        return TriIdx { a: 0, b: 3, c: 7 };
+    }
+    if f == 9 {
+        return TriIdx { a: 0, b: 7, c: 4 };
+    }
+    if f == 10 {
+        return TriIdx { a: 1, b: 2, c: 6 };
+    }
+    if f == 11 {
+        return TriIdx { a: 1, b: 6, c: 5 };
+    }
+    return TriIdx { a: 0, b: 1, c: 2 };
+}
+
+pub fn cube_face_color(f: Int) -> QoiRgba {
+    if f < 2 {
+        return qoi_rgba_new(220, 40, 40, 255);
+    }
+    if f < 4 {
+        return qoi_rgba_new(40, 200, 60, 255);
+    }
+    if f < 6 {
+        return qoi_rgba_new(60, 90, 220, 255);
+    }
+    if f < 8 {
+        return qoi_rgba_new(220, 200, 50, 255);
+    }
+    if f < 10 {
+        return qoi_rgba_new(200, 60, 200, 255);
+    }
+    return qoi_rgba_new(50, 200, 200, 255);
+}
+
+fn cube_spin_pt(p: CubePt, deg: Int, dist: Int) -> CubePt {
+    let cb_r: RotXZ = spin_rot_xz(p.x, p.z, deg);
+    return CubePt { x: spin_f2i(cb_r.ox), y: p.y, z: spin_f2i(cb_r.oz) + dist };
+}
+
+pub fn cube_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy: Int) -> DepthCanvas {
+    // NOTE: no Canvas copy of rd.cv (see raster_3d.oo note). The Int-list
+    // field binding below is retained by the backend and stays balanced.
+    let cb_w: Int = rd.cv.width;
+    let cb_h: Int = rd.cv.height;
+    let cb_flat0: List[Int] = rd.cv.px;
+    let cb_bg0: Int = list_get(cb_flat0, 0);
+    let cb_bg1: Int = list_get(cb_flat0, 1);
+    let cb_bg2: Int = list_get(cb_flat0, 2);
+    let mut cb_tax: List[Int] = list_new();
+    let mut cb_tay: List[Int] = list_new();
+    let mut cb_taz: List[Int] = list_new();
+    let mut cb_tbx: List[Int] = list_new();
+    let mut cb_tby: List[Int] = list_new();
+    let mut cb_tbz: List[Int] = list_new();
+    let mut cb_tcx: List[Int] = list_new();
+    let mut cb_tcy: List[Int] = list_new();
+    let mut cb_tcz: List[Int] = list_new();
+    let mut cb_tare: List[Int] = list_new();
+    let mut cb_tface: List[Int] = list_new();
+    let mut cb_f: Int = 0;
+    while cb_f < 12 {
+        let cb_t: TriIdx = cube_face_tri(cb_f);
+        let cb_pa: CubePt = cube_spin_pt(cube_vert(cb_t.a), deg, dist);
+        let cb_pb: CubePt = cube_spin_pt(cube_vert(cb_t.b), deg, dist);
+        let cb_pc: CubePt = cube_spin_pt(cube_vert(cb_t.c), deg, dist);
+        let cb_ra: Result[ProjPt, String] = raster_project(cb_pa.x, cb_pa.y, cb_pa.z, focal, cx, cy);
+        let cb_rb: Result[ProjPt, String] = raster_project(cb_pb.x, cb_pb.y, cb_pb.z, focal, cx, cy);
+        let cb_rc: Result[ProjPt, String] = raster_project(cb_pc.x, cb_pc.y, cb_pc.z, focal, cx, cy);
+        let mut cb_ax: Int = 0;
+        let mut cb_ay: Int = 0;
+        let mut cb_az: Int = 0;
+        let mut cb_bx: Int = 0;
+        let mut cb_by: Int = 0;
+        let mut cb_bz: Int = 0;
+        let mut cb_cx: Int = 0;
+        let mut cb_cy: Int = 0;
+        let mut cb_cz: Int = 0;
+        if cb_ra.is_ok() {
+            if cb_rb.is_ok() {
+                if cb_rc.is_ok() {
+                    let cb_sa: ProjPt = match cb_ra { Ok(a) => a, Err(_) => ProjPt { sx: 0, sy: 0, depth: 0 } };
+                    let cb_sb: ProjPt = match cb_rb { Ok(a) => a, Err(_) => ProjPt { sx: 0, sy: 0, depth: 0 } };
+                    let cb_sc: ProjPt = match cb_rc { Ok(a) => a, Err(_) => ProjPt { sx: 0, sy: 0, depth: 0 } };
+                    cb_ax = cb_sa.sx;
+                    cb_ay = cb_sa.sy;
+                    cb_az = cb_sa.depth;
+                    cb_bx = cb_sb.sx;
+                    cb_by = cb_sb.sy;
+                    cb_bz = cb_sb.depth;
+                    cb_cx = cb_sc.sx;
+                    cb_cy = cb_sc.sy;
+                    cb_cz = cb_sc.depth;
+                }
+            }
+        }
+        cb_tax = list_push(cb_tax, cb_ax);
+        cb_tay = list_push(cb_tay, cb_ay);
+        cb_taz = list_push(cb_taz, cb_az);
+        cb_tbx = list_push(cb_tbx, cb_bx);
+        cb_tby = list_push(cb_tby, cb_by);
+        cb_tbz = list_push(cb_tbz, cb_bz);
+        cb_tcx = list_push(cb_tcx, cb_cx);
+        cb_tcy = list_push(cb_tcy, cb_cy);
+        cb_tcz = list_push(cb_tcz, cb_cz);
+        cb_tare = list_push(cb_tare, raster_area2(cb_ax, cb_ay, cb_bx, cb_by, cb_cx, cb_cy));
+        cb_tface = list_push(cb_tface, cb_f);
+        cb_f = cb_f + 1;
+    }
+    let mut cb_flat: List[Int] = list_new();
+    let mut cb_zb: List[Int] = list_new();
+    let mut cb_y: Int = 0;
+    while cb_y < cb_h {
+        let mut cb_x: Int = 0;
+        while cb_x < cb_w {
+            let mut cb_best: Int = 2000000000;
+            let mut cb_br: Int = cb_bg0;
+            let mut cb_bg: Int = cb_bg1;
+            let mut cb_bb: Int = cb_bg2;
+            let mut cb_g: Int = 0;
+            while cb_g < 12 {
+                if list_get(cb_tare, cb_g) < 0 {
+                    let cb_gax: Int = list_get(cb_tax, cb_g);
+                    let cb_gay: Int = list_get(cb_tay, cb_g);
+                    let cb_gaz: Int = list_get(cb_taz, cb_g);
+                    let cb_gbx: Int = list_get(cb_tbx, cb_g);
+                    let cb_gby: Int = list_get(cb_tby, cb_g);
+                    let cb_gbz: Int = list_get(cb_tbz, cb_g);
+                    let cb_gcx: Int = list_get(cb_tcx, cb_g);
+                    let cb_gcy: Int = list_get(cb_tcy, cb_g);
+                    let cb_gcz: Int = list_get(cb_tcz, cb_g);
+                    let cb_w0: Int = (cb_gbx - cb_gax) * (cb_y - cb_gay) - (cb_gby - cb_gay) * (cb_x - cb_gax);
+                    let cb_w1: Int = (cb_gcx - cb_gbx) * (cb_y - cb_gby) - (cb_gcy - cb_gby) * (cb_x - cb_gbx);
+                    let cb_w2: Int = (cb_gax - cb_gcx) * (cb_y - cb_gcy) - (cb_gay - cb_gcy) * (cb_x - cb_gcx);
+                    if cb_w0 <= 0 {
+                        if cb_w1 <= 0 {
+                            if cb_w2 <= 0 {
+                                let cb_dep: Int = (cb_w0 * cb_gaz + cb_w1 * cb_gbz + cb_w2 * cb_gcz) / list_get(cb_tare, cb_g);
+                                if cb_dep < cb_best {
+                                    cb_best = cb_dep;
+                                    let cb_fc: QoiRgba = cube_face_color(list_get(cb_tface, cb_g));
+                                    cb_br = cb_fc.r;
+                                    cb_bg = cb_fc.g;
+                                    cb_bb = cb_fc.b;
+                                }
+                            }
+                        }
+                    }
+                }
+                cb_g = cb_g + 1;
+            }
+            cb_flat = list_push(cb_flat, cb_br);
+            cb_flat = list_push(cb_flat, cb_bg);
+            cb_flat = list_push(cb_flat, cb_bb);
+            cb_flat = list_push(cb_flat, 255);
+            cb_zb = list_push(cb_zb, cb_best);
+            cb_x = cb_x + 1;
+        }
+        cb_y = cb_y + 1;
+    }
+    return DepthCanvas { cv: Canvas { width: cb_w, height: cb_h, px: cb_flat }, zb: cb_zb };
+}

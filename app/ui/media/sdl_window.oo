@@ -63,7 +63,7 @@ pub fn sdl_open(ffi: &FfiCap, lib: String) -> Result[String, String] {
     return Ok(ctx);
 }
 
-fn sdl_status_code(out: Result[String, String]) -> Result[Int, String] {
+pub fn sdl_status_code(out: Result[String, String]) -> Result[Int, String] {
     if out.is_err() {
         return Err("ERR\tsdl: ffi_call failed");
     }
@@ -76,7 +76,7 @@ fn sdl_status_code(out: Result[String, String]) -> Result[Int, String] {
     return Ok(code);
 }
 
-fn sdl_expect_zero(got: Result[Int, String], what: String) -> Result[Int, String] {
+pub fn sdl_expect_zero(got: Result[Int, String], what: String) -> Result[Int, String] {
     if got.is_err() {
         return got;
     }
@@ -94,13 +94,17 @@ pub fn sdl_init_video(ffi: &FfiCap, ctx: String) -> Result[Int, String] {
     return sdl_expect_zero(cr, "ERR\tsdl_init_video: SDL_Init failed");
 }
 
-pub fn sdl_create_window(ffi: &FfiCap, ctx: String, title: String, w: Int, hh: Int) -> Result[String, String] {
+pub fn sdl_create_window_ex(ffi: &FfiCap, ctx: String, title: String, w: Int, hh: Int, flags: Int) -> Result[String, String] {
     let h_window: String = sdl_field(ctx, 2);
     let undef: String = "536870912";
     let ws: String = w.to_string();
     let hs: String = hh.to_string();
-    let args: String = title + "\t" + undef + "\t" + undef + "\t" + ws + "\t" + hs + "\t4";
+    let args: String = title + "\t" + undef + "\t" + undef + "\t" + ws + "\t" + hs + "\t" + flags.to_string();
     return ffi_call(ffi, h_window, "p", "siiiuu", args);
+}
+
+pub fn sdl_create_window(ffi: &FfiCap, ctx: String, title: String, w: Int, hh: Int) -> Result[String, String] {
+    return sdl_create_window_ex(ffi, ctx, title, w, hh, 4);
 }
 
 pub fn sdl_create_renderer(ffi: &FfiCap, ctx: String, window: String) -> Result[String, String] {

@@ -1,0 +1,132 @@
+// # Probe: depth-triangle rasterizer pixel proof
+//
+// Logline: A hand-counted triangle covers exactly 21 pixels; nearer depth
+// wins, farther loses, ties keep the earlier color, degenerate tris and
+// bad projections fail closed.
+//
+// Setup: Pure. No caps. 10x8 canvas, triangle (2,1),(7,1),(2,6).
+// Rows cover 6+5+4+3+2+1 = 21 pixels by the edge-function math.
+//
+// Beats:
+//   1. project maps (30,-40,10) to (250,260) depth 10; z<=0 is Err.
+//   2. area2 of the probe triangle is 25; red fill counts exactly 21.
+//   3. Blue at depth 3 replaces red; green at depth 9 loses; blue at
+//      depth 5 ties and loses; collinear tri changes nothing.
+//   4. Wire edges of the same triangle count exactly 15 pixels.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/ppm.oo";
+import "std/app/ui/media/raster_3d.oo";
+
+fn probe_count_occ(hay: String, needle: String) -> Int {
+    let mut pc_left: String = hay;
+    let mut pc_n: Int = 0;
+    let mut pc_go: Int = 1;
+    while pc_go == 1 {
+        let pc_p: Int = str_index_of(pc_left, needle);
+        if pc_p < 0 {
+            pc_go = 0;
+        }
+        if pc_p >= 0 {
+            pc_n = pc_n + 1;
+            pc_left = str_slice(pc_left, pc_p + 1, chars_len(pc_left));
+        }
+    }
+    return pc_n;
+}
+
+fn probe_ppm_of(rd: DepthCanvas) -> Result[String, String] {
+    let rd_img: Result[QoiImage, String] = canvas_to_image(rd.cv);
+    if rd_img.is_err() {
+        return Err("raster probe: canvas_to_image failed");
+    }
+    let rd_plain: QoiImage = match rd_img { Ok(a) => a, Err(_) => QoiImage { header: QoiHeader { width: 0, height: 0, channels: 3, colorspace: 0 }, pixels: list_new() } };
+    return ppm_encode(rd_plain);
+}
+
+pub fn main() -> Result[Int, String] {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
+    let blue: QoiRgba = qoi_rgba_new(0, 0, 255, 255);
+    let green: QoiRgba = qoi_rgba_new(0, 255, 0, 255);
+    if raster_depth_new(0, 8, black).is_ok() {
+        return Err("raster probe: zero width must fail");
+    }
+    let rp: Result[ProjPt, String] = raster_project(30, 0 - 40, 10, 50, 100, 60);
+    if rp.is_err() {
+        return Err("raster probe: project must succeed");
+    }
+    let pt: ProjPt = match rp { Ok(a) => a, Err(_) => ProjPt { sx: 0, sy: 0, depth: 0 } };
+    if pt.sx != 250 {
+        return Err("raster probe: sx must be 250");
+    }
+    if pt.sy != 260 {
+        return Err("raster probe: sy must be 260");
+    }
+    if pt.depth != 10 {
+        return Err("raster probe: depth must be 10");
+    }
+    if raster_project(1, 1, 0, 50, 0, 0).is_ok() {
+        return Err("raster probe: zero depth must fail");
+    }
+    if raster_project(1, 1, 0 - 3, 50, 0, 0).is_ok() {
+        return Err("raster probe: negative depth must fail");
+    }
+    if raster_area2(2, 1, 7, 1, 2, 6) != 25 {
+        return Err("raster probe: area2 must be 25");
+    }
+    let mk: Result[DepthCanvas, String] = raster_depth_new(10, 8, black);
+    if mk.is_err() {
+        return Err("raster probe: depth_new must succeed");
+    }
+    let empty: DepthCanvas = match mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    let red5: DepthCanvas = raster_tri(empty, 2, 1, 5, 7, 1, 5, 2, 6, 5, red);
+    let t1: Result[String, String] = probe_ppm_of(red5);
+    if t1.is_err() {
+        return Err("raster probe: ppm of red fill failed");
+    }
+    let ppm1: String = match t1 { Ok(a) => a, Err(b) => b };
+    if probe_count_occ(ppm1, "255 0 0\n") != 21 {
+        println(ppm1);
+        return Err("raster probe: red fill must cover 21 pixels");
+    }
+    let blue3: DepthCanvas = raster_tri(red5, 2, 1, 3, 7, 1, 3, 2, 6, 3, blue);
+    let t2: Result[String, String] = probe_ppm_of(blue3);
+    let ppm2: String = match t2 { Ok(a) => a, Err(b) => b };
+    if probe_count_occ(ppm2, "0 0 255\n") != 21 {
+        return Err("raster probe: nearer blue must cover 21 pixels");
+    }
+    if probe_count_occ(ppm2, "255 0 0\n") != 0 {
+        return Err("raster probe: nearer blue must hide red");
+    }
+    let green9: DepthCanvas = raster_tri(blue3, 2, 1, 9, 7, 1, 9, 2, 6, 9, green);
+    let t3: Result[String, String] = probe_ppm_of(green9);
+    let ppm3: String = match t3 { Ok(a) => a, Err(b) => b };
+    if probe_count_occ(ppm3, "0 255 0\n") != 0 {
+        return Err("raster probe: farther green must lose");
+    }
+    let blue5: DepthCanvas = raster_tri(red5, 2, 1, 5, 7, 1, 5, 2, 6, 5, blue);
+    let t4: Result[String, String] = probe_ppm_of(blue5);
+    let ppm4: String = match t4 { Ok(a) => a, Err(b) => b };
+    if probe_count_occ(ppm4, "255 0 0\n") != 21 {
+        return Err("raster probe: depth tie must keep earlier red");
+    }
+    let flat: DepthCanvas = raster_tri(red5, 0, 0, 5, 4, 4, 5, 8, 8, 5, green);
+    let t5: Result[String, String] = probe_ppm_of(flat);
+    let ppm5: String = match t5 { Ok(a) => a, Err(b) => b };
+    if probe_count_occ(ppm5, "255 0 0\n") != 21 {
+        return Err("raster probe: degenerate tri must change nothing");
+    }
+    let mk2: Result[DepthCanvas, String] = raster_depth_new(10, 8, black);
+    let empty2: DepthCanvas = match mk2 { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    let wired: DepthCanvas = raster_wire(empty2, 2, 1, 7, 1, 2, 6, red);
+    let t6: Result[String, String] = probe_ppm_of(wired);
+    let ppm6: String = match t6 { Ok(a) => a, Err(b) => b };
+    if probe_count_occ(ppm6, "255 0 0\n") != 15 {
+        println(ppm6);
+        return Err("raster probe: wire must cover 15 pixels");
+    }
+    println("probe: std/gfx raster_3d: ok");
+    return Ok(0);
+}

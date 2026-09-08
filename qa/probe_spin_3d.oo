@@ -1,0 +1,82 @@
+// # Probe: float trig matches cardinal values within 1e-3
+//
+// Logline: Taylor sin/cos over degrees hit 0/0.5/1 landmarks; the int
+// crossings truncate toward zero; a 90-degree turn maps (100,0) to (0,-100).
+//
+// Setup: Pure. No caps. Epsilon compare by abs difference under 0.001.
+//
+// Beats:
+//   1. sin(0/30/90) and cos(0/60/180) land on their landmarks.
+//   2. f2i truncates 2.9 to 2 and -2.9 to -2; i2f round-trips.
+//   3. rot_xz quarter turn sends +x to -z.
+
+import "std/app/ui/media/spin_3d.oo";
+
+fn probe_close(got: Float, want: Float) -> Int {
+    let mut pc_d: Float = got - want;
+    if pc_d < 0.0 {
+        pc_d = 0.0 - pc_d;
+    }
+    if pc_d < 0.001 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn main() -> Result[Int, String] {
+    if probe_close(spin_sin_deg(0), 0.0) != 1 {
+        return Err("spin probe: sin(0) must be 0");
+    }
+    if probe_close(spin_sin_deg(30), 0.5) != 1 {
+        return Err("spin probe: sin(30) must be 0.5");
+    }
+    if probe_close(spin_sin_deg(90), 1.0) != 1 {
+        return Err("spin probe: sin(90) must be 1");
+    }
+    if probe_close(spin_cos_deg(0), 1.0) != 1 {
+        return Err("spin probe: cos(0) must be 1");
+    }
+    if probe_close(spin_cos_deg(60), 0.5) != 1 {
+        return Err("spin probe: cos(60) must be 0.5");
+    }
+    if probe_close(spin_cos_deg(180), 0.0 - 1.0) != 1 {
+        return Err("spin probe: cos(180) must be -1");
+    }
+    if probe_close(spin_sin_deg(450), 1.0) != 1 {
+        return Err("spin probe: sin(450) must wrap to 1");
+    }
+    if probe_close(spin_sin_deg(0 - 90), 0.0 - 1.0) != 1 {
+        return Err("spin probe: sin(-90) must wrap to -1");
+    }
+    if spin_f2i(2.9) != 2 {
+        return Err("spin probe: f2i(2.9) must be 2");
+    }
+    if spin_f2i(0.0 - 2.9) != 0 - 2 {
+        return Err("spin probe: f2i(-2.9) must be -2");
+    }
+    if spin_f2i(0.0) != 0 {
+        return Err("spin probe: f2i(0) must be 0");
+    }
+    if probe_close(spin_i2f(0 - 37), 0.0 - 37.0) != 1 {
+        return Err("spin probe: i2f(-37) must be -37");
+    }
+    if probe_close(spin_i2f(12345), 12345.0) != 1 {
+        return Err("spin probe: i2f(12345) must be exact");
+    }
+    let turn: RotXZ = spin_rot_xz(100, 0, 90);
+    if probe_close(turn.ox, 0.0) != 1 {
+        return Err("spin probe: quarter turn ox must be 0");
+    }
+    if probe_close(turn.oz, 0.0 - 100.0) != 1 {
+        return Err("spin probe: quarter turn oz must be -100");
+    }
+    let back: RotXZ = spin_rot_xz(100, 0, 0);
+    if probe_close(back.ox, 100.0) != 1 {
+        return Err("spin probe: zero turn must keep x");
+    }
+    if probe_close(back.oz, 0.0) != 1 {
+        return Err("spin probe: zero turn must keep z");
+    }
+    println("probe: std/gfx spin_3d: ok");
+    return Ok(0);
+}

@@ -1,0 +1,109 @@
+// # SDL2 point-run blit: canvas pixels to a real window
+//
+// Logline: Draw flat RGBA pixels through SDL_RenderDrawPoint runs because
+// the FFI string_arg ceiling (1023 bytes) rules out whole-frame upload.
+//
+// Setup: Every fn takes ffi: &FfiCap first. sdl_blit_open re-resolves
+// SDL_RenderDrawPoint from the same lib (dlopen refcount, never closed).
+// Color runs come from sdl_blit_runs so the caller sets color once per run
+// and dots each pixel. ctx is the sdl_window.oo tab string; ptsym is the
+// SDL_RenderDrawPoint token from sdl_blit_open.
+//
+// Beats:
+//   1. sdl_blit_open packs lib plus the draw-point symbol.
+//   2. sdl_blit_color/sdl_blit_dot draw one run and one pixel.
+//   3. sdl_blit_runs run-length encodes a flat RGBA list, pure.
+
+fn blit_field(bctx: String, idx: Int) -> String {
+    let mut bf_rest: String = bctx;
+    let mut bf_i: Int = 0;
+    while bf_i < idx {
+        let bf_p: Int = str_index_of(bf_rest, "\t");
+        if bf_p < 0 {
+            return "";
+        }
+        bf_rest = str_slice(bf_rest, bf_p + 1, chars_len(bf_rest));
+        bf_i = bf_i + 1;
+    }
+    let bf_q: Int = str_index_of(bf_rest, "\t");
+    if bf_q < 0 {
+        return bf_rest;
+    }
+    return str_slice(bf_rest, 0, bf_q);
+}
+
+pub fn sdl_blit_open(ffi: &FfiCap, lib: String) -> Result[String, String] {
+    let bo_h = dlopen(ffi, lib);
+    if bo_h.is_err() {
+        let bo_why: String = match bo_h { Ok(a) => a, Err(b) => b };
+        return Err("ERR\tsdl_blit_open: " + bo_why);
+    }
+    let bo_hs: String = match bo_h { Ok(a) => a, Err(b) => b };
+    let bo_s = dlsym(ffi, bo_hs, "SDL_RenderDrawPoint");
+    if bo_s.is_err() {
+        let bo_dc: Result[String, String] = dlclose(ffi, bo_hs);
+        if bo_dc.is_err() {
+            return Err("ERR\tsdl_blit_open: cleanup failed");
+        }
+        return Err("ERR\tsdl_blit_open: missing SDL_RenderDrawPoint");
+    }
+    let bo_pt: String = match bo_s { Ok(a) => a, Err(b) => b };
+    return Ok(bo_pt);
+}
+
+pub fn sdl_blit_color(ffi: &FfiCap, ctx: String, r: Int, g: Int, b: Int) -> Result[Int, String] {
+    let bc_sym: String = blit_field(ctx, 4);
+    let bc_raw: Result[String, String] = ffi_call(ffi, bc_sym, "i", "puuuu", blit_field(ctx, 3) + "\t" + r.to_string() + "\t" + g.to_string() + "\t" + b.to_string() + "\t255");
+    return sdl_expect_zero(sdl_status_code(bc_raw), "ERR\tsdl_blit_color: SetRenderDrawColor failed");
+}
+
+pub fn sdl_blit_dot(ffi: &FfiCap, ptsym: String, ctx: String, x: Int, y: Int) -> Result[Int, String] {
+    let bd_raw: Result[String, String] = ffi_call(ffi, ptsym, "i", "pii", blit_field(ctx, 3) + "\t" + x.to_string() + "\t" + y.to_string());
+    return sdl_expect_zero(sdl_status_code(bd_raw), "ERR\tsdl_blit_dot: RenderDrawPoint failed");
+}
+
+pub fn sdl_blit_runs(flat: List[Int], n: Int) -> List[Int] {
+    let mut br_out: List[Int] = list_new();
+    if n <= 0 {
+        return br_out;
+    }
+    let mut br_i: Int = 0;
+    let mut br_r: Int = list_get(flat, 0);
+    let mut br_g: Int = list_get(flat, 1);
+    let mut br_b: Int = list_get(flat, 2);
+    let mut br_c: Int = 1;
+    br_i = 1;
+    while br_i < n {
+        let br_base: Int = br_i * 4;
+        let br_pr: Int = list_get(flat, br_base);
+        let br_pg: Int = list_get(flat, br_base + 1);
+        let br_pb: Int = list_get(flat, br_base + 2);
+        let mut br_same: Int = 0;
+        if br_pr == br_r {
+            if br_pg == br_g {
+                if br_pb == br_b {
+                    br_same = 1;
+                }
+            }
+        }
+        if br_same == 1 {
+            br_c = br_c + 1;
+        }
+        if br_same == 0 {
+            br_out = list_push(br_out, br_r);
+            br_out = list_push(br_out, br_g);
+            br_out = list_push(br_out, br_b);
+            br_out = list_push(br_out, br_c);
+            br_r = br_pr;
+            br_g = br_pg;
+            br_b = br_pb;
+            br_c = 1;
+        }
+        br_i = br_i + 1;
+    }
+    br_out = list_push(br_out, br_r);
+    br_out = list_push(br_out, br_g);
+    br_out = list_push(br_out, br_b);
+    br_out = list_push(br_out, br_c);
+    return br_out;
+}

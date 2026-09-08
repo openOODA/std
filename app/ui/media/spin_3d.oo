@@ -1,0 +1,113 @@
+// # Float turntable math: int/float converts plus Taylor sin/cos
+//
+// Logline: Degree trig and Y-axis rotation for the cube demo, with the
+// int/float crossings the raster needs at its edges.
+//
+// Setup: Pure compute, no caps. Float + - * / and comparisons only; no
+// runtime trig exists, so sin/cos ride a 5-term Taylor series after range
+// folding. spin_f2i truncates toward zero over roughly +/-1e6.
+//
+// Beats:
+//   1. spin_i2f/spin_f2i cross the int boundary both ways.
+//   2. spin_sin_deg/spin_cos_deg match cardinal degree values.
+//   3. spin_rot_xz turns a point around the Y axis.
+
+type RotXZ = struct {
+    ox: Float,
+    oz: Float
+};
+
+pub fn spin_i2f(v: Int) -> Float {
+    let mut sp_left: Int = v;
+    let mut sp_neg: Int = 0;
+    if sp_left < 0 {
+        sp_neg = 1;
+        sp_left = 0 - sp_left;
+    }
+    let mut sp_f: Float = 0.0;
+    while sp_left >= 10000 {
+        sp_f = sp_f + 10000.0;
+        sp_left = sp_left - 10000;
+    }
+    while sp_left >= 1000 {
+        sp_f = sp_f + 1000.0;
+        sp_left = sp_left - 1000;
+    }
+    while sp_left >= 100 {
+        sp_f = sp_f + 100.0;
+        sp_left = sp_left - 100;
+    }
+    while sp_left >= 10 {
+        sp_f = sp_f + 10.0;
+        sp_left = sp_left - 10;
+    }
+    while sp_left >= 1 {
+        sp_f = sp_f + 1.0;
+        sp_left = sp_left - 1;
+    }
+    if sp_neg == 1 {
+        return 0.0 - sp_f;
+    }
+    return sp_f;
+}
+
+pub fn spin_f2i(f: Float) -> Int {
+    let mut sp_rest: Float = f;
+    let mut sp_neg: Int = 0;
+    if sp_rest < 0.0 {
+        sp_neg = 1;
+        sp_rest = 0.0 - sp_rest;
+    }
+    let mut sp_i: Int = 0;
+    while sp_rest >= 1.0 {
+        sp_rest = sp_rest - 1.0;
+        sp_i = sp_i + 1;
+    }
+    if sp_neg == 1 {
+        return 0 - sp_i;
+    }
+    return sp_i;
+}
+
+fn spin_taylor(x: Float) -> Float {
+    let sp_x2: Float = x * x;
+    let sp_x3: Float = sp_x2 * x;
+    let sp_x5: Float = sp_x3 * sp_x2;
+    let sp_x7: Float = sp_x5 * sp_x2;
+    let sp_x9: Float = sp_x7 * sp_x2;
+    return x - sp_x3 / 6.0 + sp_x5 / 120.0 - sp_x7 / 5040.0 + sp_x9 / 362880.0;
+}
+
+pub fn spin_sin_deg(a: Int) -> Float {
+    let mut sp_d: Int = a;
+    while sp_d < 0 {
+        sp_d = sp_d + 360;
+    }
+    while sp_d >= 360 {
+        sp_d = sp_d - 360;
+    }
+    let sp_rad: Float = spin_i2f(sp_d) * 3.14159265358979 / 180.0;
+    let mut sp_fold: Float = sp_rad;
+    if sp_fold > 3.14159265358979 {
+        sp_fold = sp_fold - 2.0 * 3.14159265358979;
+    }
+    if sp_fold > 1.57079632679490 {
+        sp_fold = 3.14159265358979 - sp_fold;
+    }
+    if sp_fold < 0.0 - 1.57079632679490 {
+        sp_fold = 0.0 - 3.14159265358979 - sp_fold;
+    }
+    return spin_taylor(sp_fold);
+}
+
+pub fn spin_cos_deg(a: Int) -> Float {
+    return spin_sin_deg(a + 90);
+}
+
+pub fn spin_rot_xz(rx: Int, rz: Int, deg: Int) -> RotXZ {
+    let sp_c: Float = spin_cos_deg(deg);
+    let sp_s: Float = spin_sin_deg(deg);
+    let sp_fx: Float = spin_i2f(rx);
+    let sp_fz: Float = spin_i2f(rz);
+    return RotXZ { ox: sp_fx * sp_c + sp_fz * sp_s, oz: 0.0 - sp_fx * sp_s + sp_fz * sp_c };
+}

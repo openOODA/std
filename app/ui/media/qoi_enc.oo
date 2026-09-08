@@ -44,11 +44,12 @@ pub fn qoi_encode(img: QoiImage) -> Result[List[Int], String] {
     out = list_push(out, (img.header).colorspace);
 
     // 2. Encode pixels (RGB / RGBA)
-    let pxs: List[QoiRgba] = img.pixels;
-    let n_pixels: Int = list_len(pxs);
+    // NOTE: no `let pxs = img.pixels` binding (see raster_3d.oo note: the
+    // backend drops the entry retain for struct-element list fields).
+    let n_pixels: Int = list_len(img.pixels);
     let mut i: Int = 0;
     while i < n_pixels {
-        let p: QoiRgba = list_get(pxs, i);
+        let p: QoiRgba = list_get(img.pixels, i);
         out = list_push(out, 255); // QOI_OP_RGBA (0xFF)
         out = list_push(out, p.r);
         out = list_push(out, p.g);

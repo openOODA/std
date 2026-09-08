@@ -1,0 +1,118 @@
+// # SDL2 OpenGL context binding over software Mesa
+//
+// Logline: Real GL contexts (llvmpipe/swrast, no GPU) driven through FFI:
+// create context, clear, error-code readback, swap, delete.
+//
+// Setup: Every fn takes ffi: &FfiCap first. sdl_gl_open re-resolves the
+// three SDL_GL syms plus glClear/glGetError from libGL (dlopen refcount,
+// never closed). Only int/uint/pointer crossings: glGetString is out of
+// reach (returned C strings cannot be dereferenced through ffi_call) and
+// float calls like glClearColor are unsupported by the runtime. gctx is
+// the tab string "sdl_lib\tgl_lib\tcctx\tswap\tdel\tclear\terr". The
+// window must carry SDL_WINDOW_OPENGL (use sdl_create_window_ex).
+//
+// Beats:
+//   1. sdl_gl_open packs both libs plus five symbols.
+//   2. context/clear/swap/delete compose one headed frame.
+//   3. glGetError readback turns GL faults into named errors.
+
+fn gl_field(gctx: String, idx: Int) -> String {
+    let mut gf_rest: String = gctx;
+    let mut gf_i: Int = 0;
+    while gf_i < idx {
+        let gf_p: Int = str_index_of(gf_rest, "\t");
+        if gf_p < 0 {
+            return "";
+        }
+        gf_rest = str_slice(gf_rest, gf_p + 1, chars_len(gf_rest));
+        gf_i = gf_i + 1;
+    }
+    let gf_q: Int = str_index_of(gf_rest, "\t");
+    if gf_q < 0 {
+        return gf_rest;
+    }
+    return str_slice(gf_rest, 0, gf_q);
+}
+
+fn gl_sym(ffi: &FfiCap, hs: String, name: String) -> Result[String, String] {
+    let gs_s = dlsym(ffi, hs, name);
+    if gs_s.is_err() {
+        return Err("ERR\tsdl_gl_open: missing " + name);
+    }
+    let gs_tok: String = match gs_s { Ok(a) => a, Err(b) => b };
+    return Ok(gs_tok);
+}
+
+pub fn sdl_gl_open(ffi: &FfiCap, sdl_lib: String, gl_lib: String) -> Result[String, String] {
+    let go_s = dlopen(ffi, sdl_lib);
+    if go_s.is_err() {
+        let go_why: String = match go_s { Ok(a) => a, Err(b) => b };
+        return Err("ERR\tsdl_gl_open: " + go_why);
+    }
+    let go_sh: String = match go_s { Ok(a) => a, Err(b) => b };
+    let go_g = dlopen(ffi, gl_lib);
+    if go_g.is_err() {
+        let go_gwhy: String = match go_g { Ok(a) => a, Err(b) => b };
+        return Err("ERR\tsdl_gl_open: " + go_gwhy);
+    }
+    let go_gh: String = match go_g { Ok(a) => a, Err(b) => b };
+    let go_c: Result[String, String] = gl_sym(ffi, go_sh, "SDL_GL_CreateContext");
+    if go_c.is_err() {
+        return go_c;
+    }
+    let go_w: Result[String, String] = gl_sym(ffi, go_sh, "SDL_GL_SwapWindow");
+    if go_w.is_err() {
+        return go_w;
+    }
+    let go_d: Result[String, String] = gl_sym(ffi, go_sh, "SDL_GL_DeleteContext");
+    if go_d.is_err() {
+        return go_d;
+    }
+    let go_cl: Result[String, String] = gl_sym(ffi, go_gh, "glClear");
+    if go_cl.is_err() {
+        return go_cl;
+    }
+    let go_e: Result[String, String] = gl_sym(ffi, go_gh, "glGetError");
+    if go_e.is_err() {
+        return go_e;
+    }
+    let go_cctx: String = match go_c { Ok(a) => a, Err(b) => b };
+    let go_swap: String = match go_w { Ok(a) => a, Err(b) => b };
+    let go_del: String = match go_d { Ok(a) => a, Err(b) => b };
+    let go_clear: String = match go_cl { Ok(a) => a, Err(b) => b };
+    let go_err: String = match go_e { Ok(a) => a, Err(b) => b };
+    return Ok(sdl_lib + "\t" + gl_lib + "\t" + go_cctx + "\t" + go_swap + "\t" + go_del + "\t" + go_clear + "\t" + go_err);
+}
+
+pub fn sdl_gl_context(ffi: &FfiCap, gctx: String, window: String) -> Result[String, String] {
+    return ffi_call(ffi, gl_field(gctx, 2), "p", "p", window);
+}
+
+pub fn sdl_gl_clear(ffi: &FfiCap, gctx: String, mask: Int) -> Result[Int, String] {
+    let gc_done: Result[String, String] = ffi_call(ffi, gl_field(gctx, 5), "v", "u", mask.to_string());
+    if gc_done.is_err() {
+        return Err("ERR\tsdl_gl_clear: glClear failed");
+    }
+    let gc_raw: Result[String, String] = ffi_call(ffi, gl_field(gctx, 6), "u", "", "");
+    let gc_code: Result[Int, String] = sdl_status_code(gc_raw);
+    if gc_code.is_err() {
+        return Err("ERR\tsdl_gl_clear: glGetError failed");
+    }
+    return gc_code;
+}
+
+pub fn sdl_gl_swap(ffi: &FfiCap, gctx: String, window: String) -> Result[Int, String] {
+    let gw_done: Result[String, String] = ffi_call(ffi, gl_field(gctx, 3), "v", "p", window);
+    if gw_done.is_err() {
+        return Err("ERR\tsdl_gl_swap: SwapWindow failed");
+    }
+    return Ok(0);
+}
+
+pub fn sdl_gl_delete(ffi: &FfiCap, gctx: String, glctx: String) -> Result[Int, String] {
+    let gd_done: Result[String, String] = ffi_call(ffi, gl_field(gctx, 4), "v", "p", glctx);
+    if gd_done.is_err() {
+        return Err("ERR\tsdl_gl_delete: DeleteContext failed");
+    }
+    return Ok(0);
+}

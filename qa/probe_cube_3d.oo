@@ -1,0 +1,100 @@
+// # Probe: spinning cube renders, covers pixels, turns deterministically
+//
+// Logline: Frame 0 covers the canvas center, frame 30 differs from frame 0,
+// and frame 30 re-renders byte-identical.
+//
+// Setup: Pure. No caps. 160x100 canvas, cube half-size 60 at dist 300,
+// focal 120. Black background; covered means a non-black pixel exists.
+//
+// Beats:
+//   1. Frame header is a 160x100 P3.
+//   2. Frame 0 covers center: background pixel count drops below full.
+//   3. Rotation is visible (frame 30 differs) and deterministic (equal).
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/ppm.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/cube_3d.oo";
+
+fn probe_cube_ppm(deg: Int) -> Result[String, String] {
+    let cb_bg: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let cb_mk: Result[DepthCanvas, String] = raster_depth_new(160, 100, cb_bg);
+    if cb_mk.is_err() {
+        return Err("cube probe: depth_new failed");
+    }
+    let cb_empty: DepthCanvas = match cb_mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    let cb_shot: DepthCanvas = cube_frame(cb_empty, deg, 300, 120, 80, 50);
+    let cb_img: Result[QoiImage, String] = canvas_to_image(cb_shot.cv);
+    if cb_img.is_err() {
+        return Err("cube probe: canvas_to_image failed");
+    }
+    let cb_plain: QoiImage = match cb_img { Ok(a) => a, Err(_) => QoiImage { header: QoiHeader { width: 0, height: 0, channels: 3, colorspace: 0 }, pixels: list_new() } };
+    return ppm_encode(cb_plain);
+}
+
+fn probe_cube_blacks(ppm: String) -> Int {
+    let mut cb_left: String = ppm;
+    let mut cb_n: Int = 0;
+    let mut cb_go: Int = 1;
+    while cb_go == 1 {
+        let cb_p: Int = str_index_of(cb_left, "0 0 0\n");
+        if cb_p < 0 {
+            cb_go = 0;
+        }
+        if cb_p >= 0 {
+            cb_n = cb_n + 1;
+            cb_left = str_slice(cb_left, cb_p + 1, chars_len(cb_left));
+        }
+    }
+    return cb_n;
+}
+
+pub fn main() -> Result[Int, String] {
+    if cube_vert(0).x != 0 - 60 {
+        return Err("cube probe: vert 0 x must be -60");
+    }
+    if cube_vert(6).z != 60 {
+        return Err("cube probe: vert 6 z must be 60");
+    }
+    if cube_vert(9).x != 0 - 60 {
+        return Err("cube probe: bad vert must fall back to vert 0");
+    }
+    let cb_bad: TriIdx = cube_face_tri(99);
+    if cb_bad.a != 0 {
+        return Err("cube probe: bad face must fall back to tri 0");
+    }
+    let t0: Result[String, String] = probe_cube_ppm(0);
+    if t0.is_err() {
+        return Err("cube probe: frame 0 failed");
+    }
+    let ppm0: String = match t0 { Ok(a) => a, Err(b) => b };
+    if str_slice(ppm0, 0, 13) != "P3\n160 100\n25" {
+        println(str_slice(ppm0, 0, 13));
+        return Err("cube probe: frame 0 must be a 160x100 P3");
+    }
+    let blacks0: Int = probe_cube_blacks(ppm0);
+    if blacks0 >= 16000 {
+        return Err("cube probe: frame 0 must cover pixels");
+    }
+    if blacks0 < 100 {
+        return Err("cube probe: frame 0 must leave background");
+    }
+    let t0b: Result[String, String] = probe_cube_ppm(0);
+    let ppm0b: String = match t0b { Ok(a) => a, Err(b) => b };
+    if ppm0b != ppm0 {
+        return Err("cube probe: frame 0 must re-render identical");
+    }
+    let t30: Result[String, String] = probe_cube_ppm(30);
+    let ppm30: String = match t30 { Ok(a) => a, Err(b) => b };
+    if ppm30 == ppm0 {
+        return Err("cube probe: frame 30 must differ from frame 0");
+    }
+    let blacks30: Int = probe_cube_blacks(ppm30);
+    if blacks30 >= 16000 {
+        return Err("cube probe: frame 30 must cover pixels");
+    }
+    println("probe: std/gfx cube_3d: ok");
+    return Ok(0);
+}

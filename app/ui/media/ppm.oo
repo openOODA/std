@@ -15,15 +15,18 @@ pub fn ppm_encode(img: QoiImage) -> Result[String, String] {
     if w <= 0 || h <= 0 {
         return Err("ERR\tppm_encode: non-positive image dimensions");
     }
-    let px: List[QoiRgba] = (img.pixels);
-    if list_len(px) != w * h {
+    // NOTE: no `let px = img.pixels` binding here. The C backend omits the
+    // entry retain for struct-element list fields and still releases at
+    // exit (net -1, heap corruption at scale); direct field reads stay
+    // balanced. Revisit when the emitter retains field-list bindings.
+    if list_len(img.pixels) != w * h {
         return Err("ERR\tppm_encode: pixel count != width*height");
     }
     let mut out: String = "P3\n" + w.to_string() + " " + h.to_string() + "\n255\n";
     let mut i: Int = 0;
     let n: Int = w * h;
     while i < n {
-        let p: QoiRgba = list_get(px, i);
+        let p: QoiRgba = list_get(img.pixels, i);
         let r: Int = p.r;
         let g: Int = p.g;
         let b: Int = p.b;

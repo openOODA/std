@@ -2,7 +2,7 @@
 //
 // Logline: Ui, tui, gui, media, and graphics for std/media.
 //
-// Setup: Domain module of 14 files under std/media. Pure compute, no caps; ppm_write/qoi_write take &FsWriteCap at the call site.
+// Setup: Domain module of 19 files under std/media. Pure compute, no caps except sdl_* which take &FfiCap; ppm_write/qoi_write take &FsWriteCap at the call site.
 //
 // Beats:
 //   1. Qoi family (2 files).
@@ -11,9 +11,14 @@
 //   4. Ppm family (1 file): QoiImage to P3 text sink.
 //   5. Canvas family (1 file): flat-int 2D raster, QoiImage at the boundary.
 //   6. Qoi file family (1 file): QOI binary sink via bytes_to_str.
+//   7. Raster family (1 file): integer depth-tested triangles on Canvas.
+//   8. Spin family (1 file): float degree trig plus int crossings.
+//   9. Cube family (1 file): turntable mesh drawn through raster.
+//   10. Sdl families (3 files): window binding, point-run blit, GL context.
 
 import "audio_mixer_basic.oo";
 import "canvas_2d.oo";
+import "cube_3d.oo";
 import "h264_nal.oo";
 import "h264_sps.oo";
 import "h264_types.oo";
@@ -24,5 +29,10 @@ import "qoi_file.oo";
 import "qoi_dec.oo";
 import "qoi_enc.oo";
 import "qoi_types.oo";
+import "raster_3d.oo";
+import "sdl_blit.oo";
+import "sdl_gl.oo";
+import "sdl_window.oo";
+import "spin_3d.oo";
 import "wav.oo";
 import "wav_types.oo";
