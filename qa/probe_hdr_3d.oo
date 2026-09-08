@@ -1,0 +1,95 @@
+// # Probe: HDR gain, add, bloom spread, tonemap curve
+//
+// Logline: Gain doubles radiance exactly; bloom moves 900 center-glow to
+// 100 neighbors and 1000 center; Reinhard maps 400 to 254 and 0 to 0.
+//
+// Setup: Pure. No caps. Epsilon 0.001 on float reads; tonemap ints exact.
+//
+// Beats:
+//   1. New buffer reads 0.0; canvas red 200 lifts to 400.0 at gain 2.
+//   2. Single add lands exactly; bloom spreads and re-adds.
+//   3. Tonemap endpoints hit 254 and 0.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/hdr_3d.oo";
+
+fn probe_hdr_close(got: Float, want: Float) -> Int {
+    let mut hr_d: Float = got - want;
+    if hr_d < 0.0 {
+        hr_d = 0.0 - hr_d;
+    }
+    if hr_d < 0.001 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn main() -> Result[Int, String] {
+    if spin_f2i(1.0) != 1 {
+        return Err("hdr probe: spin unit must be 1");
+    }
+    let hr_z: HdrFb = hdr_new(4, 3);
+    if probe_hdr_close(list_get(hr_z.px, 5), 0.0) != 1 {
+        return Err("hdr probe: new buffer must read 0");
+    }
+    if list_len(hr_z.px) != 36 {
+        return Err("hdr probe: 4x3 buffer must hold 36 floats");
+    }
+    let hr_red: QoiRgba = qoi_rgba_new(200, 0, 0, 255);
+    let mk: Result[Canvas, String] = canvas_new(1, 1, hr_red);
+    if mk.is_err() {
+        return Err("hdr probe: canvas_new failed");
+    }
+    let hr_one: Canvas = match mk { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    let hr_lift: HdrFb = hdr_from_canvas(hr_one, 2.0);
+    if probe_hdr_close(list_get(hr_lift.px, 0), 400.0) != 1 {
+        return Err("hdr probe: gain 2 must lift 200 to 400");
+    }
+    if probe_hdr_close(list_get(hr_lift.px, 1), 0.0) != 1 {
+        return Err("hdr probe: green channel must stay 0");
+    }
+    let hr_dark: HdrFb = hdr_new(2, 2);
+    let hr_lit: HdrFb = hdr_add(hr_dark, 1, 0, 300.0, 150.0, 75.0);
+    if probe_hdr_close(list_get(hr_lit.px, 3), 300.0) != 1 {
+        return Err("hdr probe: add must land red");
+    }
+    if probe_hdr_close(list_get(hr_lit.px, 4), 150.0) != 1 {
+        return Err("hdr probe: add must land green");
+    }
+    if probe_hdr_close(list_get(hr_lit.px, 0), 0.0) != 1 {
+        return Err("hdr probe: neighbor must stay dark");
+    }
+    let hr_oob: HdrFb = hdr_add(hr_dark, 9, 9, 300.0, 300.0, 300.0);
+    if probe_hdr_close(list_get(hr_oob.px, 0), 0.0) != 1 {
+        return Err("hdr probe: OOB add must change nothing");
+    }
+    let hr_seed: HdrFb = hdr_new(5, 5);
+    let hr_star: HdrFb = hdr_add(hr_seed, 2, 2, 900.0, 0.0, 0.0);
+    let hr_glow: HdrFb = hdr_bloom(hr_star, 100.0, 1.0);
+    if probe_hdr_close(list_get(hr_glow.px, 36), 1000.0) != 1 {
+        return Err("hdr probe: bloom center must be 1000");
+    }
+    if probe_hdr_close(list_get(hr_glow.px, 21), 100.0) != 1 {
+        return Err("hdr probe: bloom neighbor must be 100");
+    }
+    if probe_hdr_close(list_get(hr_glow.px, 0), 0.0) != 1 {
+        return Err("hdr probe: bloom corner must stay 0");
+    }
+    let hr_hot: HdrFb = hdr_from_canvas(hr_one, 2.0);
+    let hr_img: Canvas = hdr_tonate(hr_hot);
+    if list_get(hr_img.px, 0) != 254 {
+        return Err("hdr probe: tonemap 400 must be 254");
+    }
+    let hr_cold: HdrFb = hdr_new(1, 1);
+    let hr_dim: Canvas = hdr_tonate(hr_cold);
+    if list_get(hr_dim.px, 0) != 0 {
+        return Err("hdr probe: tonemap 0 must be 0");
+    }
+    if list_get(hr_dim.px, 3) != 255 {
+        return Err("hdr probe: alpha must stay 255");
+    }
+    println("probe: std/gfx hdr_3d: ok");
+    return Ok(0);
+}

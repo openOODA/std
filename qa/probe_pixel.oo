@@ -1,0 +1,111 @@
+// # Probe: pixel sprite storage, draws, and reorientation
+//
+// Logline: Indexed sprites hold exact palette maps through lines, rects,
+// fills, flips, and a clockwise quarter turn, with fail-closed bounds.
+//
+// Setup: Pure compute, no caps. Prints probe: std/gfx pixel: ok when every
+// exact assert holds, else returns Err naming the step.
+//
+// Beats:
+//   1. new/get/set/count pin storage including OOB read -1 and OOB no-op.
+//   2. line/rect/fill_rect/fill pin clipped draws.
+//   3. flip_h/flip_v/rot90 pin reorientation maps on an asymmetric marker.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/pixel_2d.oo";
+
+fn probe_sprite() -> Sprite {
+    let sp: Result[Sprite, String] = pix_new(3, 2, 0);
+    return match sp { Ok(a) => a, Err(_) => Sprite { w: 0, h: 0, px: list_new() } };
+}
+
+fn probe_sprite44() -> Sprite {
+    let sp: Result[Sprite, String] = pix_new(4, 4, 0);
+    return match sp { Ok(a) => a, Err(_) => Sprite { w: 0, h: 0, px: list_new() } };
+}
+
+pub fn main() -> Result[Int, String] {
+    if pix_new(0, 2, 0).is_ok() {
+        return Err("pixel: zero width must fail");
+    }
+    if pix_new(3, 0, 0).is_ok() {
+        return Err("pixel: zero height must fail");
+    }
+    let sp0: Sprite = probe_sprite();
+    if pix_count(sp0, 0) != 6 {
+        return Err("pixel: new must fill bg");
+    }
+    if pix_get(sp0, 2, 1) != 0 {
+        return Err("pixel: get bg wrong");
+    }
+    if pix_get(sp0, 3, 0) != 0 - 1 {
+        return Err("pixel: oob x read must be -1");
+    }
+    if pix_get(sp0, 0 - 1, 0) != 0 - 1 {
+        return Err("pixel: negative read must be -1");
+    }
+    let sp1: Sprite = pix_set(pix_set(sp0, 0, 0, 1), 9, 9, 2);
+    if pix_get(sp1, 0, 0) != 1 {
+        return Err("pixel: set must land");
+    }
+    if pix_count(sp1, 2) != 0 {
+        return Err("pixel: oob write must drop");
+    }
+    if pix_count(sp1, 1) != 1 {
+        return Err("pixel: oob write keeps rest");
+    }
+    // Draws: diagonal line, rect outline, clipped fill, full flood.
+    let ln: Sprite = pix_line(probe_sprite44(), 0, 0, 3, 3, 2);
+    if pix_count(ln, 2) != 4 {
+        return Err("pixel: line must plot 4");
+    }
+    if pix_get(ln, 1, 1) != 2 {
+        return Err("pixel: line mid missing");
+    }
+    let rc0: Result[Sprite, String] = pix_new(4, 3, 0);
+    let rcbg: Sprite = match rc0 { Ok(a) => a, Err(_) => probe_sprite() };
+    let rc: Sprite = pix_rect(rcbg, 0, 0, 4, 3, 3);
+    if pix_count(rc, 3) != 10 {
+        return Err("pixel: rect outline must be 10");
+    }
+    let fr: Sprite = pix_fill_rect(probe_sprite44(), 2, 2, 5, 5, 4);
+    if pix_count(fr, 4) != 4 {
+        return Err("pixel: fill_rect must clip to 4");
+    }
+    let fl0: Result[Sprite, String] = pix_new(2, 3, 0);
+    let flbg: Sprite = match fl0 { Ok(a) => a, Err(_) => probe_sprite() };
+    if pix_count(pix_fill(flbg, 5), 5) != 6 {
+        return Err("pixel: fill must flood all");
+    }
+    // Reorient: asymmetric marker so each transform is distinguishable.
+    let mk: Sprite = pix_set(pix_set(probe_sprite(), 0, 0, 1), 2, 1, 2);
+    let fh: Sprite = pix_flip_h(mk);
+    if pix_get(fh, 2, 0) != 1 {
+        return Err("pixel: flip_h moves tl");
+    }
+    if pix_get(fh, 0, 1) != 2 {
+        return Err("pixel: flip_h moves br");
+    }
+    let fv: Sprite = pix_flip_v(mk);
+    if pix_get(fv, 0, 1) != 1 {
+        return Err("pixel: flip_v moves tl");
+    }
+    if pix_get(fv, 2, 0) != 2 {
+        return Err("pixel: flip_v moves br");
+    }
+    let rt: Sprite = pix_rot90(mk);
+    if rt.w != 2 {
+        return Err("pixel: rot90 must swap w");
+    }
+    if rt.h != 3 {
+        return Err("pixel: rot90 must swap h");
+    }
+    if pix_get(rt, 1, 0) != 1 {
+        return Err("pixel: rot90 tl lands");
+    }
+    if pix_get(rt, 0, 2) != 2 {
+        return Err("pixel: rot90 br lands");
+    }
+    println("probe: std/gfx pixel: ok");
+    return Ok(0);
+}

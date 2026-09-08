@@ -1,0 +1,119 @@
+// # Vector polygon fill: triangle plus convex fan
+//
+// Logline: Barycentric triangle fill on plain Canvas plus convex polygon
+// fan fill, dependency-free of depth.
+//
+// Setup: Pure compute, no caps. Only convex polygons fill correctly; the
+// fan pivots on point zero. Fills pin ambient quota per pixel the way
+// canvas_fill does, so keep them small (glyphs, icons).
+//
+// Beats:
+//   1. vec_tri_fill covers one triangle with clipping.
+//   2. vec_fill_convex fans point zero across the ring.
+
+pub fn vec_tri_fill(cv: Canvas, ax: Int, ay: Int, bx: Int, by: Int, cx: Int, cy: Int, c: QoiRgba) -> Canvas {
+    let vx_w: Int = cv.width;
+    let vx_h: Int = cv.height;
+    let vx_area: Int = raster_area2(ax, ay, bx, by, cx, cy);
+    if vx_area == 0 {
+        return cv;
+    }
+    let mut vx_ax: Int = ax;
+    let mut vx_ay: Int = ay;
+    let mut vx_bx: Int = bx;
+    let mut vx_by: Int = by;
+    let mut vx_cx: Int = cx;
+    let mut vx_cy: Int = cy;
+    if vx_area < 0 {
+        let vx_tx: Int = vx_bx;
+        let vx_ty: Int = vx_by;
+        vx_bx = vx_cx;
+        vx_by = vx_cy;
+        vx_cx = vx_tx;
+        vx_cy = vx_ty;
+    }
+    let vx_span: Int = raster_area2(vx_ax, vx_ay, vx_bx, vx_by, vx_cx, vx_cy);
+    let mut vx_x0: Int = vx_ax;
+    if vx_bx < vx_x0 {
+        vx_x0 = vx_bx;
+    }
+    if vx_cx < vx_x0 {
+        vx_x0 = vx_cx;
+    }
+    let mut vx_x1: Int = vx_ax;
+    if vx_bx > vx_x1 {
+        vx_x1 = vx_bx;
+    }
+    if vx_cx > vx_x1 {
+        vx_x1 = vx_cx;
+    }
+    let mut vx_y0: Int = vx_ay;
+    if vx_by < vx_y0 {
+        vx_y0 = vx_by;
+    }
+    if vx_cy < vx_y0 {
+        vx_y0 = vx_cy;
+    }
+    let mut vx_y1: Int = vx_ay;
+    if vx_by > vx_y1 {
+        vx_y1 = vx_by;
+    }
+    if vx_cy > vx_y1 {
+        vx_y1 = vx_cy;
+    }
+    if vx_x0 < 0 {
+        vx_x0 = 0;
+    }
+    if vx_y0 < 0 {
+        vx_y0 = 0;
+    }
+    if vx_x1 >= vx_w {
+        vx_x1 = vx_w - 1;
+    }
+    if vx_y1 >= vx_h {
+        vx_y1 = vx_h - 1;
+    }
+    // NOTE: threading canvas_set per pixel pins ambient quota the way
+    // canvas_fill does; keep vector fills small (glyphs, icons).
+    // Seed via OOB no-op (see raster_3d.oo note); never `= cv`.
+    let mut vx_out: Canvas = canvas_set(cv, 0 - 1, 0, c);
+    let mut vx_ry: Int = vx_y0;
+    while vx_ry <= vx_y1 {
+        let mut vx_rx: Int = vx_x0;
+        while vx_rx <= vx_x1 {
+            let vx_w0: Int = (vx_bx - vx_ax) * (vx_ry - vx_ay) - (vx_by - vx_ay) * (vx_rx - vx_ax);
+            let vx_w1: Int = (vx_cx - vx_bx) * (vx_ry - vx_by) - (vx_cy - vx_by) * (vx_rx - vx_bx);
+            let vx_w2: Int = (vx_ax - vx_cx) * (vx_ry - vx_cy) - (vx_ay - vx_cy) * (vx_rx - vx_cx);
+            if vx_w0 >= 0 {
+                if vx_w1 >= 0 {
+                    if vx_w2 >= 0 {
+                        vx_out = canvas_set(vx_out, vx_rx, vx_ry, c);
+                    }
+                }
+            }
+            vx_rx = vx_rx + 1;
+        }
+        vx_ry = vx_ry + 1;
+    }
+    return vx_out;
+}
+
+pub fn vec_fill_convex(cv: Canvas, pts: List[Int], n: Int, c: QoiRgba) -> Canvas {
+    // NOTE: seed via OOB no-op (see raster_3d.oo note); never `= cv`.
+    let mut vx_out: Canvas = canvas_set(cv, 0 - 1, 0, c);
+    if n < 3 {
+        return vx_out;
+    }
+    let vx_ax: Int = list_get(pts, 0);
+    let vx_ay: Int = list_get(pts, 1);
+    let mut vx_i: Int = 1;
+    while vx_i + 1 < n {
+        let vx_bx: Int = list_get(pts, vx_i * 2);
+        let vx_by: Int = list_get(pts, vx_i * 2 + 1);
+        let vx_cx: Int = list_get(pts, (vx_i + 1) * 2);
+        let vx_cy: Int = list_get(pts, (vx_i + 1) * 2 + 1);
+        vx_out = vec_tri_fill(vx_out, vx_ax, vx_ay, vx_bx, vx_by, vx_cx, vx_cy, c);
+        vx_i = vx_i + 1;
+    }
+    return vx_out;
+}

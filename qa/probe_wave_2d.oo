@@ -1,0 +1,117 @@
+// # Probe: 2D water phases, swell, paint, and foam
+//
+// Logline: Phase normalization, exact-zero still points, signed crest and
+// trough, swell-plus-chop sums, and painted deep/crest/foam pixel counts
+// with animated surface heights across time steps.
+//
+// Setup: Pure compute, no caps. Imports name every home module in the C
+// build unit (spin_f2i pins spin_3d.oo). Pixel counts read the flat
+// Canvas.px RGBA ints directly, so no PPM strings churn the list quota.
+// Prints probe: std/gfx wave_2d: ok or returns Err naming the step.
+//
+// Beats:
+//   1. wave_phase wraps 720 to 0 and -90 to 270.
+//   2. wave_h is exactly 0 at phases 0/180, positive at 90, negative at 270.
+//   3. wave_sea sums both components; bigger amps lift higher.
+//   4. wave_paint covers 36 surface pixels; foam appears with band 3 and
+//      vanishes with band -1.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/wave_2d.oo";
+
+fn wv_count_color(cv: Canvas, r: Int, g: Int, b: Int) -> Int {
+    // NOTE: Canvas.px is flat RGBA ints; list_get reads never bind, so a
+    // full-canvas count allocates nothing and stays inside list quota.
+    let mut wv_n: Int = 0;
+    let mut wv_i: Int = 0;
+    let wv_m: Int = cv.width * cv.height;
+    while wv_i < wv_m {
+        let wv_base: Int = wv_i * 4;
+        if list_get(cv.px, wv_base) == r {
+            if list_get(cv.px, wv_base + 1) == g {
+                if list_get(cv.px, wv_base + 2) == b {
+                    wv_n = wv_n + 1;
+                }
+            }
+        }
+        wv_i = wv_i + 1;
+    }
+    return wv_n;
+}
+
+fn wv_sea_canvas(t: Int, band: Int) -> Canvas {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let deep: QoiRgba = qoi_rgba_new(0, 0, 128, 255);
+    let crest: QoiRgba = qoi_rgba_new(0, 128, 255, 255);
+    let foam: QoiRgba = qoi_rgba_new(255, 255, 255, 255);
+    let cbgr: Result[Canvas, String] = canvas_new(36, 12, black);
+    let cbg: Canvas = match cbgr { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    return wave_paint(cbg, 6, t, 3, 36, 1, 2, 12, 1, deep, crest, foam, band);
+}
+
+pub fn main() -> Result[Int, String] {
+    if spin_f2i(spin_sin_deg(0)) != 0 {
+        return Err("wave_2d: spin sine at 0 must be 0");
+    }
+    if wave_phase(720) != 0 {
+        return Err("wave_2d: phase 720 must wrap to 0");
+    }
+    if wave_phase(0 - 90) != 270 {
+        return Err("wave_2d: phase -90 must wrap to 270");
+    }
+    if wave_phase(45) != 45 {
+        return Err("wave_2d: phase 45 must hold");
+    }
+    if wave_h(0, 0, 10, 360, 1) != 0 {
+        return Err("wave_2d: still point at phase 0 must be 0");
+    }
+    if wave_h(180, 0, 10, 360, 1) != 0 {
+        return Err("wave_2d: still point at phase 180 must be 0");
+    }
+    if wave_h(90, 0, 10, 360, 1) <= 0 {
+        return Err("wave_2d: crest at phase 90 must be positive");
+    }
+    if wave_h(270, 0, 10, 360, 1) >= 0 {
+        return Err("wave_2d: trough at phase 270 must be negative");
+    }
+    if wave_h(5, 5, 10, 0, 1) != 0 {
+        return Err("wave_2d: bad period must fail closed to 0");
+    }
+    if wave_h(90, 0, 20, 360, 1) <= wave_h(90, 0, 5, 360, 1) {
+        return Err("wave_2d: bigger amplitude must lift higher");
+    }
+    if wave_sea(0, 0, 3, 36, 1, 2, 12, 1) != 0 {
+        return Err("wave_2d: sea at still point must be 0");
+    }
+    if wave_sea(4, 0, 3, 36, 1, 2, 12, 1) != wave_h(4, 0, 3, 36, 1) + wave_h(4, 0, 2, 12, 1) {
+        return Err("wave_2d: sea must sum swell and chop");
+    }
+    if wave_h(3, 0, 2, 12, 1) == 0 {
+        return Err("wave_2d: chop must be nonzero at its crest");
+    }
+    if wave_sea(0, 0, 3, 36, 1, 2, 12, 1) == wave_sea(0, 45, 3, 36, 1, 2, 12, 1) {
+        return Err("wave_2d: surface must move with time");
+    }
+    // Paint: every one of the 36 columns shows exactly one surface pixel.
+    let foamy: Canvas = wv_sea_canvas(0, 3);
+    if wv_count_color(foamy, 0, 0, 128) == 0 {
+        return Err("wave_2d: deep water must cover pixels");
+    }
+    if wv_count_color(foamy, 0, 128, 255) + wv_count_color(foamy, 255, 255, 255) != 36 {
+        return Err("wave_2d: surface must span 36 columns");
+    }
+    if wv_count_color(foamy, 255, 255, 255) == 0 {
+        return Err("wave_2d: band 3 must foam the tops");
+    }
+    let calm: Canvas = wv_sea_canvas(0, 0 - 1);
+    if wv_count_color(calm, 255, 255, 255) != 0 {
+        return Err("wave_2d: band -1 must foam nothing");
+    }
+    if wv_count_color(calm, 0, 128, 255) != 36 {
+        return Err("wave_2d: calm surface must be all crest");
+    }
+    println("probe: std/gfx wave_2d: ok");
+    return Ok(0);
+}

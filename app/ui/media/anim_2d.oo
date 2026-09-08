@@ -1,0 +1,120 @@
+// # Animation helpers: tweens, run diffs, frame angles
+//
+// Logline: Integer easing, turntable angles, and RLE change sets for the
+// frame player; rendering itself stays in cube/raster.
+//
+// Setup: Pure compute, no caps. Time t runs 0..steps inclusive; out of
+// range clamps. Runs are sdl_blit_runs quadruples (r,g,b,count); the diff
+// lists changed run indices so the player re-dots only those.
+//
+// Beats:
+//   1. anim_lerp plus quad ease in/out/in-out.
+//   2. anim_spin_step maps a frame index to degrees.
+//   3. anim_run_count and anim_runs_diff drive dirty-run blits.
+
+pub fn anim_lerp(a: Int, b: Int, t: Int, steps: Int) -> Int {
+    if steps <= 0 {
+        return a;
+    }
+    let mut an_t: Int = t;
+    if an_t < 0 {
+        an_t = 0;
+    }
+    if an_t > steps {
+        an_t = steps;
+    }
+    return a + (b - a) * an_t / steps;
+}
+
+pub fn anim_ease_in(t: Int, steps: Int) -> Int {
+    if steps <= 0 {
+        return 0;
+    }
+    let mut an_t: Int = t;
+    if an_t < 0 {
+        an_t = 0;
+    }
+    if an_t > steps {
+        an_t = steps;
+    }
+    return an_t * an_t / steps;
+}
+
+pub fn anim_ease_out(t: Int, steps: Int) -> Int {
+    if steps <= 0 {
+        return 0;
+    }
+    let mut an_t: Int = t;
+    if an_t < 0 {
+        an_t = 0;
+    }
+    if an_t > steps {
+        an_t = steps;
+    }
+    let an_u: Int = steps - an_t;
+    return steps - an_u * an_u / steps;
+}
+
+pub fn anim_ease_io(t: Int, steps: Int) -> Int {
+    if steps <= 0 {
+        return 0;
+    }
+    let mut an_t: Int = t;
+    if an_t < 0 {
+        an_t = 0;
+    }
+    if an_t > steps {
+        an_t = steps;
+    }
+    if an_t * 2 < steps {
+        return 2 * an_t * an_t / steps;
+    }
+    let an_u: Int = steps - an_t;
+    return steps - 2 * an_u * an_u / steps;
+}
+
+pub fn anim_spin_step(frame: Int, total: Int, degrees: Int) -> Int {
+    if total <= 0 {
+        return 0;
+    }
+    let mut an_f: Int = frame;
+    if an_f < 0 {
+        an_f = 0;
+    }
+    if an_f > total {
+        an_f = total;
+    }
+    return an_f * degrees / total;
+}
+
+pub fn anim_run_count(runs: List[Int]) -> Int {
+    return list_len(runs) / 4;
+}
+
+pub fn anim_runs_diff(prev: List[Int], cur: List[Int]) -> List[Int] {
+    let mut an_out: List[Int] = list_new();
+    let an_np: Int = list_len(prev) / 4;
+    let an_nc: Int = list_len(cur) / 4;
+    let mut an_g: Int = 0;
+    while an_g < an_nc {
+        let mut an_same: Int = 0;
+        if an_g < an_np {
+            let an_pb: Int = an_g * 4;
+            let an_cb: Int = an_g * 4;
+            if list_get(prev, an_pb) == list_get(cur, an_cb) {
+                if list_get(prev, an_pb + 1) == list_get(cur, an_cb + 1) {
+                    if list_get(prev, an_pb + 2) == list_get(cur, an_cb + 2) {
+                        if list_get(prev, an_pb + 3) == list_get(cur, an_cb + 3) {
+                            an_same = 1;
+                        }
+                    }
+                }
+            }
+        }
+        if an_same == 0 {
+            an_out = list_push(an_out, an_g);
+        }
+        an_g = an_g + 1;
+    }
+    return an_out;
+}

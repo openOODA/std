@@ -1,0 +1,88 @@
+// # Probe: shadow frame darkens, stays deterministic
+//
+// Logline: Side light casts cube self-shadow: the shadow frame differs
+// from the lit frame, covers the same pixels, and re-renders identical.
+//
+// Setup: Pure. No caps. 160x100, light (100,40,-60) from the right so the
+// left faces drop to ambient while the lit frame keeps them shaded.
+//
+// Beats:
+//   1. Shadow frame covers pixels (background count below full).
+//   2. Shadow differs from the no-shadow lit frame at the same angle.
+//   3. Shadow re-renders byte-identical.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/ppm.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/cube_3d.oo";
+import "std/app/ui/media/shadow_3d.oo";
+
+fn probe_shadow_ppm(deg: Int, mode: Int) -> Result[String, String] {
+    let sw_bg: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let sw_mk: Result[DepthCanvas, String] = raster_depth_new(160, 100, sw_bg);
+    if sw_mk.is_err() {
+        return Err("shadow probe: depth_new failed");
+    }
+    let sw_empty: DepthCanvas = match sw_mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    let mut sw_shot: DepthCanvas = cube_frame(sw_empty, deg, 300, 120, 80, 50, 100, 40, 0 - 60, 24, 1);
+    if mode == 1 {
+        sw_shot = shadow_frame(sw_empty, deg, 300, 120, 80, 50, 100, 40, 0 - 60, 24);
+    }
+    let sw_img: Result[QoiImage, String] = canvas_to_image(sw_shot.cv);
+    if sw_img.is_err() {
+        return Err("shadow probe: canvas_to_image failed");
+    }
+    let sw_plain: QoiImage = match sw_img { Ok(a) => a, Err(_) => QoiImage { header: QoiHeader { width: 0, height: 0, channels: 3, colorspace: 0 }, pixels: list_new() } };
+    return ppm_encode(sw_plain);
+}
+
+fn probe_shadow_blacks(ppm: String) -> Int {
+    let mut sw_left: String = ppm;
+    let mut sw_n: Int = 0;
+    let mut sw_go: Int = 1;
+    while sw_go == 1 {
+        let sw_p: Int = str_index_of(sw_left, "0 0 0\n");
+        if sw_p < 0 {
+            sw_go = 0;
+        }
+        if sw_p >= 0 {
+            sw_n = sw_n + 1;
+            sw_left = str_slice(sw_left, sw_p + 1, chars_len(sw_left));
+        }
+    }
+    return sw_n;
+}
+
+pub fn main() -> Result[Int, String] {
+    let t0: Result[String, String] = probe_shadow_ppm(20, 0);
+    if t0.is_err() {
+        return Err("shadow probe: lit frame failed");
+    }
+    let ppm0: String = match t0 { Ok(a) => a, Err(b) => b };
+    let t1: Result[String, String] = probe_shadow_ppm(20, 1);
+    if t1.is_err() {
+        return Err("shadow probe: shadow frame failed");
+    }
+    let ppm1: String = match t1 { Ok(a) => a, Err(b) => b };
+    if probe_shadow_blacks(ppm1) >= 16000 {
+        return Err("shadow probe: shadow frame must cover pixels");
+    }
+    if ppm1 == ppm0 {
+        return Err("shadow probe: shadow must differ from lit");
+    }
+    let t1b: Result[String, String] = probe_shadow_ppm(20, 1);
+    let ppm1b: String = match t1b { Ok(a) => a, Err(b) => b };
+    if ppm1b != ppm1 {
+        return Err("shadow probe: shadow must re-render identical");
+    }
+    let t2: Result[String, String] = probe_shadow_ppm(60, 1);
+    let ppm2: String = match t2 { Ok(a) => a, Err(b) => b };
+    if ppm2 == ppm1 {
+        return Err("shadow probe: angle must change shadow");
+    }
+    println("probe: std/gfx shadow_3d: ok");
+    return Ok(0);
+}

@@ -1,0 +1,91 @@
+// # Bitmap text: glyph lookup, draw, measure
+//
+// Logline: 5x7 text on Canvas with integer scale, unknown glyphs blank.
+//
+// Setup: Pure compute, no caps. Glyph tables live in font_rows_1..4;
+// font_glyph tries each in order. Bits extract by divide/mod, no bitops.
+// One column of tracking between glyphs; scale multiplies blocks.
+//
+// Beats:
+//   1. font_glyph returns 7 row ints; unknown glyphs return blanks.
+//   2. text_draw stamps scaled blocks through canvas_set.
+//   3. text_width measures advance including tracking and scale.
+
+pub fn font_glyph(ch: String) -> List[Int] {
+    let ft_a: List[Int] = font_rows_1(ch);
+    if list_len(ft_a) == 7 {
+        return ft_a;
+    }
+    let ft_b: List[Int] = font_rows_2(ch);
+    if list_len(ft_b) == 7 {
+        return ft_b;
+    }
+    let ft_c: List[Int] = font_rows_3(ch);
+    if list_len(ft_c) == 7 {
+        return ft_c;
+    }
+    let ft_d: List[Int] = font_rows_4(ch);
+    if list_len(ft_d) == 7 {
+        return ft_d;
+    }
+    let mut ft_blank: List[Int] = list_new();
+    ft_blank = list_push(ft_blank, 0);
+    ft_blank = list_push(ft_blank, 0);
+    ft_blank = list_push(ft_blank, 0);
+    ft_blank = list_push(ft_blank, 0);
+    ft_blank = list_push(ft_blank, 0);
+    ft_blank = list_push(ft_blank, 0);
+    ft_blank = list_push(ft_blank, 0);
+    return ft_blank;
+}
+
+pub fn text_width(s: String, scale: Int) -> Int {
+    let ft_n: Int = chars_len(s);
+    if ft_n <= 0 {
+        return 0;
+    }
+    let mut ft_s: Int = scale;
+    if ft_s < 1 {
+        ft_s = 1;
+    }
+    return (ft_n * 6 - 1) * ft_s;
+}
+
+pub fn text_draw(cv: Canvas, x: Int, y: Int, s: String, c: QoiRgba, scale: Int) -> Canvas {
+    // NOTE: seed via OOB no-op (see raster_3d.oo note); never `= cv`.
+    let mut ft_out: Canvas = canvas_set(cv, 0 - 1, 0, c);
+    let mut ft_s: Int = scale;
+    if ft_s < 1 {
+        ft_s = 1;
+    }
+    let mut ft_i: Int = 0;
+    let ft_n: Int = chars_len(s);
+    while ft_i < ft_n {
+        let ft_ch: String = str_slice(s, ft_i, ft_i + 1);
+        let ft_rows: List[Int] = font_glyph(ft_ch);
+        let mut ft_r: Int = 0;
+        while ft_r < 7 {
+            let ft_row: Int = list_get(ft_rows, ft_r);
+            let mut ft_bv: Int = 16;
+            let mut ft_k: Int = 0;
+            while ft_k < 5 {
+                if (ft_row / ft_bv) % 2 == 1 {
+                    let mut ft_dy: Int = 0;
+                    while ft_dy < ft_s {
+                        let mut ft_dx: Int = 0;
+                        while ft_dx < ft_s {
+                            ft_out = canvas_set(ft_out, x + (ft_i * 6 + ft_k) * ft_s + ft_dx, y + ft_r * ft_s + ft_dy, c);
+                            ft_dx = ft_dx + 1;
+                        }
+                        ft_dy = ft_dy + 1;
+                    }
+                }
+                ft_bv = ft_bv / 2;
+                ft_k = ft_k + 1;
+            }
+            ft_r = ft_r + 1;
+        }
+        ft_i = ft_i + 1;
+    }
+    return ft_out;
+}

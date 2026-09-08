@@ -16,6 +16,7 @@ import "std/app/ui/media/canvas_2d.oo";
 import "std/app/ui/media/ppm.oo";
 import "std/app/ui/media/raster_3d.oo";
 import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
 import "std/app/ui/media/cube_3d.oo";
 
 fn probe_cube_ppm(deg: Int) -> Result[String, String] {
@@ -25,7 +26,7 @@ fn probe_cube_ppm(deg: Int) -> Result[String, String] {
         return Err("cube probe: depth_new failed");
     }
     let cb_empty: DepthCanvas = match cb_mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
-    let cb_shot: DepthCanvas = cube_frame(cb_empty, deg, 300, 120, 80, 50);
+    let cb_shot: DepthCanvas = cube_frame(cb_empty, deg, 300, 120, 80, 50, 0, 0, 0, 0, 0);
     let cb_img: Result[QoiImage, String] = canvas_to_image(cb_shot.cv);
     if cb_img.is_err() {
         return Err("cube probe: canvas_to_image failed");

@@ -1,0 +1,202 @@
+// # Vector paths: build, flatten, stroke, convex fill
+//
+// Logline: Resolution-independent polylines plus quadratic/cubic flattening,
+// stroked onto Canvas and convex-filled without depth.
+//
+// Setup: Pure compute, no caps. A path is a flat Int command list: 0 move
+// (x,y), 1 line (x,y), 2 quad (cx,cy,x,y), 3 cubic (c1x,c1y,c2x,c2y,x,y).
+// Flattening subdivides curves into segments (8 steps quad, 12 cubic) with
+// integer Bernstein weights. Fill is barycentric over a fan; only convex
+// polygons fill correctly.
+//
+// Beats:
+//   1. path_new/move_to/line_to/quad_to/cubic_to encode commands.
+//   2. vec_flatten lowers every command to an (x0,y0,x1,y1) segment soup.
+//   3. vec_stroke draws segments plus round joint stamps at the given width.
+//   4. vec_fill_convex fan-fills convex polygons on plain Canvas.
+
+pub fn path_new(sx: Int, sy: Int) -> List[Int] {
+    let mut vx_p: List[Int] = list_new();
+    vx_p = list_push(vx_p, 0);
+    vx_p = list_push(vx_p, sx);
+    vx_p = list_push(vx_p, sy);
+    return vx_p;
+}
+
+pub fn path_move_to(p: List[Int], x: Int, y: Int) -> List[Int] {
+    let mut vx_p: List[Int] = p;
+    vx_p = list_push(vx_p, 0);
+    vx_p = list_push(vx_p, x);
+    vx_p = list_push(vx_p, y);
+    return vx_p;
+}
+
+pub fn path_line_to(p: List[Int], x: Int, y: Int) -> List[Int] {
+    let mut vx_p: List[Int] = p;
+    vx_p = list_push(vx_p, 1);
+    vx_p = list_push(vx_p, x);
+    vx_p = list_push(vx_p, y);
+    return vx_p;
+}
+
+pub fn path_quad_to(p: List[Int], cx: Int, cy: Int, x: Int, y: Int) -> List[Int] {
+    let mut vx_p: List[Int] = p;
+    vx_p = list_push(vx_p, 2);
+    vx_p = list_push(vx_p, cx);
+    vx_p = list_push(vx_p, cy);
+    vx_p = list_push(vx_p, x);
+    vx_p = list_push(vx_p, y);
+    return vx_p;
+}
+
+pub fn path_cubic_to(p: List[Int], c1x: Int, c1y: Int, c2x: Int, c2y: Int, x: Int, y: Int) -> List[Int] {
+    let mut vx_p: List[Int] = p;
+    vx_p = list_push(vx_p, 3);
+    vx_p = list_push(vx_p, c1x);
+    vx_p = list_push(vx_p, c1y);
+    vx_p = list_push(vx_p, c2x);
+    vx_p = list_push(vx_p, c2y);
+    vx_p = list_push(vx_p, x);
+    vx_p = list_push(vx_p, y);
+    return vx_p;
+}
+
+fn vec_seg(out: List[Int], x0: Int, y0: Int, x1: Int, y1: Int) -> List[Int] {
+    let mut vx_o: List[Int] = out;
+    vx_o = list_push(vx_o, x0);
+    vx_o = list_push(vx_o, y0);
+    vx_o = list_push(vx_o, x1);
+    vx_o = list_push(vx_o, y1);
+    return vx_o;
+}
+
+fn vec_quad_pt(x0: Int, y0: Int, cx: Int, cy: Int, x1: Int, y1: Int, t: Int) -> List[Int] {
+    let vx_a: Int = (8 - t) * (8 - t);
+    let vx_b: Int = 2 * t * (8 - t);
+    let vx_c: Int = t * t;
+    let mut vx_o: List[Int] = list_new();
+    vx_o = list_push(vx_o, (vx_a * x0 + vx_b * cx + vx_c * x1) / 64);
+    vx_o = list_push(vx_o, (vx_a * y0 + vx_b * cy + vx_c * y1) / 64);
+    return vx_o;
+}
+
+fn vec_cubic_pt(x0: Int, y0: Int, c1x: Int, c1y: Int, c2x: Int, c2y: Int, x1: Int, y1: Int, t: Int) -> List[Int] {
+    let vx_u: Int = 12 - t;
+    let vx_a: Int = vx_u * vx_u * vx_u;
+    let vx_b: Int = 3 * t * vx_u * vx_u;
+    let vx_c: Int = 3 * t * t * vx_u;
+    let vx_d: Int = t * t * t;
+    let mut vx_o: List[Int] = list_new();
+    vx_o = list_push(vx_o, (vx_a * x0 + vx_b * c1x + vx_c * c2x + vx_d * x1) / 1728);
+    vx_o = list_push(vx_o, (vx_a * y0 + vx_b * c1y + vx_c * c2y + vx_d * y1) / 1728);
+    return vx_o;
+}
+
+pub fn vec_flatten(p: List[Int]) -> List[Int] {
+    let mut vx_segs: List[Int] = list_new();
+    let mut vx_i: Int = 0;
+    let mut vx_px: Int = 0;
+    let mut vx_py: Int = 0;
+    let mut vx_has: Int = 0;
+    let vx_n: Int = list_len(p);
+    while vx_i < vx_n {
+        let vx_op: Int = list_get(p, vx_i);
+        if vx_op == 0 {
+            vx_px = list_get(p, vx_i + 1);
+            vx_py = list_get(p, vx_i + 2);
+            vx_has = 1;
+            vx_i = vx_i + 3;
+        }
+        if vx_op == 1 {
+            let vx_x: Int = list_get(p, vx_i + 1);
+            let vx_y: Int = list_get(p, vx_i + 2);
+            if vx_has == 1 {
+                vx_segs = vec_seg(vx_segs, vx_px, vx_py, vx_x, vx_y);
+            }
+            vx_px = vx_x;
+            vx_py = vx_y;
+            vx_has = 1;
+            vx_i = vx_i + 3;
+        }
+        if vx_op == 2 {
+            let vx_cx: Int = list_get(p, vx_i + 1);
+            let vx_cy: Int = list_get(p, vx_i + 2);
+            let vx_x: Int = list_get(p, vx_i + 3);
+            let vx_y: Int = list_get(p, vx_i + 4);
+            let mut vx_t: Int = 1;
+            let mut vx_lx: Int = vx_px;
+            let mut vx_ly: Int = vx_py;
+            while vx_t <= 8 {
+                let vx_pt: List[Int] = vec_quad_pt(vx_px, vx_py, vx_cx, vx_cy, vx_x, vx_y, vx_t);
+                let vx_nx: Int = list_get(vx_pt, 0);
+                let vx_ny: Int = list_get(vx_pt, 1);
+                if vx_has == 1 {
+                    vx_segs = vec_seg(vx_segs, vx_lx, vx_ly, vx_nx, vx_ny);
+                }
+                vx_lx = vx_nx;
+                vx_ly = vx_ny;
+                vx_t = vx_t + 1;
+            }
+            vx_px = vx_x;
+            vx_py = vx_y;
+            vx_has = 1;
+            vx_i = vx_i + 5;
+        }
+        if vx_op == 3 {
+            let vx_a1x: Int = list_get(p, vx_i + 1);
+            let vx_a1y: Int = list_get(p, vx_i + 2);
+            let vx_a2x: Int = list_get(p, vx_i + 3);
+            let vx_a2y: Int = list_get(p, vx_i + 4);
+            let vx_x: Int = list_get(p, vx_i + 5);
+            let vx_y: Int = list_get(p, vx_i + 6);
+            let mut vx_t: Int = 1;
+            let mut vx_lx: Int = vx_px;
+            let mut vx_ly: Int = vx_py;
+            while vx_t <= 12 {
+                let vx_pt: List[Int] = vec_cubic_pt(vx_px, vx_py, vx_a1x, vx_a1y, vx_a2x, vx_a2y, vx_x, vx_y, vx_t);
+                let vx_nx: Int = list_get(vx_pt, 0);
+                let vx_ny: Int = list_get(vx_pt, 1);
+                if vx_has == 1 {
+                    vx_segs = vec_seg(vx_segs, vx_lx, vx_ly, vx_nx, vx_ny);
+                }
+                vx_lx = vx_nx;
+                vx_ly = vx_ny;
+                vx_t = vx_t + 1;
+            }
+            vx_px = vx_x;
+            vx_py = vx_y;
+            vx_has = 1;
+            vx_i = vx_i + 7;
+        }
+        if vx_op < 0 {
+            vx_i = vx_i + 1;
+        }
+        if vx_op > 3 {
+            vx_i = vx_i + 1;
+        }
+    }
+    return vx_segs;
+}
+
+pub fn vec_stroke(cv: Canvas, segs: List[Int], width: Int, c: QoiRgba) -> Canvas {
+    // NOTE: seed via OOB no-op (see raster_3d.oo note); never `= cv`.
+    let mut vx_out: Canvas = canvas_set(cv, 0 - 1, 0, c);
+    let mut vx_r: Int = width / 2;
+    if vx_r < 0 {
+        vx_r = 0;
+    }
+    let mut vx_i: Int = 0;
+    let vx_n: Int = list_len(segs);
+    while vx_i + 4 <= vx_n {
+        let vx_x0: Int = list_get(segs, vx_i);
+        let vx_y0: Int = list_get(segs, vx_i + 1);
+        let vx_x1: Int = list_get(segs, vx_i + 2);
+        let vx_y1: Int = list_get(segs, vx_i + 3);
+        vx_out = canvas_line(vx_out, vx_x0, vx_y0, vx_x1, vx_y1, c);
+        vx_out = canvas_disk(vx_out, vx_x0, vx_y0, vx_r, c);
+        vx_out = canvas_disk(vx_out, vx_x1, vx_y1, vx_r, c);
+        vx_i = vx_i + 4;
+    }
+    return vx_out;
+}
+

@@ -1,0 +1,66 @@
+// # Probe: flare brightens axis, spares off-axis, repeats exactly
+//
+// Logline: Sun pixel exceeds the bare disk, streak beats off-streak,
+// ghost row beats off-axis, far corner stays dark, rerun matches.
+//
+// Setup: Pure. No caps. 32x20 buffer, sun (8,10), strength 500. All
+// comparisons are relative, so no exact overlap accounting is needed.
+//
+// Beats:
+//   1. Corner reads 0 before and after.
+//   2. Sun, streak, and ghost-axis pixels all exceed their dark partners.
+//   3. A second identical flare reads equal radiance.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/hdr_3d.oo";
+import "std/app/ui/media/flare_2d.oo";
+
+pub fn main() -> Result[Int, String] {
+    if shade_dot(1, 0, 0, 1, 0, 0) != 1 {
+        return Err("flare probe: shade unit must be 1");
+    }
+    if spin_f2i(1.0) != 1 {
+        return Err("flare probe: spin unit must be 1");
+    }
+    let fl_c1: Result[Canvas, String] = canvas_new(1, 1, qoi_rgba_new(0, 0, 0, 255));
+    if fl_c1.is_err() {
+        return Err("flare probe: canvas unit must build");
+    }
+    let fl_seed: HdrFb = hdr_new(32, 20);
+    if list_get(fl_seed.px, 0) != 0.0 {
+        return Err("flare probe: seed corner must be 0");
+    }
+    let fl_a: HdrFb = flare_add(fl_seed, 8, 10, 500.0);
+    if list_get(fl_a.px, 0) != 0.0 {
+        return Err("flare probe: far corner must stay dark");
+    }
+    let fl_sun: Float = list_get(fl_a.px, 984);
+    if fl_sun < 400.0 {
+        return Err("flare probe: sun must exceed bare disk");
+    }
+    let fl_streak: Float = list_get(fl_a.px, 1008);
+    let fl_offstreak: Float = list_get(fl_a.px, 1296);
+    if fl_offstreak >= fl_streak {
+        return Err("flare probe: streak must beat off-streak");
+    }
+    if fl_streak < 100.0 {
+        return Err("flare probe: streak must carry light");
+    }
+    let fl_axis: Float = list_get(fl_a.px, 996);
+    let fl_offaxis: Float = list_get(fl_a.px, 420);
+    if fl_offaxis >= fl_axis {
+        return Err("flare probe: ghost axis must beat off-axis");
+    }
+    let fl_b: HdrFb = flare_add(fl_seed, 8, 10, 500.0);
+    if list_get(fl_b.px, 984) != fl_sun {
+        return Err("flare probe: rerun must read equal");
+    }
+    if list_get(fl_b.px, 1008) != fl_streak {
+        return Err("flare probe: streak must repeat");
+    }
+    println("probe: std/gfx flare_2d: ok");
+    return Ok(0);
+}

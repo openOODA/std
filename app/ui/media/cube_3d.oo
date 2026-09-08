@@ -110,7 +110,7 @@ fn cube_spin_pt(p: CubePt, deg: Int, dist: Int) -> CubePt {
     return CubePt { x: spin_f2i(cb_r.ox), y: p.y, z: spin_f2i(cb_r.oz) + dist };
 }
 
-pub fn cube_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy: Int) -> DepthCanvas {
+pub fn cube_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy: Int, lx: Int, ly: Int, lz: Int, ambient: Int, use_lit: Int) -> DepthCanvas {
     // NOTE: no Canvas copy of rd.cv (see raster_3d.oo note). The Int-list
     // field binding below is retained by the backend and stays balanced.
     let cb_w: Int = rd.cv.width;
@@ -130,6 +130,7 @@ pub fn cube_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy:
     let mut cb_tcz: List[Int] = list_new();
     let mut cb_tare: List[Int] = list_new();
     let mut cb_tface: List[Int] = list_new();
+    let mut cb_tsh: List[Int] = list_new();
     let mut cb_f: Int = 0;
     while cb_f < 12 {
         let cb_t: TriIdx = cube_face_tri(cb_f);
@@ -177,6 +178,22 @@ pub fn cube_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy:
         cb_tcz = list_push(cb_tcz, cb_cz);
         cb_tare = list_push(cb_tare, raster_area2(cb_ax, cb_ay, cb_bx, cb_by, cb_cx, cb_cy));
         cb_tface = list_push(cb_tface, cb_f);
+        let mut cb_k: Int = 256;
+        if use_lit == 1 {
+            // Kept faces wind inward in world space (see header note), so
+            // the outward normal is the negated edge cross product.
+            let cb_e1x: Int = cb_pb.x - cb_pa.x;
+            let cb_e1y: Int = cb_pb.y - cb_pa.y;
+            let cb_e1z: Int = cb_pb.z - cb_pa.z;
+            let cb_e2x: Int = cb_pc.x - cb_pa.x;
+            let cb_e2y: Int = cb_pc.y - cb_pa.y;
+            let cb_e2z: Int = cb_pc.z - cb_pa.z;
+            let cb_nx: Int = 0 - (cb_e1y * cb_e2z - cb_e1z * cb_e2y);
+            let cb_ny: Int = 0 - (cb_e1z * cb_e2x - cb_e1x * cb_e2z);
+            let cb_nz: Int = 0 - (cb_e1x * cb_e2y - cb_e1y * cb_e2x);
+            cb_k = shade_lambert(cb_nx, cb_ny, cb_nz, lx, ly, lz, ambient);
+        }
+        cb_tsh = list_push(cb_tsh, cb_k);
         cb_f = cb_f + 1;
     }
     let mut cb_flat: List[Int] = list_new();
@@ -210,7 +227,7 @@ pub fn cube_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy:
                                 let cb_dep: Int = (cb_w0 * cb_gaz + cb_w1 * cb_gbz + cb_w2 * cb_gcz) / list_get(cb_tare, cb_g);
                                 if cb_dep < cb_best {
                                     cb_best = cb_dep;
-                                    let cb_fc: QoiRgba = cube_face_color(list_get(cb_tface, cb_g));
+                                    let cb_fc: QoiRgba = shade_scale(cube_face_color(list_get(cb_tface, cb_g)), list_get(cb_tsh, cb_g));
                                     cb_br = cb_fc.r;
                                     cb_bg = cb_fc.g;
                                     cb_bb = cb_fc.b;

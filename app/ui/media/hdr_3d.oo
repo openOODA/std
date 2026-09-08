@@ -1,0 +1,152 @@
+// # HDR float framebuffer: gain, additive sprites, bloom, Reinhard
+//
+// Logline: Radiance past 1.0 in a float buffer, then exposure, bloom, and
+// a Reinhard tonemap down to Canvas.
+//
+// Setup: Pure compute, no caps. HdrFb holds 3 Floats per pixel in linear
+// radiance. Gain is linear (pass 2.0 to double exposure). Bloom is
+// bright-pass plus 3x3 box blur added back at strength; all smoothstep
+// curves below are plain arithmetic.
+//
+// Beats:
+//   1. hdr_new blacks a buffer; hdr_from_canvas lifts ints by gain.
+//   2. hdr_add splats one radiance pixel with clipping.
+//   3. hdr_bloom spreads brights; hdr_tonate maps to Canvas.
+
+type HdrFb = struct {
+    w: Int,
+    h: Int,
+    px: List[Float]
+};
+
+pub fn hdr_new(hw: Int, hh: Int) -> HdrFb {
+    let mut hr_px: List[Float] = list_new();
+    let mut hr_i: Int = 0;
+    let hr_n: Int = hw * hh * 3;
+    while hr_i < hr_n {
+        hr_px = list_push(hr_px, 0.0);
+        hr_i = hr_i + 1;
+    }
+    return HdrFb { w: hw, h: hh, px: hr_px };
+}
+
+pub fn hdr_from_canvas(cv: Canvas, gain: Float) -> HdrFb {
+    let hr_w: Int = cv.width;
+    let hr_h: Int = cv.height;
+    let hr_flat: List[Int] = cv.px;
+    let mut hr_px: List[Float] = list_new();
+    let mut hr_i: Int = 0;
+    let hr_n: Int = hr_w * hr_h;
+    while hr_i < hr_n {
+        let hr_base: Int = hr_i * 4;
+        hr_px = list_push(hr_px, spin_i2f(list_get(hr_flat, hr_base)) * gain);
+        hr_px = list_push(hr_px, spin_i2f(list_get(hr_flat, hr_base + 1)) * gain);
+        hr_px = list_push(hr_px, spin_i2f(list_get(hr_flat, hr_base + 2)) * gain);
+        hr_i = hr_i + 1;
+    }
+    return HdrFb { w: hr_w, h: hr_h, px: hr_px };
+}
+
+pub fn hdr_add(fb: HdrFb, x: Int, y: Int, r: Float, g: Float, b: Float) -> HdrFb {
+    let hr_w: Int = fb.w;
+    let hr_h: Int = fb.h;
+    if x < 0 {
+        return fb;
+    }
+    if y < 0 {
+        return fb;
+    }
+    if x >= hr_w {
+        return fb;
+    }
+    if y >= hr_h {
+        return fb;
+    }
+    let mut hr_px: List[Float] = fb.px;
+    let hr_base: Int = (y * hr_w + x) * 3;
+    hr_px = list_set(hr_px, hr_base, list_get(hr_px, hr_base) + r);
+    hr_px = list_set(hr_px, hr_base + 1, list_get(hr_px, hr_base + 1) + g);
+    hr_px = list_set(hr_px, hr_base + 2, list_get(hr_px, hr_base + 2) + b);
+    return HdrFb { w: hr_w, h: hr_h, px: hr_px };
+}
+
+pub fn hdr_bloom(fb: HdrFb, threshold: Float, strength: Float) -> HdrFb {
+    let hr_w: Int = fb.w;
+    let hr_h: Int = fb.h;
+    let hr_src: List[Float] = fb.px;
+    let mut hr_blur: List[Float] = list_new();
+    let mut hr_y: Int = 0;
+    while hr_y < hr_h {
+        let mut hr_x: Int = 0;
+        while hr_x < hr_w {
+            let mut hr_r: Float = 0.0;
+            let mut hr_g: Float = 0.0;
+            let mut hr_b: Float = 0.0;
+            let mut hr_dy: Int = 0 - 1;
+            while hr_dy <= 1 {
+                let mut hr_dx: Int = 0 - 1;
+                while hr_dx <= 1 {
+                    let hr_nx: Int = hr_x + hr_dx;
+                    let hr_ny: Int = hr_y + hr_dy;
+                    if hr_nx >= 0 {
+                        if hr_ny >= 0 {
+                            if hr_nx < hr_w {
+                                if hr_ny < hr_h {
+                                    let hr_nb: Int = (hr_ny * hr_w + hr_nx) * 3;
+                                    let hr_pr: Float = list_get(hr_src, hr_nb);
+                                    let hr_pg: Float = list_get(hr_src, hr_nb + 1);
+                                    let hr_pb: Float = list_get(hr_src, hr_nb + 2);
+                                    if hr_pr > threshold {
+                                        hr_r = hr_r + hr_pr;
+                                    }
+                                    if hr_pg > threshold {
+                                        hr_g = hr_g + hr_pg;
+                                    }
+                                    if hr_pb > threshold {
+                                        hr_b = hr_b + hr_pb;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    hr_dx = hr_dx + 1;
+                }
+                hr_dy = hr_dy + 1;
+            }
+            hr_blur = list_push(hr_blur, hr_r / 9.0);
+            hr_blur = list_push(hr_blur, hr_g / 9.0);
+            hr_blur = list_push(hr_blur, hr_b / 9.0);
+            hr_x = hr_x + 1;
+        }
+        hr_y = hr_y + 1;
+    }
+    let mut hr_px: List[Float] = fb.px;
+    let mut hr_i: Int = 0;
+    let hr_n: Int = hr_w * hr_h * 3;
+    while hr_i < hr_n {
+        hr_px = list_set(hr_px, hr_i, list_get(hr_px, hr_i) + list_get(hr_blur, hr_i) * strength);
+        hr_i = hr_i + 1;
+    }
+    return HdrFb { w: hr_w, h: hr_h, px: hr_px };
+}
+
+pub fn hdr_tonate(fb: HdrFb) -> Canvas {
+    let hr_w: Int = fb.w;
+    let hr_h: Int = fb.h;
+    let hr_src: List[Float] = fb.px;
+    let mut hr_flat: List[Int] = list_new();
+    let mut hr_i: Int = 0;
+    let hr_n: Int = hr_w * hr_h;
+    while hr_i < hr_n {
+        let hr_base: Int = hr_i * 3;
+        let hr_r: Float = list_get(hr_src, hr_base);
+        let hr_g: Float = list_get(hr_src, hr_base + 1);
+        let hr_b: Float = list_get(hr_src, hr_base + 2);
+        hr_flat = list_push(hr_flat, spin_f2i(hr_r / (1.0 + hr_r) * 255.0));
+        hr_flat = list_push(hr_flat, spin_f2i(hr_g / (1.0 + hr_g) * 255.0));
+        hr_flat = list_push(hr_flat, spin_f2i(hr_b / (1.0 + hr_b) * 255.0));
+        hr_flat = list_push(hr_flat, 255);
+        hr_i = hr_i + 1;
+    }
+    return Canvas { width: hr_w, height: hr_h, px: hr_flat };
+}

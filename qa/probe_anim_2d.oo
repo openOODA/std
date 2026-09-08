@@ -1,0 +1,158 @@
+// # Probe: tween landmarks, run diffs, one timed cube frame
+//
+// Logline: Lerp/ease hit hand values and clamp; run diffs flag exactly the
+// changed runs; a 96x60 lit frame renders and its run count prints with
+// the millisecond cost.
+//
+// Setup: Needs &TimeCap for the stopwatch plus &FfiCap-free blit runs.
+// chrono_now_ms brackets one cube_frame; the ms print is the harness
+// readout, the asserts are the correctness gate.
+//
+// Beats:
+//   1. Lerp 0..100 hits 25/50/75 and clamps both ends.
+//   2. Quad easings hit endpoints plus mid landmarks.
+//   3. Diff of [A,B] vs [A,C] is exactly [1]; equal is [].
+//   4. Timed frame covers pixels with a sane run count under 5 minutes.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/cube_3d.oo";
+import "std/app/ui/media/sdl_window.oo";
+import "std/app/ui/media/sdl_blit.oo";
+import "std/app/ui/media/anim_2d.oo";
+import "std/fs/time/chrono.oo";
+
+pub fn main(time: &TimeCap, ffi: &FfiCap) -> Result[Int, String] {
+    if shade_dot(1, 0, 0, 1, 0, 0) != 1 {
+        return Err("anim probe: shade unit must be 1");
+    }
+    if spin_f2i(1.0) != 1 {
+        return Err("anim probe: spin unit must be 1");
+    }
+    let an_so: Result[String, String] = sdl_open(ffi, "/nonexistent/sdl.so");
+    if an_so.is_ok() {
+        return Err("anim probe: bad lib must fail");
+    }
+    if anim_lerp(0, 100, 1, 4) != 25 {
+        return Err("anim probe: lerp quarter must be 25");
+    }
+    if anim_lerp(0, 100, 2, 4) != 50 {
+        return Err("anim probe: lerp half must be 50");
+    }
+    if anim_lerp(0, 100, 0, 4) != 0 {
+        return Err("anim probe: lerp start must be 0");
+    }
+    if anim_lerp(0, 100, 4, 4) != 100 {
+        return Err("anim probe: lerp end must be 100");
+    }
+    if anim_lerp(0, 100, 9, 4) != 100 {
+        return Err("anim probe: lerp must clamp high");
+    }
+    if anim_lerp(0, 100, 0 - 2, 4) != 0 {
+        return Err("anim probe: lerp must clamp low");
+    }
+    if anim_lerp(5, 5, 2, 0) != 5 {
+        return Err("anim probe: zero steps must return a");
+    }
+    if anim_ease_in(0, 4) != 0 {
+        return Err("anim probe: ease_in start must be 0");
+    }
+    if anim_ease_in(4, 4) != 4 {
+        return Err("anim probe: ease_in end must be 4");
+    }
+    if anim_ease_in(2, 4) != 1 {
+        return Err("anim probe: ease_in half must be 1");
+    }
+    if anim_ease_out(0, 4) != 0 {
+        return Err("anim probe: ease_out start must be 0");
+    }
+    if anim_ease_out(4, 4) != 4 {
+        return Err("anim probe: ease_out end must be 4");
+    }
+    if anim_ease_out(2, 4) != 3 {
+        return Err("anim probe: ease_out half must be 3");
+    }
+    if anim_ease_io(0, 8) != 0 {
+        return Err("anim probe: ease_io start must be 0");
+    }
+    if anim_ease_io(8, 8) != 8 {
+        return Err("anim probe: ease_io end must be 8");
+    }
+    if anim_ease_io(4, 8) != 4 {
+        return Err("anim probe: ease_io mid must be 4");
+    }
+    if anim_ease_io(2, 8) != 1 {
+        return Err("anim probe: ease_io quarter must be 1");
+    }
+    if anim_spin_step(0, 36, 360) != 0 {
+        return Err("anim probe: frame 0 must be 0 deg");
+    }
+    if anim_spin_step(36, 36, 360) != 360 {
+        return Err("anim probe: last frame must be 360 deg");
+    }
+    if anim_spin_step(9, 36, 360) != 90 {
+        return Err("anim probe: quarter loop must be 90 deg");
+    }
+    let mut an_prev: List[Int] = list_new();
+    an_prev = list_push(an_prev, 1);
+    an_prev = list_push(an_prev, 2);
+    an_prev = list_push(an_prev, 3);
+    an_prev = list_push(an_prev, 4);
+    an_prev = list_push(an_prev, 5);
+    an_prev = list_push(an_prev, 6);
+    an_prev = list_push(an_prev, 7);
+    an_prev = list_push(an_prev, 8);
+    let mut an_cur: List[Int] = list_new();
+    an_cur = list_push(an_cur, 1);
+    an_cur = list_push(an_cur, 2);
+    an_cur = list_push(an_cur, 3);
+    an_cur = list_push(an_cur, 4);
+    an_cur = list_push(an_cur, 9);
+    an_cur = list_push(an_cur, 9);
+    an_cur = list_push(an_cur, 9);
+    an_cur = list_push(an_cur, 9);
+    if anim_run_count(an_prev) != 2 {
+        return Err("anim probe: run count must be 2");
+    }
+    let an_d: List[Int] = anim_runs_diff(an_prev, an_cur);
+    if list_len(an_d) != 1 {
+        return Err("anim probe: diff must flag one run");
+    }
+    if list_get(an_d, 0) != 1 {
+        return Err("anim probe: diff must flag run 1");
+    }
+    let an_same: List[Int] = anim_runs_diff(an_prev, an_prev);
+    if list_len(an_same) != 0 {
+        return Err("anim probe: equal runs must diff empty");
+    }
+    let an_bg: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let an_mk: Result[DepthCanvas, String] = raster_depth_new(96, 60, an_bg);
+    if an_mk.is_err() {
+        return Err("anim probe: depth_new failed");
+    }
+    let an_empty: DepthCanvas = match an_mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    let an_t0: Int = chrono_now_ms(time);
+    let an_shot: DepthCanvas = cube_frame(an_empty, 30, 300, 120, 48, 30, 30, 40, 0 - 100, 24, 1);
+    let an_t1: Int = chrono_now_ms(time);
+    let an_ms: Int = chrono_elapsed_ms(time, an_t0);
+    if an_ms < 0 {
+        return Err("anim probe: negative frame time");
+    }
+    if an_ms > 300000 {
+        return Err("anim probe: frame took over 5 minutes");
+    }
+    let an_flat: List[Int] = an_shot.cv.px;
+    let an_runs: List[Int] = sdl_blit_runs(an_flat, 96 * 60);
+    let an_nruns: Int = anim_run_count(an_runs);
+    if an_nruns <= 0 {
+        return Err("anim probe: frame must produce runs");
+    }
+    println("anim frame ms: " + an_ms.to_string());
+    println("anim frame runs: " + an_nruns.to_string());
+    println("anim frame t1: " + an_t1.to_string());
+    println("probe: std/gfx anim_2d: ok");
+    return Ok(0);
+}

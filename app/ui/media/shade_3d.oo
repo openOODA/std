@@ -1,0 +1,115 @@
+// # Integer lighting math: isqrt, dot, cross, Lambert factor, ray-tri
+//
+// Logline: Branch-free-friendly integer shading plus a float ray-triangle
+// test for the shadow pass.
+//
+// Setup: Pure compute, no caps. Normals and light dirs are plain Int
+// triples; shade_lambert returns 0..256 where 256 is fully lit and values
+// at or below ambient mean unlit. Ray inputs are Float; the hit test
+// reports 1 inside the open t range (tmin, tmax).
+//
+// Beats:
+//   1. shade_isqrt/shade_dot/shade_cross cover the vector ops.
+//   2. shade_lambert folds facing, length normalize, and ambient clamp.
+//   3. shade_scale applies a 0..256 factor to a color channel-wise.
+//   4. shade_ray_tri hits translated triangles for shadow rays.
+
+pub fn shade_isqrt(v: Int) -> Int {
+    if v <= 0 {
+        return 0;
+    }
+    let mut sh_x: Int = v;
+    let mut sh_y: Int = (sh_x + 1) / 2;
+    while sh_y < sh_x {
+        sh_x = sh_y;
+        sh_y = (sh_x + v / sh_x) / 2;
+    }
+    return sh_x;
+}
+
+pub fn shade_dot(ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int) -> Int {
+    return ax * bx + ay * by + az * bz;
+}
+
+pub fn shade_lambert(nx: Int, ny: Int, nz: Int, lx: Int, ly: Int, lz: Int, ambient: Int) -> Int {
+    let sh_num: Int = shade_dot(nx, ny, nz, lx, ly, lz);
+    if sh_num <= 0 {
+        return ambient;
+    }
+    let sh_ln: Int = shade_isqrt(shade_dot(nx, ny, nz, nx, ny, nz));
+    let sh_ll: Int = shade_isqrt(shade_dot(lx, ly, lz, lx, ly, lz));
+    if sh_ln <= 0 {
+        return ambient;
+    }
+    if sh_ll <= 0 {
+        return ambient;
+    }
+    let sh_k: Int = sh_num * 256 / (sh_ln * sh_ll);
+    if sh_k <= ambient {
+        return ambient;
+    }
+    if sh_k > 256 {
+        return 256;
+    }
+    return sh_k;
+}
+
+pub fn shade_scale(c: QoiRgba, k: Int) -> QoiRgba {
+    let mut sh_k: Int = k;
+    if sh_k < 0 {
+        sh_k = 0;
+    }
+    if sh_k > 256 {
+        sh_k = 256;
+    }
+    return qoi_rgba_new(c.r * sh_k / 256, c.g * sh_k / 256, c.b * sh_k / 256, c.a);
+}
+
+pub fn shade_ray_tri(ox: Float, oy: Float, oz: Float, dx: Float, dy: Float, dz: Float, ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int, cx: Int, cy: Int, cz: Int, tmin: Float, tmax: Float) -> Int {
+    let sh_e1x: Float = spin_i2f(bx - ax);
+    let sh_e1y: Float = spin_i2f(by - ay);
+    let sh_e1z: Float = spin_i2f(bz - az);
+    let sh_e2x: Float = spin_i2f(cx - ax);
+    let sh_e2y: Float = spin_i2f(cy - ay);
+    let sh_e2z: Float = spin_i2f(cz - az);
+    let sh_px: Float = dy * sh_e2z - dz * sh_e2y;
+    let sh_py: Float = dz * sh_e2x - dx * sh_e2z;
+    let sh_pz: Float = dx * sh_e2y - dy * sh_e2x;
+    let sh_det: Float = sh_e1x * sh_px + sh_e1y * sh_py + sh_e1z * sh_pz;
+    let mut sh_ad: Float = sh_det;
+    if sh_ad < 0.0 {
+        sh_ad = 0.0 - sh_ad;
+    }
+    if sh_ad < 0.000001 {
+        return 0;
+    }
+    let sh_inv: Float = 1.0 / sh_det;
+    let sh_tx: Float = ox - spin_i2f(ax);
+    let sh_ty: Float = oy - spin_i2f(ay);
+    let sh_tz: Float = oz - spin_i2f(az);
+    let sh_u: Float = (sh_tx * sh_px + sh_ty * sh_py + sh_tz * sh_pz) * sh_inv;
+    if sh_u < 0.0 {
+        return 0;
+    }
+    if sh_u > 1.0 {
+        return 0;
+    }
+    let sh_qx: Float = sh_ty * sh_e1z - sh_tz * sh_e1y;
+    let sh_qy: Float = sh_tz * sh_e1x - sh_tx * sh_e1z;
+    let sh_qz: Float = sh_tx * sh_e1y - sh_ty * sh_e1x;
+    let sh_v: Float = (dx * sh_qx + dy * sh_qy + dz * sh_qz) * sh_inv;
+    if sh_v < 0.0 {
+        return 0;
+    }
+    if sh_u + sh_v > 1.0 {
+        return 0;
+    }
+    let sh_t: Float = (sh_e2x * sh_qx + sh_e2y * sh_qy + sh_e2z * sh_qz) * sh_inv;
+    if sh_t < tmin {
+        return 0;
+    }
+    if sh_t > tmax {
+        return 0;
+    }
+    return 1;
+}

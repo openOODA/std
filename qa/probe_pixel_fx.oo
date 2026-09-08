@@ -1,0 +1,125 @@
+// # Probe: pixel effects palette, swap, dither, scale, blit
+//
+// Logline: Palette swaps exchange counts, a 2x2 Bayer fill splits exactly
+// half and half, integer upscale multiplies areas, and transparent blits
+// stamp exact red pixels while skipping transparency and bad indices.
+//
+// Setup: Pure compute, no caps. Red pixels are counted through ppm_encode
+// with the raster probe's newline-needle idiom. Prints
+// probe: std/gfx pixel_fx: ok or returns Err naming the step.
+//
+// Beats:
+//   1. swap exchanges index counts; dither_rect splits 8/8 on 4x4.
+//   2. scale k=3 multiplies counts by 9; k=0 is Err.
+//   3. blit stamps 2 red, skips transparent bg and out-of-range index 7.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/ppm.oo";
+import "std/app/ui/media/pixel_2d.oo";
+import "std/app/ui/media/pixel_fx.oo";
+
+fn fx_count_occ(hay: String, needle: String) -> Int {
+    let mut fx_left: String = hay;
+    let mut fx_n: Int = 0;
+    let mut fx_go: Int = 1;
+    while fx_go == 1 {
+        let fx_p: Int = str_index_of(fx_left, needle);
+        if fx_p < 0 {
+            fx_go = 0;
+        }
+        if fx_p >= 0 {
+            fx_n = fx_n + 1;
+            fx_left = str_slice(fx_left, fx_p + 1, chars_len(fx_left));
+        }
+    }
+    return fx_n;
+}
+
+fn fx_new(w: Int, h: Int, bg: Int) -> Sprite {
+    let sp: Result[Sprite, String] = pix_new(w, h, bg);
+    return match sp { Ok(a) => a, Err(_) => Sprite { w: 0, h: 0, px: list_new() } };
+}
+
+fn fx_red_of(cv: Canvas) -> Int {
+    let ti: Result[QoiImage, String] = canvas_to_image(cv);
+    if ti.is_err() {
+        return 0 - 1;
+    }
+    let img: QoiImage = match ti { Ok(a) => a, Err(_) => QoiImage { header: QoiHeader { width: 0, height: 0, channels: 3, colorspace: 0 }, pixels: list_new() } };
+    let pe: Result[String, String] = ppm_encode(img);
+    if pe.is_err() {
+        return 0 - 2;
+    }
+    let ppm: String = match pe { Ok(a) => a, Err(b) => b };
+    return fx_count_occ(ppm, "255 0 0\n");
+}
+
+pub fn main() -> Result[Int, String] {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
+    // Swap: 3 ones and 1 two exchange counts exactly.
+    let sw0: Sprite = pix_set(pix_set(pix_set(fx_new(2, 2, 1), 0, 0, 2), 1, 0, 1), 0, 1, 1);
+    let sw: Sprite = pix_swap(sw0, 1, 2);
+    if pix_count(sw, 1) != 1 {
+        return Err("pixel_fx: swap must leave one 1");
+    }
+    if pix_count(sw, 2) != 3 {
+        return Err("pixel_fx: swap must make three 2s");
+    }
+    // Dither: full 4x4 Bayer fill of 1/2 splits 8 and 8.
+    let di: Sprite = pix_dither_rect(fx_new(4, 4, 0), 0, 0, 4, 4, 1, 2);
+    if pix_count(di, 1) != 8 {
+        return Err("pixel_fx: dither must place eight 1s");
+    }
+    if pix_count(di, 2) != 8 {
+        return Err("pixel_fx: dither must place eight 2s");
+    }
+    // Scale: 2x1 [3,4] at k=3 becomes 6x3 with 9 of each.
+    let sc0: Sprite = pix_set(pix_set(fx_new(2, 1, 0), 0, 0, 3), 1, 0, 4);
+    if pix_scale(sc0, 0).is_ok() {
+        return Err("pixel_fx: zero scale must fail");
+    }
+    let scr: Result[Sprite, String] = pix_scale(sc0, 3);
+    if scr.is_err() {
+        return Err("pixel_fx: scale must succeed");
+    }
+    let sc: Sprite = match scr { Ok(a) => a, Err(_) => fx_new(1, 1, 0) };
+    if sc.w != 6 {
+        return Err("pixel_fx: scaled width must be 6");
+    }
+    if sc.h != 3 {
+        return Err("pixel_fx: scaled height must be 3");
+    }
+    if pix_count(sc, 3) != 9 {
+        return Err("pixel_fx: scaled left block must be 9");
+    }
+    if pix_count(sc, 4) != 9 {
+        return Err("pixel_fx: scaled right block must be 9");
+    }
+    // Blit: palette [black, red]; two red plots stamp, bg 0 and bad 7 skip.
+    let mut cols: List[QoiRgba] = list_new();
+    cols = list_push(cols, black);
+    cols = list_push(cols, red);
+    let pal: Palette = pix_palette(cols);
+    if pix_pal_len(pal) != 2 {
+        return Err("pixel_fx: palette must hold 2");
+    }
+    let bl0: Sprite = pix_set(pix_set(pix_set(fx_new(2, 2, 0), 0, 0, 1), 1, 1, 1), 1, 0, 7);
+    let cbgr: Result[Canvas, String] = canvas_new(4, 4, black);
+    if cbgr.is_err() {
+        return Err("pixel_fx: canvas must build");
+    }
+    let cbg: Canvas = match cbgr { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    let stamped: Canvas = pix_blit(cbg, bl0, pal, 1, 1, 0);
+    if fx_red_of(stamped) != 2 {
+        return Err("pixel_fx: blit must stamp 2 red");
+    }
+    // Clipped blit at (3,3): only the (0,0) red plot lands on canvas.
+    let clipped: Canvas = pix_blit(cbg, bl0, pal, 3, 3, 0);
+    if fx_red_of(clipped) != 1 {
+        return Err("pixel_fx: clipped blit must stamp 1 red");
+    }
+    println("probe: std/gfx pixel_fx: ok");
+    return Ok(0);
+}

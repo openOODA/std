@@ -1,0 +1,100 @@
+// # Probe: 3D swell heights, caps, shade, and painted ocean
+//
+// Logline: Diagonal-train heights sum exactly, whitecap flags trip at the
+// cap line, sky light lifts faces above ambient, and a 3x2 tiled paint
+// covers water pixels with foam on the crests.
+//
+// Setup: Pure compute, no caps. Every import is named in an assert so the
+// strict build check keeps the module: wave_h pins wave_2d.oo, spin_f2i
+// pins spin_3d.oo. Non-black pixels are counted on the flat DepthCanvas
+// Canvas.px RGBA ints. Prints probe: std/gfx wave_3d: ok.
+//
+// Beats:
+//   1. swell_h is exactly 0 at the still point and moves with time.
+//   2. swell_cap trips at sum-minus-band and holds below it.
+//   3. shade_lambert on an up-face exceeds ambient and clamps at 256.
+//   4. swell_paint covers water, foams crests at band 4, and repeats equal.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/wave_2d.oo";
+import "std/app/ui/media/wave_3d.oo";
+
+fn sw_count_color(cv: Canvas, r: Int, g: Int, b: Int) -> Int {
+    let mut sw_n: Int = 0;
+    let mut sw_i: Int = 0;
+    let sw_m: Int = cv.width * cv.height;
+    while sw_i < sw_m {
+        let sw_base: Int = sw_i * 4;
+        if list_get(cv.px, sw_base) == r {
+            if list_get(cv.px, sw_base + 1) == g {
+                if list_get(cv.px, sw_base + 2) == b {
+                    sw_n = sw_n + 1;
+                }
+            }
+        }
+        sw_i = sw_i + 1;
+    }
+    return sw_n;
+}
+
+fn sw_ocean(t: Int, band: Int) -> DepthCanvas {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let deep: QoiRgba = qoi_rgba_new(0, 0, 160, 255);
+    let foam: QoiRgba = qoi_rgba_new(255, 255, 255, 255);
+    let mk: Result[DepthCanvas, String] = raster_depth_new(48, 32, black);
+    let empty: DepthCanvas = match mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    return swell_paint(empty, 0 - 16, 16, 56, 4, 6, 4, t, 6, 36, 1, 3, 18, 1, 48, 24, 26, 64, 0 - 200, 64, 32, deep, foam, band);
+}
+
+pub fn main() -> Result[Int, String] {
+    if canvas_new(0, 5, qoi_rgba_new(0, 0, 0, 255)).is_ok() {
+        return Err("wave_3d: zero width must fail");
+    }
+    if wave_h(0, 0, 5, 36, 1) != 0 {
+        return Err("wave_3d: still point must be 0");
+    }
+    if spin_f2i(spin_sin_deg(0)) != 0 {
+        return Err("wave_3d: spin sine at 0 must be 0");
+    }
+    if swell_h(0, 0, 0, 6, 36, 1, 3, 18, 1) != 0 {
+        return Err("wave_3d: swell still point must be 0");
+    }
+    if swell_h(2, 1, 0, 6, 36, 1, 3, 18, 1) == swell_h(2, 1, 20, 6, 36, 1, 3, 18, 1) {
+        return Err("wave_3d: swell must move with time");
+    }
+    if swell_cap(7, 6, 3, 2) != 1 {
+        return Err("wave_3d: cap line must foam");
+    }
+    if swell_cap(6, 6, 3, 2) != 0 {
+        return Err("wave_3d: below cap line must not foam");
+    }
+    if swell_cap(0, 6, 3, 0 - 1) != 0 {
+        return Err("wave_3d: impossible line must not foam");
+    }
+    let lit: Int = shade_lambert(0, 0 - 64, 0, 64, 0 - 200, 64, 32);
+    if lit <= 32 {
+        return Err("wave_3d: sky light must lift the face");
+    }
+    if lit > 256 {
+        return Err("wave_3d: lambert must clamp at 256");
+    }
+    // Paint: water covers pixels, crests foam, repeats match exactly.
+    let sea: DepthCanvas = sw_ocean(0, 4);
+    let water: Int = 48 * 32 - sw_count_color(sea.cv, 0, 0, 0);
+    if water == 0 {
+        return Err("wave_3d: ocean must cover water pixels");
+    }
+    if sw_count_color(sea.cv, 255, 255, 255) == 0 {
+        return Err("wave_3d: band 4 must foam crests");
+    }
+    let again: DepthCanvas = sw_ocean(0, 4);
+    if 48 * 32 - sw_count_color(again.cv, 0, 0, 0) != water {
+        return Err("wave_3d: equal times must paint equal oceans");
+    }
+    println("probe: std/gfx wave_3d: ok");
+    return Ok(0);
+}

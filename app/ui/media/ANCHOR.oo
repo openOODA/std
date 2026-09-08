@@ -2,7 +2,7 @@
 //
 // Logline: Ui, tui, gui, media, and graphics for std/media.
 //
-// Setup: Domain module of 19 files under std/media. Pure compute, no caps except sdl_* which take &FfiCap; ppm_write/qoi_write take &FsWriteCap at the call site.
+// Setup: Domain module of 34 files under std/media. Pure compute, no caps except sdl_* which take &FfiCap; ppm_write/qoi_write take &FsWriteCap at the call site.
 //
 // Beats:
 //   1. Qoi family (2 files).
@@ -15,13 +15,28 @@
 //   8. Spin family (1 file): float degree trig plus int crossings.
 //   9. Cube family (1 file): turntable mesh drawn through raster.
 //   10. Sdl families (3 files): window binding, point-run blit, GL context.
+//   11. Shade family (1 file): integer Lambert plus float ray-triangle.
+//   12. Vector families (2 files): paths/flatten/stroke plus polygon fill.
+//   13. Font family (5 files): 5x7 bitmap tables plus draw and measure.
+//   14. Anim family (1 file): tweens, spin steps, RLE change sets.
+//   15. Shadow family (1 file): shadow-ray cube frame.
+//   16. Hdr family (1 file): float buffer, bloom, Reinhard.
+//   17. Flare family (1 file): sun disk, axis ghosts, streak.
+//   18. Ray family (1 file): Whitted bridge on the cube mesh.
 
 import "audio_mixer_basic.oo";
 import "canvas_2d.oo";
 import "cube_3d.oo";
+import "font_5x7.oo";
+import "font_rows_1.oo";
+import "font_rows_2.oo";
+import "font_rows_3.oo";
+import "font_rows_4.oo";
+import "flare_2d.oo";
 import "h264_nal.oo";
 import "h264_sps.oo";
 import "h264_types.oo";
+import "hdr_3d.oo";
 import "media.oo";
 import "ppm.oo";
 import "qoi.oo";
@@ -30,9 +45,15 @@ import "qoi_dec.oo";
 import "qoi_enc.oo";
 import "qoi_types.oo";
 import "raster_3d.oo";
+import "ray_3d.oo";
 import "sdl_blit.oo";
 import "sdl_gl.oo";
+import "anim_2d.oo";
 import "sdl_window.oo";
+import "shade_3d.oo";
+import "shadow_3d.oo";
 import "spin_3d.oo";
+import "vec_poly.oo";
+import "vector_2d.oo";
 import "wav.oo";
 import "wav_types.oo";

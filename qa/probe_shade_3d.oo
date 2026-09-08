@@ -1,0 +1,109 @@
+// # Probe: Lambert units plus a lit cube frame
+//
+// Logline: isqrt/dot/lambert/scale match hand values; ray-tri hits inside
+// the t range and misses outside it; a lit frame differs from unlit.
+//
+// Setup: Pure. No caps. Light (30,40,-100) sits camera-side; ambient 24.
+//
+// Beats:
+//   1. isqrt(16)=4, isqrt(15)=3; dot axis values; full-on gives 256.
+//   2. Perpendicular and rear-facing normals fall to ambient.
+//   3. scale halves channels; ray hits the z=5 tri at t=5, misses behind.
+//   4. Lit frame covers pixels and differs from the unlit frame.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/ppm.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/cube_3d.oo";
+
+fn probe_shade_ppm(deg: Int, lit: Int) -> Result[String, String] {
+    let sh_bg: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let sh_mk: Result[DepthCanvas, String] = raster_depth_new(160, 100, sh_bg);
+    if sh_mk.is_err() {
+        return Err("shade probe: depth_new failed");
+    }
+    let sh_empty: DepthCanvas = match sh_mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    let sh_shot: DepthCanvas = cube_frame(sh_empty, deg, 300, 120, 80, 50, 30, 40, 0 - 100, 24, lit);
+    let sh_img: Result[QoiImage, String] = canvas_to_image(sh_shot.cv);
+    if sh_img.is_err() {
+        return Err("shade probe: canvas_to_image failed");
+    }
+    let sh_plain: QoiImage = match sh_img { Ok(a) => a, Err(_) => QoiImage { header: QoiHeader { width: 0, height: 0, channels: 3, colorspace: 0 }, pixels: list_new() } };
+    return ppm_encode(sh_plain);
+}
+
+pub fn main() -> Result[Int, String] {
+    if shade_isqrt(16) != 4 {
+        return Err("shade probe: isqrt(16) must be 4");
+    }
+    if shade_isqrt(15) != 3 {
+        return Err("shade probe: isqrt(15) must be 3");
+    }
+    if shade_isqrt(0 - 5) != 0 {
+        return Err("shade probe: isqrt of negative must be 0");
+    }
+    if shade_dot(1, 2, 3, 4, 5, 6) != 32 {
+        return Err("shade probe: dot must be 32");
+    }
+    if shade_lambert(0, 0, 60, 0, 0, 60, 24) != 256 {
+        return Err("shade probe: full-on must be 256");
+    }
+    if shade_lambert(60, 0, 0, 0, 0, 60, 24) != 24 {
+        return Err("shade probe: perpendicular must be ambient");
+    }
+    if shade_lambert(0, 0, 60, 0, 0, 0 - 60, 24) != 24 {
+        return Err("shade probe: rear must be ambient");
+    }
+    if shade_lambert(0, 0, 0, 0, 0, 60, 24) != 24 {
+        return Err("shade probe: zero normal must be ambient");
+    }
+    let sh_half: QoiRgba = shade_scale(qoi_rgba_new(200, 100, 50, 255), 128);
+    if sh_half.r != 100 {
+        return Err("shade probe: scale must halve red");
+    }
+    if sh_half.g != 50 {
+        return Err("shade probe: scale must halve green");
+    }
+    if sh_half.b != 25 {
+        return Err("shade probe: scale must halve blue");
+    }
+    if sh_half.a != 255 {
+        return Err("shade probe: scale must keep alpha");
+    }
+    let sh_full: QoiRgba = shade_scale(qoi_rgba_new(200, 100, 50, 255), 999);
+    if sh_full.r != 200 {
+        return Err("shade probe: scale must clamp at 256");
+    }
+    if shade_ray_tri(5.0, 5.0, 0.0, 0.0, 0.0, 1.0, 0, 0, 5, 10, 0, 5, 0, 10, 5, 0.1, 100.0) != 1 {
+        return Err("shade probe: ray must hit the z=5 tri");
+    }
+    if shade_ray_tri(5.0, 5.0, 0.0, 0.0, 0.0, 0.0 - 1.0, 0, 0, 5, 10, 0, 5, 0, 10, 5, 0.1, 100.0) != 0 {
+        return Err("shade probe: rear ray must miss");
+    }
+    if shade_ray_tri(50.0, 50.0, 0.0, 0.0, 0.0, 1.0, 0, 0, 5, 10, 0, 5, 0, 10, 5, 0.1, 100.0) != 0 {
+        return Err("shade probe: wide ray must miss");
+    }
+    if shade_ray_tri(5.0, 5.0, 0.0, 0.0, 0.0, 1.0, 0, 0, 5, 10, 0, 5, 0, 10, 5, 6.0, 100.0) != 0 {
+        return Err("shade probe: t past tmin must miss");
+    }
+    let t0: Result[String, String] = probe_shade_ppm(0, 0);
+    let ppm0: String = match t0 { Ok(a) => a, Err(b) => b };
+    let t1: Result[String, String] = probe_shade_ppm(0, 1);
+    if t1.is_err() {
+        return Err("shade probe: lit frame failed");
+    }
+    let ppm1: String = match t1 { Ok(a) => a, Err(b) => b };
+    if ppm1 == ppm0 {
+        return Err("shade probe: lit frame must differ from unlit");
+    }
+    let t1b: Result[String, String] = probe_shade_ppm(0, 1);
+    let ppm1b: String = match t1b { Ok(a) => a, Err(b) => b };
+    if ppm1b != ppm1 {
+        return Err("shade probe: lit frame must re-render identical");
+    }
+    println("probe: std/gfx shade_3d: ok");
+    return Ok(0);
+}

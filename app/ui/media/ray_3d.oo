@@ -1,0 +1,210 @@
+// # Whitted ray bridge: cube mesh, shadows, one reflection bounce, sky
+//
+// Logline: Executes rays against the cube mesh into Canvas pixels: primary
+// hit, shadow ray, reflected ray, gradient sky on miss.
+//
+// Setup: Pure compute, no caps. Camera at the origin looking +z; rays use
+// unnormalized direction (sx-cx, cy-sy, focal) so t stays comparable.
+// Light is directional (lx,ly,lz). Reflection adds 40% of the bounced
+// color with no second shadow (documented one-bounce approximation). Sky
+// is an exact integer gradient on the ray slope.
+//
+// Beats:
+//   1. ry_hit runs Moller-Trumbore, returning t or -1 for a miss.
+//   2. ry_sky maps miss direction to an exact (40,70,b) gradient.
+//   3. ray_frame composites primary, shadow, and reflection per pixel.
+
+fn ry_hit(ox: Float, oy: Float, oz: Float, dx: Float, dy: Float, dz: Float, ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int, cx: Int, cy: Int, cz: Int, tmin: Float, tmax: Float) -> Float {
+    let ry_found: Int = shade_ray_tri(ox, oy, oz, dx, dy, dz, ax, ay, az, bx, by, bz, cx, cy, cz, tmin, tmax);
+    if ry_found != 1 {
+        return 0.0 - 1.0;
+    }
+    let ry_e1x: Float = spin_i2f(bx - ax);
+    let ry_e1y: Float = spin_i2f(by - ay);
+    let ry_e1z: Float = spin_i2f(bz - az);
+    let ry_e2x: Float = spin_i2f(cx - ax);
+    let ry_e2y: Float = spin_i2f(cy - ay);
+    let ry_e2z: Float = spin_i2f(cz - az);
+    let ry_px: Float = dy * ry_e2z - dz * ry_e2y;
+    let ry_py: Float = dz * ry_e2x - dx * ry_e2z;
+    let ry_pz: Float = dx * ry_e2y - dy * ry_e2x;
+    let ry_det: Float = ry_e1x * ry_px + ry_e1y * ry_py + ry_e1z * ry_pz;
+    let ry_tx: Float = ox - spin_i2f(ax);
+    let ry_ty: Float = oy - spin_i2f(ay);
+    let ry_tz: Float = oz - spin_i2f(az);
+    let ry_qx: Float = ry_ty * ry_e1z - ry_tz * ry_e1y;
+    let ry_qy: Float = ry_tz * ry_e1x - ry_tx * ry_e1z;
+    let ry_qz: Float = ry_tx * ry_e1y - ry_ty * ry_e1x;
+    return (ry_e2x * ry_qx + ry_e2y * ry_qy + ry_e2z * ry_qz) / ry_det;
+}
+
+fn ry_sky_r(dx: Float, dy: Float, dz: Float) -> Int {
+    return 40;
+}
+
+fn ry_sky_g(dx: Float, dy: Float, dz: Float) -> Int {
+    return 70;
+}
+
+fn ry_sky_b(dx: Float, dy: Float, dz: Float) -> Int {
+    let mut ry_ax: Float = dx;
+    if ry_ax < 0.0 {
+        ry_ax = 0.0 - ry_ax;
+    }
+    let mut ry_ay: Float = dy;
+    if ry_ay < 0.0 {
+        ry_ay = 0.0 - ry_ay;
+    }
+    let mut ry_az: Float = dz;
+    if ry_az < 0.0 {
+        ry_az = 0.0 - ry_az;
+    }
+    let ry_den: Float = ry_ax + ry_ay + ry_az;
+    if ry_den < 0.000001 {
+        return 140;
+    }
+    let ry_up: Int = spin_f2i(100.0 * dy / ry_den);
+    let ry_k: Int = 100 + ry_up;
+    return 140 + 60 * ry_k / 200;
+}
+
+pub fn ray_frame(deg: Int, dist: Int, focal: Int, cx: Int, cy: Int, w: Int, h: Int, lx: Int, ly: Int, lz: Int, ambient: Int) -> Canvas {
+    let mut ry_wax: List[Int] = list_new();
+    let mut ry_way: List[Int] = list_new();
+    let mut ry_waz: List[Int] = list_new();
+    let mut ry_wbx: List[Int] = list_new();
+    let mut ry_wby: List[Int] = list_new();
+    let mut ry_wbz: List[Int] = list_new();
+    let mut ry_wcx: List[Int] = list_new();
+    let mut ry_wcy: List[Int] = list_new();
+    let mut ry_wcz: List[Int] = list_new();
+    let mut ry_tface: List[Int] = list_new();
+    let mut ry_f: Int = 0;
+    while ry_f < 12 {
+        let ry_t: TriIdx = cube_face_tri(ry_f);
+        let ry_pa: CubePt = cube_spin_pt(cube_vert(ry_t.a), deg, dist);
+        let ry_pb: CubePt = cube_spin_pt(cube_vert(ry_t.b), deg, dist);
+        let ry_pc: CubePt = cube_spin_pt(cube_vert(ry_t.c), deg, dist);
+        ry_wax = list_push(ry_wax, ry_pa.x);
+        ry_way = list_push(ry_way, ry_pa.y);
+        ry_waz = list_push(ry_waz, ry_pa.z);
+        ry_wbx = list_push(ry_wbx, ry_pb.x);
+        ry_wby = list_push(ry_wby, ry_pb.y);
+        ry_wbz = list_push(ry_wbz, ry_pb.z);
+        ry_wcx = list_push(ry_wcx, ry_pc.x);
+        ry_wcy = list_push(ry_wcy, ry_pc.y);
+        ry_wcz = list_push(ry_wcz, ry_pc.z);
+        ry_tface = list_push(ry_tface, ry_f);
+        ry_f = ry_f + 1;
+    }
+    let ry_ldx: Float = spin_i2f(lx);
+    let ry_ldy: Float = spin_i2f(ly);
+    let ry_ldz: Float = spin_i2f(lz);
+    let mut ry_flat: List[Int] = list_new();
+    let mut ry_y: Int = 0;
+    while ry_y < h {
+        let mut ry_x: Int = 0;
+        while ry_x < w {
+            let ry_dx: Float = spin_i2f(ry_x - cx);
+            let ry_dy: Float = spin_i2f(cy - ry_y);
+            let ry_dz: Float = spin_i2f(focal);
+            let mut ry_best: Float = 1000000.0;
+            let mut ry_bf: Int = 0 - 1;
+            let mut ry_g: Int = 0;
+            while ry_g < 12 {
+                let ry_ht: Float = ry_hit(0.0, 0.0, 0.0, ry_dx, ry_dy, ry_dz, list_get(ry_wax, ry_g), list_get(ry_way, ry_g), list_get(ry_waz, ry_g), list_get(ry_wbx, ry_g), list_get(ry_wby, ry_g), list_get(ry_wbz, ry_g), list_get(ry_wcx, ry_g), list_get(ry_wcy, ry_g), list_get(ry_wcz, ry_g), 0.001, 1000000.0);
+                if ry_ht >= 0.0 {
+                    if ry_ht < ry_best {
+                        ry_best = ry_ht;
+                        ry_bf = ry_g;
+                    }
+                }
+                ry_g = ry_g + 1;
+            }
+            let mut ry_sr: Int = ry_sky_r(ry_dx, ry_dy, ry_dz);
+            let mut ry_sg: Int = ry_sky_g(ry_dx, ry_dy, ry_dz);
+            let mut ry_sb: Int = ry_sky_b(ry_dx, ry_dy, ry_dz);
+            if ry_bf >= 0 {
+                let ry_hx: Float = ry_dx * ry_best;
+                let ry_hy: Float = ry_dy * ry_best;
+                let ry_hz: Float = ry_dz * ry_best;
+                let ry_al: QoiRgba = cube_face_color(list_get(ry_tface, ry_bf));
+                let ry_ax0: Int = list_get(ry_wax, ry_bf);
+                let ry_ay0: Int = list_get(ry_way, ry_bf);
+                let ry_az0: Int = list_get(ry_waz, ry_bf);
+                let ry_nx: Int = 0 - ((list_get(ry_wby, ry_bf) - ry_ay0) * (list_get(ry_wcz, ry_bf) - ry_az0) - (list_get(ry_wbz, ry_bf) - ry_az0) * (list_get(ry_wcy, ry_bf) - ry_ay0));
+                let ry_ny: Int = 0 - ((list_get(ry_wbz, ry_bf) - ry_az0) * (list_get(ry_wcx, ry_bf) - ry_ax0) - (list_get(ry_wbx, ry_bf) - ry_ax0) * (list_get(ry_wcz, ry_bf) - ry_az0));
+                let ry_nz: Int = 0 - ((list_get(ry_wbx, ry_bf) - ry_ax0) * (list_get(ry_wcy, ry_bf) - ry_ay0) - (list_get(ry_wby, ry_bf) - ry_ay0) * (list_get(ry_wcx, ry_bf) - ry_ax0));
+                let ry_nl: Int = shade_isqrt(shade_dot(ry_nx, ry_ny, ry_nz, ry_nx, ry_ny, ry_nz));
+                let mut ry_k: Int = ambient;
+                if ry_nl > 0 {
+                    ry_k = shade_lambert(ry_nx, ry_ny, ry_nz, lx, ly, lz, ambient);
+                }
+                let mut ry_o: Int = 0;
+                while ry_o < 12 {
+                    if ry_o != ry_bf {
+                        let ry_sh: Float = ry_hit(ry_hx + spin_i2f(ry_nx) / spin_i2f(ry_nl) / 2.0, ry_hy + spin_i2f(ry_ny) / spin_i2f(ry_nl) / 2.0, ry_hz + spin_i2f(ry_nz) / spin_i2f(ry_nl) / 2.0, ry_ldx, ry_ldy, ry_ldz, list_get(ry_wax, ry_o), list_get(ry_way, ry_o), list_get(ry_waz, ry_o), list_get(ry_wbx, ry_o), list_get(ry_wby, ry_o), list_get(ry_wbz, ry_o), list_get(ry_wcx, ry_o), list_get(ry_wcy, ry_o), list_get(ry_wcz, ry_o), 0.001, 1000000.0);
+                        if ry_sh >= 0.0 {
+                            ry_k = ambient;
+                        }
+                    }
+                    ry_o = ry_o + 1;
+                }
+                let ry_lc: QoiRgba = shade_scale(ry_al, ry_k);
+                ry_sr = ry_lc.r;
+                ry_sg = ry_lc.g;
+                ry_sb = ry_lc.b;
+                if ry_nl > 0 {
+                    let ry_nfx: Float = spin_i2f(ry_nx) / spin_i2f(ry_nl);
+                    let ry_nfy: Float = spin_i2f(ry_ny) / spin_i2f(ry_nl);
+                    let ry_nfz: Float = spin_i2f(ry_nz) / spin_i2f(ry_nl);
+                    let ry_ddn: Float = ry_dx * ry_nfx + ry_dy * ry_nfy + ry_dz * ry_nfz;
+                    let ry_rx: Float = ry_dx - 2.0 * ry_ddn * ry_nfx;
+                    let ry_ry: Float = ry_dy - 2.0 * ry_ddn * ry_nfy;
+                    let ry_rz: Float = ry_dz - 2.0 * ry_ddn * ry_nfz;
+                    let mut ry_rt: Float = 1000000.0;
+                    let mut ry_rf: Int = 0 - 1;
+                    let mut ry_q: Int = 0;
+                    while ry_q < 12 {
+                        let ry_qt: Float = ry_hit(ry_hx, ry_hy, ry_hz, ry_rx, ry_ry, ry_rz, list_get(ry_wax, ry_q), list_get(ry_way, ry_q), list_get(ry_waz, ry_q), list_get(ry_wbx, ry_q), list_get(ry_wby, ry_q), list_get(ry_wbz, ry_q), list_get(ry_wcx, ry_q), list_get(ry_wcy, ry_q), list_get(ry_wcz, ry_q), 0.001, 1000000.0);
+                        if ry_qt >= 0.0 {
+                            if ry_qt < ry_rt {
+                                ry_rt = ry_qt;
+                                ry_rf = ry_q;
+                            }
+                        }
+                        ry_q = ry_q + 1;
+                    }
+                    let mut ry_rr: Int = ry_sky_r(ry_rx, ry_ry, ry_rz);
+                    let mut ry_rg: Int = ry_sky_g(ry_rx, ry_ry, ry_rz);
+                    let mut ry_rb: Int = ry_sky_b(ry_rx, ry_ry, ry_rz);
+                    if ry_rf >= 0 {
+                        let ry_ra: QoiRgba = cube_face_color(list_get(ry_tface, ry_rf));
+                        ry_rr = ry_ra.r;
+                        ry_rg = ry_ra.g;
+                        ry_rb = ry_ra.b;
+                    }
+                    ry_sr = ry_sr + ry_rr * 4 / 10;
+                    ry_sg = ry_sg + ry_rg * 4 / 10;
+                    ry_sb = ry_sb + ry_rb * 4 / 10;
+                }
+                if ry_sr > 255 {
+                    ry_sr = 255;
+                }
+                if ry_sg > 255 {
+                    ry_sg = 255;
+                }
+                if ry_sb > 255 {
+                    ry_sb = 255;
+                }
+            }
+            ry_flat = list_push(ry_flat, ry_sr);
+            ry_flat = list_push(ry_flat, ry_sg);
+            ry_flat = list_push(ry_flat, ry_sb);
+            ry_flat = list_push(ry_flat, 255);
+            ry_x = ry_x + 1;
+        }
+        ry_y = ry_y + 1;
+    }
+    return Canvas { width: w, height: h, px: ry_flat };
+}

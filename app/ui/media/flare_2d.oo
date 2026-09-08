@@ -1,0 +1,61 @@
+// # Lens flare: sun disk, axis ghosts, horizontal streak
+//
+// Logline: Additive post-effect on the HDR buffer before tonemap.
+//
+// Setup: Pure compute, no caps. Ghosts sit on the sun-to-center axis at
+// quarters with shrinking radius and radiance; the streak falls off with
+// distance. All light adds, so order of passes never matters.
+//
+// Beats:
+//   1. flare_add lays sun disk, four ghosts, and streak in one call.
+//   2. Ghost radiance and radius shrink along the axis.
+//   3. Off-axis and far pixels stay dark.
+
+pub fn flare_add(fb: HdrFb, sx: Int, sy: Int, strength: Float) -> HdrFb {
+    let fl_w: Int = fb.w;
+    let fl_h: Int = fb.h;
+    let mut fl_out: HdrFb = fb;
+    let mut fl_dy: Int = 0 - 2;
+    while fl_dy <= 2 {
+        let fl_span: Int = shade_isqrt(4 - fl_dy * fl_dy);
+        let mut fl_dx: Int = 0 - fl_span;
+        while fl_dx <= fl_span {
+            fl_out = hdr_add(fl_out, sx + fl_dx, sy + fl_dy, strength, strength, strength);
+            fl_dx = fl_dx + 1;
+        }
+        fl_dy = fl_dy + 1;
+    }
+    let fl_cx: Int = fl_w / 2;
+    let fl_cy: Int = fl_h / 2;
+    let mut fl_fi: Int = 1;
+    while fl_fi <= 4 {
+        let fl_gx: Int = sx + (fl_cx - sx) * fl_fi / 4;
+        let fl_gy: Int = sy + (fl_cy - sy) * fl_fi / 4;
+        let fl_gr: Int = 4 - fl_fi;
+        let fl_gv: Float = strength / spin_i2f(fl_fi + 1);
+        let mut fl_gdy: Int = 0 - fl_gr;
+        while fl_gdy <= fl_gr {
+            let fl_gspan: Int = shade_isqrt(fl_gr * fl_gr - fl_gdy * fl_gdy);
+            let mut fl_gdx: Int = 0 - fl_gspan;
+            while fl_gdx <= fl_gspan {
+                let fl_dist: Int = shade_isqrt(fl_gdx * fl_gdx + fl_gdy * fl_gdy);
+                let fl_v: Float = fl_gv * spin_i2f(fl_gr - fl_dist + 1) / spin_i2f(fl_gr + 1);
+                fl_out = hdr_add(fl_out, fl_gx + fl_gdx, fl_gy + fl_gdy, fl_v, fl_v, fl_v * 0.9);
+                fl_gdx = fl_gdx + 1;
+            }
+            fl_gdy = fl_gdy + 1;
+        }
+        fl_fi = fl_fi + 1;
+    }
+    let mut fl_sx: Int = sx - 16;
+    while fl_sx <= sx + 16 {
+        let mut fl_adx: Int = fl_sx - sx;
+        if fl_adx < 0 {
+            fl_adx = 0 - fl_adx;
+        }
+        let fl_sv: Float = strength * 8.0 / (8.0 + spin_i2f(fl_adx));
+        fl_out = hdr_add(fl_out, fl_sx, sy, fl_sv, fl_sv, fl_sv * 0.9);
+        fl_sx = fl_sx + 1;
+    }
+    return fl_out;
+}

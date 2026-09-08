@@ -1,0 +1,72 @@
+// # Probe: ray-traced cube center, sky corner, determinism
+//
+// Logline: The 96x60 frame centers on (213,63,103) by the Lambert,
+// reflection, and sky math; the corner is exact sky (40,70,174); angle
+// change re-renders different and deterministically.
+//
+// Setup: Pure. No caps. Light (30,40,-100), ambient 24, degree 0. Center
+// ray (0,0,120) hits front red: lambert 230 gives (197,35,35), reflection
+// toward -z misses into sky (40,70,170), 40% adds (16,28,68).
+//
+// Beats:
+//   1. Center pixel is exactly (213,63,103).
+//   2. Corner pixel is exactly sky (40,70,174).
+//   3. Re-render matches; 30 degrees differs.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/cube_3d.oo";
+import "std/app/ui/media/ray_3d.oo";
+
+pub fn main() -> Result[Int, String] {
+    if qoi_rgba_new(1, 2, 3, 4).r != 1 {
+        return Err("ray probe: color unit must be 1");
+    }
+    let ry_c1: Result[Canvas, String] = canvas_new(1, 1, qoi_rgba_new(0, 0, 0, 255));
+    if ry_c1.is_err() {
+        return Err("ray probe: canvas unit must build");
+    }
+    let ry_cv: Canvas = ray_frame(0, 300, 120, 48, 30, 96, 60, 30, 40, 0 - 100, 24);
+    if ry_cv.width != 96 {
+        return Err("ray probe: width must be 96");
+    }
+    let ry_flat: List[Int] = ry_cv.px;
+    let ry_cc: Int = (30 * 96 + 48) * 4;
+    if list_get(ry_flat, ry_cc) != 213 {
+        return Err("ray probe: center red must be 213");
+    }
+    if list_get(ry_flat, ry_cc + 1) != 63 {
+        return Err("ray probe: center green must be 63");
+    }
+    if list_get(ry_flat, ry_cc + 2) != 103 {
+        return Err("ray probe: center blue must be 103");
+    }
+    if list_get(ry_flat, 0) != 40 {
+        return Err("ray probe: corner red must be 40");
+    }
+    if list_get(ry_flat, 1) != 70 {
+        return Err("ray probe: corner green must be 70");
+    }
+    if list_get(ry_flat, 2) != 174 {
+        return Err("ray probe: corner blue must be 174");
+    }
+    let ry_again: Canvas = ray_frame(0, 300, 120, 48, 30, 96, 60, 30, 40, 0 - 100, 24);
+    let ry_flat2: List[Int] = ry_again.px;
+    if list_get(ry_flat2, ry_cc) != 213 {
+        return Err("ray probe: re-render center must match");
+    }
+    let ry_turn: Canvas = ray_frame(30, 300, 120, 48, 30, 96, 60, 30, 40, 0 - 100, 24);
+    let ry_flat3: List[Int] = ry_turn.px;
+    if list_get(ry_flat3, ry_cc) == 213 {
+        if list_get(ry_flat3, ry_cc + 1) == 63 {
+            if list_get(ry_flat3, ry_cc + 2) == 103 {
+                return Err("ray probe: turned frame must differ");
+            }
+        }
+    }
+    println("probe: std/gfx ray_3d: ok");
+    return Ok(0);
+}

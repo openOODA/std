@@ -1,0 +1,113 @@
+// # Probe: font rows, text pixels, measure
+//
+// Logline: A draws 18 pixels, A1 draws 28, unknown draws blank, widths
+// measure with tracking and scale.
+//
+// Setup: Pure. No caps. Glyph bit counts come straight from the tables:
+// A rows sum 3+2+2+5+2+2+2 = 18; digit 1 sums 1+2+1+1+1+1+3 = 10.
+//
+// Beats:
+//   1. font_glyph("A") has 7 rows opening with 14; "~" is blank.
+//   2. text_width covers tracking and scale; empty is zero.
+//   3. Drawn "A" counts 18 red; "A1" counts 28.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/ppm.oo";
+import "std/app/ui/media/font_rows_1.oo";
+import "std/app/ui/media/font_rows_2.oo";
+import "std/app/ui/media/font_rows_3.oo";
+import "std/app/ui/media/font_rows_4.oo";
+import "std/app/ui/media/font_5x7.oo";
+
+fn probe_font_ppm(cv: Canvas) -> Result[String, String] {
+    let ft_img: Result[QoiImage, String] = canvas_to_image(cv);
+    if ft_img.is_err() {
+        return Err("font probe: canvas_to_image failed");
+    }
+    let ft_plain: QoiImage = match ft_img { Ok(a) => a, Err(_) => QoiImage { header: QoiHeader { width: 0, height: 0, channels: 3, colorspace: 0 }, pixels: list_new() } };
+    return ppm_encode(ft_plain);
+}
+
+fn probe_font_count(ppm: String, pat: String) -> Int {
+    let mut ft_left: String = ppm;
+    let mut ft_n: Int = 0;
+    let mut ft_go: Int = 1;
+    while ft_go == 1 {
+        let ft_p: Int = str_index_of(ft_left, pat);
+        if ft_p < 0 {
+            ft_go = 0;
+        }
+        if ft_p >= 0 {
+            ft_n = ft_n + 1;
+            ft_left = str_slice(ft_left, ft_p + 1, chars_len(ft_left));
+        }
+    }
+    return ft_n;
+}
+
+pub fn main() -> Result[Int, String] {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
+    let ft_a: List[Int] = font_glyph("A");
+    if list_len(ft_a) != 7 {
+        return Err("font probe: A must have 7 rows");
+    }
+    if list_get(ft_a, 0) != 14 {
+        return Err("font probe: A row 0 must be 14");
+    }
+    let ft_q: List[Int] = font_glyph("~");
+    if list_len(ft_q) != 7 {
+        return Err("font probe: unknown must still return 7 rows");
+    }
+    if list_get(ft_q, 3) != 0 {
+        return Err("font probe: unknown must be blank");
+    }
+    if text_width("AB", 1) != 11 {
+        return Err("font probe: width AB@1 must be 11");
+    }
+    if text_width("AB", 2) != 22 {
+        return Err("font probe: width AB@2 must be 22");
+    }
+    if text_width("", 1) != 0 {
+        return Err("font probe: empty width must be 0");
+    }
+    let mk: Result[Canvas, String] = canvas_new(40, 10, black);
+    if mk.is_err() {
+        return Err("font probe: canvas_new failed");
+    }
+    let empty: Canvas = match mk { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    let drew_a: Canvas = text_draw(empty, 0, 0, "A", red, 1);
+    let t1: Result[String, String] = probe_font_ppm(drew_a);
+    let ppm1: String = match t1 { Ok(a) => a, Err(b) => b };
+    if probe_font_count(ppm1, "255 0 0\n") != 18 {
+        println(ppm1);
+        return Err("font probe: A must draw 18 pixels");
+    }
+    let drew_a1: Canvas = text_draw(empty, 0, 0, "A1", red, 1);
+    let t2: Result[String, String] = probe_font_ppm(drew_a1);
+    let ppm2: String = match t2 { Ok(a) => a, Err(b) => b };
+    if probe_font_count(ppm2, "255 0 0\n") != 28 {
+        println(ppm2);
+        return Err("font probe: A1 must draw 28 pixels");
+    }
+    let drew_q: Canvas = text_draw(empty, 0, 0, "~", red, 1);
+    let t3: Result[String, String] = probe_font_ppm(drew_q);
+    let ppm3: String = match t3 { Ok(a) => a, Err(b) => b };
+    if probe_font_count(ppm3, "255 0 0\n") != 0 {
+        return Err("font probe: unknown must draw nothing");
+    }
+    // Scale 2 doubles the 7 rows to 14, so this draw needs its own tall
+    // canvas; on the 10-tall sheet rows 10-13 would clip to 28 pixels.
+    let mk_big: Result[Canvas, String] = canvas_new(40, 20, black);
+    let empty_big: Canvas = match mk_big { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    let drew_big: Canvas = text_draw(empty_big, 0, 0, "I", red, 2);
+    let t4: Result[String, String] = probe_font_ppm(drew_big);
+    let ppm4: String = match t4 { Ok(a) => a, Err(b) => b };
+    if probe_font_count(ppm4, "255 0 0\n") != 44 {
+        println(ppm4);
+        return Err("font probe: I@2 must draw 44 pixels");
+    }
+    println("probe: std/gfx font_5x7: ok");
+    return Ok(0);
+}

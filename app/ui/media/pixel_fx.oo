@@ -1,0 +1,114 @@
+// # Pixel effects: palette, swap, dither, scale, canvas blit
+//
+// Logline: Palette-indexed finishing moves: remap colors, Bayer-mix two
+// indices, nearest-neighbor upscale, and transparent blits onto a Canvas.
+//
+// Setup: Pure compute, no caps. Same-dir Sprite/Palette/Canvas/QoiRgba
+// resolve without import; probes import qoi_types.oo and canvas_2d.oo so
+// the C build unit carries every home module. Out-of-range palette reads
+// and scales fail closed (skip pixel / Err).
+//
+// Beats:
+//   1. pix_palette builds the table; pix_swap remaps two indices.
+//   2. pix_dither_rect mixes i0/i1 on a 2x2 Bayer grid.
+//   3. pix_scale upscales by integer k; pix_blit stamps with transparency.
+
+pub fn pix_palette(cols: List[QoiRgba]) -> Palette {
+    return Palette { cols: cols };
+}
+
+pub fn pix_pal_len(pal: Palette) -> Int {
+    return list_len(pal.cols);
+}
+
+pub fn pix_swap(sp: Sprite, a: Int, b: Int) -> Sprite {
+    let mut px_px: List[Int] = list_new();
+    let mut px_i: Int = 0;
+    let px_n: Int = sp.w * sp.h;
+    while px_i < px_n {
+        let px_v: Int = list_get(sp.px, px_i);
+        if px_v == a {
+            px_px = list_push(px_px, b);
+        } else {
+            if px_v == b {
+                px_px = list_push(px_px, a);
+            } else {
+                px_px = list_push(px_px, px_v);
+            }
+        }
+        px_i = px_i + 1;
+    }
+    return Sprite { w: sp.w, h: sp.h, px: px_px };
+}
+
+pub fn pix_dither_rect(sp: Sprite, x: Int, y: Int, w: Int, h: Int, i0: Int, i1: Int) -> Sprite {
+    // NOTE: 2x2 Bayer matrix [0,2,3,1]; threshold 2 splits even/odd parity
+    // so a solid fill mixes exactly half and half.
+    let mut px_out: Sprite = sp;
+    let mut px_yy: Int = y;
+    while px_yy < y + h {
+        let mut px_xx: Int = x;
+        while px_xx < x + w {
+            let px_m00: Int = (px_xx - (px_xx / 2) * 2) * 2 + (px_yy - (px_yy / 2) * 2);
+            let mut px_t: Int = 0;
+            if px_m00 == 1 {
+                px_t = 2;
+            }
+            if px_m00 == 2 {
+                px_t = 3;
+            }
+            if px_m00 == 3 {
+                px_t = 1;
+            }
+            if px_t < 2 {
+                px_out = pix_set(px_out, px_xx, px_yy, i0);
+            } else {
+                px_out = pix_set(px_out, px_xx, px_yy, i1);
+            }
+            px_xx = px_xx + 1;
+        }
+        px_yy = px_yy + 1;
+    }
+    return px_out;
+}
+
+pub fn pix_scale(sp: Sprite, k: Int) -> Result[Sprite, String] {
+    if k <= 0 {
+        return Err("ERR\tpix_scale: bad factor");
+    }
+    let mut px_px: List[Int] = list_new();
+    let mut px_y: Int = 0;
+    while px_y < sp.h * k {
+        let mut px_x: Int = 0;
+        while px_x < sp.w * k {
+            px_px = list_push(px_px, pix_get(sp, px_x / k, px_y / k));
+            px_x = px_x + 1;
+        }
+        px_y = px_y + 1;
+    }
+    return Ok(Sprite { w: sp.w * k, h: sp.h * k, px: px_px });
+}
+
+pub fn pix_blit(cv: Canvas, sp: Sprite, pal: Palette, ox: Int, oy: Int, transparent: Int) -> Canvas {
+    let mut px_cv: Canvas = cv;
+    let px_n: Int = list_len(pal.cols);
+    let mut px_y: Int = 0;
+    while px_y < sp.h {
+        let mut px_x: Int = 0;
+        while px_x < sp.w {
+            let px_i: Int = pix_get(sp, px_x, px_y);
+            if px_i != transparent {
+                if px_i >= 0 {
+                    if px_i < px_n {
+                        // NOTE: list_get reads, never binds: struct-list
+                        // payloads stay sound through canvas_set.
+                        px_cv = canvas_set(px_cv, ox + px_x, oy + px_y, list_get(pal.cols, px_i));
+                    }
+                }
+            }
+            px_x = px_x + 1;
+        }
+        px_y = px_y + 1;
+    }
+    return px_cv;
+}

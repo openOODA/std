@@ -1,0 +1,65 @@
+// # Two-dimensional water: swell plus chop over a still-water row
+//
+// Logline: A 2D sea surface from two sine components (big swell, small
+// chop) painted as deep fill, crest line, and foam caps on a Canvas.
+//
+// Setup: Pure compute, no caps. Heights ride on spin_sin_deg through
+// spin_f2i truncation; exact-zero asserts only pin phases 0 and 180 where
+// the Taylor fold is exactly 0.0, while crest/trough asserts use signs.
+// Probes import spin_3d.oo, canvas_2d.oo, and qoi_types.oo so every home
+// module joins the C build unit; same-dir names need that to link.
+//
+// Beats:
+//   1. wave_phase normalizes any integer phase into 0..359.
+//   2. wave_h is exactly 0 at phases 0/180, positive at 90, negative at 270.
+//   3. wave_sea sums swell and chop; amplitude scales the water.
+//   4. wave_paint fills deep water, draws the crest, and foams the tops.
+
+pub fn wave_phase(ph: Int) -> Int {
+    let mut wv_p: Int = ph;
+    while wv_p < 0 {
+        wv_p = wv_p + 360;
+    }
+    while wv_p >= 360 {
+        wv_p = wv_p - 360;
+    }
+    return wv_p;
+}
+
+pub fn wave_h(x: Int, t: Int, amp: Int, period: Int, rate: Int) -> Int {
+    if period <= 0 {
+        return 0;
+    }
+    let wv_step: Int = 360 / period;
+    let wv_ph: Int = wave_phase(x * wv_step + t * rate);
+    return spin_f2i(spin_sin_deg(wv_ph) * spin_i2f(amp));
+}
+
+pub fn wave_sea(x: Int, t: Int, a1: Int, p1: Int, r1: Int, a2: Int, p2: Int, r2: Int) -> Int {
+    return wave_h(x, t, a1, p1, r1) + wave_h(x, t, a2, p2, r2);
+}
+
+pub fn wave_paint(cv: Canvas, y_base: Int, t: Int, a1: Int, p1: Int, r1: Int, a2: Int, p2: Int, r2: Int, deep: QoiRgba, crest: QoiRgba, foam: QoiRgba, foam_band: Int) -> Canvas {
+    let mut wv_cv: Canvas = cv;
+    let mut wv_x: Int = 0;
+    while wv_x < cv.width {
+        let wv_h: Int = wave_sea(wv_x, t, a1, p1, r1, a2, p2, r2);
+        let wv_ys: Int = y_base - wv_h;
+        let mut wv_y: Int = wv_ys;
+        while wv_y < cv.height {
+            wv_cv = canvas_set(wv_cv, wv_x, wv_y, deep);
+            wv_y = wv_y + 1;
+        }
+        if wv_ys >= 0 {
+            if wv_ys < cv.height {
+                if wv_h >= a1 + a2 - foam_band {
+                    wv_cv = canvas_set(wv_cv, wv_x, wv_ys, foam);
+                } else {
+                    wv_cv = canvas_set(wv_cv, wv_x, wv_ys, crest);
+                }
+            }
+        }
+        wv_x = wv_x + 1;
+    }
+    return wv_cv;
+}

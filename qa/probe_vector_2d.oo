@@ -1,0 +1,139 @@
+// # Probe: vector flatten counts, stroke pixels, convex fill area
+//
+// Logline: A line path flattens to one exact segment; quad/cubic flatten
+// to 8/12 segments with a hand-checked midpoint; strokes and fills cover
+// hand-counted pixels.
+//
+// Setup: Pure. No caps. Quad (0,0) c(10,0) (10,10) hits (7,2) at t=4 by
+// the integer Bernstein weights (480/64, 160/64).
+//
+// Beats:
+//   1. Line flatten is one segment with exact endpoints.
+//   2. Quad/cubic flatten to 8/12 segments; quad midpoint is (7,2).
+//   3. Zero-width stroke of (0,0)-(5,0) covers exactly 6 pixels.
+//   4. Triangle fan fill covers 21; unit square covers 16.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/ppm.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/vector_2d.oo";
+import "std/app/ui/media/vec_poly.oo";
+
+fn probe_vec_ppm(cv: Canvas) -> Result[String, String] {
+    let vx_img: Result[QoiImage, String] = canvas_to_image(cv);
+    if vx_img.is_err() {
+        return Err("vector probe: canvas_to_image failed");
+    }
+    let vx_plain: QoiImage = match vx_img { Ok(a) => a, Err(_) => QoiImage { header: QoiHeader { width: 0, height: 0, channels: 3, colorspace: 0 }, pixels: list_new() } };
+    return ppm_encode(vx_plain);
+}
+
+fn probe_vec_count(ppm: String, pat: String) -> Int {
+    let mut vx_left: String = ppm;
+    let mut vx_n: Int = 0;
+    let mut vx_go: Int = 1;
+    while vx_go == 1 {
+        let vx_p: Int = str_index_of(vx_left, pat);
+        if vx_p < 0 {
+            vx_go = 0;
+        }
+        if vx_p >= 0 {
+            vx_n = vx_n + 1;
+            vx_left = str_slice(vx_left, vx_p + 1, chars_len(vx_left));
+        }
+    }
+    return vx_n;
+}
+
+pub fn main() -> Result[Int, String] {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
+    let mut vp_line: List[Int] = path_new(0, 0);
+    vp_line = path_line_to(vp_line, 5, 0);
+    let vp_segs: List[Int] = vec_flatten(vp_line);
+    if list_len(vp_segs) != 4 {
+        return Err("vector probe: line must flatten to 4 ints");
+    }
+    if list_get(vp_segs, 0) != 0 {
+        return Err("vector probe: seg must start at x 0");
+    }
+    if list_get(vp_segs, 2) != 5 {
+        return Err("vector probe: seg must end at x 5");
+    }
+    if list_get(vp_segs, 3) != 0 {
+        return Err("vector probe: seg must end at y 0");
+    }
+    let mut vp_quad: List[Int] = path_new(0, 0);
+    vp_quad = path_quad_to(vp_quad, 10, 0, 10, 10);
+    let vp_qs: List[Int] = vec_flatten(vp_quad);
+    if list_len(vp_qs) != 32 {
+        return Err("vector probe: quad must flatten to 8 segments");
+    }
+    if list_get(vp_qs, 0) != 0 {
+        return Err("vector probe: quad must start at x 0");
+    }
+    let vp_mid: Int = 3 * 4 + 2;
+    if list_get(vp_qs, vp_mid) != 7 {
+        return Err("vector probe: quad midpoint x must be 7");
+    }
+    if list_get(vp_qs, vp_mid + 1) != 2 {
+        return Err("vector probe: quad midpoint y must be 2");
+    }
+    let mut vp_cub: List[Int] = path_new(0, 0);
+    vp_cub = path_cubic_to(vp_cub, 0, 10, 10, 10, 10, 0);
+    let vp_cs: List[Int] = vec_flatten(vp_cub);
+    if list_len(vp_cs) != 48 {
+        return Err("vector probe: cubic must flatten to 12 segments");
+    }
+    let mk: Result[Canvas, String] = canvas_new(10, 8, black);
+    if mk.is_err() {
+        return Err("vector probe: canvas_new failed");
+    }
+    let empty: Canvas = match mk { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    let stroked: Canvas = vec_stroke(empty, vp_segs, 0, red);
+    let t1: Result[String, String] = probe_vec_ppm(stroked);
+    let ppm1: String = match t1 { Ok(a) => a, Err(b) => b };
+    if probe_vec_count(ppm1, "255 0 0\n") != 6 {
+        println(ppm1);
+        return Err("vector probe: stroke must cover 6 pixels");
+    }
+    let mut vp_tri: List[Int] = list_new();
+    vp_tri = list_push(vp_tri, 2);
+    vp_tri = list_push(vp_tri, 1);
+    vp_tri = list_push(vp_tri, 7);
+    vp_tri = list_push(vp_tri, 1);
+    vp_tri = list_push(vp_tri, 2);
+    vp_tri = list_push(vp_tri, 6);
+    let filled: Canvas = vec_fill_convex(empty, vp_tri, 3, red);
+    let t2: Result[String, String] = probe_vec_ppm(filled);
+    let ppm2: String = match t2 { Ok(a) => a, Err(b) => b };
+    if probe_vec_count(ppm2, "255 0 0\n") != 21 {
+        println(ppm2);
+        return Err("vector probe: tri fill must cover 21 pixels");
+    }
+    let mut vp_sq: List[Int] = list_new();
+    vp_sq = list_push(vp_sq, 1);
+    vp_sq = list_push(vp_sq, 1);
+    vp_sq = list_push(vp_sq, 4);
+    vp_sq = list_push(vp_sq, 1);
+    vp_sq = list_push(vp_sq, 4);
+    vp_sq = list_push(vp_sq, 4);
+    vp_sq = list_push(vp_sq, 1);
+    vp_sq = list_push(vp_sq, 4);
+    let squared: Canvas = vec_fill_convex(empty, vp_sq, 4, red);
+    let t3: Result[String, String] = probe_vec_ppm(squared);
+    let ppm3: String = match t3 { Ok(a) => a, Err(b) => b };
+    if probe_vec_count(ppm3, "255 0 0\n") != 16 {
+        println(ppm3);
+        return Err("vector probe: square fill must cover 16 pixels");
+    }
+    let tiny: Canvas = vec_fill_convex(empty, vp_sq, 2, red);
+    let t4: Result[String, String] = probe_vec_ppm(tiny);
+    let ppm4: String = match t4 { Ok(a) => a, Err(b) => b };
+    if probe_vec_count(ppm4, "255 0 0\n") != 0 {
+        return Err("vector probe: n<3 fill must draw nothing");
+    }
+    println("probe: std/gfx vector_2d: ok");
+    return Ok(0);
+}

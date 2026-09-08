@@ -1,0 +1,211 @@
+// # Pixel sprites: indexed raster ops on palette pictures
+//
+// Logline: Tiny indexed-color pictures with plot, line, rect, fill, flip,
+// and quarter turns; color lives in a separate Palette.
+//
+// Setup: Pure compute, no caps. Sprite pixels are palette indices (Int);
+// Palette holds the QoiRgba table. Out-of-bounds reads return -1 and
+// out-of-bounds writes keep the sprite unchanged. Never bind pal.cols or
+// sp.px across calls; read through list_get like the raster notes say.
+//
+// Beats:
+//   1. pix_new/pix_get/pix_set/pix_count cover storage and query.
+//   2. pix_line/pix_rect/pix_fill_rect draw with clipping.
+//   3. pix_fill floods, pix_flip_h/v and pix_rot90 reorient.
+
+type Sprite = struct {
+    w: Int,
+    h: Int,
+    px: List[Int]
+};
+
+type Palette = struct {
+    cols: List[QoiRgba]
+};
+
+pub fn pix_new(w: Int, h: Int, bg: Int) -> Result[Sprite, String] {
+    if w <= 0 {
+        return Err("ERR\tpix_new: bad width");
+    }
+    if h <= 0 {
+        return Err("ERR\tpix_new: bad height");
+    }
+    let mut px_px: List[Int] = list_new();
+    let mut px_i: Int = 0;
+    let px_n: Int = w * h;
+    while px_i < px_n {
+        px_px = list_push(px_px, bg);
+        px_i = px_i + 1;
+    }
+    return Ok(Sprite { w: w, h: h, px: px_px });
+}
+
+pub fn pix_get(sp: Sprite, x: Int, y: Int) -> Int {
+    if x < 0 {
+        return 0 - 1;
+    }
+    if y < 0 {
+        return 0 - 1;
+    }
+    if x >= sp.w {
+        return 0 - 1;
+    }
+    if y >= sp.h {
+        return 0 - 1;
+    }
+    return list_get(sp.px, y * sp.w + x);
+}
+
+pub fn pix_set(sp: Sprite, x: Int, y: Int, idx: Int) -> Sprite {
+    if x < 0 {
+        return sp;
+    }
+    if y < 0 {
+        return sp;
+    }
+    if x >= sp.w {
+        return sp;
+    }
+    if y >= sp.h {
+        return sp;
+    }
+    // NOTE: Int-list set threads like canvas_set; returns stay balanced.
+    let mut px_px: List[Int] = sp.px;
+    px_px = list_set(px_px, y * sp.w + x, idx);
+    return Sprite { w: sp.w, h: sp.h, px: px_px };
+}
+
+pub fn pix_count(sp: Sprite, idx: Int) -> Int {
+    let mut px_n: Int = 0;
+    let mut px_i: Int = 0;
+    let px_m: Int = sp.w * sp.h;
+    while px_i < px_m {
+        if list_get(sp.px, px_i) == idx {
+            px_n = px_n + 1;
+        }
+        px_i = px_i + 1;
+    }
+    return px_n;
+}
+
+pub fn pix_line(sp: Sprite, x0: Int, y0: Int, x1: Int, y1: Int, idx: Int) -> Sprite {
+    let mut px_out: Sprite = sp;
+    let mut px_ax: Int = x1 - x0;
+    if px_ax < 0 {
+        px_ax = 0 - px_ax;
+    }
+    let mut px_ay: Int = y1 - y0;
+    if px_ay < 0 {
+        px_ay = 0 - px_ay;
+    }
+    let mut px_steps: Int = px_ax;
+    if px_ay > px_steps {
+        px_steps = px_ay;
+    }
+    let mut px_i: Int = 0;
+    while px_i <= px_steps {
+        let px_x: Int = x0 + (x1 - x0) * px_i / px_steps;
+        let px_y: Int = y0 + (y1 - y0) * px_i / px_steps;
+        px_out = pix_set(px_out, px_x, px_y, idx);
+        px_i = px_i + 1;
+    }
+    return px_out;
+}
+
+pub fn pix_rect(sp: Sprite, x: Int, y: Int, w: Int, h: Int, idx: Int) -> Sprite {
+    let mut px_out: Sprite = sp;
+    let mut px_yy: Int = y;
+    while px_yy < y + h {
+        let mut px_xx: Int = x;
+        while px_xx < x + w {
+            let mut px_edge: Int = 0;
+            if px_xx == x {
+                px_edge = 1;
+            }
+            if px_xx == x + w - 1 {
+                px_edge = 1;
+            }
+            if px_yy == y {
+                px_edge = 1;
+            }
+            if px_yy == y + h - 1 {
+                px_edge = 1;
+            }
+            if px_edge == 1 {
+                px_out = pix_set(px_out, px_xx, px_yy, idx);
+            }
+            px_xx = px_xx + 1;
+        }
+        px_yy = px_yy + 1;
+    }
+    return px_out;
+}
+
+pub fn pix_fill_rect(sp: Sprite, x: Int, y: Int, w: Int, h: Int, idx: Int) -> Sprite {
+    let mut px_out: Sprite = sp;
+    let mut px_yy: Int = y;
+    while px_yy < y + h {
+        let mut px_xx: Int = x;
+        while px_xx < x + w {
+            px_out = pix_set(px_out, px_xx, px_yy, idx);
+            px_xx = px_xx + 1;
+        }
+        px_yy = px_yy + 1;
+    }
+    return px_out;
+}
+
+pub fn pix_fill(sp: Sprite, idx: Int) -> Sprite {
+    let mut px_out: Sprite = sp;
+    let mut px_i: Int = 0;
+    let px_n: Int = sp.w * sp.h;
+    while px_i < px_n {
+        px_out = pix_set(px_out, px_i - (px_i / sp.w) * sp.w, px_i / sp.w, idx);
+        px_i = px_i + 1;
+    }
+    return px_out;
+}
+
+pub fn pix_flip_h(sp: Sprite) -> Sprite {
+    let mut px_px: List[Int] = list_new();
+    let mut px_y: Int = 0;
+    while px_y < sp.h {
+        let mut px_x: Int = 0;
+        while px_x < sp.w {
+            px_px = list_push(px_px, pix_get(sp, sp.w - 1 - px_x, px_y));
+            px_x = px_x + 1;
+        }
+        px_y = px_y + 1;
+    }
+    return Sprite { w: sp.w, h: sp.h, px: px_px };
+}
+
+pub fn pix_flip_v(sp: Sprite) -> Sprite {
+    let mut px_px: List[Int] = list_new();
+    let mut px_y: Int = 0;
+    while px_y < sp.h {
+        let mut px_x: Int = 0;
+        while px_x < sp.w {
+            px_px = list_push(px_px, pix_get(sp, px_x, sp.h - 1 - px_y));
+            px_x = px_x + 1;
+        }
+        px_y = px_y + 1;
+    }
+    return Sprite { w: sp.w, h: sp.h, px: px_px };
+}
+
+pub fn pix_rot90(sp: Sprite) -> Sprite {
+    // NOTE: Clockwise: new(x, y) reads old(y, H - 1 - x); the mirror form
+    // drops the bottom row out of range, so keep this exact mapping.
+    let mut px_px: List[Int] = list_new();
+    let mut px_y: Int = 0;
+    while px_y < sp.w {
+        let mut px_x: Int = 0;
+        while px_x < sp.h {
+            px_px = list_push(px_px, pix_get(sp, px_y, sp.h - 1 - px_x));
+            px_x = px_x + 1;
+        }
+        px_y = px_y + 1;
+    }
+    return Sprite { w: sp.h, h: sp.w, px: px_px };
+}

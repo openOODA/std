@@ -1,0 +1,200 @@
+// # Shadow-mapped cube frame: primary raster plus shadow rays
+//
+// Logline: Directional-light shadows on the turntable cube by testing the
+// lit surface point against every other triangle.
+//
+// Setup: Pure compute, no caps. Same camera convention as cube_frame. The
+// shadow ray starts at the hit point biased two units along the face
+// normal and skips its own triangle; remaining acne on shared edges is a
+// known limit. Shadowed pixels fall back to ambient, lit ones take the
+// Lambert factor.
+//
+// Beats:
+//   1. Tri setup stores screen coords, world coords, and normals.
+//   2. shadow_frame shades by primary hit, shadow ray, then Lambert.
+//   3. Deterministic per angle like cube_frame.
+
+pub fn shadow_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy: Int, lx: Int, ly: Int, lz: Int, ambient: Int) -> DepthCanvas {
+    let cb_w: Int = rd.cv.width;
+    let cb_h: Int = rd.cv.height;
+    let cb_flat0: List[Int] = rd.cv.px;
+    let cb_bg0: Int = list_get(cb_flat0, 0);
+    let cb_bg1: Int = list_get(cb_flat0, 1);
+    let cb_bg2: Int = list_get(cb_flat0, 2);
+    let mut sw_sax: List[Int] = list_new();
+    let mut sw_say: List[Int] = list_new();
+    let mut sw_saz: List[Int] = list_new();
+    let mut sw_sbx: List[Int] = list_new();
+    let mut sw_sby: List[Int] = list_new();
+    let mut sw_sbz: List[Int] = list_new();
+    let mut sw_scx: List[Int] = list_new();
+    let mut sw_scy: List[Int] = list_new();
+    let mut sw_scz: List[Int] = list_new();
+    let mut sw_wax: List[Int] = list_new();
+    let mut sw_way: List[Int] = list_new();
+    let mut sw_waz: List[Int] = list_new();
+    let mut sw_wbx: List[Int] = list_new();
+    let mut sw_wby: List[Int] = list_new();
+    let mut sw_wbz: List[Int] = list_new();
+    let mut sw_wcx: List[Int] = list_new();
+    let mut sw_wcy: List[Int] = list_new();
+    let mut sw_wcz: List[Int] = list_new();
+    let mut sw_tnx: List[Int] = list_new();
+    let mut sw_tny: List[Int] = list_new();
+    let mut sw_tnz: List[Int] = list_new();
+    let mut sw_tare: List[Int] = list_new();
+    let mut sw_tface: List[Int] = list_new();
+    let mut sw_tsh: List[Int] = list_new();
+    let mut sw_f: Int = 0;
+    while sw_f < 12 {
+        let sw_t: TriIdx = cube_face_tri(sw_f);
+        let sw_pa: CubePt = cube_spin_pt(cube_vert(sw_t.a), deg, dist);
+        let sw_pb: CubePt = cube_spin_pt(cube_vert(sw_t.b), deg, dist);
+        let sw_pc: CubePt = cube_spin_pt(cube_vert(sw_t.c), deg, dist);
+        let sw_ra: Result[ProjPt, String] = raster_project(sw_pa.x, sw_pa.y, sw_pa.z, focal, cx, cy);
+        let sw_rb: Result[ProjPt, String] = raster_project(sw_pb.x, sw_pb.y, sw_pb.z, focal, cx, cy);
+        let sw_rc: Result[ProjPt, String] = raster_project(sw_pc.x, sw_pc.y, sw_pc.z, focal, cx, cy);
+        let mut sw_ax: Int = 0;
+        let mut sw_ay: Int = 0;
+        let mut sw_az: Int = 0;
+        let mut sw_bx: Int = 0;
+        let mut sw_by: Int = 0;
+        let mut sw_bz: Int = 0;
+        let mut sw_cx: Int = 0;
+        let mut sw_cy: Int = 0;
+        let mut sw_cz: Int = 0;
+        if sw_ra.is_ok() {
+            if sw_rb.is_ok() {
+                if sw_rc.is_ok() {
+                    let sw_sa: ProjPt = match sw_ra { Ok(a) => a, Err(_) => ProjPt { sx: 0, sy: 0, depth: 0 } };
+                    let sw_sb: ProjPt = match sw_rb { Ok(a) => a, Err(_) => ProjPt { sx: 0, sy: 0, depth: 0 } };
+                    let sw_sc: ProjPt = match sw_rc { Ok(a) => a, Err(_) => ProjPt { sx: 0, sy: 0, depth: 0 } };
+                    sw_ax = sw_sa.sx;
+                    sw_ay = sw_sa.sy;
+                    sw_az = sw_sa.depth;
+                    sw_bx = sw_sb.sx;
+                    sw_by = sw_sb.sy;
+                    sw_bz = sw_sb.depth;
+                    sw_cx = sw_sc.sx;
+                    sw_cy = sw_sc.sy;
+                    sw_cz = sw_sc.depth;
+                }
+            }
+        }
+        let sw_e1x: Int = sw_pb.x - sw_pa.x;
+        let sw_e1y: Int = sw_pb.y - sw_pa.y;
+        let sw_e1z: Int = sw_pb.z - sw_pa.z;
+        let sw_e2x: Int = sw_pc.x - sw_pa.x;
+        let sw_e2y: Int = sw_pc.y - sw_pa.y;
+        let sw_e2z: Int = sw_pc.z - sw_pa.z;
+        let sw_nx: Int = 0 - (sw_e1y * sw_e2z - sw_e1z * sw_e2y);
+        let sw_ny: Int = 0 - (sw_e1z * sw_e2x - sw_e1x * sw_e2z);
+        let sw_nz: Int = 0 - (sw_e1x * sw_e2y - sw_e1y * sw_e2x);
+        sw_sax = list_push(sw_sax, sw_ax);
+        sw_say = list_push(sw_say, sw_ay);
+        sw_saz = list_push(sw_saz, sw_az);
+        sw_sbx = list_push(sw_sbx, sw_bx);
+        sw_sby = list_push(sw_sby, sw_by);
+        sw_sbz = list_push(sw_sbz, sw_bz);
+        sw_scx = list_push(sw_scx, sw_cx);
+        sw_scy = list_push(sw_scy, sw_cy);
+        sw_scz = list_push(sw_scz, sw_cz);
+        sw_wax = list_push(sw_wax, sw_pa.x);
+        sw_way = list_push(sw_way, sw_pa.y);
+        sw_waz = list_push(sw_waz, sw_pa.z);
+        sw_wbx = list_push(sw_wbx, sw_pb.x);
+        sw_wby = list_push(sw_wby, sw_pb.y);
+        sw_wbz = list_push(sw_wbz, sw_pb.z);
+        sw_wcx = list_push(sw_wcx, sw_pc.x);
+        sw_wcy = list_push(sw_wcy, sw_pc.y);
+        sw_wcz = list_push(sw_wcz, sw_pc.z);
+        sw_tnx = list_push(sw_tnx, sw_nx);
+        sw_tny = list_push(sw_tny, sw_ny);
+        sw_tnz = list_push(sw_tnz, sw_nz);
+        sw_tare = list_push(sw_tare, raster_area2(sw_ax, sw_ay, sw_bx, sw_by, sw_cx, sw_cy));
+        sw_tface = list_push(sw_tface, sw_f);
+        sw_tsh = list_push(sw_tsh, shade_lambert(sw_nx, sw_ny, sw_nz, lx, ly, lz, ambient));
+        sw_f = sw_f + 1;
+    }
+    let sw_ldx: Float = spin_i2f(lx);
+    let sw_ldy: Float = spin_i2f(ly);
+    let sw_ldz: Float = spin_i2f(lz);
+    let mut sw_flat: List[Int] = list_new();
+    let mut sw_zb: List[Int] = list_new();
+    let mut sw_y: Int = 0;
+    while sw_y < cb_h {
+        let mut sw_x: Int = 0;
+        while sw_x < cb_w {
+            let mut sw_best: Int = 2000000000;
+            let mut sw_br: Int = cb_bg0;
+            let mut sw_bg: Int = cb_bg1;
+            let mut sw_bb: Int = cb_bg2;
+            let mut sw_g: Int = 0;
+            while sw_g < 12 {
+                if list_get(sw_tare, sw_g) < 0 {
+                    let sw_gax: Int = list_get(sw_sax, sw_g);
+                    let sw_gay: Int = list_get(sw_say, sw_g);
+                    let sw_gaz: Int = list_get(sw_saz, sw_g);
+                    let sw_gbx: Int = list_get(sw_sbx, sw_g);
+                    let sw_gby: Int = list_get(sw_sby, sw_g);
+                    let sw_gbz: Int = list_get(sw_sbz, sw_g);
+                    let sw_gcx: Int = list_get(sw_scx, sw_g);
+                    let sw_gcy: Int = list_get(sw_scy, sw_g);
+                    let sw_gcz: Int = list_get(sw_scz, sw_g);
+                    let sw_w0: Int = (sw_gbx - sw_gax) * (sw_y - sw_gay) - (sw_gby - sw_gay) * (sw_x - sw_gax);
+                    let sw_w1: Int = (sw_gcx - sw_gbx) * (sw_y - sw_gby) - (sw_gcy - sw_gby) * (sw_x - sw_gbx);
+                    let sw_w2: Int = (sw_gax - sw_gcx) * (sw_y - sw_gcy) - (sw_gay - sw_gcy) * (sw_x - sw_gcx);
+                    if sw_w0 <= 0 {
+                        if sw_w1 <= 0 {
+                            if sw_w2 <= 0 {
+                                let sw_dep: Int = (sw_w0 * sw_gaz + sw_w1 * sw_gbz + sw_w2 * sw_gcz) / list_get(sw_tare, sw_g);
+                                if sw_dep < sw_best {
+                                    sw_best = sw_dep;
+                                    let sw_are: Int = list_get(sw_tare, sw_g);
+                                    let sw_hx: Float = spin_i2f((sw_w0 * list_get(sw_wax, sw_g) + sw_w1 * list_get(sw_wbx, sw_g) + sw_w2 * list_get(sw_wcx, sw_g)) / sw_are);
+                                    let sw_hy: Float = spin_i2f((sw_w0 * list_get(sw_way, sw_g) + sw_w1 * list_get(sw_wby, sw_g) + sw_w2 * list_get(sw_wcy, sw_g)) / sw_are);
+                                    let sw_hz: Float = spin_i2f((sw_w0 * list_get(sw_waz, sw_g) + sw_w1 * list_get(sw_wbz, sw_g) + sw_w2 * list_get(sw_wcz, sw_g)) / sw_are);
+                                    let sw_nl: Int = shade_isqrt(shade_dot(list_get(sw_tnx, sw_g), list_get(sw_tny, sw_g), list_get(sw_tnz, sw_g), list_get(sw_tnx, sw_g), list_get(sw_tny, sw_g), list_get(sw_tnz, sw_g)));
+                                    let mut sw_ox: Float = sw_hx;
+                                    let mut sw_oy: Float = sw_hy;
+                                    let mut sw_oz: Float = sw_hz;
+                                    if sw_nl > 0 {
+                                        sw_ox = sw_hx + spin_i2f(list_get(sw_tnx, sw_g) * 2 / sw_nl);
+                                        sw_oy = sw_hy + spin_i2f(list_get(sw_tny, sw_g) * 2 / sw_nl);
+                                        sw_oz = sw_hz + spin_i2f(list_get(sw_tnz, sw_g) * 2 / sw_nl);
+                                    }
+                                    let mut sw_k: Int = list_get(sw_tsh, sw_g);
+                                    let mut sw_o: Int = 0;
+                                    while sw_o < 12 {
+                                        if sw_o != sw_g {
+                                            if list_get(sw_tare, sw_o) != 0 {
+                                                let sw_hit: Int = shade_ray_tri(sw_ox, sw_oy, sw_oz, sw_ldx, sw_ldy, sw_ldz, list_get(sw_wax, sw_o), list_get(sw_way, sw_o), list_get(sw_waz, sw_o), list_get(sw_wbx, sw_o), list_get(sw_wby, sw_o), list_get(sw_wbz, sw_o), list_get(sw_wcx, sw_o), list_get(sw_wcy, sw_o), list_get(sw_wcz, sw_o), 0.01, 1000000.0);
+                                                if sw_hit == 1 {
+                                                    sw_k = ambient;
+                                                }
+                                            }
+                                        }
+                                        sw_o = sw_o + 1;
+                                    }
+                                    let sw_fc: QoiRgba = shade_scale(cube_face_color(list_get(sw_tface, sw_g)), sw_k);
+                                    sw_br = sw_fc.r;
+                                    sw_bg = sw_fc.g;
+                                    sw_bb = sw_fc.b;
+                                }
+                            }
+                        }
+                    }
+                }
+                sw_g = sw_g + 1;
+            }
+            sw_flat = list_push(sw_flat, sw_br);
+            sw_flat = list_push(sw_flat, sw_bg);
+            sw_flat = list_push(sw_flat, sw_bb);
+            sw_flat = list_push(sw_flat, 255);
+            sw_zb = list_push(sw_zb, sw_best);
+            sw_x = sw_x + 1;
+        }
+        sw_y = sw_y + 1;
+    }
+    return DepthCanvas { cv: Canvas { width: cb_w, height: cb_h, px: sw_flat }, zb: sw_zb };
+}

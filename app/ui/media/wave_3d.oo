@@ -1,0 +1,90 @@
+// # Three-dimensional swell: shaded heightfield mesh with whitecaps
+//
+// Logline: An ocean tile from two diagonal sine trains, rasterized as
+// flat-shaded depth-tested triangles with foam caps on the highest crests.
+//
+// Setup: Pure compute, no caps. Corner heights come from wave_h over the
+// diagonals x+z and x-z; faces take integer cross-product normals into
+// shade_lambert, and crest triangles flip to foam past the cap line.
+// Probes import raster_3d.oo, shade_3d.oo, spin_3d.oo, wave_2d.oo, and
+// qoi_types.oo so every home module joins the C build unit. Keep tiles
+// small: each triangle writes every covered pixel through the depth test,
+// so list quota caps the quad budget (6x4 at step 4 is measured safe;
+// 3x2 at step 8 dilutes crests and starves the foam line).
+//
+// Beats:
+//   1. swell_h sums the two diagonal trains; still point is exactly 0.
+//   2. swell_cap flags foam at and above amplitude sum minus band.
+//   3. swell_tri projects one world triangle and paints shade or foam.
+//   4. swell_paint tiles quads into a lit, depth-tested ocean surface.
+
+pub fn swell_h(x: Int, z: Int, t: Int, a1: Int, p1: Int, r1: Int, a2: Int, p2: Int, r2: Int) -> Int {
+    return wave_h(x + z, t, a1, p1, r1) + wave_h(x - z, t, a2, p2, r2);
+}
+
+pub fn swell_cap(havg: Int, a1: Int, a2: Int, band: Int) -> Int {
+    if havg >= a1 + a2 - band {
+        return 1;
+    }
+    return 0;
+}
+
+fn swell_proj(x: Int, y: Int, z: Int, focal: Int, cx: Int, cy: Int) -> ProjPt {
+    let sw_r: Result[ProjPt, String] = raster_project(x, y, z, focal, cx, cy);
+    return match sw_r { Ok(a) => a, Err(_) => ProjPt { sx: 0 - 1000, sy: 0 - 1000, depth: 0 - 1 } };
+}
+
+pub fn swell_tri(rd: DepthCanvas, ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int, cx: Int, cy: Int, cz: Int, focal: Int, px: Int, py: Int, k: Int, deep: QoiRgba, foam: QoiRgba, cap: Int) -> DepthCanvas {
+    let pa: ProjPt = swell_proj(ax, ay, az, focal, px, py);
+    let pb: ProjPt = swell_proj(bx, by, bz, focal, px, py);
+    let pc: ProjPt = swell_proj(cx, cy, cz, focal, px, py);
+    if pa.depth <= 0 {
+        return rd;
+    }
+    if pb.depth <= 0 {
+        return rd;
+    }
+    if pc.depth <= 0 {
+        return rd;
+    }
+    let mut sw_col: QoiRgba = shade_scale(deep, k);
+    if cap == 1 {
+        sw_col = foam;
+    }
+    return raster_tri(rd, pa.sx, pa.sy, pa.depth, pb.sx, pb.sy, pb.depth, pc.sx, pc.sy, pc.depth, sw_col);
+}
+
+pub fn swell_paint(rd: DepthCanvas, ox: Int, oy: Int, oz: Int, step: Int, nqx: Int, nqz: Int, t: Int, a1: Int, p1: Int, r1: Int, a2: Int, p2: Int, r2: Int, focal: Int, cx: Int, cy: Int, lx: Int, ly: Int, lz: Int, ambient: Int, deep: QoiRgba, foam: QoiRgba, band: Int) -> DepthCanvas {
+    let mut sw_rd: DepthCanvas = rd;
+    let mut sw_j: Int = 0;
+    while sw_j < nqz {
+        let mut sw_i: Int = 0;
+        while sw_i < nqx {
+            let sw_x0: Int = ox + sw_i * step;
+            let sw_x1: Int = sw_x0 + step;
+            let sw_z0: Int = oz + sw_j * step;
+            let sw_z1: Int = sw_z0 + step;
+            let sw_ha: Int = swell_h(sw_x0, sw_z0, t, a1, p1, r1, a2, p2, r2);
+            let sw_hb: Int = swell_h(sw_x1, sw_z0, t, a1, p1, r1, a2, p2, r2);
+            let sw_hc: Int = swell_h(sw_x1, sw_z1, t, a1, p1, r1, a2, p2, r2);
+            let sw_hd: Int = swell_h(sw_x0, sw_z1, t, a1, p1, r1, a2, p2, r2);
+            // NOTE: Up-face normal of the A-B-D corner tripod; ny stays
+            // negative (up in y-down world) so the sky light dots positive.
+            let sw_nx: Int = (sw_hb - sw_ha) * step;
+            let sw_ny: Int = 0 - step * step;
+            let sw_nz: Int = step * (sw_hd - sw_ha);
+            let sw_k: Int = shade_lambert(sw_nx, sw_ny, sw_nz, lx, ly, lz, ambient);
+            let sw_cap1: Int = swell_cap((sw_ha + sw_hb + sw_hc) / 3, a1, a2, band);
+            let sw_cap2: Int = swell_cap((sw_ha + sw_hc + sw_hd) / 3, a1, a2, band);
+            let sw_ya: Int = oy - sw_ha;
+            let sw_yb: Int = oy - sw_hb;
+            let sw_yc: Int = oy - sw_hc;
+            let sw_yd: Int = oy - sw_hd;
+            sw_rd = swell_tri(sw_rd, sw_x0, sw_ya, sw_z0, sw_x1, sw_yb, sw_z0, sw_x1, sw_yc, sw_z1, focal, cx, cy, sw_k, deep, foam, sw_cap1);
+            sw_rd = swell_tri(sw_rd, sw_x0, sw_ya, sw_z0, sw_x1, sw_yc, sw_z1, sw_x0, sw_yd, sw_z1, focal, cx, cy, sw_k, deep, foam, sw_cap2);
+            sw_i = sw_i + 1;
+        }
+        sw_j = sw_j + 1;
+    }
+    return sw_rd;
+}
