@@ -1,0 +1,120 @@
+// # Probe: particle motion, gravity, culling, and render
+//
+// Logline: Spawn fields, exact two-tick gravity arc, life countdown,
+// batch culling to empty, and render plots exactly the living on-screen
+// pixels while skipping the dead and the clipped.
+//
+// Setup: Pure compute, no caps. Imports name every home module in the C
+// build unit. Prints probe: std/gfx particle_2d: ok or Err naming a step.
+//
+// Beats:
+//   1. part_spawn pins fields; part_alive trips at life zero and below.
+//   2. part_update integrates the arc (13,18) then (16,17) exactly.
+//   3. part_update_all culls lives [2,1] to one then empty.
+//   4. part_render stamps 1 red for one living on-screen particle.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/particle_2d.oo";
+
+fn pt_count_color(cv: Canvas, r: Int, g: Int, b: Int) -> Int {
+    let mut pt_n: Int = 0;
+    let mut pt_i: Int = 0;
+    let pt_m: Int = cv.width * cv.height;
+    while pt_i < pt_m {
+        let pt_base: Int = pt_i * 4;
+        if list_get(cv.px, pt_base) == r {
+            if list_get(cv.px, pt_base + 1) == g {
+                if list_get(cv.px, pt_base + 2) == b {
+                    pt_n = pt_n + 1;
+                }
+            }
+        }
+        pt_i = pt_i + 1;
+    }
+    return pt_n;
+}
+
+fn pt_canvas() -> Canvas {
+    let r: Result[Canvas, String] = canvas_new(8, 8, qoi_rgba_new(0, 0, 0, 255));
+    let c: Canvas = match r { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    return Canvas { width: c.width, height: c.height, px: c.px };
+}
+
+pub fn main() -> Result[Int, String] {
+    let s: Particle = part_spawn(10, 20, 3, 0 - 2, 5);
+    if s.x != 10 {
+        return Err("particle_2d: spawn must keep x");
+    }
+    if s.vy != 0 - 2 {
+        return Err("particle_2d: spawn must keep vy");
+    }
+    if s.life != 5 {
+        return Err("particle_2d: spawn must keep life");
+    }
+    if part_alive(s) != 1 {
+        return Err("particle_2d: life 5 must be alive");
+    }
+    if part_alive(part_spawn(0, 0, 0, 0, 0)) != 0 {
+        return Err("particle_2d: life 0 must be dead");
+    }
+    if part_alive(part_spawn(0, 0, 0, 0, 0 - 3)) != 0 {
+        return Err("particle_2d: negative life must be dead");
+    }
+    // Arc: (10,20) v(3,-2) g1 -> (13,18) v(3,-1) -> (16,17) v(3,0).
+    let t1: Particle = part_update(s, 1);
+    if t1.x != 13 {
+        return Err("particle_2d: tick 1 must move x to 13");
+    }
+    if t1.y != 18 {
+        return Err("particle_2d: tick 1 must move y to 18");
+    }
+    if t1.vy != 0 - 1 {
+        return Err("particle_2d: gravity must lift vy to -1");
+    }
+    if t1.life != 4 {
+        return Err("particle_2d: tick 1 must count life to 4");
+    }
+    let t2: Particle = part_update(t1, 1);
+    if t2.x != 16 {
+        return Err("particle_2d: tick 2 must move x to 16");
+    }
+    if t2.y != 17 {
+        return Err("particle_2d: tick 2 must move y to 17");
+    }
+    if t2.vy != 0 {
+        return Err("particle_2d: gravity must settle vy to 0");
+    }
+    // Batch: lives [2,1] step to one survivor, then empty.
+    let mut batch: List[Particle] = list_new();
+    batch = list_push(batch, part_spawn(0, 0, 1, 0, 2));
+    batch = list_push(batch, part_spawn(4, 4, 0 - 1, 0, 1));
+    let step1: List[Particle] = part_update_all(batch, 0);
+    if list_len(step1) != 1 {
+        return Err("particle_2d: first step must cull to one");
+    }
+    let lone: Particle = list_get(step1, 0);
+    if lone.x != 1 {
+        return Err("particle_2d: survivor must advance to x 1");
+    }
+    if lone.life != 1 {
+        return Err("particle_2d: survivor must hold life 1");
+    }
+    // NOTE: Never nest a struct-list call as an argument; bind first.
+    let step2: List[Particle] = part_update_all(step1, 0);
+    if list_len(step2) != 0 {
+        return Err("particle_2d: second step must cull to empty");
+    }
+    // Render: living on-screen plots, dead and off-screen skip.
+    let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
+    let mut cast: List[Particle] = list_new();
+    cast = list_push(cast, part_spawn(1, 1, 0, 0, 3));
+    cast = list_push(cast, part_spawn(2, 2, 0, 0, 0));
+    cast = list_push(cast, part_spawn(9, 9, 0, 0, 3));
+    let shot: Canvas = part_render(pt_canvas(), cast, red);
+    if pt_count_color(shot, 255, 0, 0) != 1 {
+        return Err("particle_2d: render must stamp 1 red");
+    }
+    println("probe: std/gfx particle_2d: ok");
+    return Ok(0);
+}

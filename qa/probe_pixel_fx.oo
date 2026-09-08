@@ -55,6 +55,29 @@ fn fx_red_of(cv: Canvas) -> Int {
     return fx_count_occ(ppm, "255 0 0\n");
 }
 
+fn fx_pal3() -> Palette {
+    let mut cols: List[QoiRgba] = list_new();
+    cols = list_push(cols, qoi_rgba_new(0, 0, 0, 255));
+    cols = list_push(cols, qoi_rgba_new(255, 0, 0, 255));
+    cols = list_push(cols, qoi_rgba_new(0, 0, 255, 255));
+    return pix_palette(cols);
+}
+
+fn fx_dot(idx: Int) -> Sprite {
+    let r: Result[Sprite, String] = pix_new(1, 1, 0);
+    let bg: Sprite = match r { Ok(a) => a, Err(_) => Sprite { w: 0, h: 0, px: list_new() } };
+    return pix_fill(bg, idx);
+}
+
+fn fx_red_of_idx(idx: Int, pal: Palette) -> Int {
+    // NOTE: One indexed dot blitted with transparent 9 (nothing skips),
+    // so the red count reads the palette slot directly.
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let cbgr: Result[Canvas, String] = canvas_new(1, 1, black);
+    let cbg: Canvas = match cbgr { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    return fx_red_of(pix_blit(cbg, fx_dot(idx), pal, 0, 0, 9));
+}
+
 pub fn main() -> Result[Int, String] {
     let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
     let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
@@ -119,6 +142,36 @@ pub fn main() -> Result[Int, String] {
     let clipped: Canvas = pix_blit(cbg, bl0, pal, 3, 3, 0);
     if fx_red_of(clipped) != 1 {
         return Err("pixel_fx: clipped blit must stamp 1 red");
+    }
+    // Cycle: [black,red,blue] rotated left recolors slot 0 red, slot 1 blue.
+    let pal3: Palette = fx_pal3();
+    if fx_red_of_idx(0, pal3) != 0 {
+        return Err("pixel_fx: slot 0 starts black");
+    }
+    if fx_red_of_idx(1, pal3) != 1 {
+        return Err("pixel_fx: slot 1 starts red");
+    }
+    let cyc1: Palette = pix_cycle(pal3, 1);
+    if fx_red_of_idx(0, cyc1) != 1 {
+        return Err("pixel_fx: cycle 1 must turn slot 0 red");
+    }
+    if fx_red_of_idx(1, cyc1) != 0 {
+        return Err("pixel_fx: cycle 1 must turn slot 1 blue");
+    }
+    if fx_red_of_idx(1, pix_cycle(pal3, 3)) != 1 {
+        return Err("pixel_fx: cycle 3 must be identity");
+    }
+    if fx_red_of_idx(0, pix_cycle(pal3, 4)) != 1 {
+        return Err("pixel_fx: cycle 4 must wrap to cycle 1");
+    }
+    if fx_red_of_idx(1, pix_cycle(pal3, 0 - 1)) != 0 {
+        return Err("pixel_fx: cycle -1 must turn slot 1 black");
+    }
+    if pix_pal_len(pix_cycle(pix_palette(list_new()), 5)) != 0 {
+        return Err("pixel_fx: empty cycle must stay empty");
+    }
+    if fx_red_of_idx(0, pix_palette(list_new())) != 0 {
+        return Err("pixel_fx: empty palette must paint nothing");
     }
     println("probe: std/gfx pixel_fx: ok");
     return Ok(0);

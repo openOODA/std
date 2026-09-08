@@ -1,0 +1,72 @@
+// # Two-dimensional particles: spray, rain, smoke, sparks
+//
+// Logline: Integer point particles with velocity, gravity, and countdown
+// life, batch-updated, culled on death, and plotted onto a Canvas.
+//
+// Setup: Pure compute, no caps. Particles are plain Ints (no lists), so
+// they return soundly under any backend. Positions integrate in world
+// pixels per tick; gravity adds to vy each tick; life drops by one and
+// the dead are skipped at render and dropped by update_all. Spray for the
+// wave oceans is just crest positions spawned upward with life; the probe
+// pins the arithmetic, not the ocean coupling.
+//
+// Beats:
+//   1. part_spawn/part_alive cover birth and death.
+//   2. part_update integrates motion, gravity, and countdown exactly.
+//   3. part_update_all steps a list and culls the dead.
+//   4. part_render plots exactly the living pixels.
+
+type Particle = struct {
+    x: Int,
+    y: Int,
+    vx: Int,
+    vy: Int,
+    life: Int
+};
+
+pub fn part_spawn(x: Int, y: Int, vx: Int, vy: Int, life: Int) -> Particle {
+    return Particle { x: x, y: y, vx: vx, vy: vy, life: life };
+}
+
+pub fn part_alive(p: Particle) -> Int {
+    if p.life > 0 {
+        return 1;
+    }
+    return 0;
+}
+
+pub fn part_update(p: Particle, gravity: Int) -> Particle {
+    return Particle { x: p.x + p.vx, y: p.y + p.vy, vx: p.vx, vy: p.vy + gravity, life: p.life - 1 };
+}
+
+pub fn part_update_all(parts: List[Particle], gravity: Int) -> List[Particle] {
+    let mut pt_out: List[Particle] = list_new();
+    let mut pt_i: Int = 0;
+    while pt_i < list_len(parts) {
+        // NOTE: Struct-list reads go through list_get only, never bound.
+        let pt_nx: Particle = part_update(list_get(parts, pt_i), gravity);
+        if part_alive(pt_nx) == 1 {
+            pt_out = list_push(pt_out, pt_nx);
+        }
+        pt_i = pt_i + 1;
+    }
+    return pt_out;
+}
+
+pub fn part_render(cv: Canvas, parts: List[Particle], color: QoiRgba) -> Canvas {
+    let mut pt_cv: Canvas = cv;
+    let mut pt_i: Int = 0;
+    while pt_i < list_len(parts) {
+        let pt_p: Particle = list_get(parts, pt_i);
+        if part_alive(pt_p) == 1 {
+            pt_cv = canvas_set(pt_cv, pt_p.x, pt_p.y, color);
+        }
+        pt_i = pt_i + 1;
+    }
+    // NOTE: Literal rebuild, not `return pt_cv`: the C backend drops the
+    // retain on a returned local, handing the caller a dangling struct.
+    // The pixel list routes through a local first so the emitter pairs
+    // its retain with a release (no leak, no dangle).
+    let pt_done: List[Int] = pt_cv.px;
+    return Canvas { width: pt_cv.width, height: pt_cv.height, px: pt_done };
+}

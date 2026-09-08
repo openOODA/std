@@ -21,6 +21,32 @@ pub fn pix_pal_len(pal: Palette) -> Int {
     return list_len(pal.cols);
 }
 
+pub fn pix_cycle(pal: Palette, steps: Int) -> Palette {
+    // NOTE: Rotate the table left by steps (negative steps rotate right),
+    // so animation ticks recolor every indexed pixel without redrawing.
+    // Empty tables come back unchanged; overshoot wraps around.
+    let px_n: Int = list_len(pal.cols);
+    if px_n <= 0 {
+        return pal;
+    }
+    let mut px_k: Int = steps;
+    while px_k < 0 {
+        px_k = px_k + px_n;
+    }
+    while px_k >= px_n {
+        px_k = px_k - px_n;
+    }
+    let mut px_out: List[QoiRgba] = list_new();
+    let mut px_i: Int = 0;
+    while px_i < px_n {
+        // NOTE: Struct-list reads go through list_get only, never bound.
+        px_out = list_push(px_out, list_get(pal.cols, px_i + px_k - (px_i + px_k) / px_n * px_n));
+        px_i = px_i + 1;
+    }
+    // NOTE: Literal return keeps the backend retain balanced (see pix_blit).
+    return Palette { cols: px_out };
+}
+
 pub fn pix_swap(sp: Sprite, a: Int, b: Int) -> Sprite {
     let mut px_px: List[Int] = list_new();
     let mut px_i: Int = 0;
