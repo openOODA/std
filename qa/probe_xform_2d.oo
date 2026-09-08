@@ -1,0 +1,120 @@
+// # Probe: affine maps, quarter turns, and the push stack
+//
+// Logline: Identity/translate/scale map exactly, quarter turns snap to
+// exact matrices, composition applies scale-after-translate in order,
+// and the stack composes pushed maps with identity default.
+//
+// Setup: Pure compute, no caps. Imports name spin_3d.oo (spin_f2i pins
+// it) and xform_2d.oo. Float asserts only touch exactly representable
+// values (small ints, +-1.0, 0.0); the 45-degree path is smoked through
+// the origin, which is exact for any coefficients.
+//
+// Beats:
+//   1. Translate/scale/identity map points exactly.
+//   2. Rotate 90/180/270 land exactly; 45 holds the origin.
+//   3. Mul order and stack push/pop/top compose exactly.
+
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/xform_2d.oo";
+
+pub fn main() -> Result[Int, String] {
+    if spin_f2i(spin_sin_deg(0)) != 0 {
+        return Err("xform_2d: spin sine at 0 must be 0");
+    }
+    let p1: XfPt = xf_apply(xf_ident(), 7.0, 9.0);
+    if p1.x != 7.0 {
+        return Err("xform_2d: identity must keep x");
+    }
+    if p1.y != 9.0 {
+        return Err("xform_2d: identity must keep y");
+    }
+    let p2: XfPt = xf_apply(xf_translate(2.0, 0.0 - 3.0), 1.0, 1.0);
+    if p2.x != 3.0 {
+        return Err("xform_2d: translate must move x to 3");
+    }
+    if p2.y != 0.0 - 2.0 {
+        return Err("xform_2d: translate must move y to -2");
+    }
+    let p3: XfPt = xf_apply(xf_scale(4.0, 5.0), 1.0, 1.0);
+    if p3.x != 4.0 {
+        return Err("xform_2d: scale must stretch x to 4");
+    }
+    if p3.y != 5.0 {
+        return Err("xform_2d: scale must stretch y to 5");
+    }
+    // Quarter turns: (1,0) walks (0,1), (-1,0), (0,-1) exactly.
+    let q90: XfPt = xf_apply(xf_rotate(90), 1.0, 0.0);
+    if q90.x != 0.0 {
+        return Err("xform_2d: 90 must zero x");
+    }
+    if q90.y != 1.0 {
+        return Err("xform_2d: 90 must lift y to 1");
+    }
+    let q180: XfPt = xf_apply(xf_rotate(180), 1.0, 0.0);
+    if q180.x != 0.0 - 1.0 {
+        return Err("xform_2d: 180 must flip x to -1");
+    }
+    if q180.y != 0.0 {
+        return Err("xform_2d: 180 must zero y");
+    }
+    let q270: XfPt = xf_apply(xf_rotate(270), 1.0, 0.0);
+    if q270.x != 0.0 {
+        return Err("xform_2d: 270 must zero x");
+    }
+    if q270.y != 0.0 - 1.0 {
+        return Err("xform_2d: 270 must drop y to -1");
+    }
+    if xf_rotate(0 - 90).a != 0.0 {
+        return Err("xform_2d: -90 must normalize to the 270 matrix");
+    }
+    let q45: XfPt = xf_apply(xf_rotate(45), 0.0, 0.0);
+    if q45.x != 0.0 {
+        return Err("xform_2d: 45 must hold the origin x");
+    }
+    if q45.y != 0.0 {
+        return Err("xform_2d: 45 must hold the origin y");
+    }
+    // Compose: scale after translate maps (1,1) to (12,20).
+    let both: Transform = xf_mul(xf_scale(4.0, 5.0), xf_translate(2.0, 3.0));
+    let p4: XfPt = xf_apply(both, 1.0, 1.0);
+    if p4.x != 12.0 {
+        return Err("xform_2d: composed x must be 12");
+    }
+    if p4.y != 20.0 {
+        return Err("xform_2d: composed y must be 20");
+    }
+    // Stack: push order is application order; pop restores; empty is ident.
+    let mut st: List[Transform] = list_new();
+    st = xf_push(st, xf_translate(2.0, 3.0));
+    st = xf_push(st, xf_scale(4.0, 5.0));
+    let p5: XfPt = xf_apply(xf_top(st), 1.0, 1.0);
+    if p5.x != 12.0 {
+        return Err("xform_2d: stack top x must be 12");
+    }
+    if p5.y != 20.0 {
+        return Err("xform_2d: stack top y must be 20");
+    }
+    let st1: List[Transform] = xf_pop(st);
+    if list_len(st1) != 1 {
+        return Err("xform_2d: pop must drop one");
+    }
+    let p6: XfPt = xf_apply(xf_top(st1), 1.0, 1.0);
+    if p6.x != 3.0 {
+        return Err("xform_2d: popped top x must be 3");
+    }
+    if p6.y != 4.0 {
+        return Err("xform_2d: popped top y must be 4");
+    }
+    // NOTE: Struct-list calls bind before use, never nest as arguments.
+    let st0: List[Transform] = xf_pop(st1);
+    let p7: XfPt = xf_apply(xf_top(st0), 7.0, 9.0);
+    if p7.x != 7.0 {
+        return Err("xform_2d: empty stack must be identity");
+    }
+    let st00: List[Transform] = xf_pop(st0);
+    if list_len(st00) != 0 {
+        return Err("xform_2d: pop on empty must stay empty");
+    }
+    println("probe: std/gfx xform_2d: ok");
+    return Ok(0);
+}

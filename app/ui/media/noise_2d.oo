@@ -1,0 +1,79 @@
+// # Two-dimensional noise: hash lattice, value field, fractal sum
+//
+// Logline: Deterministic integer noise for clouds, terrain, and water
+// detail: a 0..255 hash lattice, bilinear value sampling at any scale,
+// and an octave-summing fBm with exact structural anchors.
+//
+// Setup: Pure compute, no caps. All arithmetic is 64-bit Int. The hash is
+// one multiply-xor LCG round mod 2^31-1: every intermediate stays below
+// 2.4e18 for coordinates within +-1M and octaves within 8, so no clamp
+// tax is paid. Value sampling lerps LINEARLY with floor-division lattice
+// addressing, so lattice points reproduce the hash exactly. fBm halves
+// amplitude per octave and shifts seed per octave to decorrelate.
+//
+// Beats:
+//   1. nx_hash anchors 57 at the origin and stays byte-ranged.
+//   2. nx_value anchors lattice points to the hash at any scale.
+//   3. nx_fbm with one octave equals value; three stay below 512.
+
+pub fn nx_hash(x: Int, y: Int, seed: Int) -> Int {
+    // NOTE: (0,0,0) folds to LCG(0) = 12345 = 48 * 256 + 57, so the
+    // origin anchor is hand-checkable; every other value is pinned by
+    // range, seed-sensitivity, and lattice-anchor asserts in the probe.
+    // Two mod stages bound every product below 2.4e18 (64-bit safe for
+    // coordinates within +-1M); the final mask keeps negatives in range.
+    let nx_mix: Int = (x * 374761393 + y * 668265263 + seed * 974634211) % 2147483647;
+    let nx_lcg: Int = (nx_mix * 1103515245 + 12345) % 2147483647;
+    return nx_lcg & 255;
+}
+
+pub fn nx_value(x: Int, y: Int, seed: Int, scale: Int) -> Int {
+    if scale <= 1 {
+        return nx_hash(x, y, seed);
+    }
+    // NOTE: Floor-division lattice addressing keeps negative spans
+    // seamless; remainders always land in 0..scale-1.
+    let mut nx_qx: Int = x / scale;
+    if x < 0 {
+        if x - nx_qx * scale != 0 {
+            nx_qx = nx_qx - 1;
+        }
+    }
+    let mut nx_qy: Int = y / scale;
+    if y < 0 {
+        if y - nx_qy * scale != 0 {
+            nx_qy = nx_qy - 1;
+        }
+    }
+    let nx_rx: Int = x - nx_qx * scale;
+    let nx_ry: Int = y - nx_qy * scale;
+    let nx_c00: Int = nx_hash(nx_qx, nx_qy, seed);
+    let nx_c10: Int = nx_hash(nx_qx + 1, nx_qy, seed);
+    let nx_c01: Int = nx_hash(nx_qx, nx_qy + 1, seed);
+    let nx_c11: Int = nx_hash(nx_qx + 1, nx_qy + 1, seed);
+    let nx_top: Int = (nx_c00 * (scale - nx_rx) + nx_c10 * nx_rx) / scale;
+    let nx_bot: Int = (nx_c01 * (scale - nx_rx) + nx_c11 * nx_rx) / scale;
+    return (nx_top * (scale - nx_ry) + nx_bot * nx_ry) / scale;
+}
+
+pub fn nx_fbm(x: Int, y: Int, seed: Int, octaves: Int, scale: Int) -> Int {
+    if octaves <= 0 {
+        return 0;
+    }
+    // NOTE: Eight octaves cap the frequency products inside 64 bits.
+    let mut nx_o: Int = octaves;
+    if nx_o > 8 {
+        nx_o = 8;
+    }
+    let mut nx_v: Int = 0;
+    let mut nx_a: Int = 256;
+    let mut nx_f: Int = 1;
+    let mut nx_k: Int = 0;
+    while nx_k < nx_o {
+        nx_v = nx_v + nx_value(x * nx_f, y * nx_f, seed + nx_k, scale) * nx_a / 256;
+        nx_a = nx_a / 2;
+        nx_f = nx_f * 2;
+        nx_k = nx_k + 1;
+    }
+    return nx_v;
+}

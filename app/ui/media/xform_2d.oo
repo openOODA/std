@@ -1,0 +1,116 @@
+// # Two-dimensional transforms: affine maps plus a push stack
+//
+// Logline: Float affine maps (identity, translate, scale, rotate) with
+// exact right-angle rotations, associative composition, point mapping,
+// and a push/pop stack that composes to one top transform.
+//
+// Setup: Pure compute, no caps. Coefficients ride Floats so spins stay
+// smooth, but xf_rotate snaps 0/90/180/270 to exact integer matrices and
+// documents the Taylor remainder everywhere else. No lists live inside a
+// Transform, so values return soundly under any backend; the stack is a
+// List[Transform] read through list_get like every struct list.
+//
+// Beats:
+//   1. Identity, translate, and scale map points exactly.
+//   2. Quarter turns rotate exactly; composition is associative.
+//   3. Push/pop/top thread a scene stack with identity default.
+
+type Transform = struct {
+    a: Float,
+    b: Float,
+    c: Float,
+    d: Float,
+    tx: Float,
+    ty: Float
+};
+
+type XfPt = struct {
+    x: Float,
+    y: Float
+};
+
+pub fn xf_ident() -> Transform {
+    return Transform { a: 1.0, b: 0.0, c: 0.0, d: 1.0, tx: 0.0, ty: 0.0 };
+}
+
+pub fn xf_translate(tx: Float, ty: Float) -> Transform {
+    return Transform { a: 1.0, b: 0.0, c: 0.0, d: 1.0, tx: tx, ty: ty };
+}
+
+pub fn xf_scale(sx: Float, sy: Float) -> Transform {
+    return Transform { a: sx, b: 0.0, c: 0.0, d: sy, tx: 0.0, ty: 0.0 };
+}
+
+pub fn xf_rotate(deg: Int) -> Transform {
+    // NOTE: Right angles snap exact; anything else rides spin_sin_deg
+    // with its Taylor remainder, so probes pin quadrants, not degrees.
+    let mut xf_d: Int = deg;
+    while xf_d < 0 {
+        xf_d = xf_d + 360;
+    }
+    while xf_d >= 360 {
+        xf_d = xf_d - 360;
+    }
+    if xf_d == 0 {
+        return Transform { a: 1.0, b: 0.0, c: 0.0, d: 1.0, tx: 0.0, ty: 0.0 };
+    }
+    if xf_d == 90 {
+        return Transform { a: 0.0, b: 0.0 - 1.0, c: 1.0, d: 0.0, tx: 0.0, ty: 0.0 };
+    }
+    if xf_d == 180 {
+        return Transform { a: 0.0 - 1.0, b: 0.0, c: 0.0, d: 0.0 - 1.0, tx: 0.0, ty: 0.0 };
+    }
+    if xf_d == 270 {
+        return Transform { a: 0.0, b: 1.0, c: 0.0 - 1.0, d: 0.0, tx: 0.0, ty: 0.0 };
+    }
+    let xf_c: Float = spin_cos_deg(xf_d);
+    let xf_s: Float = spin_sin_deg(xf_d);
+    return Transform { a: xf_c, b: 0.0 - xf_s, c: xf_s, d: xf_c, tx: 0.0, ty: 0.0 };
+}
+
+pub fn xf_mul(m1: Transform, m2: Transform) -> Transform {
+    // NOTE: Applies m2 first, then m1 (column-vector order).
+    return Transform {
+        a: m1.a * m2.a + m1.b * m2.c,
+        b: m1.a * m2.b + m1.b * m2.d,
+        c: m1.c * m2.a + m1.d * m2.c,
+        d: m1.c * m2.b + m1.d * m2.d,
+        tx: m1.a * m2.tx + m1.b * m2.ty + m1.tx,
+        ty: m1.c * m2.tx + m1.d * m2.ty + m1.ty
+    };
+}
+
+pub fn xf_apply(m: Transform, x: Float, y: Float) -> XfPt {
+    return XfPt { x: m.a * x + m.b * y + m.tx, y: m.c * x + m.d * y + m.ty };
+}
+
+pub fn xf_push(stack: List[Transform], m: Transform) -> List[Transform] {
+    return list_push(stack, m);
+}
+
+pub fn xf_pop(stack: List[Transform]) -> List[Transform] {
+    // NOTE: No slice primitive exists for struct lists, so pop rebuilds
+    // through pushes; empty stays empty, never traps. Bare lists return
+    // soundly, so no literal rebuild is needed here.
+    if list_len(stack) <= 0 {
+        return stack;
+    }
+    let mut xf_out: List[Transform] = list_new();
+    let mut xf_i: Int = 0;
+    while xf_i < list_len(stack) - 1 {
+        xf_out = list_push(xf_out, list_get(stack, xf_i));
+        xf_i = xf_i + 1;
+    }
+    return xf_out;
+}
+
+pub fn xf_top(stack: List[Transform]) -> Transform {
+    let mut xf_acc: Transform = xf_ident();
+    let mut xf_i: Int = 0;
+    while xf_i < list_len(stack) {
+        // NOTE: Struct-list reads go through list_get only, never bound.
+        xf_acc = xf_mul(list_get(stack, xf_i), xf_acc);
+        xf_i = xf_i + 1;
+    }
+    return xf_acc;
+}

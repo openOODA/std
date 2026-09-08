@@ -1,0 +1,123 @@
+// # Textured triangles: sprite-mapped depth-tested fills
+//
+// Logline: Affine UV-mapped triangles over sprite sheets and palettes,
+// sharing raster_3d.oo edge traversal, depth wins, and cutout holes that
+// never occlude.
+//
+// Setup: Pure compute, no caps. Lives beside raster_3d.oo (not inside)
+// so the base rasterizer keeps zero new imports; probes import both
+// plus pixel_2d.oo, canvas_2d.oo, and qoi_types.oo for the full unit.
+// UVs are screen-space affine and must be >= 0; texels equal to the
+// transparent index (or outside the palette) skip without writing
+// depth. Empty palettes return rd unchanged. Returns mirror
+// raster_tri's balanced literal shape.
+//
+// Beats:
+//   1. Vertices show their own texels; coverage counts exactly.
+//   2. Farther textures lose depth ties to nearer flats.
+//   3. Degenerate tris and empty palettes paint nothing.
+
+pub fn raster_tex(rd: DepthCanvas, ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int, cx: Int, cy: Int, cz: Int, au: Int, av: Int, bu: Int, bv: Int, cu: Int, cw: Int, tex: Sprite, pal: Palette, transparent: Int) -> DepthCanvas {
+    // NOTE: Affine screen-space UVs (no perspective divide): exact at the
+    // vertices, linearly blended inside. Weights pair w0->C, w1->A, w2->B
+    // like raster_tri, so UVs follow the same rotation. Texels equal to
+    // transparent (or outside the palette) skip WITHOUT writing depth, so
+    // cutout holes never occlude. Empty palettes return rd unchanged.
+    // Same-dir pix_get/pix_blit names resolve through the calling probe's
+    // imports; the literal return mirrors raster_tri's balanced shape.
+    let rt_w: Int = rd.cv.width;
+    let rt_h: Int = rd.cv.height;
+    let mut rt_ax: Int = ax;
+    let mut rt_ay: Int = ay;
+    let mut rt_az: Int = az;
+    let mut rt_bx: Int = bx;
+    let mut rt_by: Int = by;
+    let mut rt_bz: Int = bz;
+    let mut rt_cx: Int = cx;
+    let mut rt_cy: Int = cy;
+    let mut rt_cz: Int = cz;
+    let mut rt_au: Int = au;
+    let mut rt_av: Int = av;
+    let mut rt_bu: Int = bu;
+    let mut rt_bv: Int = bv;
+    let mut rt_cu: Int = cu;
+    let mut rt_cvv: Int = cw;
+    let rt_area: Int = raster_area2(rt_ax, rt_ay, rt_bx, rt_by, rt_cx, rt_cy);
+    if rt_area == 0 {
+        return rd;
+    }
+    if rt_area < 0 {
+        let rt_tx: Int = rt_bx;
+        let rt_ty: Int = rt_by;
+        let rt_tz: Int = rt_bz;
+        let rt_tu: Int = rt_bu;
+        let rt_tv: Int = rt_bv;
+        rt_bx = rt_cx;
+        rt_by = rt_cy;
+        rt_bz = rt_cz;
+        rt_bu = rt_cu;
+        rt_bv = rt_cvv;
+        rt_cx = rt_tx;
+        rt_cy = rt_ty;
+        rt_cz = rt_tz;
+        rt_cu = rt_tu;
+        rt_cvv = rt_tv;
+    }
+    let rt_n: Int = list_len(pal.cols);
+    if rt_n <= 0 {
+        return rd;
+    }
+    let rt_span: Int = raster_area2(rt_ax, rt_ay, rt_bx, rt_by, rt_cx, rt_cy);
+    let mut rt_x0: Int = rt_ax;
+    if rt_bx < rt_x0 { rt_x0 = rt_bx; }
+    if rt_cx < rt_x0 { rt_x0 = rt_cx; }
+    let mut rt_x1: Int = rt_ax;
+    if rt_bx > rt_x1 { rt_x1 = rt_bx; }
+    if rt_cx > rt_x1 { rt_x1 = rt_cx; }
+    let mut rt_y0: Int = rt_ay;
+    if rt_by < rt_y0 { rt_y0 = rt_by; }
+    if rt_cy < rt_y0 { rt_y0 = rt_cy; }
+    let mut rt_y1: Int = rt_ay;
+    if rt_by > rt_y1 { rt_y1 = rt_by; }
+    if rt_cy > rt_y1 { rt_y1 = rt_cy; }
+    if rt_x0 < 0 { rt_x0 = 0; }
+    if rt_y0 < 0 { rt_y0 = 0; }
+    if rt_x1 >= rt_w { rt_x1 = rt_w - 1; }
+    if rt_y1 >= rt_h { rt_y1 = rt_h - 1; }
+    let mut rt_out: Canvas = canvas_set(rd.cv, 0 - 1, 0, list_get(pal.cols, 0));
+    let mut rt_zb: List[Int] = rd.zb;
+    let mut rt_ry: Int = rt_y0;
+    while rt_ry <= rt_y1 {
+        let mut rt_rx: Int = rt_x0;
+        while rt_rx <= rt_x1 {
+            let rt_w0: Int = (rt_bx - rt_ax) * (rt_ry - rt_ay) - (rt_by - rt_ay) * (rt_rx - rt_ax);
+            let rt_w1: Int = (rt_cx - rt_bx) * (rt_ry - rt_by) - (rt_cy - rt_by) * (rt_rx - rt_bx);
+            let rt_w2: Int = (rt_ax - rt_cx) * (rt_ry - rt_cy) - (rt_ay - rt_cy) * (rt_rx - rt_cx);
+            if rt_w0 >= 0 {
+                if rt_w1 >= 0 {
+                    if rt_w2 >= 0 {
+                        let rt_dep: Int = (rt_w0 * rt_cz + rt_w1 * rt_az + rt_w2 * rt_bz) / rt_span;
+                        let rt_zi: Int = rt_ry * rt_w + rt_rx;
+                        if rt_dep < list_get(rt_zb, rt_zi) {
+                            let rt_uu: Int = (rt_w0 * rt_cu + rt_w1 * rt_au + rt_w2 * rt_bu) / rt_span;
+                            let rt_vv: Int = (rt_w0 * rt_cvv + rt_w1 * rt_av + rt_w2 * rt_bv) / rt_span;
+                            let rt_pi: Int = pix_get(tex, rt_uu, rt_vv);
+                            if rt_pi != transparent {
+                                if rt_pi >= 0 {
+                                    if rt_pi < rt_n {
+                                        rt_zb = list_set(rt_zb, rt_zi, rt_dep);
+                                        rt_out = canvas_set(rt_out, rt_rx, rt_ry, list_get(pal.cols, rt_pi));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            rt_rx = rt_rx + 1;
+        }
+        rt_ry = rt_ry + 1;
+    }
+    return DepthCanvas { cv: rt_out, zb: rt_zb };
+}
+

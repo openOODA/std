@@ -1,0 +1,186 @@
+// # Two-dimensional post chain: depth fog plus integer bloom
+//
+// Logline: Atmosphere and glow that settle the HDR lane: linear depth fog
+// in radiance space before the tonemap, integer depth fog and bright-pass
+// bloom for Canvas pipelines that never leave LDR.
+//
+// Setup: Pure compute, no caps. post_fog_fb runs in the HdrFb linear
+// domain so fogged brights still roll off through hdr_tonate; the two
+// _ldr passes stay integer-first for byte-exact probes. Depth arrives as
+// a plain List[Int] of w*h entries in raster z units (smaller is nearer).
+// A degenerate range (far <= near) is a documented no-op returning src.
+//
+// Beats:
+//   1. post_fog_fb halves 2.0 radiance at mid-range and no-ops degenerate.
+//   2. post_fog_ldr mixes exactly half at mid-range, clamps past far.
+//   3. post_bloom_ldr spreads a hot pixel to neighbors and keeps edges.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/hdr_3d.oo";
+
+pub fn post_fog_fb(src: HdrFb, depth: List[Int], near: Int, far: Int, fr: Float, fg: Float, fbl: Float) -> HdrFb {
+    let po_w: Int = src.w;
+    let po_h: Int = src.h;
+    let po_span: Int = far - near;
+    if po_span <= 0 {
+        return src;
+    }
+    let po_rad: List[Float] = src.px;
+    let mut po_px: List[Float] = list_new();
+    let mut po_i: Int = 0;
+    let po_n: Int = po_w * po_h;
+    while po_i < po_n {
+        let mut po_t: Float = 0.0;
+        let po_z: Int = list_get(depth, po_i);
+        if po_z > near {
+            po_t = spin_i2f(po_z - near) / spin_i2f(po_span);
+        }
+        if po_t > 1.0 {
+            po_t = 1.0;
+        }
+        let po_base: Int = po_i * 3;
+        let po_r: Float = list_get(po_rad, po_base);
+        let po_g: Float = list_get(po_rad, po_base + 1);
+        let po_b: Float = list_get(po_rad, po_base + 2);
+        po_px = list_push(po_px, po_r + (fr - po_r) * po_t);
+        po_px = list_push(po_px, po_g + (fg - po_g) * po_t);
+        po_px = list_push(po_px, po_b + (fbl - po_b) * po_t);
+        po_i = po_i + 1;
+    }
+    // NOTE: Literal rebuild, not `return src`: the C backend drops the
+    // retain on a returned local, handing the caller a dangling struct.
+    // The list routes through a local first so the emitter pairs each
+    // retain with a release (no leak, no dangle).
+    let po_out: List[Float] = po_px;
+    return HdrFb { w: po_w, h: po_h, px: po_out };
+}
+
+pub fn post_fog_ldr(src: Canvas, depth: List[Int], near: Int, far: Int, fog: QoiRgba) -> Canvas {
+    let po_w: Int = src.width;
+    let po_h: Int = src.height;
+    let po_span: Int = far - near;
+    if po_span <= 0 {
+        return src;
+    }
+    let po_flat: List[Int] = src.px;
+    let mut po_px: List[Int] = list_new();
+    let mut po_i: Int = 0;
+    let po_n: Int = po_w * po_h;
+    while po_i < po_n {
+        let mut po_t: Int = 0;
+        let po_z: Int = list_get(depth, po_i);
+        if po_z > near {
+            po_t = (po_z - near) * 256 / po_span;
+        }
+        if po_t > 256 {
+            po_t = 256;
+        }
+        let po_base: Int = po_i * 4;
+        let po_r: Int = list_get(po_flat, po_base);
+        let po_g: Int = list_get(po_flat, po_base + 1);
+        let po_b: Int = list_get(po_flat, po_base + 2);
+        let po_a: Int = list_get(po_flat, po_base + 3);
+        po_px = list_push(po_px, (po_r * (256 - po_t) + fog.r * po_t) / 256);
+        po_px = list_push(po_px, (po_g * (256 - po_t) + fog.g * po_t) / 256);
+        po_px = list_push(po_px, (po_b * (256 - po_t) + fog.b * po_t) / 256);
+        po_px = list_push(po_px, po_a);
+        po_i = po_i + 1;
+    }
+    // NOTE: Products stay below 2*255*256, so no wrap tax is paid and
+    // qoi_rgba_new masking is bypassed by pushing the flat list direct.
+    let po_out: List[Int] = po_px;
+    return Canvas { width: po_w, height: po_h, px: po_out };
+}
+
+pub fn post_bloom_ldr(src: Canvas, threshold: Int, strength: Int) -> Canvas {
+    let po_w: Int = src.width;
+    let po_h: Int = src.height;
+    let po_flat: List[Int] = src.px;
+    let mut po_hot: List[Int] = list_new();
+    let mut po_i: Int = 0;
+    let po_n: Int = po_w * po_h;
+    while po_i < po_n {
+        let po_base: Int = po_i * 4;
+        let po_r: Int = list_get(po_flat, po_base);
+        let po_g: Int = list_get(po_flat, po_base + 1);
+        let po_b: Int = list_get(po_flat, po_base + 2);
+        let mut po_m: Int = po_r;
+        if po_g > po_m {
+            po_m = po_g;
+        }
+        if po_b > po_m {
+            po_m = po_b;
+        }
+        if po_m > threshold {
+            po_hot = list_push(po_hot, po_r);
+            po_hot = list_push(po_hot, po_g);
+            po_hot = list_push(po_hot, po_b);
+        } else {
+            po_hot = list_push(po_hot, 0);
+            po_hot = list_push(po_hot, 0);
+            po_hot = list_push(po_hot, 0);
+        }
+        po_i = po_i + 1;
+    }
+    let po_pass: List[Int] = po_hot;
+    let mut po_px: List[Int] = list_new();
+    let mut po_y: Int = 0;
+    while po_y < po_h {
+        let mut po_x: Int = 0;
+        while po_x < po_w {
+            let mut po_sr: Int = 0;
+            let mut po_sg: Int = 0;
+            let mut po_sb: Int = 0;
+            let mut po_dy: Int = 0 - 1;
+            while po_dy <= 1 {
+                let mut po_dx: Int = 0 - 1;
+                while po_dx <= 1 {
+                    let po_nx: Int = po_x + po_dx;
+                    let po_ny: Int = po_y + po_dy;
+                    if po_nx >= 0 {
+                        if po_ny >= 0 {
+                            if po_nx < po_w {
+                                if po_ny < po_h {
+                                    let po_nb: Int = (po_ny * po_w + po_nx) * 3;
+                                    po_sr = po_sr + list_get(po_pass, po_nb);
+                                    po_sg = po_sg + list_get(po_pass, po_nb + 1);
+                                    po_sb = po_sb + list_get(po_pass, po_nb + 2);
+                                }
+                            }
+                        }
+                    }
+                    po_dx = po_dx + 1;
+                }
+                po_dy = po_dy + 1;
+            }
+            // NOTE: Truncation order is pinned: box average first (/9),
+            // then fixed-point strength (/256), then add and clamp.
+            let po_ar: Int = (po_sr / 9) * strength / 256;
+            let po_ag: Int = (po_sg / 9) * strength / 256;
+            let po_ab: Int = (po_sb / 9) * strength / 256;
+            let po_base: Int = (po_y * po_w + po_x) * 4;
+            let mut po_or: Int = list_get(po_flat, po_base) + po_ar;
+            let mut po_og: Int = list_get(po_flat, po_base + 1) + po_ag;
+            let mut po_ob: Int = list_get(po_flat, po_base + 2) + po_ab;
+            if po_or > 255 {
+                po_or = 255;
+            }
+            if po_og > 255 {
+                po_og = 255;
+            }
+            if po_ob > 255 {
+                po_ob = 255;
+            }
+            po_px = list_push(po_px, po_or);
+            po_px = list_push(po_px, po_og);
+            po_px = list_push(po_px, po_ob);
+            po_px = list_push(po_px, list_get(po_flat, po_base + 3));
+            po_x = po_x + 1;
+        }
+        po_y = po_y + 1;
+    }
+    let po_out: List[Int] = po_px;
+    return Canvas { width: po_w, height: po_h, px: po_out };
+}

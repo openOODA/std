@@ -115,7 +115,10 @@ pub fn raster_tri(rd: DepthCanvas, ax: Int, ay: Int, az: Int, bx: Int, by: Int, 
             if rt_w0 >= 0 {
                 if rt_w1 >= 0 {
                     if rt_w2 >= 0 {
-                        let rt_dep: Int = (rt_w0 * rt_az + rt_w1 * rt_bz + rt_w2 * rt_cz) / rt_span;
+                        // NOTE: Weights pair w0->C, w1->A, w2->B (w1 is span
+                        // at A): attributes must follow that rotation, or
+                        // per-vertex depth and UVs come out permuted.
+                        let rt_dep: Int = (rt_w0 * rt_cz + rt_w1 * rt_az + rt_w2 * rt_bz) / rt_span;
                         let rt_zi: Int = rt_ry * rt_w + rt_rx;
                         if rt_dep < list_get(rt_zb, rt_zi) {
                             rt_zb = list_set(rt_zb, rt_zi, rt_dep);

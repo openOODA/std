@@ -2,7 +2,7 @@
 //
 // Logline: Ui, tui, gui, media, and graphics for std/media.
 //
-// Setup: Domain module of 34 files under std/media. Pure compute, no caps except sdl_* which take &FfiCap; ppm_write/qoi_write take &FsWriteCap at the call site.
+// Setup: Domain module of 45 files under std/media. Pure compute, no caps except sdl_* which take &FfiCap; ppm_write/qoi_write take &FsWriteCap at the call site.
 //
 // Beats:
 //   1. Qoi family (2 files).
@@ -23,6 +23,15 @@
 //   16. Hdr family (1 file): float buffer, bloom, Reinhard.
 //   17. Flare family (1 file): sun disk, axis ghosts, streak.
 //   18. Ray family (1 file): Whitted bridge on the cube mesh.
+//   19. Pixel family (2 files): indexed sprite core plus palette FX.
+//   20. Wave family (2 files): 2D waterline plus 3D swell oceans.
+//   21. Camera family (1 file): viewport, zoom, clamp, cull rects.
+//   22. Tilemap family (1 file): culled sprite-sheet tile renderer.
+//   23. Particle family (1 file): pooled point particles with gravity.
+//   24. Noise family (1 file): hash lattice, value field, fBm.
+//   25. Transform family (1 file): affine maps plus push stack.
+//   26. Texture family (1 file): affine UV triangles on raster depth.
+//   27. Post family (1 file): depth fog plus integer bloom.
 
 import "audio_mixer_basic.oo";
 import "canvas_2d.oo";
@@ -37,7 +46,13 @@ import "h264_nal.oo";
 import "h264_sps.oo";
 import "h264_types.oo";
 import "hdr_3d.oo";
+import "camera_2d.oo";
 import "media.oo";
+import "noise_2d.oo";
+import "particle_2d.oo";
+import "pixel_2d.oo";
+import "pixel_fx.oo";
+import "post_2d.oo";
 import "ppm.oo";
 import "qoi.oo";
 import "qoi_file.oo";
@@ -53,7 +68,12 @@ import "sdl_window.oo";
 import "shade_3d.oo";
 import "shadow_3d.oo";
 import "spin_3d.oo";
+import "tex_3d.oo";
+import "tilemap_2d.oo";
 import "vec_poly.oo";
 import "vector_2d.oo";
+import "wave_2d.oo";
+import "wave_3d.oo";
 import "wav.oo";
 import "wav_types.oo";
+import "xform_2d.oo";

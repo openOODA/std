@@ -1,0 +1,89 @@
+// # Probe: noise anchors, ranges, and octave structure
+//
+// Logline: The hash anchors 57 at the origin, stays byte-ranged, and
+// answers seeds differently; value sampling reproduces the hash on
+// lattice points (including negative spans) at any scale; fBm matches
+// value at one octave and stays inside its geometric bound at three.
+//
+// Setup: Pure compute, no caps. Prints probe: std/gfx noise_2d: ok or
+// returns Err naming the step. All asserts are structural (anchors,
+// ranges, orderings) rather than pinned hash digits, except the
+// hand-checked origin 57.
+//
+// Beats:
+//   1. nx_hash is exactly 57 at (0,0,0), ranged, seed-sensitive.
+//   2. nx_value anchors lattice points to nx_hash, negatives included.
+//   3. nx_fbm is 0 without octaves, equals value at one, bounded at three.
+
+import "std/app/ui/media/noise_2d.oo";
+
+fn nx_in_byte(v: Int) -> Int {
+    if v < 0 {
+        return 0;
+    }
+    if v > 255 {
+        return 0;
+    }
+    return 1;
+}
+
+pub fn main() -> Result[Int, String] {
+    if nx_hash(0, 0, 0) != 57 {
+        return Err("noise_2d: origin must hash to 57");
+    }
+    if nx_in_byte(nx_hash(3, 5, 0)) != 1 {
+        return Err("noise_2d: hash must stay in byte range");
+    }
+    if nx_in_byte(nx_hash(0 - 4, 7, 2)) != 1 {
+        return Err("noise_2d: negative hash must stay in range");
+    }
+    if nx_in_byte(nx_hash(100, 0 - 200, 9)) != 1 {
+        return Err("noise_2d: far hash must stay in range");
+    }
+    if nx_hash(3, 5, 0) == nx_hash(3, 5, 1) {
+        return Err("noise_2d: seed must change the hash");
+    }
+    if nx_hash(7, 1, 4) == nx_hash(7, 1, 5) {
+        return Err("noise_2d: seed must change the hash twice");
+    }
+    if nx_hash(0, 0, 0) == nx_hash(1, 0, 0) {
+        return Err("noise_2d: neighbor must hash differently");
+    }
+    // Value anchors: lattice points reproduce the hash exactly.
+    if nx_value(32, 48, 7, 16) != nx_hash(2, 3, 7) {
+        return Err("noise_2d: lattice point must anchor the hash");
+    }
+    if nx_value(0 - 32, 16, 7, 16) != nx_hash(0 - 2, 1, 7) {
+        return Err("noise_2d: negative lattice must anchor too");
+    }
+    if nx_value(5, 9, 3, 1) != nx_hash(5, 9, 3) {
+        return Err("noise_2d: scale 1 must be the hash");
+    }
+    if nx_value(5, 9, 3, 0) != nx_hash(5, 9, 3) {
+        return Err("noise_2d: scale 0 must fall back to hash");
+    }
+    if nx_in_byte(nx_value(7, 3, 5, 16)) != 1 {
+        return Err("noise_2d: value must stay in byte range");
+    }
+    if nx_in_byte(nx_value(0 - 7, 0 - 3, 5, 16)) != 1 {
+        return Err("noise_2d: negative value must stay in range");
+    }
+    // fBm: empty is 0, one octave is value, three stay bounded above value.
+    if nx_fbm(11, 23, 7, 0, 16) != 0 {
+        return Err("noise_2d: zero octaves must be 0");
+    }
+    if nx_fbm(11, 23, 7, 1, 16) != nx_value(11, 23, 7, 16) {
+        return Err("noise_2d: one octave must equal value");
+    }
+    if nx_fbm(11, 23, 7, 3, 16) < nx_fbm(11, 23, 7, 1, 16) {
+        return Err("noise_2d: extra octaves must not shrink");
+    }
+    if nx_fbm(11, 23, 7, 3, 16) >= 512 {
+        return Err("noise_2d: three octaves must stay below 512");
+    }
+    if nx_fbm(11, 23, 7, 99, 16) != nx_fbm(11, 23, 7, 8, 16) {
+        return Err("noise_2d: octave cap must hold at 8");
+    }
+    println("probe: std/gfx noise_2d: ok");
+    return Ok(0);
+}

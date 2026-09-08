@@ -1,0 +1,121 @@
+// # Probe: textured triangle vertex mapping and depth
+//
+// Logline: A 2x2 checker texture lands its exact texel colors on the
+// triangle vertices, covers six pixels, loses depth ties to nearer
+// flats, and skips degenerates and empty palettes without painting.
+//
+// Setup: Pure compute, no caps. Imports name every home module in the C
+// build unit. Counts read the flat DepthCanvas Canvas.px RGBA ints.
+// Prints probe: std/gfx raster_tex: ok or Err naming the step. The vertex
+// asserts pin the corrected barycentric pairing: pre-fix code permutes
+// per-vertex attributes, so these fail on the old interpolation.
+//
+// Beats:
+//   1. Vertices show their own texels: red, blue, blue.
+//   2. Six pixels paint; a nearer flat red keeps all six red.
+//   3. Collinear tris and empty palettes paint nothing.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/pixel_2d.oo";
+import "std/app/ui/media/pixel_fx.oo";
+import "std/app/ui/media/raster_3d.oo";
+import "std/app/ui/media/tex_3d.oo";
+
+fn tx_count_color(cv: Canvas, r: Int, g: Int, b: Int) -> Int {
+    let mut tx_n: Int = 0;
+    let mut tx_i: Int = 0;
+    let tx_m: Int = cv.width * cv.height;
+    while tx_i < tx_m {
+        let tx_base: Int = tx_i * 4;
+        if list_get(cv.px, tx_base) == r {
+            if list_get(cv.px, tx_base + 1) == g {
+                if list_get(cv.px, tx_base + 2) == b {
+                    tx_n = tx_n + 1;
+                }
+            }
+        }
+        tx_i = tx_i + 1;
+    }
+    return tx_n;
+}
+
+fn tx_checker() -> Sprite {
+    let r: Result[Sprite, String] = pix_new(2, 2, 0);
+    let bg: Sprite = match r { Ok(a) => a, Err(_) => Sprite { w: 0, h: 0, px: list_new() } };
+    let s1: Sprite = pix_set(pix_set(bg, 0, 0, 1), 1, 1, 1);
+    let s2: Sprite = pix_set(pix_set(s1, 1, 0, 2), 0, 1, 2);
+    return Sprite { w: s2.w, h: s2.h, px: s2.px };
+}
+
+fn tx_pal() -> Palette {
+    let mut cols: List[QoiRgba] = list_new();
+    cols = list_push(cols, qoi_rgba_new(0, 0, 0, 255));
+    cols = list_push(cols, qoi_rgba_new(255, 0, 0, 255));
+    cols = list_push(cols, qoi_rgba_new(0, 0, 255, 255));
+    let p: Palette = pix_palette(cols);
+    return Palette { cols: p.cols };
+}
+
+fn tx_empty() -> DepthCanvas {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let mk: Result[DepthCanvas, String] = raster_depth_new(6, 6, black);
+    let e: DepthCanvas = match mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
+    return DepthCanvas { cv: e.cv, zb: e.zb };
+}
+
+fn tx_water(cv: Canvas) -> Int {
+    return 6 * 6 - tx_count_color(cv, 0, 0, 0);
+}
+
+pub fn main() -> Result[Int, String] {
+    if canvas_new(0, 5, qoi_rgba_new(0, 0, 0, 255)).is_ok() {
+        return Err("raster_tex: zero width must fail");
+    }
+    // Tri (1,1),(3,1),(1,3) depths 3,5,9 with UVs (0,0),(1,0),(0,1).
+    // Non-uniform depths pin the corrected barycentric pairing: vertex A
+    // must hold az in the z-buffer (the old rotation stored bz there).
+    let sea: DepthCanvas = raster_tex(tx_empty(), 1, 1, 3, 3, 1, 5, 1, 3, 9, 0, 0, 1, 0, 0, 1, tx_checker(), tx_pal(), 9);
+    if tx_water(sea.cv) != 6 {
+        return Err("raster_tex: tri must cover 6 pixels");
+    }
+    if list_get(sea.zb, 1 * 6 + 1) != 3 {
+        return Err("raster_tex: depth at A must be az");
+    }
+    if list_get(sea.zb, 1 * 6 + 3) != 5 {
+        return Err("raster_tex: depth at B must be bz");
+    }
+    // NOTE: Vertex pixels read back through the flat canvas ints.
+    if list_get(sea.cv.px, (1 * 6 + 1) * 4) != 255 {
+        return Err("raster_tex: vertex A must be red");
+    }
+    if list_get(sea.cv.px, (1 * 6 + 3) * 4 + 2) != 255 {
+        return Err("raster_tex: vertex B must be blue");
+    }
+    if list_get(sea.cv.px, (3 * 6 + 1) * 4 + 2) != 255 {
+        return Err("raster_tex: vertex C must be blue");
+    }
+    // Nearer flat red at depth 3 keeps all six pixels red-free of texture.
+    let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
+    let flat_first: DepthCanvas = raster_tri(tx_empty(), 1, 1, 3, 3, 1, 3, 1, 3, 3, red);
+    let over: DepthCanvas = raster_tex(flat_first, 1, 1, 5, 3, 1, 5, 1, 3, 5, 0, 0, 1, 0, 0, 1, tx_checker(), tx_pal(), 9);
+    if tx_count_color(over.cv, 255, 0, 0) != 6 {
+        return Err("raster_tex: farther texture must lose all six");
+    }
+    if tx_count_color(over.cv, 0, 0, 255) != 0 {
+        return Err("raster_tex: farther texture must show no blue");
+    }
+    // Collinear and empty-palette tris paint nothing.
+    let deg: DepthCanvas = raster_tex(tx_empty(), 0, 0, 5, 2, 2, 5, 4, 4, 5, 0, 0, 1, 0, 0, 1, tx_checker(), tx_pal(), 9);
+    if tx_water(deg.cv) != 0 {
+        return Err("raster_tex: degenerate tri must paint nothing");
+    }
+    let mut no_cols: List[QoiRgba] = list_new();
+    let nopal: Palette = pix_palette(no_cols);
+    let nop: DepthCanvas = raster_tex(tx_empty(), 1, 1, 5, 3, 1, 5, 1, 3, 5, 0, 0, 1, 0, 0, 1, tx_checker(), nopal, 9);
+    if tx_water(nop.cv) != 0 {
+        return Err("raster_tex: empty palette must paint nothing");
+    }
+    println("probe: std/gfx raster_tex: ok");
+    return Ok(0);
+}
