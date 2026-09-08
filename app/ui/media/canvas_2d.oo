@@ -1,0 +1,188 @@
+// # Software 2D Canvas on flat ints
+//
+// Logline: Pure-CPU raster drawing (fill, set, rect, line, disk) over a flat RGBA int buffer.
+//
+// Setup: Pure compute, no caps. Canvas holds 4 ints per pixel; canvas_to_image converts to QoiImage at the sink boundary. Out-of-bounds pixels clip silently; rect corners normalize.
+//
+// Beats:
+//   1. canvas_new builds a filled raster; bad dims fail closed like qoi_encode.
+//   2. canvas_set clips to bounds; fill/rect/line/disk compose through it.
+//   3. Integer-only Bresenham line and Newton isqrt disk; no float, no short-circuit &&.
+//   4. canvas_to_image lifts the flat buffer to the shared QoiImage raster.
+
+type Canvas = struct {
+    width: Int,
+    height: Int,
+    px: List[Int]
+};
+
+pub fn canvas_new(w: Int, h: Int, c: QoiRgba) -> Result[Canvas, String] {
+    if w <= 0 || h <= 0 {
+        return Err("ERR\tcanvas_new: non-positive image dimensions");
+    }
+    let r: Int = c.r;
+    let g: Int = c.g;
+    let b: Int = c.b;
+    let a: Int = c.a;
+    let mut flat: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = w * h;
+    while i < n {
+        flat = list_push(flat, r);
+        flat = list_push(flat, g);
+        flat = list_push(flat, b);
+        flat = list_push(flat, a);
+        i = i + 1;
+    }
+    return Ok(Canvas { width: w, height: h, px: flat });
+}
+
+pub fn canvas_set(cv: Canvas, x: Int, y: Int, c: QoiRgba) -> Canvas {
+    let w: Int = cv.width;
+    let h: Int = cv.height;
+    if x < 0 { return cv; }
+    if y < 0 { return cv; }
+    if x >= w { return cv; }
+    if y >= h { return cv; }
+    let base: Int = (y * w + x) * 4;
+    let mut flat: List[Int] = cv.px;
+    flat = list_set(flat, base, c.r);
+    flat = list_set(flat, base + 1, c.g);
+    flat = list_set(flat, base + 2, c.b);
+    flat = list_set(flat, base + 3, c.a);
+    return Canvas { width: w, height: h, px: flat };
+}
+
+pub fn canvas_fill(cv: Canvas, c: QoiRgba) -> Canvas {
+    let w: Int = cv.width;
+    let h: Int = cv.height;
+    let n: Int = w * h;
+    let mut out: Canvas = cv;
+    let mut i: Int = 0;
+    while i < n {
+        out = canvas_set(out, i - (i / w) * w, i / w, c);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn canvas_rect(cv: Canvas, x0: Int, y0: Int, x1: Int, y1: Int, c: QoiRgba) -> Canvas {
+    let mut xa: Int = x0;
+    let mut xb: Int = x1;
+    if xa > xb {
+        let t: Int = xa;
+        xa = xb;
+        xb = t;
+    }
+    let mut ya: Int = y0;
+    let mut yb: Int = y1;
+    if ya > yb {
+        let u: Int = ya;
+        ya = yb;
+        yb = u;
+    }
+    let mut out: Canvas = cv;
+    let mut y: Int = ya;
+    while y <= yb {
+        let mut x: Int = xa;
+        while x <= xb {
+            out = canvas_set(out, x, y, c);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    return out;
+}
+
+pub fn canvas_line(cv: Canvas, x0: Int, y0: Int, x1: Int, y1: Int, c: QoiRgba) -> Canvas {
+    let mut out: Canvas = cv;
+    let mut x: Int = x0;
+    let mut y: Int = y0;
+    let dx: Int = x1 - x0;
+    let dy: Int = y1 - y0;
+    let mut sx: Int = 1;
+    if dx < 0 { sx = 0 - 1; }
+    let mut sy: Int = 1;
+    if dy < 0 { sy = 0 - 1; }
+    let mut ax: Int = dx;
+    if ax < 0 { ax = 0 - ax; }
+    let mut ay: Int = dy;
+    if ay < 0 { ay = 0 - ay; }
+    let mut steps: Int = ax;
+    if ay > ax { steps = ay; }
+    let x_major: Bool = ax >= ay;
+    let mut err: Int = 2 * ax - ay;
+    if x_major { err = 2 * ay - ax; }
+    let mut i: Int = 0;
+    while i <= steps {
+        out = canvas_set(out, x, y, c);
+        if x_major {
+            x = x + sx;
+            if err > 0 {
+                y = y + sy;
+                err = err - 2 * ax;
+            }
+            err = err + 2 * ay;
+        }
+        if !x_major {
+            y = y + sy;
+            if err > 0 {
+                x = x + sx;
+                err = err - 2 * ay;
+            }
+            err = err + 2 * ax;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn canvas_isqrt(n: Int) -> Int {
+    if n <= 0 { return 0; }
+    let mut x: Int = n;
+    let mut y: Int = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    return x;
+}
+
+pub fn canvas_disk(cv: Canvas, cx: Int, cy: Int, r: Int, c: QoiRgba) -> Canvas {
+    let mut out: Canvas = cv;
+    if r < 0 { return out; }
+    let rr: Int = r * r;
+    let mut dy: Int = 0 - r;
+    while dy <= r {
+        let dx: Int = canvas_isqrt(rr - dy * dy);
+        let mut x: Int = cx - dx;
+        while x <= cx + dx {
+            out = canvas_set(out, x, cy + dy, c);
+            x = x + 1;
+        }
+        dy = dy + 1;
+    }
+    return out;
+}
+
+pub fn canvas_to_image(cv: Canvas) -> Result[QoiImage, String] {
+    let w: Int = cv.width;
+    let h: Int = cv.height;
+    let flat: List[Int] = cv.px;
+    if w <= 0 || h <= 0 {
+        return Err("ERR\tcanvas_to_image: non-positive image dimensions");
+    }
+    if list_len(flat) != w * h * 4 {
+        return Err("ERR\tcanvas_to_image: buffer size != width*height*4");
+    }
+    let header: QoiHeader = QoiHeader { width: w, height: h, channels: 4, colorspace: 0 };
+    let mut pixels: List[QoiRgba] = list_new();
+    let mut i: Int = 0;
+    let n: Int = w * h;
+    while i < n {
+        let base: Int = i * 4;
+        pixels = list_push(pixels, qoi_rgba_new(list_get(flat, base), list_get(flat, base + 1), list_get(flat, base + 2), list_get(flat, base + 3)));
+        i = i + 1;
+    }
+    return Ok(QoiImage { header: header, pixels: pixels });
+}

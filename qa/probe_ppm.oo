@@ -1,0 +1,37 @@
+// # Probe: PPM image sink byte proof
+//
+// Logline: ppm_encode of a 2x1 raster is byte-exact; bad dimensions fail closed.
+//
+// Setup: Pure. No caps. Mirrors the outsider QoiImage idiom of property_qoi_codec.
+//
+// Beats:
+//   1. A red-blue 2x1 raster encodes to the exact P3 text.
+//   2. Zero width is Err, never a file.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/ppm.oo";
+
+pub fn main() -> Result[Int, String] {
+    let mut px: List[QoiRgba] = list_new();
+    px = list_push(px, qoi_rgba_new(255, 0, 0, 255));
+    px = list_push(px, qoi_rgba_new(0, 0, 255, 255));
+    let header: QoiHeader = QoiHeader { width: 2, height: 1, channels: 3, colorspace: 0 };
+    let img: QoiImage = QoiImage { header: header, pixels: px };
+    let t: Result[String, String] = ppm_encode(img);
+    if t.is_err() {
+        return Err("ppm: 2x1 must encode");
+    }
+    let text: String = match t { Ok(s) => s, Err(e) => e };
+    let want: String = "P3\n2 1\n255\n255 0 0\n0 0 255\n";
+    if text == want {
+        let bad_h: QoiHeader = QoiHeader { width: 0, height: 1, channels: 3, colorspace: 0 };
+        let bad: QoiImage = QoiImage { header: bad_h, pixels: px };
+        if ppm_encode(bad).is_err() {
+            println("probe: std/gfx ppm: ok");
+            return Ok(0);
+        }
+        return Err("ppm: zero width must fail");
+    }
+    println(text);
+    return Err("ppm: byte mismatch");
+}

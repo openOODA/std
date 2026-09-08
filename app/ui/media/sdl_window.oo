@@ -1,0 +1,169 @@
+// # SDL2 software window via FFI
+//
+// Logline: Open a real window with SDL2 software rendering through dlopen/dlsym/ffi_call.
+//
+// Setup: Every fn takes ffi: &FfiCap first. Needs OODA_FFI_ALLOW_DLOPEN=1 plus a signed lib (minisig policy). Constants from SDL2 headers: INIT_VIDEO 32, WIN_UNDEFINED 0x1FFF0000, WIN_SHOWN 4, RENDER_SOFTWARE 1. The ctx is one tab-joined string (never a struct): 0 lib, 1 init, 2 window, 3 renderer, 4 color, 5 clear, 6 present, 7 delay, 8 destroy_ren, 9 destroy_win, 10 quit. Windows/renderers travel as ptr tokens. Titles must not contain tabs.
+//
+// Beats:
+//   1. sdl_open loads the lib and packs 11 resolved symbols into one ctx string.
+//   2. init/window/renderer/color/present/delay/close/quit compose one demo.
+//   3. Every SDL status code is checked; failures name the call.
+
+import "std/core/primitives/str.oo";
+
+fn sdl_field(ctx: String, idx: Int) -> String {
+    let mut rest: String = ctx;
+    let mut i: Int = 0;
+    while i < idx {
+        let p: Int = str_index_of(rest, "\t");
+        if p < 0 { return ""; }
+        rest = str_slice(rest, p + 1, chars_len(rest));
+        i = i + 1;
+    }
+    let q: Int = str_index_of(rest, "\t");
+    if q < 0 { return rest; }
+    return str_slice(rest, 0, q);
+}
+
+pub fn sdl_open(ffi: &FfiCap, lib: String) -> Result[String, String] {
+    let h = dlopen(ffi, lib);
+    if h.is_err() {
+        let why: String = match h { Ok(a) => a, Err(b) => b };
+        return Err("ERR\tsdl_open: " + why);
+    }
+    let hs: String = h.val;
+    let mut names: List[String] = list_new();
+    names = list_push(names, "SDL_Init");
+    names = list_push(names, "SDL_CreateWindow");
+    names = list_push(names, "SDL_CreateRenderer");
+    names = list_push(names, "SDL_SetRenderDrawColor");
+    names = list_push(names, "SDL_RenderClear");
+    names = list_push(names, "SDL_RenderPresent");
+    names = list_push(names, "SDL_Delay");
+    names = list_push(names, "SDL_DestroyRenderer");
+    names = list_push(names, "SDL_DestroyWindow");
+    names = list_push(names, "SDL_Quit");
+    let mut ctx: String = hs;
+    let mut i: Int = 0;
+    let n: Int = list_len(names);
+    while i < n {
+        let nm: String = list_get(names, i);
+        let s = dlsym(ffi, hs, nm);
+        if s.is_err() {
+            let dc: Result[String, String] = dlclose(ffi, hs);
+            if dc.is_err() {
+                return Err("ERR\tsdl_open: cleanup failed");
+            }
+            return Err("ERR\tsdl_open: missing " + nm);
+        }
+        let v: String = match s { Ok(a) => a, Err(b) => b };
+        ctx = ctx + "\t" + v;
+        i = i + 1;
+    }
+    return Ok(ctx);
+}
+
+fn sdl_status_code(out: Result[String, String]) -> Result[Int, String] {
+    if out.is_err() {
+        return Err("ERR\tsdl: ffi_call failed");
+    }
+    let text: String = match out { Ok(a) => a, Err(b) => b };
+    let pc: Result[Int, String] = parse_int(text);
+    if pc.is_err() {
+        return Err("ERR\tsdl: bad status int");
+    }
+    let code: Int = match pc { Ok(n) => n, Err(e) => 0 - 1 };
+    return Ok(code);
+}
+
+fn sdl_expect_zero(got: Result[Int, String], what: String) -> Result[Int, String] {
+    if got.is_err() {
+        return got;
+    }
+    let code: Int = match got { Ok(n) => n, Err(e) => 0 - 1 };
+    if code != 0 {
+        return Err(what);
+    }
+    return Ok(0);
+}
+
+pub fn sdl_init_video(ffi: &FfiCap, ctx: String) -> Result[Int, String] {
+    let h_init: String = sdl_field(ctx, 1);
+    let cr_raw: Result[String, String] = ffi_call(ffi, h_init, "i", "u", "32");
+    let cr: Result[Int, String] = sdl_status_code(cr_raw);
+    return sdl_expect_zero(cr, "ERR\tsdl_init_video: SDL_Init failed");
+}
+
+pub fn sdl_create_window(ffi: &FfiCap, ctx: String, title: String, w: Int, hh: Int) -> Result[String, String] {
+    let h_window: String = sdl_field(ctx, 2);
+    let undef: String = "536870912";
+    let ws: String = w.to_string();
+    let hs: String = hh.to_string();
+    let args: String = title + "\t" + undef + "\t" + undef + "\t" + ws + "\t" + hs + "\t4";
+    return ffi_call(ffi, h_window, "p", "siiiuu", args);
+}
+
+pub fn sdl_create_renderer(ffi: &FfiCap, ctx: String, window: String) -> Result[String, String] {
+    let h_renderer: String = sdl_field(ctx, 3);
+    let neg1: Int = 0 - 1;
+    let idx: String = neg1.to_string();
+    return ffi_call(ffi, h_renderer, "p", "iu", window + "\t" + idx + "\t1");
+}
+
+pub fn sdl_show_color(ffi: &FfiCap, ctx: String, ren: String, r: Int, g: Int, b: Int) -> Result[Int, String] {
+    let h_color: String = sdl_field(ctx, 4);
+    let h_clear: String = sdl_field(ctx, 5);
+    let h_present: String = sdl_field(ctx, 6);
+    let c_raw: Result[String, String] = ffi_call(ffi, h_color, "i", "puuuu", ren + "\t" + r.to_string() + "\t" + g.to_string() + "\t" + b.to_string() + "\t255");
+    let c: Result[Int, String] = sdl_status_code(c_raw);
+    let rc: Result[Int, String] = sdl_expect_zero(c, "ERR\tsdl_show_color: SetRenderDrawColor failed");
+    if rc.is_err() {
+        return rc;
+    }
+    let k_raw: Result[String, String] = ffi_call(ffi, h_clear, "i", "p", ren);
+    let k: Result[Int, String] = sdl_status_code(k_raw);
+    let rk: Result[Int, String] = sdl_expect_zero(k, "ERR\tsdl_show_color: RenderClear failed");
+    if rk.is_err() {
+        return rk;
+    }
+    let p_raw: Result[String, String] = ffi_call(ffi, h_present, "i", "p", ren);
+    let pr: Result[Int, String] = sdl_status_code(p_raw);
+    return sdl_expect_zero(pr, "ERR\tsdl_show_color: RenderPresent failed");
+}
+
+pub fn sdl_delay(ffi: &FfiCap, ctx: String, ms: Int) -> Result[Int, String] {
+    let h_delay: String = sdl_field(ctx, 7);
+    let d: Result[String, String] = ffi_call(ffi, h_delay, "v", "u", ms.to_string());
+    if d.is_err() {
+        return Err("ERR\tsdl_delay: ffi_call failed");
+    }
+    return Ok(0);
+}
+
+pub fn sdl_close(ffi: &FfiCap, ctx: String, ren: String, win: String) -> Result[Int, String] {
+    let h_lib: String = sdl_field(ctx, 0);
+    let h_destroy_ren: String = sdl_field(ctx, 8);
+    let h_destroy_win: String = sdl_field(ctx, 9);
+    let d1: Result[String, String] = ffi_call(ffi, h_destroy_ren, "v", "p", ren);
+    if d1.is_err() {
+        return Err("ERR\tsdl_close: DestroyRenderer failed");
+    }
+    let d2: Result[String, String] = ffi_call(ffi, h_destroy_win, "v", "p", win);
+    if d2.is_err() {
+        return Err("ERR\tsdl_close: DestroyWindow failed");
+    }
+    let dc_lib: Result[String, String] = dlclose(ffi, h_lib);
+    if dc_lib.is_err() {
+        return Err("ERR\tsdl_close: dlclose failed");
+    }
+    return Ok(0);
+}
+
+pub fn sdl_quit(ffi: &FfiCap, ctx: String) -> Result[Int, String] {
+    let h_quit: String = sdl_field(ctx, 10);
+    let qr: Result[String, String] = ffi_call(ffi, h_quit, "v", "", "");
+    if qr.is_err() {
+        return Err("ERR\tsdl_quit: ffi_call failed");
+    }
+    return Ok(0);
+}

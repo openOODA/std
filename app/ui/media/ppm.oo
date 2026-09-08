@@ -1,0 +1,43 @@
+// # PPM Image Sink (P3 text)
+//
+// Logline: Encode QoiImage rasters to PPM P3 text and write them under &FsWriteCap.
+//
+// Setup: Pure encode; only ppm_write takes &FsWriteCap. Speaks QoiImage so the step-2 canvas, QOI, and step-3 SDL present share one raster type.
+//
+// Beats:
+//   1. ppm_encode emits the P3 header plus r g b triplets; alpha is dropped.
+//   2. Pixel count must equal width times height; bad dimensions fail closed.
+//   3. ppm_write persists the text under &FsWriteCap.
+
+pub fn ppm_encode(img: QoiImage) -> Result[String, String] {
+    let w: Int = (img.header).width;
+    let h: Int = (img.header).height;
+    if w <= 0 || h <= 0 {
+        return Err("ERR\tppm_encode: non-positive image dimensions");
+    }
+    let px: List[QoiRgba] = (img.pixels);
+    if list_len(px) != w * h {
+        return Err("ERR\tppm_encode: pixel count != width*height");
+    }
+    let mut out: String = "P3\n" + w.to_string() + " " + h.to_string() + "\n255\n";
+    let mut i: Int = 0;
+    let n: Int = w * h;
+    while i < n {
+        let p: QoiRgba = list_get(px, i);
+        let r: Int = p.r;
+        let g: Int = p.g;
+        let b: Int = p.b;
+        out = out + r.to_string() + " " + g.to_string() + " " + b.to_string() + "\n";
+        i = i + 1;
+    }
+    return Ok(out);
+}
+
+pub fn ppm_write(fw: &FsWriteCap, path: String, img: QoiImage) -> Result[Void, String] {
+    let t: Result[String, String] = ppm_encode(img);
+    if t.is_ok() {
+        let text: String = match t { Ok(s) => s, Err(e) => e };
+        return write_file(fw, path, text);
+    }
+    return Err("ERR\tppm_write: encode failed");
+}

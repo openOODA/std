@@ -1,0 +1,45 @@
+// # Probe: QOI file sink byte proof
+//
+// Logline: qoi_pack of a 2x1 raster carries the qoif magic, dims, and end marker.
+//
+// Setup: Pure. No caps. byte_at reads the packed string back.
+//
+// Beats:
+//   1. Magic is qoif, width/height read back big-endian, end marker closes.
+//   2. Zero width is Err, never a file.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/qoi_file.oo";
+
+pub fn main() -> Result[Int, String] {
+    let mut px: List[QoiRgba] = list_new();
+    px = list_push(px, qoi_rgba_new(255, 0, 0, 255));
+    px = list_push(px, qoi_rgba_new(0, 0, 255, 255));
+    let header: QoiHeader = QoiHeader { width: 2, height: 1, channels: 3, colorspace: 0 };
+    let img: QoiImage = QoiImage { header: header, pixels: px };
+    let t: Result[String, String] = qoi_pack(img);
+    if t.is_err() {
+        return Err("qoi: 2x1 must pack");
+    }
+    let s: String = match t { Ok(a) => a, Err(b) => b };
+    if byte_at(s, 0) != 113 || byte_at(s, 1) != 111 || byte_at(s, 2) != 105 || byte_at(s, 3) != 102 {
+        return Err("qoi: magic must be qoif");
+    }
+    if byte_at(s, 7) != 2 || byte_at(s, 11) != 1 {
+        return Err("qoi: dims must read back 2x1 big-endian");
+    }
+    let n: Int = bytes_len(s);
+    if n < 22 {
+        return Err("qoi: packed stream too short");
+    }
+    if byte_at(s, n - 1) != 1 {
+        return Err("qoi: end marker must close with 1");
+    }
+    let bad_h: QoiHeader = QoiHeader { width: 0, height: 1, channels: 3, colorspace: 0 };
+    let bad: QoiImage = QoiImage { header: bad_h, pixels: px };
+    if qoi_pack(bad).is_ok() {
+        return Err("qoi: zero width must fail");
+    }
+    println("probe: std/gfx qoi file: ok");
+    return Ok(0);
+}

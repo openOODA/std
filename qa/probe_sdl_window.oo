@@ -1,0 +1,74 @@
+// # SDL2 software-window demo probe
+//
+// Logline: Open a real SDL2 window through the FFI binding and show a color.
+// Needs OODA_FFI_ALLOW_DLOPEN=1 and a signed lib (minisig anchor);
+// without the anchor dlopen must fail closed with a named error.
+//
+// Beats:
+//   1. sdl_open resolves the 11 SDL symbols into one ctx string.
+//   2. init/video, window, renderer, red frame, present, delay, close, quit.
+//   3. Every step names its failure; SDL_DEMO_OK prints only on full pass.
+
+import "std/app/ui/media/sdl_window.oo";
+
+pub fn main(ffi: &FfiCap) {
+    let mut demo_rc: Int = 0;
+    let mut demo_ctx: String = "";
+    let demo_opened = sdl_open(ffi, "/lib64/libSDL2-2.0.so.0");
+    if demo_opened.is_err() {
+        let demo_why: String = match demo_opened { Ok(a) => a, Err(b) => b };
+        println(demo_why);
+        demo_rc = 1;
+    }
+    if demo_rc == 0 {
+        demo_ctx = match demo_opened { Ok(a) => a, Err(b) => b };
+        let demo_vi = sdl_init_video(ffi, demo_ctx);
+        if demo_vi.is_err() {
+            println("SDL_DEMO init failed");
+            demo_rc = 2;
+        }
+    }
+    if demo_rc == 0 {
+        let demo_win = sdl_create_window(ffi, demo_ctx, "oo-demo", 320, 200);
+        if demo_win.is_err() {
+            println("SDL_DEMO window failed");
+            demo_rc = 3;
+        }
+        if demo_rc == 0 {
+            let demo_window: String = match demo_win { Ok(a) => a, Err(b) => b };
+            let demo_ren = sdl_create_renderer(ffi, demo_ctx, demo_window);
+            if demo_ren.is_err() {
+                println("SDL_DEMO renderer failed");
+                demo_rc = 4;
+            }
+            if demo_rc == 0 {
+                let demo_renderer: String = match demo_ren { Ok(a) => a, Err(b) => b };
+                let demo_shown = sdl_show_color(ffi, demo_ctx, demo_renderer, 200, 30, 30);
+                if demo_shown.is_err() {
+                    println("SDL_DEMO show failed");
+                    demo_rc = 5;
+                }
+                if demo_rc == 0 {
+                    let demo_slept = sdl_delay(ffi, demo_ctx, 500);
+                    if demo_slept.is_err() {
+                        println("SDL_DEMO delay failed");
+                        demo_rc = 6;
+                    }
+                }
+                let demo_closed = sdl_close(ffi, demo_ctx, demo_renderer, demo_window);
+                if demo_closed.is_err() {
+                    println("SDL_DEMO close failed");
+                    demo_rc = 7;
+                }
+            }
+        }
+        let demo_quit = sdl_quit(ffi, demo_ctx);
+        if demo_quit.is_err() {
+            println("SDL_DEMO quit failed");
+            demo_rc = 8;
+        }
+    }
+    if demo_rc == 0 {
+        println("SDL_DEMO_OK");
+    }
+}

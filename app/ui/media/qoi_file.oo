@@ -1,0 +1,36 @@
+// # QOI File Sink
+//
+// Logline: Encode QoiImage to QOI bytes and write them under &FsWriteCap.
+//
+// Setup: Bridges qoi_encode to write_file via bytes_to_str (clamped 0..255, NUL-safe, wb+fwrite(len)). Only qoi_write takes &FsWriteCap; qoi_pack is pure.
+//
+// Beats:
+//   1. qoi_pack returns the exact byte string; truncated encodings fail closed.
+//   2. qoi_write persists the packed bytes under &FsWriteCap.
+
+import "./qoi_enc.oo";
+
+pub fn qoi_pack(img: QoiImage) -> Result[String, String] {
+    let t: Result[List[Int], String] = qoi_encode(img);
+    if t.is_err() {
+        return Err("ERR\tqoi_pack: encode failed");
+    }
+    let raw: List[Int] = match t { Ok(b) => b, Err(e) => qoi_empty_bytes() };
+    if list_len(raw) < 22 {
+        return Err("ERR\tqoi_pack: truncated encoding");
+    }
+    return Ok(bytes_to_str(raw));
+}
+
+pub fn qoi_write(fw: &FsWriteCap, path: String, img: QoiImage) -> Result[Void, String] {
+    let p: Result[String, String] = qoi_pack(img);
+    if p.is_err() {
+        return Err("ERR\tqoi_write: pack failed");
+    }
+    let text: String = match p { Ok(s) => s, Err(e) => e };
+    return write_file(fw, path, text);
+}
+
+fn qoi_empty_bytes() -> List[Int] {
+    return bytes_new();
+}

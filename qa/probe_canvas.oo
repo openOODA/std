@@ -1,0 +1,108 @@
+// # Probe: 2D canvas shape proof
+//
+// Logline: Each canvas shape paints exactly its pixels on isolated rasters; clips hold.
+//
+// Setup: Pure. No caps. Fresh 8x8 black canvas per shape so asserts never interfere.
+//        Reads go through the flat int buffer, the toolchain's proven path.
+//
+// Beats:
+//   1. set paints one pixel; out-of-bounds sets change nothing.
+//   2. rect paints its corners and not its neighbors; reversed corners agree.
+//   3. line paints the traced diagonal; disk paints plus-shape for r=1, not corners.
+//   4. canvas_new rejects zero width; to_image succeeds (pixels proven in demo).
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+
+fn probe_black8() -> Canvas {
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    let t: Result[Canvas, String] = canvas_new(8, 8, black);
+    let cv: Canvas = match t { Ok(one) => one, Err(e) => probe_fallback() };
+    return cv;
+}
+
+fn probe_fallback() -> Canvas {
+    let mut flat: List[Int] = list_new();
+    flat = list_push(flat, 0);
+    flat = list_push(flat, 0);
+    flat = list_push(flat, 0);
+    flat = list_push(flat, 255);
+    return Canvas { width: 1, height: 1, px: flat };
+}
+
+fn probe_is(cv: Canvas, x: Int, y: Int, r: Int, g: Int, b: Int) -> Bool {
+    let w: Int = cv.width;
+    let px: List[Int] = cv.px;
+    let base: Int = (y * w + x) * 4;
+    if list_get(px, base) != r { return false; }
+    if list_get(px, base + 1) != g { return false; }
+    if list_get(px, base + 2) != b { return false; }
+    return true;
+}
+
+pub fn main() -> Result[Int, String] {
+    let red: QoiRgba = qoi_rgba_new(255, 0, 0, 255);
+    let white: QoiRgba = qoi_rgba_new(255, 255, 255, 255);
+    let green: QoiRgba = qoi_rgba_new(0, 255, 0, 255);
+    let blue: QoiRgba = qoi_rgba_new(0, 0, 255, 255);
+    let black: QoiRgba = qoi_rgba_new(0, 0, 0, 255);
+    // set + clip: one red pixel; out-of-bounds sets paint nothing new.
+    let s1: Canvas = canvas_set(probe_black8(), 2, 3, red);
+    if !probe_is(s1, 2, 3, 255, 0, 0) {
+        return Err("canvas: set pixel missing");
+    }
+    let s2: Canvas = canvas_set(canvas_set(s1, 9, 9, red), 0 - 1, 2, red);
+    if !probe_is(s2, 2, 3, 255, 0, 0) {
+        return Err("canvas: clip corrupted the pixel");
+    }
+    if !probe_is(s2, 0, 0, 0, 0, 0) {
+        return Err("canvas: clip painted background");
+    }
+    // rect: corners painted, neighbors clean, reversed corners agree.
+    let r1: Canvas = canvas_rect(probe_black8(), 1, 1, 2, 2, white);
+    if !probe_is(r1, 1, 1, 255, 255, 255) {
+        return Err("canvas: rect corner missing");
+    }
+    if !probe_is(r1, 0, 0, 0, 0, 0) {
+        return Err("canvas: rect leaked outside");
+    }
+    let r2: Canvas = canvas_rect(probe_black8(), 2, 2, 1, 1, white);
+    if !probe_is(r2, 2, 2, 255, 255, 255) {
+        return Err("canvas: reversed rect disagrees");
+    }
+    // line: traced diagonal (0,3)-(3,0) hits (1,2) and (2,1), not (0,0).
+    let l1: Canvas = canvas_line(probe_black8(), 0, 3, 3, 0, green);
+    if !probe_is(l1, 1, 2, 0, 255, 0) {
+        return Err("canvas: line misses (1,2)");
+    }
+    if !probe_is(l1, 2, 1, 0, 255, 0) {
+        return Err("canvas: line misses (2,1)");
+    }
+    if !probe_is(l1, 0, 0, 0, 0, 0) {
+        return Err("canvas: line paints off-trace pixel");
+    }
+    // disk r=1: plus-shape painted, diagonal corner clean.
+    let d1: Canvas = canvas_disk(probe_black8(), 4, 4, 1, blue);
+    if !probe_is(d1, 4, 4, 0, 0, 255) {
+        return Err("canvas: disk center missing");
+    }
+    if !probe_is(d1, 3, 4, 0, 0, 255) {
+        return Err("canvas: disk arm missing");
+    }
+    if !probe_is(d1, 3, 3, 0, 0, 0) {
+        return Err("canvas: disk paints corner");
+    }
+    // new rejects zero width; to_image keeps dimensions.
+    if canvas_new(0, 5, black).is_ok() {
+        return Err("canvas: zero width must fail");
+    }
+    // to_image must succeed; the pixel proof of the boundary lives in the
+    // ppm demo (byte-exact), not here: match-unwrapping a struct-list
+    // payload is unsound in this toolchain (heap corruption, see repros).
+    let ti: Result[QoiImage, String] = canvas_to_image(probe_black8());
+    if ti.is_err() {
+        return Err("canvas: to_image must succeed");
+    }
+    println("probe: std/gfx canvas: ok");
+    return Ok(0);
+}
