@@ -91,8 +91,9 @@ fn ed25519_curve_from(n: Int) -> List[Int] {
     return list_set(list_set(o, 0, n & 65535), 1, n >> 16);
 }
 fn ed25519_curve_inv(a: List[Int]) -> List[Int] {
-    let mut r: List[Int] = a;
-    let mut i: Int = 253;
+    // Unrolled i=253 step (r=sq(a); r=mulf(r,a)) so a is only borrowed.
+    let mut r: List[Int] = ed25519_curve_mulf(ed25519_curve_sq(a), a);
+    let mut i: Int = 252;
     while i >= 0 {
         r = ed25519_curve_sq(r);
         if i != 2 {
@@ -103,8 +104,8 @@ fn ed25519_curve_inv(a: List[Int]) -> List[Int] {
     return r;
 }
 fn ed25519_curve_sqrt(a: List[Int]) -> List[Int] {
-    let mut r: List[Int] = a;
-    let mut i: Int = 250;
+    let mut r: List[Int] = ed25519_curve_mulf(ed25519_curve_sq(a), a);
+    let mut i: Int = 249;
     while i >= 1 {
         r = ed25519_curve_sq(r);
         r = ed25519_curve_mulf(r, a);

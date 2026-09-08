@@ -100,8 +100,9 @@ fn c_mul(a: List[Int], b: List[Int]) -> List[Int] {
 fn c_sq(a: List[Int]) -> List[Int] { return c_mul(a, a); }
 
 fn c_inv(a: List[Int]) -> List[Int] {
-    let mut r: List[Int] = a;
-    let mut i: Int = 253;
+    // Unrolled i=253 step (r=sq(a); r=mulf(r,a)) so a is only borrowed.
+    let mut r: List[Int] = c_mul(c_sq(a), a);
+    let mut i: Int = 252;
     while i >= 0 {
         r = c_sq(r);
         if i != 2 {
