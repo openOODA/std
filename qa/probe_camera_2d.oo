@@ -1,0 +1,88 @@
+// # Probe: 2D camera viewport math
+//
+// Logline: Viewport construction, pan, world clamping, zoomed
+// world-to-screen maps, and overlap culling all pin exact integers.
+//
+// Setup: Pure compute, no caps. Prints probe: std/gfx camera_2d: ok or
+// returns Err naming the step.
+//
+// Beats:
+//   1. cam_new rejects zero size and zero zoom.
+//   2. cam_pan offsets; cam_clamp holds edges and centers.
+//   3. cam_world_to_screen scales by zoom; cam_cull keeps touchers.
+
+import "std/app/ui/media/camera_2d.oo";
+
+fn cm_cam() -> Camera {
+    let r: Result[Camera, String] = cam_new(0, 0, 16, 12, 1);
+    return match r { Ok(a) => a, Err(_) => Camera { x: 0, y: 0, w: 0, h: 0, zoom: 1 } };
+}
+
+pub fn main() -> Result[Int, String] {
+    if cam_new(0, 0, 0, 12, 1).is_ok() {
+        return Err("camera_2d: zero width must fail");
+    }
+    if cam_new(0, 0, 16, 0, 1).is_ok() {
+        return Err("camera_2d: zero height must fail");
+    }
+    if cam_new(0, 0, 16, 12, 0).is_ok() {
+        return Err("camera_2d: zero zoom must fail");
+    }
+    let panned: Camera = cam_pan(cm_cam(), 5, 0 - 3);
+    if panned.x != 5 {
+        return Err("camera_2d: pan must move x");
+    }
+    if panned.y != 0 - 3 {
+        return Err("camera_2d: pan must move y");
+    }
+    // Clamp: negative snaps to 0, overshoot snaps to world minus view.
+    let lo: Camera = cam_clamp(cam_pan(cm_cam(), 0 - 9, 0 - 9), 64, 64);
+    if lo.x != 0 {
+        return Err("camera_2d: clamp must stop at left");
+    }
+    if lo.y != 0 {
+        return Err("camera_2d: clamp must stop at top");
+    }
+    let hi: Camera = cam_clamp(cam_pan(cm_cam(), 999, 999), 64, 64);
+    if hi.x != 48 {
+        return Err("camera_2d: clamp must stop at right");
+    }
+    if hi.y != 52 {
+        return Err("camera_2d: clamp must stop at bottom");
+    }
+    // Map: origin-centered camera puts (5,7) at (5,7); zoom 2 doubles.
+    let pt: ScreenPt = cam_world_to_screen(cm_cam(), 5, 7);
+    if pt.sx != 5 {
+        return Err("camera_2d: map sx must be 5");
+    }
+    if pt.sy != 7 {
+        return Err("camera_2d: map sy must be 7");
+    }
+    let zmr: Result[Camera, String] = cam_new(4, 4, 16, 12, 2);
+    let zm: Camera = match zmr { Ok(a) => a, Err(_) => cm_cam() };
+    let zp: ScreenPt = cam_world_to_screen(zm, 6, 7);
+    if zp.sx != 4 {
+        return Err("camera_2d: zoom must double dx");
+    }
+    if zp.sy != 6 {
+        return Err("camera_2d: zoom must double dy");
+    }
+    // Cull: inside and edge-touchers keep, fully-outside drops.
+    if cam_cull(cm_cam(), 2, 2, 4, 4) != 1 {
+        return Err("camera_2d: inside must keep");
+    }
+    if cam_cull(cm_cam(), 0 - 4, 0, 4, 4) != 1 {
+        return Err("camera_2d: edge toucher must keep");
+    }
+    if cam_cull(cm_cam(), 0 - 5, 0, 4, 4) != 0 {
+        return Err("camera_2d: left-out must drop");
+    }
+    if cam_cull(cm_cam(), 17, 0, 4, 4) != 0 {
+        return Err("camera_2d: right-out must drop");
+    }
+    if cam_cull(cm_cam(), 0, 13, 4, 4) != 0 {
+        return Err("camera_2d: bottom-out must drop");
+    }
+    println("probe: std/gfx camera_2d: ok");
+    return Ok(0);
+}

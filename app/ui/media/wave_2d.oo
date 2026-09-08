@@ -61,5 +61,10 @@ pub fn wave_paint(cv: Canvas, y_base: Int, t: Int, a1: Int, p1: Int, r1: Int, a2
         }
         wv_x = wv_x + 1;
     }
-    return wv_cv;
+    // NOTE: Literal rebuild, not `return wv_cv`: the C backend drops the
+    // retain on a returned local, handing the caller a dangling struct.
+    // The pixel list routes through a local first so the emitter pairs
+    // its retain with a release (no leak, no dangle).
+    let wv_done: List[Int] = wv_cv.px;
+    return Canvas { width: wv_cv.width, height: wv_cv.height, px: wv_done };
 }

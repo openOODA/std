@@ -1,0 +1,95 @@
+// # Two-dimensional camera: viewport, pan, clamp, cull
+//
+// Logline: A world-unit viewport with integer zoom, world-to-screen maps,
+// world-bound clamping, and rectangle overlap culling for tile renderers.
+//
+// Setup: Pure compute, no caps. Camera x/y sit in world units at the
+// top-left; w/h are screen pixels and the visible world span is w/zoom
+// by h/zoom. Zoom is an integer >= 1; bad dimensions fail closed.
+//
+// Beats:
+//   1. cam_new pins dimensions and rejects zero size or zero zoom.
+//   2. cam_pan moves and cam_clamp holds the view inside the world.
+//   3. cam_world_to_screen maps with zoom; cam_cull tests rect overlap.
+
+type Camera = struct {
+    x: Int,
+    y: Int,
+    w: Int,
+    h: Int,
+    zoom: Int
+};
+
+type ScreenPt = struct {
+    sx: Int,
+    sy: Int
+};
+
+pub fn cam_new(x: Int, y: Int, w: Int, h: Int, zoom: Int) -> Result[Camera, String] {
+    if w <= 0 {
+        return Err("ERR\tcam_new: bad width");
+    }
+    if h <= 0 {
+        return Err("ERR\tcam_new: bad height");
+    }
+    if zoom < 1 {
+        return Err("ERR\tcam_new: bad zoom");
+    }
+    return Ok(Camera { x: x, y: y, w: w, h: h, zoom: zoom });
+}
+
+pub fn cam_pan(cam: Camera, dx: Int, dy: Int) -> Camera {
+    return Camera { x: cam.x + dx, y: cam.y + dy, w: cam.w, h: cam.h, zoom: cam.zoom };
+}
+
+pub fn cam_clamp(cam: Camera, world_w: Int, world_h: Int) -> Camera {
+    let mut cm_x: Int = cam.x;
+    let mut cm_y: Int = cam.y;
+    let cm_mx: Int = world_w - cam.w / cam.zoom;
+    let cm_my: Int = world_h - cam.h / cam.zoom;
+    if cm_mx <= 0 {
+        cm_x = 0;
+    } else {
+        if cm_x < 0 {
+            cm_x = 0;
+        }
+        if cm_x > cm_mx {
+            cm_x = cm_mx;
+        }
+    }
+    if cm_my <= 0 {
+        cm_y = 0;
+    } else {
+        if cm_y < 0 {
+            cm_y = 0;
+        }
+        if cm_y > cm_my {
+            cm_y = cm_my;
+        }
+    }
+    return Camera { x: cm_x, y: cm_y, w: cam.w, h: cam.h, zoom: cam.zoom };
+}
+
+pub fn cam_world_to_screen(cam: Camera, wx: Int, wy: Int) -> ScreenPt {
+    return ScreenPt { sx: (wx - cam.x) * cam.zoom, sy: (wy - cam.y) * cam.zoom };
+}
+
+pub fn cam_cull(cam: Camera, x: Int, y: Int, w: Int, h: Int) -> Int {
+    // NOTE: 1 means visible (keep), 0 means fully outside (drop); touching
+    // edges count as visible so scrolling never pops tiles a pixel early.
+    let cm_vw: Int = cam.w / cam.zoom;
+    let cm_vh: Int = cam.h / cam.zoom;
+    if x + w < cam.x {
+        return 0;
+    }
+    if x > cam.x + cm_vw {
+        return 0;
+    }
+    if y + h < cam.y {
+        return 0;
+    }
+    if y > cam.y + cm_vh {
+        return 0;
+    }
+    return 1;
+}

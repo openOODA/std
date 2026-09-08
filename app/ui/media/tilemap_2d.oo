@@ -1,0 +1,145 @@
+// # Tilemap renderer: sprite sheets stamped through a camera
+//
+// Logline: Index maps of sprite-sheet tiles painted onto a Canvas with
+// camera culling, integer zoom doubling, transparency, and palette color.
+//
+// Setup: Pure compute, no caps. Tiles hold sheet indices; -1 is empty and
+// out-of-range sheet reads are skipped, so ragged maps fail soft per tile
+// but never trap. Sprites come from a List[Sprite] sheet read only through
+// list_get, never bound, per the struct-list soundness rule. Probes import
+// pixel_2d.oo, camera_2d.oo, canvas_2d.oo, and qoi_types.oo so every home
+// module joins the C build unit. Keep test maps tiny: every painted pixel
+// costs a canvas_set against the ambient list quota.
+//
+// Beats:
+//   1. tile_new/tile_get/tile_set/tile_count cover storage and query.
+//   2. tile_render stamps exact pixel counts per sheet index.
+//   3. tile_render culls off-camera tiles and doubles pixels at zoom 2.
+
+type Tilemap = struct {
+    tw: Int,
+    th: Int,
+    ts: Int,
+    tiles: List[Int]
+};
+
+pub fn tile_new(tw: Int, th: Int, ts: Int, fill: Int) -> Result[Tilemap, String] {
+    if tw <= 0 {
+        return Err("ERR\ttile_new: bad width");
+    }
+    if th <= 0 {
+        return Err("ERR\ttile_new: bad height");
+    }
+    if ts <= 0 {
+        return Err("ERR\ttile_new: bad tile size");
+    }
+    let mut tm_tiles: List[Int] = list_new();
+    let mut tm_i: Int = 0;
+    while tm_i < tw * th {
+        tm_tiles = list_push(tm_tiles, fill);
+        tm_i = tm_i + 1;
+    }
+    return Ok(Tilemap { tw: tw, th: th, ts: ts, tiles: tm_tiles });
+}
+
+pub fn tile_get(tm: Tilemap, x: Int, y: Int) -> Int {
+    if x < 0 {
+        return 0 - 1;
+    }
+    if y < 0 {
+        return 0 - 1;
+    }
+    if x >= tm.tw {
+        return 0 - 1;
+    }
+    if y >= tm.th {
+        return 0 - 1;
+    }
+    return list_get(tm.tiles, y * tm.tw + x);
+}
+
+pub fn tile_set(tm: Tilemap, x: Int, y: Int, v: Int) -> Tilemap {
+    if x < 0 {
+        return tm;
+    }
+    if y < 0 {
+        return tm;
+    }
+    if x >= tm.tw {
+        return tm;
+    }
+    if y >= tm.th {
+        return tm;
+    }
+    let mut tm_tiles: List[Int] = tm.tiles;
+    tm_tiles = list_set(tm_tiles, y * tm.tw + x, v);
+    return Tilemap { tw: tm.tw, th: tm.th, ts: tm.ts, tiles: tm_tiles };
+}
+
+pub fn tile_count(tm: Tilemap, v: Int) -> Int {
+    let mut tm_n: Int = 0;
+    let mut tm_i: Int = 0;
+    while tm_i < tm.tw * tm.th {
+        if list_get(tm.tiles, tm_i) == v {
+            tm_n = tm_n + 1;
+        }
+        tm_i = tm_i + 1;
+    }
+    return tm_n;
+}
+
+pub fn tile_render(cv: Canvas, tm: Tilemap, sheet: List[Sprite], pal: Palette, cam: Camera, transparent: Int) -> Canvas {
+    let mut tr_cv: Canvas = cv;
+    let tr_n: Int = list_len(pal.cols);
+    let tr_ns: Int = list_len(sheet);
+    let mut tr_j: Int = 0;
+    while tr_j < tm.th {
+        let mut tr_i: Int = 0;
+        while tr_i < tm.tw {
+            let tr_idx: Int = tile_get(tm, tr_i, tr_j);
+            if tr_idx >= 0 {
+                if tr_idx < tr_ns {
+                    if cam_cull(cam, tr_i * tm.ts, tr_j * tm.ts, tm.ts, tm.ts) == 1 {
+                        // NOTE: list_get copies the sprite out; its pixel
+                        // list is only ever read through pix_get below.
+                        let tr_sp: Sprite = list_get(sheet, tr_idx);
+                        let tr_o: ScreenPt = cam_world_to_screen(cam, tr_i * tm.ts, tr_j * tm.ts);
+                        let mut tr_sy: Int = 0;
+                        while tr_sy < tm.ts {
+                            let mut tr_sx: Int = 0;
+                            while tr_sx < tm.ts {
+                                let tr_pi: Int = pix_get(tr_sp, tr_sx, tr_sy);
+                                if tr_pi != transparent {
+                                    if tr_pi >= 0 {
+                                        if tr_pi < tr_n {
+                                            let tr_col: QoiRgba = list_get(pal.cols, tr_pi);
+                                            let mut tr_ky: Int = 0;
+                                            while tr_ky < cam.zoom {
+                                                let mut tr_kx: Int = 0;
+                                                while tr_kx < cam.zoom {
+                                                    tr_cv = canvas_set(tr_cv, tr_o.sx + tr_sx * cam.zoom + tr_kx, tr_o.sy + tr_sy * cam.zoom + tr_ky, tr_col);
+                                                    tr_kx = tr_kx + 1;
+                                                }
+                                                tr_ky = tr_ky + 1;
+                                            }
+                                        }
+                                    }
+                                }
+                                tr_sx = tr_sx + 1;
+                            }
+                            tr_sy = tr_sy + 1;
+                        }
+                    }
+                }
+            }
+            tr_i = tr_i + 1;
+        }
+        tr_j = tr_j + 1;
+    }
+    // NOTE: Literal rebuild, not `return tr_cv`: the C backend drops the
+    // retain on a returned local, handing the caller a dangling struct.
+    // The pixel list routes through a local first so the emitter pairs
+    // its retain with a release (no leak, no dangle).
+    let tr_done: List[Int] = tr_cv.px;
+    return Canvas { width: tr_cv.width, height: tr_cv.height, px: tr_done };
+}

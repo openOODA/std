@@ -69,7 +69,12 @@ pub fn pix_dither_rect(sp: Sprite, x: Int, y: Int, w: Int, h: Int, i0: Int, i1: 
         }
         px_yy = px_yy + 1;
     }
-    return px_out;
+    // NOTE: Literal rebuild, not `return px_out`: the C backend drops the
+    // retain on a returned local, handing the caller a dangling struct.
+    // The pixel list routes through a local first so the emitter pairs
+    // its retain with a release (no leak, no dangle).
+    let px_done: List[Int] = px_out.px;
+    return Sprite { w: px_out.w, h: px_out.h, px: px_done };
 }
 
 pub fn pix_scale(sp: Sprite, k: Int) -> Result[Sprite, String] {
@@ -110,5 +115,10 @@ pub fn pix_blit(cv: Canvas, sp: Sprite, pal: Palette, ox: Int, oy: Int, transpar
         }
         px_y = px_y + 1;
     }
-    return px_cv;
+    // NOTE: Literal rebuild, not `return px_cv`: the C backend drops the
+    // retain on a returned local, handing the caller a dangling struct.
+    // The pixel list routes through a local first so the emitter pairs
+    // its retain with a release (no leak, no dangle).
+    let px_done: List[Int] = px_cv.px;
+    return Canvas { width: px_cv.width, height: px_cv.height, px: px_done };
 }

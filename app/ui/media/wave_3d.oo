@@ -86,5 +86,13 @@ pub fn swell_paint(rd: DepthCanvas, ox: Int, oy: Int, oz: Int, step: Int, nqx: I
         }
         sw_j = sw_j + 1;
     }
-    return sw_rd;
+    // NOTE: Literal rebuild, not `return sw_rd`: the C backend drops the
+    // retain on a returned local, handing the caller a dangling struct.
+    // Both lists route through locals first so the emitter pairs each
+    // retain with a release (no leak, no dangle).
+    let sw_ci: Canvas = sw_rd.cv;
+    let sw_cvp: List[Int] = sw_ci.px;
+    let sw_zb: List[Int] = sw_rd.zb;
+    let sw_cvo: Canvas = Canvas { width: sw_ci.width, height: sw_ci.height, px: sw_cvp };
+    return DepthCanvas { cv: sw_cvo, zb: sw_zb };
 }

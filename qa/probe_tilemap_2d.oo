@@ -1,0 +1,164 @@
+// # Probe: tilemap storage, full render, cull, and zoom
+//
+// Logline: Tile indices store and count exactly; a 4x3 map stamps 80 red
+// and 80 blue pixels, a quarter camera culls to 16/32, and zoom 2 doubles
+// the visible tile to 64/128 while skipping empties and bad indices.
+//
+// Setup: Pure compute, no caps. Sheet is two solid 4x4 sprites (red idx,
+// blue idx) over a black/red/blue palette with transparent 0. Pixel counts
+// read the flat Canvas.px RGBA ints. Prints probe: std/gfx tilemap: ok.
+//
+// Beats:
+//   1. tile_new rejects zero size; get/set pin storage and OOB rules.
+//   2. Full-map render stamps exact per-index counts; index 7 skips.
+//   3. Small camera culls; zoom camera doubles surviving pixels.
+
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/pixel_2d.oo";
+import "std/app/ui/media/pixel_fx.oo";
+import "std/app/ui/media/camera_2d.oo";
+import "std/app/ui/media/tilemap_2d.oo";
+
+fn tm_count_color(cv: Canvas, r: Int, g: Int, b: Int) -> Int {
+    let mut tm_n: Int = 0;
+    let mut tm_i: Int = 0;
+    let tm_m: Int = cv.width * cv.height;
+    while tm_i < tm_m {
+        let tm_base: Int = tm_i * 4;
+        if list_get(cv.px, tm_base) == r {
+            if list_get(cv.px, tm_base + 1) == g {
+                if list_get(cv.px, tm_base + 2) == b {
+                    tm_n = tm_n + 1;
+                }
+            }
+        }
+        tm_i = tm_i + 1;
+    }
+    return tm_n;
+}
+
+fn tm_solid(idx: Int) -> Sprite {
+    let r: Result[Sprite, String] = pix_new(4, 4, 0);
+    let bg: Sprite = match r { Ok(a) => a, Err(_) => Sprite { w: 0, h: 0, px: list_new() } };
+    // NOTE: Helpers return fresh values, never a threaded local: the C
+    // backend drops the retain on a returned local (dangling struct).
+    let f: Sprite = pix_fill(bg, idx);
+    return Sprite { w: f.w, h: f.h, px: f.px };
+}
+
+fn tm_map() -> Tilemap {
+    let r: Result[Tilemap, String] = tile_new(4, 3, 4, 0 - 1);
+    let mut m: Tilemap = match r { Ok(a) => a, Err(_) => Tilemap { tw: 0, th: 0, ts: 0, tiles: list_new() } };
+    m = tile_set(m, 0, 0, 0);
+    m = tile_set(m, 1, 0, 1);
+    m = tile_set(m, 2, 0, 0);
+    m = tile_set(m, 3, 0, 1);
+    m = tile_set(m, 0, 1, 1);
+    m = tile_set(m, 2, 1, 1);
+    m = tile_set(m, 3, 1, 0);
+    m = tile_set(m, 0, 2, 0);
+    m = tile_set(m, 1, 2, 1);
+    m = tile_set(m, 2, 2, 7);
+    m = tile_set(m, 3, 2, 0);
+    // NOTE: Literal rebuild, not `return m`: see tm_solid above.
+    return Tilemap { tw: m.tw, th: m.th, ts: m.ts, tiles: m.tiles };
+}
+
+fn tm_sheet() -> List[Sprite] {
+    let mut s: List[Sprite] = list_new();
+    s = list_push(s, tm_solid(1));
+    s = list_push(s, tm_solid(2));
+    return s;
+}
+
+fn tm_pal() -> Palette {
+    let mut cols: List[QoiRgba] = list_new();
+    cols = list_push(cols, qoi_rgba_new(0, 0, 0, 255));
+    cols = list_push(cols, qoi_rgba_new(255, 0, 0, 255));
+    cols = list_push(cols, qoi_rgba_new(0, 0, 255, 255));
+    // NOTE: Literal rebuild, not `return pix_palette(cols)` or a local: see
+    // tm_solid above; only literals and bare lists return soundly here.
+    let p: Palette = pix_palette(cols);
+    return Palette { cols: p.cols };
+}
+
+fn tm_canvas(w: Int, h: Int) -> Canvas {
+    let r: Result[Canvas, String] = canvas_new(w, h, qoi_rgba_new(0, 0, 0, 255));
+    let c: Canvas = match r { Ok(a) => a, Err(_) => Canvas { width: 0, height: 0, px: list_new() } };
+    // NOTE: Literal rebuild for the same backend reason as tm_solid.
+    return Canvas { width: c.width, height: c.height, px: c.px };
+}
+
+fn tm_cam(x: Int, y: Int, w: Int, h: Int, zoom: Int) -> Camera {
+    // NOTE: Cameras carry no lists and return soundly either way.
+    let r: Result[Camera, String] = cam_new(x, y, w, h, zoom);
+    return match r { Ok(a) => a, Err(_) => Camera { x: 0, y: 0, w: 0, h: 0, zoom: 1 } };
+}
+
+pub fn main() -> Result[Int, String] {
+    if tile_new(0, 3, 4, 0).is_ok() {
+        return Err("tilemap: zero width must fail");
+    }
+    if tile_new(4, 3, 0, 0).is_ok() {
+        return Err("tilemap: zero tile size must fail");
+    }
+    let m: Tilemap = tm_map();
+    if tile_get(m, 1, 0) != 1 {
+        return Err("tilemap: get must read back");
+    }
+    if tile_get(m, 9, 9) != 0 - 1 {
+        return Err("tilemap: oob get must be -1");
+    }
+    if tile_count(m, 0) != 5 {
+        return Err("tilemap: must hold five 0s");
+    }
+    if tile_count(m, 1) != 5 {
+        return Err("tilemap: must hold five 1s");
+    }
+    if tile_count(tile_set(m, 9, 9, 0), 0) != 5 {
+        return Err("tilemap: oob set must drop");
+    }
+    // Full render: five red tiles and five blue tiles at 16 px each.
+    // NOTE: Helpers bind to lets first; nested struct-returning calls as
+    // arguments lose retains in the C backend, so never nest them here.
+    let sh_full: List[Sprite] = tm_sheet();
+    let pl_full: Palette = tm_pal();
+    let cb_full: Canvas = tm_canvas(16, 12);
+    let vw_full: Camera = tm_cam(0, 0, 16, 12, 1);
+    let full: Canvas = tile_render(cb_full, m, sh_full, pl_full, vw_full, 0);
+    if tm_count_color(full, 255, 0, 0) != 80 {
+        return Err("tilemap: full render must stamp 80 red");
+    }
+    if tm_count_color(full, 0, 0, 255) != 80 {
+        return Err("tilemap: full render must stamp 80 blue");
+    }
+    // Culled render: an 8x8 canvas keeps the top-left tiles fully inside;
+    // edge-touching neighbors clip to zero while fully-outside tiles skip.
+    let sh_cut: List[Sprite] = tm_sheet();
+    let pl_cut: Palette = tm_pal();
+    let cb_cut: Canvas = tm_canvas(8, 8);
+    let vw_cut: Camera = tm_cam(0, 0, 8, 8, 1);
+    let cut: Canvas = tile_render(cb_cut, m, sh_cut, pl_cut, vw_cut, 0);
+    if tm_count_color(cut, 255, 0, 0) != 16 {
+        return Err("tilemap: culled render must stamp 16 red");
+    }
+    if tm_count_color(cut, 0, 0, 255) != 32 {
+        return Err("tilemap: culled render must stamp 32 blue");
+    }
+    // Zoom render: 16x16 at zoom 2 doubles the four touching tiles; the
+    // empty bottom-right of the four paints nothing.
+    let sh_big: List[Sprite] = tm_sheet();
+    let pl_big: Palette = tm_pal();
+    let cb_big: Canvas = tm_canvas(16, 16);
+    let vw_big: Camera = tm_cam(0, 0, 8, 8, 2);
+    let big: Canvas = tile_render(cb_big, m, sh_big, pl_big, vw_big, 0);
+    if tm_count_color(big, 255, 0, 0) != 64 {
+        return Err("tilemap: zoom render must stamp 64 red");
+    }
+    if tm_count_color(big, 0, 0, 255) != 128 {
+        return Err("tilemap: zoom render must stamp 128 blue");
+    }
+    println("probe: std/gfx tilemap: ok");
+    return Ok(0);
+}
