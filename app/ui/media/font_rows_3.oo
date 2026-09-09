@@ -4,6 +4,10 @@
 //
 // Setup: Pure compute, no caps. Each glyph is 7 row ints, 0..31.
 // font_rows_3 returns an empty list for glyphs it does not hold.
+//
+// Beats:
+//   1. Match glyphs U-Z and 0-5 to row tables.
+//   2. Return empty list for other chars.
 
 pub fn font_rows_3(ch: String) -> List[Int] {
     if ch == "U" {
