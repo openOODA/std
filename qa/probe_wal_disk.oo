@@ -1,0 +1,142 @@
+// # std/qa/probe_wal_disk — On-Disk WAL Durability Verification
+//
+// Logline: Real append-then-fsync WAL round-trips on disk, torn-tail refusal, and SIGKILL survival.
+//
+// Setup: Needs FsReadCap + FsWriteCap (+ TimeCap to sleep for the kill harness).
+//   No args: self-test on a scratch file (suite double-run path).
+//   write <path> [sleep_ms]: append 3 records (k1/v1, k2/v2, tomb k1), fsync each.
+//   recover <path>: fresh process replays exactly 3 clean records.
+//   recover_torn <path>: truncated file replays the verified prefix, flags truncated.
+// Fail closed on the first mismatch.
+//
+// Beats:
+//   1. Self-test: encode/decode round-trip on a real file, then torn-tail refusal.
+//   2. Write mode persists 3 fsynced records for a later process.
+//   3. Recover mode proves cross-process replay: exact seqs, keys, tombstone, clean flag.
+//   4. Torn mode proves fail-closed prefix recovery: 2 entries plus truncated flag.
+
+import "app/data/db/wal.oo";
+import "app/data/db/kv_types.oo";
+
+fn wald_three(fs_w: &FsWriteCap, path: String) -> Result[WalWriter, String] {
+    let w0: Result[WalWriter, String] = wal_open(path);
+    if w0.is_err() {
+        return Err("waldisk: wal_open refused");
+    }
+    let mut wal: WalWriter = match w0 { Ok(w) => w, Err(_) => WalWriter { file_path: "", current_lsn: 0, bytes_written: 0, entries: list_new() } };
+    let a1: Result[Int, String] = wal_append_sync(fs_w, &mut wal, kv_entry_new("k1", "v1", 0));
+    if a1.is_err() {
+        return Err("waldisk: append k1 failed");
+    }
+    let a2: Result[Int, String] = wal_append_sync(fs_w, &mut wal, kv_entry_new("k2", "v2", 0));
+    if a2.is_err() {
+        return Err("waldisk: append k2 failed");
+    }
+    let a3: Result[Int, String] = wal_append_sync(fs_w, &mut wal, kv_entry_tombstone("k1", 0));
+    if a3.is_err() {
+        return Err("waldisk: append tombstone failed");
+    }
+    if wal.current_lsn != 3 {
+        return Err("waldisk: want lsn 3");
+    }
+    return Ok(wal);
+}
+
+fn wald_assert_three(fs_r: &FsReadCap, path: String, want_truncated: Bool, want_n: Int) -> Result[Int, String] {
+    let rc: Result[WalRecovery, String] = wal_recover_file(fs_r, path);
+    if rc.is_err() {
+        return Err("waldisk: recover refused file");
+    }
+    let rec: WalRecovery = match rc { Ok(r) => r, Err(_) => WalRecovery { entries: list_new(), truncated: true } };
+    if rec.truncated != want_truncated {
+        return Err("waldisk: truncated flag mismatch");
+    }
+    if list_len(rec.entries) != want_n {
+        return Err("waldisk: entry count mismatch");
+    }
+    if want_n == 3 {
+        let e0: KvEntry = list_get(rec.entries, 0);
+        let e1: KvEntry = list_get(rec.entries, 1);
+        let e2: KvEntry = list_get(rec.entries, 2);
+        if e0.seq_num != 1 || e0.key != "k1" || e0.value != "v1" || e0.is_tombstone {
+            return Err("waldisk: record 1 mismatch");
+        }
+        if e1.seq_num != 2 || e1.key != "k2" || e1.value != "v2" || e1.is_tombstone {
+            return Err("waldisk: record 2 mismatch");
+        }
+        if e2.seq_num != 3 || e2.key != "k1" || !e2.is_tombstone {
+            return Err("waldisk: tombstone mismatch");
+        }
+    }
+    return Ok(0);
+}
+
+fn wald_selftest(fs_r: &FsReadCap, fs_w: &FsWriteCap) -> Result[Int, String] {
+    let path: String = ".ooda-cache/ooda-tmp/wal_selftest.log";
+    let fresh: Result[Void, String] = write_file(fs_w, path, "");
+    if fresh.is_err() {
+        return Err("waldisk: scratch reset failed");
+    }
+    let w: Result[WalWriter, String] = wald_three(fs_w, path);
+    if w.is_err() {
+        return Err("waldisk: scratch write phase failed");
+    }
+    let c: Result[Int, String] = wald_assert_three(fs_r, path, false, 3);
+    if c.is_err() {
+        return c;
+    }
+    let rd: Result[String, String] = read_file(fs_r, path);
+    if rd.is_err() {
+        return Err("waldisk: re-read failed");
+    }
+    let body: String = match rd { Ok(s) => s, Err(_) => "" };
+    let torn: Result[Void, String] = write_file(fs_w, path, str_slice(body, 0, bytes_len(body) - 5));
+    if torn.is_err() {
+        return Err("waldisk: torn rewrite failed");
+    }
+    return wald_assert_three(fs_r, path, true, 2);
+}
+
+pub fn main(fs_r: &FsReadCap, fs_w: &FsWriteCap, time: &TimeCap, args: List[String]) -> Result[Int, String] {
+    if list_len(args) == 0 {
+        let s: Result[Int, String] = wald_selftest(fs_r, fs_w);
+        if s.is_err() {
+            return s;
+        }
+        println("OK\twal_disk\tselftest");
+        return Ok(0);
+    }
+    let mode: String = list_get(args, 0);
+    if list_len(args) < 2 {
+        return Err("waldisk: mode needs a path");
+    }
+    let path: String = list_get(args, 1);
+    if mode == "write" {
+        let w: Result[WalWriter, String] = wald_three(fs_w, path);
+        if w.is_err() {
+            return Err("waldisk: write phase failed");
+        }
+        println("OK\twal_disk\twrote");
+        if list_len(args) >= 3 {
+            sleep_ms(time, 30000);
+        }
+        return Ok(0);
+    }
+    if mode == "recover" {
+        let c: Result[Int, String] = wald_assert_three(fs_r, path, false, 3);
+        if c.is_err() {
+            return c;
+        }
+        println("OK\twal_disk\trecover");
+        return Ok(0);
+    }
+    if mode == "recover_torn" {
+        let c: Result[Int, String] = wald_assert_three(fs_r, path, true, 2);
+        if c.is_err() {
+            return c;
+        }
+        println("OK\twal_disk\ttorn");
+        return Ok(0);
+    }
+    return Err("waldisk: unknown mode");
+}

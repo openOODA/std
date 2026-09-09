@@ -154,12 +154,23 @@ fn probe_memtable() -> Result[Int, String] {
     return Ok(0);
 }
 
+/// Length-box for recovered entry lists. list_len on a match-bound
+/// List[KvEntry] ident mis-dispatches to the int-list helper; reading the
+/// length through a struct field resolves via the field table instead.
+type ProbeEntryBox = struct {
+    xs: List[KvEntry]
+};
+
 fn probe_wal() -> Result[Int, String] {
     if wal_open("").is_ok() {
         return Err("data: wal empty path must refuse");
     }
     let wo: Result[WalWriter, String] = wal_open("w");
-    let mut w: WalWriter = match wo { Ok(x) => x, Err(_) => process_exit(1) };
+    if wo.is_err() {
+        return Err("data: wal open failed");
+    }
+    let no_wal_entries: List[KvEntry] = list_new();
+    let mut w: WalWriter = match wo { Ok(x) => x, Err(_) => WalWriter { file_path: "w", current_lsn: 0, bytes_written: 0, entries: no_wal_entries } };
     let e1: KvEntry = kv_entry_new("k1", "v1", 1);
     let a1: Result[Int, String] = wal_append(&mut w, e1);
     let lsn1: Int = match a1 { Ok(v) => v, Err(_) => 0 - 1 };
@@ -173,8 +184,13 @@ fn probe_wal() -> Result[Int, String] {
         return Err("data: second wal lsn must be 2");
     }
     let rec: Result[List[KvEntry], String] = wal_recover(w);
-    let entries: List[KvEntry] = match rec { Ok(v) => v, Err(_) => list_new() };
-    if list_len(entries) != 2 {
+    if rec.is_err() {
+        return Err("data: wal recover failed");
+    }
+    let no_rec_entries: List[KvEntry] = list_new();
+    let entries: List[KvEntry] = match rec { Ok(v) => v, Err(_) => no_rec_entries };
+    let box1: ProbeEntryBox = ProbeEntryBox { xs: entries };
+    if list_len(box1.xs) != 2 {
         return Err("data: wal recover must replay 2 entries");
     }
     let tr: Result[Bool, String] = wal_truncate(&mut w);
@@ -182,8 +198,13 @@ fn probe_wal() -> Result[Int, String] {
         return Err("data: wal truncate failed");
     }
     let rec2: Result[List[KvEntry], String] = wal_recover(w);
-    let entries2: List[KvEntry] = match rec2 { Ok(v) => v, Err(_) => list_new() };
-    if list_len(entries2) != 0 {
+    if rec2.is_err() {
+        return Err("data: wal re-recover failed");
+    }
+    let no_rec2_entries: List[KvEntry] = list_new();
+    let entries2: List[KvEntry] = match rec2 { Ok(v) => v, Err(_) => no_rec2_entries };
+    let box2: ProbeEntryBox = ProbeEntryBox { xs: entries2 };
+    if list_len(box2.xs) != 0 {
         return Err("data: wal must be empty after truncate");
     }
     return Ok(0);

@@ -11,12 +11,21 @@
 //   4. Truncate reclaimed WAL log segments after SSTable flush.
 
 import "./kv_types.oo";
+import "core/primitives/str.oo";
 
 type WalWriter = struct {
     file_path: String,
     current_lsn: Int,
     bytes_written: Int,
     entries: List[KvEntry]
+};
+
+/// Prefix-verified recovery result. truncated is true when the file ends
+/// mid-record or carries a corrupt line: the prefix is verified, the tail
+/// is refused, never guessed.
+type WalRecovery = struct {
+    entries: List[KvEntry],
+    truncated: Bool
 };
 
 /// Calculate CRC checksum for a WAL entry.
@@ -64,7 +73,7 @@ pub fn wal_recover(wal: WalWriter) -> Result[List[KvEntry], String] {
     let mut i: Int = 0;
     while i < n {
         let entry: KvEntry = list_get(wal.entries, i);
-        let chk: Int = wal_entry_checksum(&entry);
+        let chk: Int = wal_entry_checksum(entry);
         if chk < 0 {
             return Err("ERR\twal_recover: corrupted entry checksum");
         }
@@ -80,4 +89,155 @@ pub fn wal_truncate(wal: &mut WalWriter) -> Result[Bool, String] {
     wal.entries = empty;
     wal.bytes_written = 0;
     return Ok(true);
+}
+
+/// Record format v1: one line per mutation, TAB-separated, LF-terminated:
+/// v1\t<seq>\t<tomb 0|1>\t<key>\t<value>\t<checksum>\n
+/// Keys and values must not contain TAB (9) or LF (10); encode refuses
+/// them fail-closed so the framing stays unambiguous without escaping.
+fn wal_has_framing_byte(s: String) -> Bool {
+    let n: Int = bytes_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b == 9 || b == 10 {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+/// Encode one sequenced entry to its v1 disk line (with trailing LF).
+pub fn wal_record_encode(entry: KvEntry) -> Result[String, String] {
+    if bytes_len(entry.key) == 0 {
+        return Err("ERR\twal_record_encode: empty key prohibited");
+    }
+    if wal_has_framing_byte(entry.key) || wal_has_framing_byte(entry.value) {
+        return Err("ERR\twal_record_encode: TAB/LF byte in key or value");
+    }
+    let mut tomb: String = "0";
+    if entry.is_tombstone {
+        tomb = "1";
+    }
+    let chk: Int = wal_entry_checksum(entry);
+    let tab: String = chr(9);
+    let lf: String = chr(10);
+    return Ok("v1" + tab + (entry.seq_num).to_string() + tab + tomb + tab + entry.key + tab + entry.value + tab + (chk).to_string() + lf);
+}
+
+/// Decode one v1 disk line (without trailing LF) back to its entry.
+/// Any framing, digit, or checksum mismatch is Err: the caller stops the
+/// replay there and marks the recovery truncated.
+pub fn wal_record_decode(line: String) -> Result[KvEntry, String] {
+    let n: Int = bytes_len(line);
+    let mut tabs: List[Int] = list_new();
+    let mut i: Int = 0;
+    while i < n {
+        if byte_at(line, i) == 9 {
+            tabs = list_push(tabs, i);
+        }
+        i = i + 1;
+    }
+    if list_len(tabs) != 5 {
+        return Err("ERR\twal_record_decode: want 6 fields");
+    }
+    let magic: String = str_slice(line, 0, list_get(tabs, 0));
+    if magic != "v1" {
+        return Err("ERR\twal_record_decode: bad magic");
+    }
+    let seq_r: Result[Int, String] = parse_int(str_slice(line, list_get(tabs, 0) + 1, list_get(tabs, 1)));
+    if seq_r.is_err() {
+        return Err("ERR\twal_record_decode: bad seq");
+    }
+    let seq: Int = match seq_r { Ok(v) => v, Err(_) => 0 };
+    let tomb_s: String = str_slice(line, list_get(tabs, 1) + 1, list_get(tabs, 2));
+    if tomb_s != "0" && tomb_s != "1" {
+        return Err("ERR\twal_record_decode: bad tombstone");
+    }
+    let key: String = str_slice(line, list_get(tabs, 2) + 1, list_get(tabs, 3));
+    if bytes_len(key) == 0 {
+        return Err("ERR\twal_record_decode: empty key");
+    }
+    let value: String = str_slice(line, list_get(tabs, 3) + 1, list_get(tabs, 4));
+    let chk_r: Result[Int, String] = parse_int(str_slice(line, list_get(tabs, 4) + 1, n));
+    if chk_r.is_err() {
+        return Err("ERR\twal_record_decode: bad checksum");
+    }
+    let chk: Int = match chk_r { Ok(v) => v, Err(_) => 0 };
+    let entry: KvEntry = KvEntry { key: key, value: value, seq_num: seq, is_tombstone: tomb_s == "1" };
+    if wal_entry_checksum(entry) != chk {
+        return Err("ERR\twal_record_decode: checksum mismatch");
+    }
+    return Ok(entry);
+}
+
+/// Append one mutation to the on-disk WAL with fsync before return.
+/// Ok(lsn) means bytes are on stable storage: a later SIGKILL cannot lose
+/// them. State advances only on Ok, so a failed append never moves the LSN.
+pub fn wal_append_sync(fs_w: &FsWriteCap, wal: &mut WalWriter, entry: KvEntry) -> Result[Int, String] {
+    if bytes_len(entry.key) == 0 {
+        return Err("ERR\twal_append_sync: empty key prohibited");
+    }
+    let lsn: Int = wal.current_lsn + 1;
+    let stamped: KvEntry = KvEntry { key: entry.key, value: entry.value, seq_num: lsn, is_tombstone: entry.is_tombstone };
+    let enc: Result[String, String] = wal_record_encode(stamped);
+    if enc.is_err() {
+        return Err("ERR\twal_append_sync: encode refused");
+    }
+    let rec: String = match enc { Ok(s) => s, Err(_) => "" };
+    let wr: Result[Void, String] = file_append_sync(fs_w, wal.file_path, rec);
+    if wr.is_err() {
+        return Err("ERR\twal_append_sync: disk append failed");
+    }
+    wal.current_lsn = lsn;
+    wal.bytes_written = wal.bytes_written + bytes_len(rec);
+    wal.entries = list_push(wal.entries, stamped);
+    return Ok(lsn);
+}
+
+/// Replay the on-disk WAL into prefix-verified entries. A torn tail or a
+/// corrupt line stops the replay and sets truncated; verified prefix
+/// entries are still returned. Missing/unreadable file is Err.
+pub fn wal_recover_file(fs_r: &FsReadCap, path: String) -> Result[WalRecovery, String] {
+    if bytes_len(path) == 0 {
+        return Err("ERR\twal_recover_file: invalid empty path");
+    }
+    let rd: Result[String, String] = read_file(fs_r, path);
+    if rd.is_err() {
+        return Err("ERR\twal_recover_file: unreadable file");
+    }
+    let body: String = match rd { Ok(s) => s, Err(_) => "" };
+    let n: Int = bytes_len(body);
+    let mut entries: List[KvEntry] = list_new();
+    let mut truncated: Bool = false;
+    let mut start: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        if byte_at(body, i) == 10 {
+            let line: String = str_slice(body, start, i);
+            if bytes_len(line) == 0 {
+                truncated = true;
+                i = n;
+            } else {
+                let dec: Result[KvEntry, String] = wal_record_decode(line);
+                if dec.is_err() {
+                    truncated = true;
+                    i = n;
+                } else {
+                    let entry: KvEntry = match dec { Ok(e) => e, Err(_) => KvEntry { key: "", value: "", seq_num: 0, is_tombstone: false } };
+                    entries = list_push(entries, entry);
+                    start = i + 1;
+                    i = i + 1;
+                    continue;
+                }
+            }
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+    if start < n {
+        truncated = true;
+    }
+    return Ok(WalRecovery { entries: entries, truncated: truncated });
 }
