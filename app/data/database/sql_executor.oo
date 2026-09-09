@@ -7,7 +7,13 @@
 // Beats:
 //   1. Define database row records, catalog tables, and query execution results.
 //   2. Evaluate filter predicates, projections, and row insertions against schemas.
-//   3. Execute physical plans and return structured query result batches.
+//   3. Execute statements against real table storage and return actual row sets.
+//
+// NOTE: the old sql_execute_plan returned canned rows_affected: 1 without
+// touching storage. It is deleted; sql_execute_stmt below mutates real
+// DbTable.rows and reports real counts. No callers existed.
+
+import "./sql_ast.oo";
 
 type DbRow = struct {
     row_id: Int,
@@ -18,7 +24,8 @@ type DbRow = struct {
 type DbTable = struct {
     table_name: String,
     row_count: Int,
-    next_row_id: Int
+    next_row_id: Int,
+    rows: List[DbRow]
 };
 
 type DbCatalog = struct {
@@ -29,7 +36,14 @@ type DbQueryResult = struct {
     rows_affected: Int,
     execution_time_ms: Int,
     success: Bool,
-    error_msg: String
+    error_msg: String,
+    rows: List[DbRow]
+};
+
+/// Length-box: see probe_data ProbeEntryBox. list_len/list_get on a bare
+/// List[SqlBinaryOp] ident mis-dispatch; fields resolve correctly.
+type SqlWhereBox = struct {
+    ops: List[SqlBinaryOp]
 };
 
 pub fn db_catalog_create() -> DbCatalog {
@@ -49,10 +63,34 @@ pub fn db_catalog_add_table(
 }
 
 pub fn db_table_create(table_name: String) -> DbTable {
+    let no_rows: List[DbRow] = list_new();
     return DbTable {
         table_name: table_name,
         row_count: 0,
-        next_row_id: 1
+        next_row_id: 1,
+        rows: no_rows
+    };
+}
+
+fn db_result_none() -> DbQueryResult {
+    let no_rows: List[DbRow] = list_new();
+    return DbQueryResult {
+        rows_affected: 0,
+        execution_time_ms: 0,
+        success: true,
+        error_msg: "",
+        rows: no_rows
+    };
+}
+
+fn db_result_fail(msg: String) -> DbQueryResult {
+    let no_rows: List[DbRow] = list_new();
+    return DbQueryResult {
+        rows_affected: 0,
+        execution_time_ms: 0,
+        success: false,
+        error_msg: msg,
+        rows: no_rows
     };
 }
 
@@ -70,30 +108,71 @@ pub fn sql_row_matches_filters(
     return true;
 }
 
-pub fn sql_execute_plan(
-    cat: DbCatalog,
-    stmt_kind: Int
-) -> DbQueryResult {
-    if stmt_kind == 1 { // SELECT
-        return DbQueryResult {
-            rows_affected: 1,
-            execution_time_ms: 1,
-            success: true,
-            error_msg: ""
-        };
+fn sql_field_val(row: DbRow, field: String) -> String {
+    if field == "name" {
+        return row.name;
     }
-    if stmt_kind == 2 { // INSERT
-        return DbQueryResult {
-            rows_affected: 1,
-            execution_time_ms: 1,
-            success: true,
-            error_msg: ""
-        };
+    if field == "role" {
+        return row.role;
     }
-    return DbQueryResult {
-        rows_affected: 0,
-        execution_time_ms: 0,
-        success: true,
-        error_msg: ""
-    };
+    return "";
 }
+
+/// True when the row satisfies every predicate in the box. Unknown fields
+/// match nothing (fail closed); predicate ops reuse sql_row_matches_filters.
+fn sql_where_scan(row: DbRow, wb: SqlWhereBox) -> Bool {
+    let n: Int = list_len(wb.ops);
+    let mut i: Int = 0;
+    while i < n {
+        let pred: SqlBinaryOp = list_get(wb.ops, i);
+        if pred.left_field != "name" && pred.left_field != "role" {
+            return false;
+        }
+        let got: String = sql_field_val(row, pred.left_field);
+        if !sql_row_matches_filters(got, pred.right_val, pred.op) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn sql_apply_sets(row: DbRow, cols: List[String], vals: List[String]) -> DbRow {
+    let mut name: String = row.name;
+    let mut role: String = row.role;
+    let mut i: Int = 0;
+    while i < list_len(cols) {
+        let c: String = list_get(cols, i);
+        if c == "name" {
+            name = list_get(vals, i);
+        }
+        if c == "role" {
+            role = list_get(vals, i);
+        }
+        i = i + 1;
+    }
+    return DbRow { row_id: row.row_id, name: name, role: role };
+}
+
+/// INSERT column lookup. Unknown columns and length mismatch refuse: real
+/// stores reject unknown columns instead of guessing.
+fn sql_insert_field(cols: List[String], vals: List[String], want: String) -> Result[String, String] {
+    if list_len(cols) != list_len(vals) {
+        return Err("ERR\tsql_executor\tcolumns/values length mismatch");
+    }
+    let mut i: Int = 0;
+    while i < list_len(cols) {
+        let c: String = list_get(cols, i);
+        if c != "name" && c != "role" {
+            return Err("ERR\tsql_executor\tunknown column");
+        }
+        if c == want {
+            return Ok(list_get(vals, i));
+        }
+        i = i + 1;
+    }
+    return Ok("");
+}
+
+/// DML lives in ./sql_exec_dml.oo (file cap): sql_exec_select, sql_exec_insert,
+/// sql_exec_update, sql_exec_delete, and the sql_execute_stmt dispatch.

@@ -1,0 +1,154 @@
+// # std/qa/probe_sql_exec — Real SQL Executor Verification
+//
+// Logline: INSERT/SELECT/UPDATE/DELETE round-trip against real table storage with true counts.
+//
+// Setup: Pure compute over DbTable.rows. No filesystem. Fail closed on the first mismatch.
+// AST statements come from the sql_ast constructors (text parsing is a later slice).
+//
+// Beats:
+//   1. Three INSERTs land: affected 1 each, row_count 3, ids 1-3.
+//   2. SELECT all returns 3 real rows in order; SELECT WHERE role=user returns 2.
+//   3. UPDATE one row reports 1 and the re-read shows the new role.
+//   4. DELETE reports the removed count and the store shrinks.
+//   5. Unknown columns, wrong table, and unknown kinds fail with success=false.
+
+import "app/data/database/sql_executor.oo";
+import "app/data/database/sql_exec_dml.oo";
+import "app/data/database/sql_ast.oo";
+
+fn sqlex_cols2(a: String, b: String) -> List[String] {
+    let mut cols: List[String] = list_new();
+    cols = list_push(cols, a);
+    cols = list_push(cols, b);
+    return cols;
+}
+
+fn sqlex_where(field: String, op: String, val: String) -> List[SqlBinaryOp] {
+    let mut ops: List[SqlBinaryOp] = list_new();
+    ops = list_push(ops, SqlBinaryOp { op: op, left_field: field, right_val: val });
+    return ops;
+}
+
+fn sqlex_insert(t: &mut DbTable, name: String, role: String) -> Result[Int, String] {
+    let ins: SqlInsertStmt = sql_insert_stmt_create(t.table_name, sqlex_cols2("name", "role"), sqlex_cols2(name, role));
+    let r: DbQueryResult = sql_execute_stmt(t, sql_stmt_from_insert(ins));
+    if !r.success {
+        return Err("sqlexec: insert refused");
+    }
+    let aff: Int = r.rows_affected;
+    return Ok(aff);
+}
+
+fn sqlex_select(t: &mut DbTable, wh: List[SqlBinaryOp]) -> DbQueryResult {
+    let mut sel: SqlSelectStmt = sql_select_stmt_create(t.table_name, sqlex_cols2("name", "role"));
+    sel.where_clause = wh;
+    return sql_execute_stmt(t, sql_stmt_from_select(sel));
+}
+
+pub fn main() -> Result[Int, String] {
+    let mut t: DbTable = db_table_create("users");
+    let a1: Result[Int, String] = sqlex_insert(&mut t, "alice", "admin");
+    let a2: Result[Int, String] = sqlex_insert(&mut t, "bob", "user");
+    let a3: Result[Int, String] = sqlex_insert(&mut t, "carol", "user");
+    if a1.is_err() || a2.is_err() || a3.is_err() {
+        return Err("sqlexec: seed inserts refused");
+    }
+    let n1: Int = match a1 { Ok(v) => v, Err(_) => 0 - 1 };
+    let n2: Int = match a2 { Ok(v) => v, Err(_) => 0 - 1 };
+    let n3: Int = match a3 { Ok(v) => v, Err(_) => 0 - 1 };
+    if n1 != 1 || n2 != 1 || n3 != 1 {
+        return Err("sqlexec: each insert must affect exactly 1");
+    }
+    if t.row_count != 3 || t.next_row_id != 4 {
+        return Err("sqlexec: store must hold 3 rows with next id 4");
+    }
+    let no_where: List[SqlBinaryOp] = list_new();
+    let all: DbQueryResult = sqlex_select(&mut t, no_where);
+    if !all.success || all.rows_affected != 3 {
+        return Err("sqlexec: select-all must return 3");
+    }
+    let r0: DbRow = list_get(all.rows, 0);
+    let r1: DbRow = list_get(all.rows, 1);
+    let r2: DbRow = list_get(all.rows, 2);
+    if r0.row_id != 1 || r0.name != "alice" || r0.role != "admin" {
+        return Err("sqlexec: row 1 mismatch");
+    }
+    if r1.row_id != 2 || r1.name != "bob" {
+        return Err("sqlexec: row 2 mismatch");
+    }
+    if r2.row_id != 3 || r2.name != "carol" {
+        return Err("sqlexec: row 3 mismatch");
+    }
+    let users: DbQueryResult = sqlex_select(&mut t, sqlex_where("role", "=", "user"));
+    if !users.success || users.rows_affected != 2 {
+        return Err("sqlexec: where role=user must return 2");
+    }
+    let mut upd: SqlUpdateStmt = sql_update_stmt_create(t.table_name, sqlex_cols2("role", "role"), sqlex_cols2("admin", "admin"));
+    upd.where_clause = sqlex_where("name", "=", "bob");
+    let u: DbQueryResult = sql_execute_stmt(&mut t, sql_stmt_from_update(upd));
+    if !u.success || u.rows_affected != 1 {
+        return Err("sqlexec: update must touch exactly 1");
+    }
+    let bob: DbQueryResult = sqlex_select(&mut t, sqlex_where("name", "=", "bob"));
+    let b0: DbRow = list_get(bob.rows, 0);
+    if !bob.success || bob.rows_affected != 1 || b0.role != "admin" {
+        return Err("sqlexec: bob must read back admin");
+    }
+    let mut del: SqlDeleteStmt = sql_delete_stmt_create(t.table_name);
+    del.where_clause = sqlex_where("role", "=", "user");
+    let d: DbQueryResult = sql_execute_stmt(&mut t, sql_stmt_from_delete(del));
+    if !d.success || d.rows_affected != 1 {
+        return Err("sqlexec: delete must drop exactly 1");
+    }
+    let rest: DbQueryResult = sqlex_select(&mut t, no_where);
+    if !rest.success || rest.rows_affected != 2 || t.row_count != 2 {
+        return Err("sqlexec: store must hold 2 rows after delete");
+    }
+    let bad_ins: SqlInsertStmt = sql_insert_stmt_create(t.table_name, sqlex_cols2("name", "bogus"), sqlex_cols2("x", "y"));
+    let bad: DbQueryResult = sql_execute_stmt(&mut t, sql_stmt_from_insert(bad_ins));
+    if bad.success {
+        return Err("sqlexec: unknown column must refuse");
+    }
+    let wrong: SqlInsertStmt = sql_insert_stmt_create("nope", sqlex_cols2("name", "role"), sqlex_cols2("x", "y"));
+    let wr: DbQueryResult = sql_execute_stmt(&mut t, sql_stmt_from_insert(wrong));
+    if wr.success {
+        return Err("sqlexec: wrong table must refuse");
+    }
+    let mut empty: SqlStatement = sql_empty_statement();
+    empty.kind = 99;
+    let unk: DbQueryResult = sql_execute_stmt(&mut t, empty);
+    if unk.success {
+        return Err("sqlexec: unknown kind must refuse");
+    }
+    let mut fresh: DbTable = db_table_create("empty");
+    let esel: DbQueryResult = sqlex_select(&mut fresh, no_where);
+    if !esel.success || esel.rows_affected != 0 {
+        return Err("sqlexec: empty select must return 0, never canned 1");
+    }
+    let mut lim: SqlSelectStmt = sql_select_stmt_create(t.table_name, sqlex_cols2("name", "role"));
+    lim.limit_val = 1;
+    lim.offset_val = 1;
+    let lr: DbQueryResult = sql_execute_stmt(&mut t, sql_stmt_from_select(lim));
+    if !lr.success || lr.rows_affected != 1 {
+        return Err("sqlexec: limit 1 offset 1 must return 1");
+    }
+    let l0: DbRow = list_get(lr.rows, 0);
+    if l0.name != "bob" {
+        return Err("sqlexec: offset 1 must skip alice");
+    }
+    let nofield: DbQueryResult = sqlex_select(&mut t, sqlex_where("bogus", "=", "x"));
+    if !nofield.success || nofield.rows_affected != 0 {
+        return Err("sqlexec: unknown field must match nothing");
+    }
+    let mut upd0: SqlUpdateStmt = sql_update_stmt_create(t.table_name, sqlex_cols2("role", "role"), sqlex_cols2("x", "x"));
+    upd0.where_clause = sqlex_where("name", "=", "nobody");
+    let u0: DbQueryResult = sql_execute_stmt(&mut t, sql_stmt_from_update(upd0));
+    if !u0.success || u0.rows_affected != 0 {
+        return Err("sqlexec: empty update must touch 0");
+    }
+    if t.row_count != 2 {
+        return Err("sqlexec: refused writes must not move the store");
+    }
+    println("OK\tsql_exec\tinsert-select-update-delete");
+    return Ok(0);
+}

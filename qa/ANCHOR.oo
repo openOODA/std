@@ -18,7 +18,8 @@
 //   11. probe_cap_grant.oo — verify 20 subset of 26 cap inventory
 //   12. probe_data.oo — verify data/database pure pieces (btree, page header, stmt kinds, certs)
 //   13. probe_wal_disk.oo — verify on-disk WAL (fsync round-trip, torn-tail refusal, kill-recover modes)
-//   14. suite.oo runs every probe twice (local entry; CI wiring pending).
+//   14. probe_sql_exec.oo — verify real SQL executor (insert/select/update/delete round-trip, true counts)
+//   15. suite.oo runs every probe twice (local entry; CI wiring pending).
 
 import "suite.oo";
 import "probe_core.oo";

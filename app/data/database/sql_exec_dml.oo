@@ -1,0 +1,158 @@
+// # SQL Data-Manipulation Execution
+//
+// Logline: SELECT/INSERT/UPDATE/DELETE against real DbTable.rows with true counts.
+//
+// Setup: Imports row/table/result types plus where-scan and set helpers from
+// sql_executor.oo and statement shapes from sql_ast.oo. No cycles.
+//
+// Beats:
+//   1. SELECT scans real rows with where/limit/offset and returns matches.
+//   2. INSERT appends sequenced rows and advances row_count/next_row_id.
+//   3. UPDATE/DELETE rebuild the store and report touched/dropped counts.
+
+import "./sql_executor.oo";
+import "./sql_ast.oo";
+
+/// Takes &mut like its siblings so the dispatch can forward the live store;
+/// SELECT never writes through it.
+fn sql_exec_select(t: &mut DbTable, stmt: SqlStatement) -> DbQueryResult {
+    let sel: SqlSelectStmt = stmt.select_stmt;
+    let wb: SqlWhereBox = SqlWhereBox { ops: sel.where_clause };
+    let mut out: List[DbRow] = list_new();
+    let mut skipped: Int = 0;
+    let mut taken: Int = 0;
+    let mut i: Int = 0;
+    while i < list_len(t.rows) {
+        let row: DbRow = list_get(t.rows, i);
+        if sql_where_scan(row, wb) {
+            if skipped < sel.offset_val {
+                skipped = skipped + 1;
+            } else if sel.limit_val < 0 || taken < sel.limit_val {
+                out = list_push(out, row);
+                taken = taken + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return DbQueryResult {
+        rows_affected: taken,
+        execution_time_ms: 0,
+        success: true,
+        error_msg: "",
+        rows: out
+    };
+}
+
+fn sql_exec_insert(t: &mut DbTable, stmt: SqlStatement) -> DbQueryResult {
+    let ins: SqlInsertStmt = stmt.insert_stmt;
+    if sql_row_matches_filters(ins.table_name, t.table_name, "!=") {
+        return db_result_fail("ERR\tsql_executor\tunknown table");
+    }
+    let nr: Result[String, String] = sql_insert_field(ins.columns, ins.values, "name");
+    if nr.is_err() {
+        return db_result_fail("ERR\tsql_executor\tbad insert columns");
+    }
+    let rl: Result[String, String] = sql_insert_field(ins.columns, ins.values, "role");
+    if rl.is_err() {
+        return db_result_fail("ERR\tsql_executor\tbad insert columns");
+    }
+    let name: String = match nr { Ok(s) => s, Err(_) => "" };
+    let role: String = match rl { Ok(s) => s, Err(_) => "" };
+    let row: DbRow = DbRow { row_id: t.next_row_id, name: name, role: role };
+    t.rows = list_push(t.rows, row);
+    t.row_count = t.row_count + 1;
+    t.next_row_id = t.next_row_id + 1;
+    let no_rows: List[DbRow] = list_new();
+    return DbQueryResult {
+        rows_affected: 1,
+        execution_time_ms: 0,
+        success: true,
+        error_msg: "",
+        rows: no_rows
+    };
+}
+
+fn sql_exec_update(t: &mut DbTable, stmt: SqlStatement) -> DbQueryResult {
+    let upd: SqlUpdateStmt = stmt.update_stmt;
+    if sql_row_matches_filters(upd.table_name, t.table_name, "!=") {
+        return db_result_fail("ERR\tsql_executor\tunknown table");
+    }
+    if list_len(upd.set_columns) != list_len(upd.set_values) {
+        return db_result_fail("ERR\tsql_executor\tset columns/values length mismatch");
+    }
+    let wb: SqlWhereBox = SqlWhereBox { ops: upd.where_clause };
+    let mut kept: List[DbRow] = list_new();
+    let mut touched: Int = 0;
+    let mut i: Int = 0;
+    while i < list_len(t.rows) {
+        let row: DbRow = list_get(t.rows, i);
+        if sql_where_scan(row, wb) {
+            kept = list_push(kept, sql_apply_sets(row, upd.set_columns, upd.set_values));
+            touched = touched + 1;
+        } else {
+            kept = list_push(kept, row);
+        }
+        i = i + 1;
+    }
+    t.rows = kept;
+    let no_rows: List[DbRow] = list_new();
+    return DbQueryResult {
+        rows_affected: touched,
+        execution_time_ms: 0,
+        success: true,
+        error_msg: "",
+        rows: no_rows
+    };
+}
+
+fn sql_exec_delete(t: &mut DbTable, stmt: SqlStatement) -> DbQueryResult {
+    let del: SqlDeleteStmt = stmt.delete_stmt;
+    if sql_row_matches_filters(del.table_name, t.table_name, "!=") {
+        return db_result_fail("ERR\tsql_executor\tunknown table");
+    }
+    let wb: SqlWhereBox = SqlWhereBox { ops: del.where_clause };
+    let mut kept: List[DbRow] = list_new();
+    let mut dropped: Int = 0;
+    let mut i: Int = 0;
+    while i < list_len(t.rows) {
+        let row: DbRow = list_get(t.rows, i);
+        if sql_where_scan(row, wb) {
+            dropped = dropped + 1;
+        } else {
+            kept = list_push(kept, row);
+        }
+        i = i + 1;
+    }
+    t.rows = kept;
+    t.row_count = t.row_count - dropped;
+    let no_rows: List[DbRow] = list_new();
+    return DbQueryResult {
+        rows_affected: dropped,
+        execution_time_ms: 0,
+        success: true,
+        error_msg: "",
+        rows: no_rows
+    };
+}
+
+/// Execute one AST statement against real table storage. Rows written by
+/// INSERT are read back by later SELECT/UPDATE/DELETE in the same store;
+/// counts report what actually happened, never canned constants.
+pub fn sql_execute_stmt(t: &mut DbTable, stmt: SqlStatement) -> DbQueryResult {
+    if stmt.kind == 1 {
+        return sql_exec_select(t, stmt);
+    }
+    if stmt.kind == 2 {
+        return sql_exec_insert(t, stmt);
+    }
+    if stmt.kind == 3 {
+        return sql_exec_update(t, stmt);
+    }
+    if stmt.kind == 4 {
+        return sql_exec_delete(t, stmt);
+    }
+    if stmt.kind == 5 {
+        return db_result_none();
+    }
+    return db_result_fail("ERR\tsql_executor\tunknown statement kind");
+}
