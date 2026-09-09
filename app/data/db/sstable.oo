@@ -90,7 +90,7 @@ pub fn sstable_get(sst: SSTable, key: String) -> Option[String] {
         let cur: KvEntry = list_get(sst.entries, i);
         if cur.key == key {
             if cur.is_tombstone {
-                return None;
+                return out;
             }
             let v: String = cur.value;
             out = Some(v);

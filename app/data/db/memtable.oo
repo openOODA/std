@@ -29,7 +29,7 @@ pub fn memtable_new(capacity_bytes: Int) -> MemTable {
 }
 
 /// Put or update a key-value entry in sorted order.
-pub fn memtable_put(mem: MemTable, entry: KvEntry) -> Result[Bool, String] {
+pub fn memtable_put(mem: &mut MemTable, entry: KvEntry) -> Result[Bool, String] {
     let entry_k: String = entry.key;
     if entry_k.len() == 0 {
         return Err("ERR\tmemtable_put: empty key");
@@ -76,7 +76,7 @@ pub fn memtable_get(mem: MemTable, key: String) -> Option[String] {
         let cur: KvEntry = list_get(mem.entries, i);
         if cur.key == key {
             if cur.is_tombstone {
-                return None;
+                return out;
             }
             let v: String = cur.value;
             out = Some(v);

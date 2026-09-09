@@ -11,6 +11,9 @@
 //   4. Amdahl and ACID theory certs hold.
 
 import "app/data/db/btree.oo";
+import "app/data/db/memtable.oo";
+import "app/data/db/wal.oo";
+import "app/data/db/kv_types.oo";
 import "app/data/database/sqlite_page_header.oo";
 import "app/data/database/sql_parser.oo";
 import "app/data/amdahls_law_data.oo";
@@ -109,6 +112,83 @@ fn probe_stmt_kinds() -> Result[Int, String] {
     return Ok(0);
 }
 
+fn probe_memtable() -> Result[Int, String] {
+    let mut m: MemTable = memtable_new(100000);
+    let e1: KvEntry = kv_entry_new("k1", "v1", 1);
+    let p1: Result[Bool, String] = memtable_put(&mut m, e1);
+    if p1.is_err() {
+        return Err("data: memtable put k1 failed");
+    }
+    let e2: KvEntry = kv_entry_new("k2", "v2", 2);
+    let p2: Result[Bool, String] = memtable_put(&mut m, e2);
+    if p2.is_err() {
+        return Err("data: memtable put k2 failed");
+    }
+    if memtable_len(m) != 2 {
+        return Err("data: memtable must hold 2 entries");
+    }
+    let bad: KvEntry = kv_entry_new("", "v", 3);
+    if memtable_put(&mut m, bad).is_ok() {
+        return Err("data: memtable empty key must refuse");
+    }
+    let hit: List[KvEntry] = memtable_scan(m, "", "", 10);
+    if list_len(hit) != 2 {
+        return Err("data: memtable full scan must return 2");
+    }
+    let narrow: List[KvEntry] = memtable_scan(m, "k2", "k2", 10);
+    if list_len(narrow) != 1 {
+        return Err("data: memtable point scan must return 1");
+    }
+    if memtable_should_flush(m) {
+        return Err("data: roomy memtable must not want flush");
+    }
+    let mut tiny: MemTable = memtable_new(10);
+    let te: KvEntry = kv_entry_new("k1", "v1", 1);
+    let tp: Result[Bool, String] = memtable_put(&mut tiny, te);
+    if tp.is_err() {
+        return Err("data: tiny memtable put failed");
+    }
+    if !memtable_should_flush(tiny) {
+        return Err("data: tiny memtable must want flush");
+    }
+    return Ok(0);
+}
+
+fn probe_wal() -> Result[Int, String] {
+    if wal_open("").is_ok() {
+        return Err("data: wal empty path must refuse");
+    }
+    let wo: Result[WalWriter, String] = wal_open("w");
+    let mut w: WalWriter = match wo { Ok(x) => x, Err(_) => process_exit(1) };
+    let e1: KvEntry = kv_entry_new("k1", "v1", 1);
+    let a1: Result[Int, String] = wal_append(&mut w, e1);
+    let lsn1: Int = match a1 { Ok(v) => v, Err(_) => 0 - 1 };
+    if lsn1 != 1 {
+        return Err("data: first wal lsn must be 1");
+    }
+    let e2: KvEntry = kv_entry_new("k2", "v2", 2);
+    let a2: Result[Int, String] = wal_append(&mut w, e2);
+    let lsn2: Int = match a2 { Ok(v) => v, Err(_) => 0 - 1 };
+    if lsn2 != 2 {
+        return Err("data: second wal lsn must be 2");
+    }
+    let rec: Result[List[KvEntry], String] = wal_recover(w);
+    let entries: List[KvEntry] = match rec { Ok(v) => v, Err(_) => list_new() };
+    if list_len(entries) != 2 {
+        return Err("data: wal recover must replay 2 entries");
+    }
+    let tr: Result[Bool, String] = wal_truncate(&mut w);
+    if tr.is_err() {
+        return Err("data: wal truncate failed");
+    }
+    let rec2: Result[List[KvEntry], String] = wal_recover(w);
+    let entries2: List[KvEntry] = match rec2 { Ok(v) => v, Err(_) => list_new() };
+    if list_len(entries2) != 0 {
+        return Err("data: wal must be empty after truncate");
+    }
+    return Ok(0);
+}
+
 fn probe_theory() -> Result[Int, String] {
     if !verify_amdahls_law_data() {
         return Err("data: amdahl law cert must hold");
@@ -131,6 +211,14 @@ pub fn main() -> Result[Int, String] {
     let s: Result[Int, String] = probe_stmt_kinds();
     if s.is_err() {
         return s;
+    }
+    let m: Result[Int, String] = probe_memtable();
+    if m.is_err() {
+        return m;
+    }
+    let wl: Result[Int, String] = probe_wal();
+    if wl.is_err() {
+        return wl;
     }
     let t: Result[Int, String] = probe_theory();
     if t.is_err() {

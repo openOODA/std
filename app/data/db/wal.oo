@@ -45,7 +45,7 @@ pub fn wal_open(file_path: String) -> Result[WalWriter, String] {
 }
 
 /// Append a key-value mutation to the WAL log.
-pub fn wal_append(wal: WalWriter, entry: KvEntry) -> Result[Int, String] {
+pub fn wal_append(wal: &mut WalWriter, entry: KvEntry) -> Result[Int, String] {
     if (entry.key).len() == 0 {
         return Err("ERR\twal_append: empty key prohibited");
     }
@@ -75,7 +75,7 @@ pub fn wal_recover(wal: WalWriter) -> Result[List[KvEntry], String] {
 }
 
 /// Truncate WAL entries up to a given committed LSN.
-pub fn wal_truncate(wal: WalWriter) -> Result[Bool, String] {
+pub fn wal_truncate(wal: &mut WalWriter) -> Result[Bool, String] {
     let empty: List[KvEntry] = list_new();
     wal.entries = empty;
     wal.bytes_written = 0;
