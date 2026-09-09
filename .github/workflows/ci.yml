@@ -5,5 +5,37 @@ on:
     branches: [main]
 
 jobs:
+  # Immune system: every qa probe builds and runs twice in fresh processes
+  # with byte-identical output. AI writes the code; this makes it trustworthy.
+  immune-system:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout std
+        uses: actions/checkout@v4
+        with:
+          path: std
+      - name: checkout oodac
+        uses: actions/checkout@v4
+        with:
+          repository: openOODA/oodac
+          path: oodac
+      - name: checkout oodar
+        uses: actions/checkout@v4
+        with:
+          repository: openOODA/oodar
+          path: oodar
+      - name: require compiler
+        run: |
+          test -x oodac/bin/oodac || chmod +x oodac/bin/oodac
+      - name: double-run identical-twice suite
+        working-directory: ${{ github.workspace }}/std
+        env:
+          OODA_COMPILER: ${{ github.workspace }}/oodac/bin/oodac
+          OODA_FS_READDIR: ${{ github.workspace }}
+          OODA_FS_WRITEDIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          "${OODA_COMPILER}" build --backend c qa/suite.oo -o /tmp/std_suite
+          /tmp/std_suite
   auto-release:
     uses: openOODA/openOODA/.github/workflows/auto-release.yml@main

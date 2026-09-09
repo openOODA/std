@@ -1,18 +1,23 @@
-// # Test Standard Library — Run QA Probes Twice
+// # Test Standard Library — Run QA Probes Twice, Byte-Identical
 //
-// Logline: Run each qa probe twice under sovereign compiler. Fail closed on miss.
+// Logline: Run each qa probe twice in fresh processes under the sovereign
+// compiler. Fail closed on miss AND on any output difference.
 //
-// Setup: Double-run law. Builds and executes all 8 domain probes plus api_surface.
+// Setup: Double-run identity law (the immune system: AI writes the code,
+// this machinery makes it trustworthy). Builds and executes the domain
+// probes plus api_surface. Compiler resolves with zero user config.
 //
 // Beats:
-//   1. Resolve sovereign compiler binary.
-//   2. Compile and execute each probe twice.
-//   3. Clean up temporary probe binaries immediately.
-//   4. Exit 0 only when all probes pass both runs.
+//   1. Resolve sovereign compiler binary (OODA_COMPILER, OODA_TOOLCHAIN, HOME).
+//   2. Compile and execute each probe twice in fresh processes.
+//   3. Byte-compare both runs' outputs; any difference fails the suite.
+//   4. Clean up temporary probe binaries immediately.
+//   5. Exit 0 only when all probes pass both runs identically.
 
 import "std/fs/process/env.oo";
+import "std/fs/file/path.oo";
 
-fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
+fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[String, String] {
     let tmp_bin: String = path + ".tmp.bin";
     let b: Result[String, String] = sys_exec(p, oodac, "build", "--backend", "c", path, "-o", tmp_bin);
     if b.is_err() {
@@ -25,17 +30,24 @@ fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[Int, St
         let e: String = match r { Ok(_) => "", Err(m) => m };
         return Err("exec fail " + path + ": " + e);
     }
-    return Ok(0);
+    return r;
 }
 
 fn run_probe_twice(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
-    let r1: Result[Int, String] = run_probe_once(p, oodac, path);
+    let r1: Result[String, String] = run_probe_once(p, oodac, path);
     if r1.is_err() {
-        return r1;
+        let e1: String = match r1 { Ok(_) => "", Err(m) => m };
+        return Err(e1);
     }
-    let r2: Result[Int, String] = run_probe_once(p, oodac, path);
+    let r2: Result[String, String] = run_probe_once(p, oodac, path);
     if r2.is_err() {
-        return r2;
+        let e2: String = match r2 { Ok(_) => "", Err(m) => m };
+        return Err(e2);
+    }
+    let o1: String = match r1 { Ok(s) => s, Err(_) => "" };
+    let o2: String = match r2 { Ok(s) => s, Err(_) => "" };
+    if o1 != o2 {
+        return Err("non-identical double-run " + path + ": first " + o1 + " vs second " + o2);
     }
     return Ok(0);
 }
@@ -44,7 +56,17 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
     let cr: Result[String, String] = env_get(env, "OODA_COMPILER");
     let mut oodac: String = match cr { Ok(s) => s, Err(_) => "" };
     if oodac == "" {
-        oodac = "/home/jeryd/.local/bin/oodac";
+        let tr: Result[String, String] = env_get(env, "OODA_TOOLCHAIN");
+        let th: String = match tr { Ok(s) => s, Err(_) => "" };
+        if th != "" { oodac = th + "/bin/oodac"; }
+    }
+    if oodac == "" {
+        let hr: Result[String, String] = env_get(env, "HOME");
+        let home: String = match hr { Ok(s) => s, Err(_) => "" };
+        if home != "" { oodac = home + "/.openooda/bin/oodac"; }
+    }
+    if oodac == "" || !path_exists(fs_r, oodac) {
+        return Err("no compiler (OODA_COMPILER, OODA_TOOLCHAIN, or HOME layout)");
     }
     let probes: List[String] = list_new();
     let mut ps: List[String] = list_push(probes, "qa/probe_api_surface.oo");
@@ -70,6 +92,6 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
         if r.is_err() { return r; }
         i = i + 1;
     }
-    println("std test suite: ALL PROBES PASSED (double-run verified)");
+    println("std test suite: ALL PROBES PASSED (double-run identical)");
     return Ok(0);
 }
