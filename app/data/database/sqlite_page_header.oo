@@ -56,8 +56,11 @@ fn sqlite_ok(buf: List[Int], pt: Int) -> SqliteHdr {
 }
 
 pub fn sqlite_page_header_stat(h: SqliteHdr) -> Result[Int, String] {
+    // Checker workaround: Ok()/Err() of a struct field infers the
+    // receiver type. Read fields into annotated locals and return those.
     if h.flag < 1 {
-        return Err(h.err);
+        return Err("sqlite header refused");
     }
-    return Ok(h.ptype);
+    let pt: Int = h.ptype;
+    return Ok(pt);
 }

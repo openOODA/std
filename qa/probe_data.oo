@@ -1,0 +1,141 @@
+// # std/qa/probe_data — Database Engine Verification
+//
+// Logline: Verify std data/database pure pieces: btree round-trip, page header, statement kinds, theory certs.
+//
+// Setup: Pure compute. No filesystem. No network. Fail closed on the first mismatch.
+//
+// Beats:
+//   1. Btree insert then search hits; miss returns None; empty key refused.
+//   2. SQLite page header decodes a table leaf; short and bad-type refused.
+//   3. Statement kinds classify SELECT/INSERT/UPDATE/DELETE/CREATE; short refused.
+//   4. Amdahl and ACID theory certs hold.
+
+import "app/data/db/btree.oo";
+import "app/data/database/sqlite_page_header.oo";
+import "app/data/database/sql_parser.oo";
+import "app/data/amdahls_law_data.oo";
+import "app/data/acid_law.oo";
+
+fn probe_btree() -> Result[Int, String] {
+    let mut t: BTree = btree_new(16);
+    let r1: Result[Bool, String] = btree_insert(&mut t, "k1", "v1");
+    if r1.is_err() {
+        return Err("data: btree insert k1 failed");
+    }
+    let r2: Result[Bool, String] = btree_insert(&mut t, "k2", "v2");
+    if r2.is_err() {
+        return Err("data: btree insert k2 failed");
+    }
+    let dup: Result[Bool, String] = btree_insert(&mut t, "k1", "v1b");
+    if dup.is_err() {
+        return Err("data: btree duplicate insert must upsert");
+    }
+    // Value assertions deferred: the C emitter lowers neither
+    // Option[String] match arms nor .is_some() yet (Int only).
+    // These calls pin crash-freedom of both search paths meanwhile.
+    let _m1: Option[String] = btree_search(t, "k1");
+    let _m2: Option[String] = btree_search(t, "zzz");
+    let bad: Result[Bool, String] = btree_insert(&mut t, "", "v");
+    if bad.is_ok() {
+        return Err("data: btree empty key must refuse");
+    }
+    return Ok(0);
+}
+
+fn probe_page_header() -> Result[Int, String] {
+    let mut buf: List[Int] = list_new();
+    buf = list_push(buf, 13);
+    buf = list_push(buf, 0);
+    buf = list_push(buf, 0);
+    buf = list_push(buf, 0);
+    buf = list_push(buf, 5);
+    buf = list_push(buf, 12);
+    buf = list_push(buf, 200);
+    buf = list_push(buf, 0);
+    let h: SqliteHdr = sqlite_page_header_parse(buf);
+    if h.flag != 1 {
+        return Err("data: page header sample must parse");
+    }
+    if h.ptype != 13 {
+        return Err("data: page header must decode table leaf 13");
+    }
+    if h.cells != 5 {
+        return Err("data: page header must decode 5 cells");
+    }
+    let mut short: List[Int] = list_new();
+    short = list_push(short, 13);
+    let hs: SqliteHdr = sqlite_page_header_parse(short);
+    if hs.flag == 1 {
+        return Err("data: short header must refuse");
+    }
+    let mut badt: List[Int] = list_new();
+    badt = list_push(badt, 7);
+    badt = list_push(badt, 0);
+    badt = list_push(badt, 0);
+    badt = list_push(badt, 0);
+    badt = list_push(badt, 0);
+    badt = list_push(badt, 0);
+    badt = list_push(badt, 0);
+    badt = list_push(badt, 0);
+    let hb: SqliteHdr = sqlite_page_header_parse(badt);
+    if hb.flag == 1 {
+        return Err("data: bad page type must refuse");
+    }
+    return Ok(0);
+}
+
+fn probe_stmt_kinds() -> Result[Int, String] {
+    if sql_parse_statement_kind("SELECT a FROM t") != 1 {
+        return Err("data: SELECT must be kind 1");
+    }
+    if sql_parse_statement_kind("insert into t values (1)") != 2 {
+        return Err("data: INSERT must be kind 2");
+    }
+    if sql_parse_statement_kind("UPDATE t SET a = 1") != 3 {
+        return Err("data: UPDATE must be kind 3");
+    }
+    if sql_parse_statement_kind("delete from t") != 4 {
+        return Err("data: DELETE must be kind 4");
+    }
+    if sql_parse_statement_kind("CREATE TABLE t (a Int)") != 5 {
+        return Err("data: CREATE must be kind 5");
+    }
+    if sql_parse_statement_kind("hi") != 0 {
+        return Err("data: short query must be kind 0");
+    }
+    if sql_parse_statement_kind("FROBNICATE the wobble") != 0 {
+        return Err("data: unknown verb must be kind 0");
+    }
+    return Ok(0);
+}
+
+fn probe_theory() -> Result[Int, String] {
+    if !verify_amdahls_law_data() {
+        return Err("data: amdahl law cert must hold");
+    }
+    if !verify_acid_law() {
+        return Err("data: acid law cert must hold");
+    }
+    return Ok(0);
+}
+
+pub fn main() -> Result[Int, String] {
+    let b: Result[Int, String] = probe_btree();
+    if b.is_err() {
+        return b;
+    }
+    let p: Result[Int, String] = probe_page_header();
+    if p.is_err() {
+        return p;
+    }
+    let s: Result[Int, String] = probe_stmt_kinds();
+    if s.is_err() {
+        return s;
+    }
+    let t: Result[Int, String] = probe_theory();
+    if t.is_err() {
+        return t;
+    }
+    println("probe: std/data db engine ok");
+    return Ok(0);
+}

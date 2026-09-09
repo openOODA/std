@@ -90,7 +90,7 @@ pub fn btree_search(tree: BTree, key: String) -> Option[String] {
 }
 
 /// Insert a key-value pair into the B-Tree leaf.
-pub fn btree_insert(tree: BTree, key: String, value: String) -> Result[Bool, String] {
+pub fn btree_insert(tree: &mut BTree, key: String, value: String) -> Result[Bool, String] {
     if key.len() == 0 {
         return Err("ERR\tbtree_insert: empty key");
     }
