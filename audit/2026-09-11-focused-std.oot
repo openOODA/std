@@ -170,8 +170,11 @@
 //      any prefix sits outside OODA_FS_WRITEDIR — oo_fs_mkdir's deny
 //      check precedes its EEXIST tolerance, so e.g. /home fails before
 //      the leaf is reached. Relative workspace paths are the working
-//      convention (probe_cap_fs uses .ooda-cache/). Proper fix needs
-//      oodar to EEXIST-tolerate before the boundary check.
+//      convention (probe_cap_fs uses .ooda-cache/). CORRECTED after
+//      reading oodar/fs/os/fs_dir.c: the deny-first ordering is
+//      deliberate — EEXIST-tolerating first would mint an existence
+//      oracle across the write boundary (mkdir Ok ↔ "path exists").
+//      Intended confinement, not a runtime bug; no oodar change needed.
 //   M7: probe_sandbox_stress hardcoded /tmp fixtures the ambient write
 //      cap can never create; reworked to workspace-relative fs ops +
 //      OODA_FS_READDIR-anchored Landlock grants. All three denial axes
