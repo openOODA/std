@@ -76,12 +76,11 @@ pub fn http_resp_parse(s: String) -> Result[HttpResponse, String] {
             continue;
         }
         let nm: String = str_slice(line, 0, colon);
-        let rest: String = str_slice(line, colon + 1, chars_len(line));
-        let rlen: Int = chars_len(rest);
-        let mut val: String = rest;
-        if rlen > 0 {
-            if char_at(rest, 0) == " " {
-                val = str_slice(rest, 1, rlen);
+        let mut val: String = str_slice(line, colon + 1, chars_len(line));
+        let vlen: Int = chars_len(val);
+        if vlen > 0 {
+            if char_at(val, 0) == " " {
+                val = str_slice(val, 1, vlen);
             }
         }
         hs = list_push(hs, nm);

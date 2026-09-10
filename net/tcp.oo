@@ -16,7 +16,7 @@ pub fn net_tcp_connect(
   tcp: &TcpCap,
   host: String,
   port: Int
-) -> Result[Int, String] {
+) -> Result[String, String] {
   return tcp_connect(tcp, host, port);
 }
 
@@ -24,13 +24,14 @@ pub fn net_tcp_write(
   tcp: &TcpCap,
   fd: Int,
   data: String
-) -> Result[Int, String] {
+) -> Result[String, String] {
   return tcp_write(tcp, fd, data);
 }
 
 pub fn net_tcp_read(
   tcp: &TcpCap,
-  fd: Int
+  fd: Int,
+  max_bytes: Int
 ) -> Result[String, String] {
-  return tcp_read(tcp, fd);
+  return tcp_read(tcp, fd, max_bytes);
 }

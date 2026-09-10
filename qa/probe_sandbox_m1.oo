@@ -1,0 +1,160 @@
+// # Kernel Sandbox Module Verification Probe
+//
+// Logline: Empirical verification of standard library kernel sandbox configuration, status formatters, and Landlock engine under &SysCap.
+//
+// Setup: Requires &SysCap for kernel sandbox matrix enforcement. Imports config.oo, status.oo, and engine.oo directly.
+//
+// Beats:
+//   1. Validate SandboxConfig default properties, builders, and path serialization.
+//   2. Falsify path validation against empty paths, relative paths, and colons.
+//   3. Inspect SandboxStatus formatting and unconfined constructor.
+//   4. Verify kernel backend probe, engine version, and availability.
+//   5. Apply sandbox matrix under &SysCap and assert fail-closed rejection on invalid configuration.
+
+import "sec/sandbox/config.oo";
+import "sec/sandbox/status.oo";
+import "sec/sandbox/engine.oo";
+
+pub fn main(sys: &SysCap) -> Result[Int, String] {
+    // 1. Validate engine version and availability
+    let ver: String = sandbox_engine_version();
+    if ver != "1.0.0" {
+        return Err("FAIL: sandbox_engine_version mismatch: " + ver);
+    }
+
+    let is_avail: Bool = sandbox_is_available();
+    if !is_avail {
+        return Err("FAIL: sandbox_is_available returned false on Linux");
+    }
+
+    let backend: String = sandbox_probe_backend();
+    if !str_contains(backend, "Landlock") {
+        return Err("FAIL: sandbox_probe_backend unexpected: " + backend);
+    }
+
+    // 2. Validate SandboxConfig default
+    let cfg_def: SandboxConfig = sandbox_config_default();
+    if list_len(cfg_def.read_allowlist) != 0 {
+        return Err("FAIL: default read_allowlist not empty");
+    }
+    if list_len(cfg_def.write_allowlist) != 0 {
+        return Err("FAIL: default write_allowlist not empty");
+    }
+    if cfg_def.max_mem_mb != 0 {
+        return Err("FAIL: default max_mem_mb != 0");
+    }
+    if cfg_def.max_cpu_sec != 0 {
+        return Err("FAIL: default max_cpu_sec != 0");
+    }
+    if cfg_def.max_nofile != 0 {
+        return Err("FAIL: default max_nofile != 0");
+    }
+    if cfg_def.allowed_caps_mask != 0 {
+        return Err("FAIL: default allowed_caps_mask != 0");
+    }
+    if !cfg_def.fail_closed {
+        return Err("FAIL: default fail_closed != true");
+    }
+
+    // 3. Test builders
+    let mut cfg: SandboxConfig = sandbox_config_default();
+    cfg = sandbox_config_with_read(cfg, "/usr");
+    cfg = sandbox_config_with_read(cfg, "/lib");
+    cfg = sandbox_config_with_write(cfg, "/tmp");
+    cfg = sandbox_config_with_max_mem(cfg, 512);
+    cfg = sandbox_config_with_max_cpu(cfg, 30);
+    cfg = sandbox_config_with_max_nofile(cfg, 1024);
+    cfg = sandbox_config_with_caps_mask(cfg, 25);
+
+    if list_len(cfg.read_allowlist) != 2 {
+        return Err("FAIL: read_allowlist len != 2");
+    }
+    if list_len(cfg.write_allowlist) != 1 {
+        return Err("FAIL: write_allowlist len != 1");
+    }
+    if cfg.max_mem_mb != 512 {
+        return Err("FAIL: max_mem_mb != 512");
+    }
+    if cfg.max_cpu_sec != 30 {
+        return Err("FAIL: max_cpu_sec != 30");
+    }
+    if cfg.max_nofile != 1024 {
+        return Err("FAIL: max_nofile != 1024");
+    }
+    if cfg.allowed_caps_mask != 25 {
+        return Err("FAIL: allowed_caps_mask != 25");
+    }
+
+    // 4. Test path serialization
+    let r_colon: String = sandbox_config_paths_to_colon(cfg.read_allowlist);
+    if r_colon != "/usr:/lib" {
+        return Err("FAIL: paths_to_colon mismatch: " + r_colon);
+    }
+    let empty_list: List[String] = list_new();
+    let empty_colon: String = sandbox_config_paths_to_colon(empty_list);
+    if empty_colon != "" {
+        return Err("FAIL: empty paths_to_colon mismatch");
+    }
+
+    // 5. Negative path validation tests (Negative-Trust Edge Falsification)
+    let mut bad_paths: List[String] = list_new();
+    bad_paths = list_push(bad_paths, "");
+    let r_empty: Result[Bool, String] = sandbox_config_validate_paths(bad_paths);
+    if !r_empty.is_err() {
+        return Err("FAIL: empty path should fail validation");
+    }
+
+    let mut rel_paths: List[String] = list_new();
+    rel_paths = list_push(rel_paths, "relative/path");
+    let r_rel: Result[Bool, String] = sandbox_config_validate_paths(rel_paths);
+    if !r_rel.is_err() {
+        return Err("FAIL: relative path should fail validation");
+    }
+
+    let mut col_paths: List[String] = list_new();
+    col_paths = list_push(col_paths, "/path/with:colon");
+    let r_col: Result[Bool, String] = sandbox_config_validate_paths(col_paths);
+    if !r_col.is_err() {
+        return Err("FAIL: path with colon should fail validation");
+    }
+
+    // 6. Test SandboxStatus formatting
+    let st: SandboxStatus = sandbox_status_new(true, "Linux Landlock LSM + seccomp-bpf", 16, true, false, false, true);
+    let st_str: String = sandbox_status_to_string(st);
+    if !str_contains(st_str, "Enforcement: active") {
+        return Err("FAIL: status_to_string missing active enforcement");
+    }
+    if !str_contains(st_str, "Filesystem: restricted") {
+        return Err("FAIL: status_to_string missing restricted fs");
+    }
+    if !str_contains(st_str, "Resource Quotas: enforced") {
+        return Err("FAIL: status_to_string missing enforced quotas");
+    }
+
+    let st_unconf: SandboxStatus = sandbox_current_status();
+    let unconf_str: String = sandbox_status_to_string(st_unconf);
+    if !str_contains(unconf_str, "Enforcement: unconfined") {
+        return Err("FAIL: current_status should be unconfined");
+    }
+
+    // 7. Negative-trust matrix apply falsification (invalid paths fail closed)
+    let mut bad_cfg: SandboxConfig = sandbox_config_default();
+    bad_cfg = sandbox_config_with_read(bad_cfg, "bad/rel/path");
+    let r_bad_apply: Result[Int, String] = sandbox_apply_matrix(sys, bad_cfg);
+    if !r_bad_apply.is_err() {
+        return Err("FAIL: sandbox_apply_matrix with relative path must fail closed");
+    }
+
+    // 8. Positive matrix apply under &SysCap (permits read /, write /tmp)
+    let mut good_cfg: SandboxConfig = sandbox_config_default();
+    good_cfg = sandbox_config_with_read(good_cfg, "/");
+    good_cfg = sandbox_config_with_write(good_cfg, "/tmp");
+    let r_good_apply: Result[Int, String] = sandbox_apply_matrix(sys, good_cfg);
+    if r_good_apply.is_err() {
+        let err_str: String = match r_good_apply { Ok(_) => "", Err(e) => e };
+        return Err("FAIL: sandbox_apply_matrix failed: " + err_str);
+    }
+
+    println("probe_sandbox_m1: ALL ASSERTIONS PASSED (100% verified)");
+    return Ok(0);
+}

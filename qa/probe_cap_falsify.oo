@@ -1,0 +1,78 @@
+// # Capability Negative-Trust Falsification Probe
+//
+// Logline: Falsify capability security by proving that undeclared, forged, or mismatched capability tokens fail closed at compile time with cap_deny.
+//
+// Setup: Requires &ProcessCap, &FsWriteCap, &FsReadCap, and &EnvCap. Writes hostile code fixtures and asserts oodac check rejection.
+//
+// Beats:
+//   1. Resolve sovereign compiler binary oodac.
+//   2. Falsify unprivileged read: assert calling read_file without &FsReadCap fails compilation.
+//   3. Falsify capability escalation: assert passing &FsReadCap to write_file fails compilation.
+//   4. Falsify unprivileged process execution: assert calling sys_exec without &ProcessCap fails compilation.
+//   5. Clean up temporary test fixtures and confirm unlinked state.
+
+import "fs/process/env.oo";
+import "fs/os/fs.oo";
+
+fn resolve_compiler(fs_r: &FsReadCap, env: &EnvCap) -> String {
+    let cr: Result[String, String] = env_get(env, "OODA_COMPILER");
+    let mut oodac: String = match cr { Ok(s) => s, Err(_) => "" };
+    if oodac == "" {
+        let tr: Result[String, String] = env_get(env, "OODA_TOOLCHAIN");
+        let th: String = match tr { Ok(s) => s, Err(_) => "" };
+        if th != "" { oodac = th + "/bin/oodac"; }
+    }
+    if oodac == "" {
+        let hr: Result[String, String] = env_get(env, "HOME");
+        let home: String = match hr { Ok(s) => s, Err(_) => "" };
+        if home != "" { oodac = home + "/.openooda/bin/oodac"; }
+    }
+    return oodac;
+}
+
+fn assert_check_fails(p: &ProcessCap, fs_w: &FsWriteCap, oodac: String, path: String, src: String, tag: String) -> Result[Int, String] {
+    let w: Result[Void, String] = write_file(fs_w, path, src);
+    if w.is_err() {
+        return Err("cap_falsify: failed to write fixture for " + tag);
+    }
+    let r: Result[String, String] = sys_exec(p, oodac, "check", path);
+    let _del: Result[String, String] = sys_exec(p, "rm", "-f", path);
+    if r.is_ok() {
+        return Err("Negative-trust violation: " + tag + " succeeded when it MUST fail closed with cap_deny");
+    }
+    let err_msg: String = match r { Ok(_) => "", Err(s) => s };
+    if !str_contains(err_msg, "Security Capability Violation") && !str_contains(err_msg, "requires a &") {
+        return Err("cap_falsify: unexpected error message for " + tag + ": " + err_msg);
+    }
+    return Ok(0);
+}
+
+pub fn main(p: &ProcessCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> Result[Int, String] {
+    let oodac: String = resolve_compiler(fs_r, env);
+    if oodac == "" || !path_exists(fs_r, oodac) {
+        return Err("cap_falsify: could not resolve oodac compiler");
+    }
+
+    let _mk: Result[Void, String] = fs_mkdir_p(fs_w, ".ooda-cache");
+
+    // Case 1: Calling read_file without declaring &FsReadCap
+    let f1: String = ".ooda-cache/falsify_no_fsread.oo";
+    let s1: String = "pub fn rogue() -> String {\nlet r = read_file(\"/etc/hosts\");\nreturn match r { Ok(s) => s, Err(_) => \"\" };\n}\npub fn main() {}\n";
+    let r1: Result[Int, String] = assert_check_fails(p, fs_w, oodac, f1, s1, "calling read_file without &FsReadCap");
+    if r1.is_err() { return r1; }
+
+    // Case 2: Attempting to pass &FsReadCap into write_file
+    let f2: String = ".ooda-cache/falsify_read_for_write.oo";
+    let s2: String = "pub fn rogue_write(fs: &FsReadCap) {\nlet r = write_file(fs, \"/tmp/x\", \"hi\");\n}\npub fn main() {}\n";
+    let r2: Result[Int, String] = assert_check_fails(p, fs_w, oodac, f2, s2, "passing &FsReadCap to write_file");
+    if r2.is_err() { return r2; }
+
+    // Case 3: Calling sys_exec without declaring &ProcessCap
+    let f3: String = ".ooda-cache/falsify_no_process.oo";
+    let s3: String = "pub fn rogue_exec() {\nlet r = sys_exec(\"true\");\n}\npub fn main() {}\n";
+    let r3: Result[Int, String] = assert_check_fails(p, fs_w, oodac, f3, s3, "calling sys_exec without &ProcessCap");
+    if r3.is_err() { return r3; }
+
+    println("probe: std/qa cap_falsify passed (1:1 negative compile checks verified)");
+    return Ok(0);
+}

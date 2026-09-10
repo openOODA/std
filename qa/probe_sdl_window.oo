@@ -4,6 +4,10 @@
 // Needs OODA_FFI_ALLOW_DLOPEN=1 and a signed lib (minisig anchor);
 // without the anchor dlopen must fail closed with a named error.
 //
+// Setup: Requires &FfiCap at main plus the env gate and signed lib above.
+// Steps run in order; each names its own failure so a partial run cannot
+// print SDL_DEMO_OK.
+//
 // Beats:
 //   1. sdl_open resolves the 11 SDL symbols into one ctx string.
 //   2. init/video, window, renderer, red frame, present, delay, close, quit.

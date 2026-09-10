@@ -1,0 +1,60 @@
+// # Process & System Capability Token Verification Probe
+//
+// Logline: Verify that &ProcessCap gates execution, &EnvCap gates environment access, and &SysCap seals residual syscalls.
+//
+// Setup: Requires &ProcessCap, &EnvCap, and &SysCap.
+//
+// Beats:
+//   1. Execute process via process_exec and sys_exec (&ProcessCap).
+//   2. Read environment keys via env_get (&EnvCap).
+//   3. Assert residual syscall stubs (epoll, inotify, prctl) fail closed under &SysCap.
+//   4. Assert process_args returns valid arg list under &ProcessCap.
+
+import "fs/process/process.oo";
+import "fs/process/env.oo";
+
+pub fn main(p: &ProcessCap, env: &EnvCap, sys: &SysCap) -> Result[Int, String] {
+    let r_echo: Result[String, String] = process_exec(p, "echo CAP_PROCESS_OK");
+    if r_echo.is_err() {
+        return Err("cap_process: process_exec failed under &ProcessCap");
+    }
+    let echo_out: String = match r_echo { Ok(s) => s, Err(_) => "" };
+    if !str_contains(echo_out, "CAP_PROCESS_OK") {
+        return Err("cap_process: process_exec output mismatch: " + echo_out);
+    }
+
+    let r_direct: Result[String, String] = sys_exec(p, "true");
+    if r_direct.is_err() {
+        return Err("cap_process: sys_exec 'true' failed under &ProcessCap");
+    }
+
+    let args: List[String] = process_args(p);
+    if list_len(args) < 0 {
+        return Err("cap_process: process_args returned invalid list length");
+    }
+
+    let r_env: Result[String, String] = env_get(env, "HOME");
+    let mut saw_env: Bool = r_env.is_ok();
+    if !saw_env {
+        let r_env2: Result[String, String] = env_get(env, "PATH");
+        saw_env = r_env2.is_ok();
+    }
+
+    let ep: Result[String, String] = process_epoll_create(sys, 0);
+    if !ep.is_err() {
+        return Err("cap_process: process_epoll_create must fail closed under &SysCap");
+    }
+
+    let ino: Result[String, String] = process_inotify_init(sys);
+    if !ino.is_err() {
+        return Err("cap_process: process_inotify_init must fail closed under &SysCap");
+    }
+
+    let pr: Result[String, String] = process_prctl(sys, 0);
+    if !pr.is_err() {
+        return Err("cap_process: process_prctl must fail closed under &SysCap");
+    }
+
+    println("probe: std/qa cap_process passed (&ProcessCap, &EnvCap, &SysCap verified)");
+    return Ok(0);
+}

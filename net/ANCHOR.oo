@@ -119,15 +119,15 @@ pub fn net_mod_tcp_write(tcp: &TcpCap, fd: Int, data: String) -> Result[String, 
     return net_tcp_write(tcp, fd, data);
 }
 
-pub fn net_mod_tcp_read(tcp: &TcpCap, fd: Int) -> Result[String, String] {
-    return net_tcp_read(tcp, fd);
+pub fn net_mod_tcp_read(tcp: &TcpCap, fd: Int, max_bytes: Int) -> Result[String, String] {
+    return net_tcp_read(tcp, fd, max_bytes);
 }
 
-pub fn net_mod_tls_connect(tcp: &TcpCap, host: String, port: Int) -> Result[String, String] {
+pub fn net_mod_tls_connect(tcp: &TcpCap, host: String, port: Int) -> Result[Int, String] {
     return net_tls_connect(tcp, host, port);
 }
 
-pub fn net_mod_udp_bind(udp: &UdpCap, port: Int) -> Result[String, String] {
+pub fn net_mod_udp_bind(udp: &UdpCap, port: Int) -> Result[Int, String] {
     return net_udp_bind(udp, port);
 }
 

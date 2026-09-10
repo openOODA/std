@@ -1,0 +1,168 @@
+// # Sandbox Configuration Module
+//
+// Logline: Immutable configuration parameters for kernel sandbox matrices including Landlock LSM and rlimits.
+//
+// Setup: Pure data structures and path formatting utilities; requires zero ambient capabilities.
+//
+// Beats:
+//   1. Define SandboxConfig struct with filesystem allowlists, resource quotas, and capability bitmask.
+//   2. Provide constructor functions for default and customized sandbox profiles.
+//   3. Validate that all allowlist paths are absolute and properly formatted without colons.
+//   4. Convert path lists into colon-delimited strings for kernel Landlock consumption.
+
+type SandboxConfig = struct {
+    read_allowlist: List[String],
+    write_allowlist: List[String],
+    max_mem_mb: Int,
+    max_cpu_sec: Int,
+    max_nofile: Int,
+    allowed_caps_mask: Int,
+    fail_closed: Bool
+};
+
+pub fn sandbox_config_default() -> SandboxConfig {
+    let reads: List[String] = list_new();
+    let writes: List[String] = list_new();
+    return SandboxConfig {
+        read_allowlist: reads,
+        write_allowlist: writes,
+        max_mem_mb: 0,
+        max_cpu_sec: 0,
+        max_nofile: 0,
+        allowed_caps_mask: 0,
+        fail_closed: true
+    };
+}
+
+pub fn sandbox_config_new(
+    reads: List[String],
+    writes: List[String],
+    mem_mb: Int,
+    cpu_sec: Int,
+    max_fds: Int,
+    caps_mask: Int,
+    fail_closed: Bool
+) -> SandboxConfig {
+    return SandboxConfig {
+        read_allowlist: reads,
+        write_allowlist: writes,
+        max_mem_mb: mem_mb,
+        max_cpu_sec: cpu_sec,
+        max_nofile: max_fds,
+        allowed_caps_mask: caps_mask,
+        fail_closed: fail_closed
+    };
+}
+
+pub fn sandbox_config_with_read(cfg: SandboxConfig, path: String) -> SandboxConfig {
+    let mut reads: List[String] = cfg.read_allowlist;
+    reads = list_push(reads, path);
+    return SandboxConfig {
+        read_allowlist: reads,
+        write_allowlist: cfg.write_allowlist,
+        max_mem_mb: cfg.max_mem_mb,
+        max_cpu_sec: cfg.max_cpu_sec,
+        max_nofile: cfg.max_nofile,
+        allowed_caps_mask: cfg.allowed_caps_mask,
+        fail_closed: cfg.fail_closed
+    };
+}
+
+pub fn sandbox_config_with_write(cfg: SandboxConfig, path: String) -> SandboxConfig {
+    let mut writes: List[String] = cfg.write_allowlist;
+    writes = list_push(writes, path);
+    return SandboxConfig {
+        read_allowlist: cfg.read_allowlist,
+        write_allowlist: writes,
+        max_mem_mb: cfg.max_mem_mb,
+        max_cpu_sec: cfg.max_cpu_sec,
+        max_nofile: cfg.max_nofile,
+        allowed_caps_mask: cfg.allowed_caps_mask,
+        fail_closed: cfg.fail_closed
+    };
+}
+
+pub fn sandbox_config_with_max_mem(cfg: SandboxConfig, mb: Int) -> SandboxConfig {
+    return SandboxConfig {
+        read_allowlist: cfg.read_allowlist,
+        write_allowlist: cfg.write_allowlist,
+        max_mem_mb: mb,
+        max_cpu_sec: cfg.max_cpu_sec,
+        max_nofile: cfg.max_nofile,
+        allowed_caps_mask: cfg.allowed_caps_mask,
+        fail_closed: cfg.fail_closed
+    };
+}
+
+pub fn sandbox_config_with_max_cpu(cfg: SandboxConfig, sec: Int) -> SandboxConfig {
+    return SandboxConfig {
+        read_allowlist: cfg.read_allowlist,
+        write_allowlist: cfg.write_allowlist,
+        max_mem_mb: cfg.max_mem_mb,
+        max_cpu_sec: sec,
+        max_nofile: cfg.max_nofile,
+        allowed_caps_mask: cfg.allowed_caps_mask,
+        fail_closed: cfg.fail_closed
+    };
+}
+
+pub fn sandbox_config_with_max_nofile(cfg: SandboxConfig, max_fds: Int) -> SandboxConfig {
+    return SandboxConfig {
+        read_allowlist: cfg.read_allowlist,
+        write_allowlist: cfg.write_allowlist,
+        max_mem_mb: cfg.max_mem_mb,
+        max_cpu_sec: cfg.max_cpu_sec,
+        max_nofile: max_fds,
+        allowed_caps_mask: cfg.allowed_caps_mask,
+        fail_closed: cfg.fail_closed
+    };
+}
+
+pub fn sandbox_config_with_caps_mask(cfg: SandboxConfig, mask: Int) -> SandboxConfig {
+    return SandboxConfig {
+        read_allowlist: cfg.read_allowlist,
+        write_allowlist: cfg.write_allowlist,
+        max_mem_mb: cfg.max_mem_mb,
+        max_cpu_sec: cfg.max_cpu_sec,
+        max_nofile: cfg.max_nofile,
+        allowed_caps_mask: mask,
+        fail_closed: cfg.fail_closed
+    };
+}
+
+pub fn sandbox_config_validate_paths(paths: List[String]) -> Result[Bool, String] {
+    let n: Int = list_len(paths);
+    let mut i: Int = 0;
+    while i < n {
+        let p: String = list_get(paths, i);
+        if chars_len(p) == 0 {
+            return Err("sandbox: path must not be empty");
+        }
+        if str_slice(p, 0, 1) != "/" {
+            return Err("sandbox: path must be absolute: " + p);
+        }
+        if str_contains(p, ":") {
+            return Err("sandbox: path must not contain colon delimiter: " + p);
+        }
+        i = i + 1;
+    }
+    return Ok(true);
+}
+
+pub fn sandbox_config_paths_to_colon(paths: List[String]) -> String {
+    let n: Int = list_len(paths);
+    if n == 0 {
+        return "";
+    }
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let p: String = list_get(paths, i);
+        if i > 0 {
+            out = out + ":";
+        }
+        out = out + p;
+        i = i + 1;
+    }
+    return out;
+}

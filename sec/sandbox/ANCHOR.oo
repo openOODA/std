@@ -1,0 +1,58 @@
+// # Sandbox Submodule Hub -- Zero-Drag
+//
+// Logline: Unified entry point for the standard library kernel sandboxing module, exposing Landlock LSM and resource limit enforcement.
+//
+// Setup: Pure module re-exports. Matrix enforcement takes &SysCap at call site. Probe and status inspection take zero ambient capabilities.
+//
+// Beats:
+//   1. Re-export SandboxConfig and configuration builders under sec_sandbox_*.
+//   2. Re-export SandboxStatus and diagnostic formatters under sec_sandbox_*.
+//   3. Re-export kernel execution engine functions under sec_sandbox_*.
+
+import "config.oo";
+import "status.oo";
+import "engine.oo";
+
+pub fn sec_sandbox_config_default() -> SandboxConfig {
+    return sandbox_config_default();
+}
+
+pub fn sec_sandbox_config_paths_to_colon(paths: List[String]) -> String {
+    return sandbox_config_paths_to_colon(paths);
+}
+
+pub fn sec_sandbox_status_new(
+    enforced: Bool,
+    backend: String,
+    caps: Int,
+    fs: Bool,
+    net: Bool,
+    proc: Bool,
+    quotas: Bool
+) -> SandboxStatus {
+    return sandbox_status_new(enforced, backend, caps, fs, net, proc, quotas);
+}
+
+pub fn sec_sandbox_status_to_string(st: SandboxStatus) -> String {
+    return sandbox_status_to_string(st);
+}
+
+pub fn sec_sandbox_probe_backend() -> String {
+    return sandbox_probe_backend();
+}
+
+pub fn sec_sandbox_is_available() -> Bool {
+    return sandbox_is_available();
+}
+
+pub fn sec_sandbox_apply_matrix(sys: &SysCap, cfg: SandboxConfig) -> Result[Int, String] {
+    return sandbox_apply_matrix(sys, cfg);
+}
+
+pub fn sec_sandbox_current_status() -> SandboxStatus {
+    return sandbox_current_status();
+}
+
+pub fn sec_sandbox_engine_version() -> String {
+    return sandbox_engine_version();
+}

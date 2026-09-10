@@ -14,12 +14,27 @@
 //   7. probe_hw.oo — verify hw/ silicon/gpu/mem
 //   8. probe_meta.oo — verify meta/ test/diag
 //   9. probe_api_surface.oo — verify std ANCHOR.oo exposes exactly 8 public subdirs
-//   10. probe_caps.oo — verify sec/hash blake3 flag and bytes_len fix
+//   10. probe_caps.oo — verify caller capability tokens and permissions
 //   11. probe_cap_grant.oo — verify 20 subset of 26 cap inventory
-//   12. probe_data.oo — verify data/database pure pieces (btree, page header, stmt kinds, certs)
-//   13. probe_wal_disk.oo — verify on-disk WAL (fsync round-trip, torn-tail refusal, kill-recover modes)
-//   14. probe_sql_exec.oo — verify real SQL executor (insert/select/update/delete round-trip, true counts)
-//   15. suite.oo runs every probe twice (local entry; CI wiring pending).
+//   12. probe_cap_fs.oo — verify &FsReadCap and &FsWriteCap filesystem operations
+//   13. probe_cap_process.oo — verify &ProcessCap, &EnvCap, and &SysCap execution
+//   14. probe_cap_system.oo — verify &TimeCap, &RandCap, and &AllocCap system operations
+//   15. probe_cap_net.oo — verify &TcpCap network operations
+//   16. probe_cap_falsify.oo — negative-trust compile-time cap_deny falsification
+//   17. probe_data.oo — verify data/database pure pieces (btree, page header, stmt kinds, certs)
+//   18. probe_wal_disk.oo — verify on-disk WAL (fsync round-trip, torn-tail refusal, kill-recover modes)
+//   19. probe_sql_exec.oo — verify real SQL executor (insert/select/update/delete round-trip, true counts)
+//   20. probe_sandbox_m1.oo — verify sec/sandbox engine: backend probe, config matrix, positive apply
+//   21. probe_sandbox_adv1.oo — adversarial sandbox configs: bad paths, huge fds, fail-closed refusals
+//   22. probe_sandbox_stress.oo — real Landlock confinement: allowed rw vs kernel-denied read/write
+//   23. suite.oo runs every probe twice under double-run discipline.
+//
+// Not in the suite: probe_repl_m1_audit.oo is blocked by an oodac emit bug
+// (functions defined in ANCHOR.oo files typecheck but never reach the C
+// emitter — check passes, gcc sees implicit declarations). probe_repl_
+// direct/m1_test2 exercise the repl engine, which is uncommitted WIP in
+// app/agent/ — wire them when that lane lands. probe_sdl_*/graphics
+// probes need a display.
 
 import "suite.oo";
 import "probe_core.oo";
@@ -33,3 +48,8 @@ import "probe_meta.oo";
 import "probe_api_surface.oo";
 import "probe_caps.oo";
 import "probe_cap_grant.oo";
+import "probe_cap_fs.oo";
+import "probe_cap_process.oo";
+import "probe_cap_system.oo";
+import "probe_cap_net.oo";
+import "probe_cap_falsify.oo";

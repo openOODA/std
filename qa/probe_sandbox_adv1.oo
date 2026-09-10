@@ -1,0 +1,226 @@
+// # Adversarial Kernel Sandbox Probe
+//
+// Logline: Hostile boundary, edge-case, and fail-closed validation of standard library kernel sandbox facilities.
+//
+// Setup: Requires &SysCap for kernel sandbox matrix enforcement and rlimit builtins.
+//
+// Beats:
+//   1. Falsify malformed, empty, relative, and colon-injected paths.
+//   2. Falsify non-existent directory and regular file paths during matrix apply.
+//   3. Stress-test resource quota boundary values (0, negative, excessive ceilings).
+//   4. Verify serialization integrity of colon-delimited paths.
+//   5. Verify SandboxStatus formatting and unconfined introspection.
+//   6. Verify kernel backend availability, version, and final positive matrix apply.
+
+import "sec/sandbox/config.oo";
+import "sec/sandbox/status.oo";
+import "sec/sandbox/engine.oo";
+
+pub fn main(sys: &SysCap) -> Result[Int, String] {
+    // Beat 1: Falsify malformed, empty, relative, and colon-injected paths
+    let mut bad_empty: List[String] = list_new();
+    bad_empty = list_push(bad_empty, "");
+    if !sandbox_config_validate_paths(bad_empty).is_err() {
+        return Err("FAIL: empty path must fail validation");
+    }
+
+    let mut bad_rel: List[String] = list_new();
+    bad_rel = list_push(bad_rel, "relative/dir");
+    if !sandbox_config_validate_paths(bad_rel).is_err() {
+        return Err("FAIL: relative path must fail validation");
+    }
+
+    let mut bad_dot: List[String] = list_new();
+    bad_dot = list_push(bad_dot, "./local/dir");
+    if !sandbox_config_validate_paths(bad_dot).is_err() {
+        return Err("FAIL: dot-relative path must fail validation");
+    }
+
+    let mut bad_parent: List[String] = list_new();
+    bad_parent = list_push(bad_parent, "../parent/dir");
+    if !sandbox_config_validate_paths(bad_parent).is_err() {
+        return Err("FAIL: parent-relative path must fail validation");
+    }
+
+    let mut bad_col: List[String] = list_new();
+    bad_col = list_push(bad_col, "/usr:/bin");
+    if !sandbox_config_validate_paths(bad_col).is_err() {
+        return Err("FAIL: colon-injected path must fail validation");
+    }
+
+    let mut bad_col_lead: List[String] = list_new();
+    bad_col_lead = list_push(bad_col_lead, ":/var/log");
+    if !sandbox_config_validate_paths(bad_col_lead).is_err() {
+        return Err("FAIL: leading colon path must fail validation");
+    }
+
+    let mut bad_col_trail: List[String] = list_new();
+    bad_col_trail = list_push(bad_col_trail, "/var/log:");
+    if !sandbox_config_validate_paths(bad_col_trail).is_err() {
+        return Err("FAIL: trailing colon path must fail validation");
+    }
+
+    let mut bad_space_only: List[String] = list_new();
+    bad_space_only = list_push(bad_space_only, "   ");
+    if !sandbox_config_validate_paths(bad_space_only).is_err() {
+        return Err("FAIL: whitespace-only path must fail validation");
+    }
+
+    let mut bad_mixed: List[String] = list_new();
+    bad_mixed = list_push(bad_mixed, "/valid/path");
+    bad_mixed = list_push(bad_mixed, "invalid_rel");
+    if !sandbox_config_validate_paths(bad_mixed).is_err() {
+        return Err("FAIL: mixed path list containing invalid entry must fail validation");
+    }
+
+    // Beat 2: Falsify non-existent directory and regular file paths during matrix apply
+    let mut cfg_bad_r: SandboxConfig = sandbox_config_default();
+    cfg_bad_r = sandbox_config_with_read(cfg_bad_r, "bad/rel");
+    if !sandbox_apply_matrix(sys, cfg_bad_r).is_err() {
+        return Err("FAIL: sandbox_apply_matrix with relative read path must fail closed");
+    }
+
+    let mut cfg_bad_w: SandboxConfig = sandbox_config_default();
+    cfg_bad_w = sandbox_config_with_read(cfg_bad_w, "/tmp");
+    cfg_bad_w = sandbox_config_with_write(cfg_bad_w, "bad/rel/write");
+    if !sandbox_apply_matrix(sys, cfg_bad_w).is_err() {
+        return Err("FAIL: sandbox_apply_matrix with relative write path must fail closed");
+    }
+
+    let mut cfg_nonexist: SandboxConfig = sandbox_config_default();
+    cfg_nonexist = sandbox_config_with_read(cfg_nonexist, "/nonexistent_openooda_dir_0xdeadbeef");
+    if !sandbox_apply_matrix(sys, cfg_nonexist).is_err() {
+        return Err("FAIL: sandbox_apply_matrix with non-existent directory must fail closed");
+    }
+
+    let mut cfg_regfile: SandboxConfig = sandbox_config_default();
+    cfg_regfile = sandbox_config_with_read(cfg_regfile, "/etc/hosts");
+    if !sandbox_apply_matrix(sys, cfg_regfile).is_err() {
+        return Err("FAIL: sandbox_apply_matrix with regular file must fail closed");
+    }
+
+    // Beat 3: Stress-test resource quota boundary values
+    let r_mem_zero: Result[String, String] = oo_rlimit_set_mem_mb(sys, 0);
+    if !r_mem_zero.is_err() {
+        return Err("FAIL: oo_rlimit_set_mem_mb with 0 MB must fail");
+    }
+
+    let r_mem_neg: Result[String, String] = oo_rlimit_set_mem_mb(sys, -1);
+    if !r_mem_neg.is_err() {
+        return Err("FAIL: oo_rlimit_set_mem_mb with negative MB must fail");
+    }
+
+    let r_cpu_zero: Result[String, String] = oo_rlimit_set_cpu_sec(sys, 0);
+    if !r_cpu_zero.is_err() {
+        return Err("FAIL: oo_rlimit_set_cpu_sec with 0 sec must fail");
+    }
+
+    let r_cpu_neg: Result[String, String] = oo_rlimit_set_cpu_sec(sys, -1);
+    if !r_cpu_neg.is_err() {
+        return Err("FAIL: oo_rlimit_set_cpu_sec with negative sec must fail");
+    }
+
+    let r_fd_zero: Result[String, String] = oo_rlimit_set_nofile(sys, 0);
+    if !r_fd_zero.is_err() {
+        return Err("FAIL: oo_rlimit_set_nofile with 0 FDs must fail");
+    }
+
+    let r_fd_neg: Result[String, String] = oo_rlimit_set_nofile(sys, -1);
+    if !r_fd_neg.is_err() {
+        return Err("FAIL: oo_rlimit_set_nofile with negative FDs must fail");
+    }
+
+    let mut cfg_huge_fd: SandboxConfig = sandbox_config_default();
+    cfg_huge_fd = sandbox_config_with_read(cfg_huge_fd, "/tmp");
+    cfg_huge_fd = sandbox_config_with_max_nofile(cfg_huge_fd, 2000000000);
+    let r_huge_fd: Result[Int, String] = sandbox_apply_matrix(sys, cfg_huge_fd);
+    if !r_huge_fd.is_err() {
+        return Err("FAIL: sandbox_apply_matrix with unachievable FD ceiling must fail closed");
+    }
+
+    // Beat 4: Verify serialization integrity of colon-delimited paths
+    let empty_paths: List[String] = list_new();
+    if sandbox_config_paths_to_colon(empty_paths) != "" {
+        return Err("FAIL: empty paths to colon must be empty string");
+    }
+
+    let mut single_path: List[String] = list_new();
+    single_path = list_push(single_path, "/usr");
+    if sandbox_config_paths_to_colon(single_path) != "/usr" {
+        return Err("FAIL: single path serialization mismatch");
+    }
+
+    let mut multi_paths: List[String] = list_new();
+    multi_paths = list_push(multi_paths, "/a");
+    multi_paths = list_push(multi_paths, "/b/sub");
+    multi_paths = list_push(multi_paths, "/c");
+    multi_paths = list_push(multi_paths, "/d");
+    multi_paths = list_push(multi_paths, "/e");
+
+    let colon_res: String = sandbox_config_paths_to_colon(multi_paths);
+    if colon_res != "/a:/b/sub:/c:/d:/e" {
+        return Err("FAIL: multi-path serialization mismatch: " + colon_res);
+    }
+    if str_contains(colon_res, "::") {
+        return Err("FAIL: serialization produced double colons");
+    }
+    if str_slice(colon_res, 0, 1) == ":" {
+        return Err("FAIL: serialization produced leading colon");
+    }
+
+    // Beat 5: Verify SandboxStatus formatting and unconfined introspection
+    let st_unconf: SandboxStatus = sandbox_current_status();
+    if st_unconf.is_enforced {
+        return Err("FAIL: current_status should initially report is_enforced=false");
+    }
+    let s_unconf: String = sandbox_status_to_string(st_unconf);
+    if !str_contains(s_unconf, "Enforcement: unconfined") {
+        return Err("FAIL: unconfined status string mismatch");
+    }
+    if !str_contains(s_unconf, "Filesystem: unrestricted") {
+        return Err("FAIL: unconfined status filesystem mismatch");
+    }
+
+    let st_all: SandboxStatus = sandbox_status_new(true, "Linux Landlock LSM + seccomp-bpf", 255, true, true, true, true);
+    let s_all: String = sandbox_status_to_string(st_all);
+    if !str_contains(s_all, "Enforcement: active") {
+        return Err("FAIL: active status string missing Enforcement: active");
+    }
+    if !str_contains(s_all, "Filesystem: restricted") {
+        return Err("FAIL: active status missing Filesystem: restricted");
+    }
+    if !str_contains(s_all, "Network: restricted") {
+        return Err("FAIL: active status missing Network: restricted");
+    }
+    if !str_contains(s_all, "Processes: restricted") {
+        return Err("FAIL: active status missing Processes: restricted");
+    }
+    if !str_contains(s_all, "Resource Quotas: enforced") {
+        return Err("FAIL: active status missing Resource Quotas: enforced");
+    }
+
+    // Beat 6: Verify kernel backend availability, version, and final positive matrix apply
+    if sandbox_engine_version() != "1.0.0" {
+        return Err("FAIL: engine version mismatch");
+    }
+    if !sandbox_is_available() {
+        return Err("FAIL: Landlock kernel sandbox backend not available");
+    }
+    let b_name: String = sandbox_probe_backend();
+    if !str_contains(b_name, "Landlock") {
+        return Err("FAIL: backend probe mismatch: " + b_name);
+    }
+
+    let mut good_cfg: SandboxConfig = sandbox_config_default();
+    good_cfg = sandbox_config_with_read(good_cfg, "/");
+    good_cfg = sandbox_config_with_write(good_cfg, "/tmp");
+    good_cfg = sandbox_config_with_max_cpu(good_cfg, 60);
+    let r_good: Result[Int, String] = sandbox_apply_matrix(sys, good_cfg);
+    if r_good.is_err() {
+        let err_s: String = match r_good { Ok(_) => "", Err(e) => e };
+        return Err("FAIL: positive sandbox_apply_matrix failed: " + err_s);
+    }
+
+    println("probe_sandbox_adv1: ALL ADVERSARIAL ASSERTIONS PASSED (100% verified)");
+    return Ok(0);
+}

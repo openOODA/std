@@ -1,0 +1,66 @@
+// # Filesystem Capability Token Verification Probe
+//
+// Logline: Verify that &FsReadCap admits reads and queries, &FsWriteCap admits writes and directory operations, and neither violates boundary invariants.
+//
+// Setup: Requires &FsReadCap, &FsWriteCap, and &ProcessCap. Writes scratch file, verifies reads and size, then cleans up.
+//
+// Beats:
+//   1. Write file via fs_write_file (&FsWriteCap).
+//   2. Probe path existence and file size via fs_path_exists and fs_file_size (&FsReadCap).
+//   3. Read content via fs_read_file (&FsReadCap) and assert byte-exact match.
+//   4. Create nested directory via fs_mkdir_p (&FsWriteCap) and assert fs_is_dir (&FsReadCap).
+//   5. Remove temporary test artifacts and confirm unlinked status.
+
+import "fs/os/fs.oo";
+
+pub fn main(fs_r: &FsReadCap, fs_w: &FsWriteCap) -> Result[Int, String] {
+    let test_dir: String = ".ooda-cache/qa_cap_fs";
+    let test_file: String = test_dir + "/test_payload.txt";
+    let payload: String = "CAPABILITY_FS_PAYLOAD_TOKEN_OK";
+
+    let mk: Result[Void, String] = fs_mkdir_p(fs_w, test_dir);
+    if mk.is_err() {
+        return Err("cap_fs: fs_mkdir_p failed under &FsWriteCap");
+    }
+
+    if !fs_is_dir(fs_r, test_dir) {
+        return Err("cap_fs: fs_is_dir failed under &FsReadCap");
+    }
+
+    let wr: Result[Void, String] = fs_write_file(fs_w, test_file, payload);
+    if wr.is_err() {
+        return Err("cap_fs: fs_write_file failed under &FsWriteCap");
+    }
+
+    if !fs_path_exists(fs_r, test_file) {
+        return Err("cap_fs: fs_path_exists returned false under &FsReadCap");
+    }
+
+    let sz: Int = fs_file_size(fs_r, test_file);
+    let exp_sz: Int = chars_len(payload);
+    if sz != exp_sz {
+        return Err("cap_fs: fs_file_size mismatch under &FsReadCap");
+    }
+
+    let rd: Result[String, String] = fs_read_file(fs_r, test_file);
+    if rd.is_err() {
+        return Err("cap_fs: fs_read_file failed under &FsReadCap");
+    }
+
+    let content: String = match rd { Ok(s) => s, Err(_) => "" };
+    if content != payload {
+        return Err("cap_fs: content mismatch under &FsReadCap");
+    }
+
+    let rm: Result[Void, String] = fs_remove_file(fs_w, test_file);
+    if rm.is_err() {
+        return Err("cap_fs: fs_remove_file failed under &FsWriteCap");
+    }
+
+    if fs_path_exists(fs_r, test_file) {
+        return Err("cap_fs: file should not exist after fs_remove_file");
+    }
+
+    println("probe: std/qa cap_fs passed (&FsReadCap, &FsWriteCap verified)");
+    return Ok(0);
+}

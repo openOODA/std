@@ -1,0 +1,83 @@
+// # Sandbox Status Module
+//
+// Logline: Runtime status inspection structures and diagnostic formatters for kernel sandbox containment.
+//
+// Setup: Pure data representation for reporting kernel lockdown state, backend type, and active restrictions.
+//
+// Beats:
+//   1. Define SandboxStatus struct with enforcement flags, backend name, and active restrictions.
+//   2. Provide constructors for unconfined, active, and custom sandbox states.
+//   3. Format sandbox status into human-readable diagnostic summaries.
+
+type SandboxStatus = struct {
+    is_enforced: Bool,
+    backend_name: String,
+    active_caps_mask: Int,
+    fs_restricted: Bool,
+    net_restricted: Bool,
+    proc_restricted: Bool,
+    quotas_enforced: Bool
+};
+
+pub fn sandbox_status_unconfined(backend: String) -> SandboxStatus {
+    return SandboxStatus {
+        is_enforced: false,
+        backend_name: backend,
+        active_caps_mask: 0,
+        fs_restricted: false,
+        net_restricted: false,
+        proc_restricted: false,
+        quotas_enforced: false
+    };
+}
+
+pub fn sandbox_status_new(
+    enforced: Bool,
+    backend: String,
+    caps: Int,
+    fs: Bool,
+    net: Bool,
+    proc: Bool,
+    quotas: Bool
+) -> SandboxStatus {
+    return SandboxStatus {
+        is_enforced: enforced,
+        backend_name: backend,
+        active_caps_mask: caps,
+        fs_restricted: fs,
+        net_restricted: net,
+        proc_restricted: proc,
+        quotas_enforced: quotas
+    };
+}
+
+pub fn sandbox_status_to_string(st: SandboxStatus) -> String {
+    let mut out: String = "Sandbox Backend: " + st.backend_name + "\n";
+    if st.is_enforced {
+        out = out + "Enforcement: active\n";
+    } else {
+        out = out + "Enforcement: unconfined\n";
+    }
+    out = out + "Active Caps Mask: " + (st).active_caps_mask.to_string() + "\n";
+    if st.fs_restricted {
+        out = out + "Filesystem: restricted\n";
+    } else {
+        out = out + "Filesystem: unrestricted\n";
+    }
+    if st.net_restricted {
+        out = out + "Network: restricted\n";
+    } else {
+        out = out + "Network: unrestricted\n";
+    }
+    if st.proc_restricted {
+        out = out + "Processes: restricted\n";
+    } else {
+        out = out + "Processes: unrestricted\n";
+    }
+    if st.quotas_enforced {
+        out = out + "Resource Quotas: enforced\n";
+    } else {
+        out = out + "Resource Quotas: none\n";
+    }
+    return out;
+}

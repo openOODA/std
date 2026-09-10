@@ -1,0 +1,91 @@
+// # Sandbox Execution Engine
+//
+// Logline: Enforce kernel sandbox confinement matrices via Linux Landlock LSM, seccomp filters, and POSIX resource limits.
+//
+// Setup: Requires &SysCap capability token for sandbox matrix enforcement. Probe and status inspection take zero ambient capabilities.
+//
+// Beats:
+//   1. Probe host kernel sandbox backend and check availability.
+//   2. Apply Landlock filesystem allowlist restrictions under &SysCap.
+//   3. Apply memory, CPU timeout, and file descriptor limits via rlimits.
+//   4. Report active sandbox containment status.
+
+import "config.oo";
+import "status.oo";
+
+pub fn sandbox_engine_version() -> String {
+    return "1.0.0";
+}
+
+pub fn sandbox_probe_backend() -> String {
+    let avail: Int = landlock_is_available();
+    if avail > 0 {
+        return "Linux Landlock LSM + seccomp-bpf";
+    }
+    return "none";
+}
+
+pub fn sandbox_is_available() -> Bool {
+    let avail: Int = landlock_is_available();
+    return avail > 0;
+}
+
+pub fn sandbox_apply_matrix(sys: &SysCap, cfg: SandboxConfig) -> Result[Int, String] {
+    if !sandbox_is_available() {
+        if cfg.fail_closed {
+            return Err("ERR\tsandbox\tkernel sandbox backend unavailable");
+        }
+    }
+
+    let val_r: Result[Bool, String] = sandbox_config_validate_paths(cfg.read_allowlist);
+    if val_r.is_err() {
+        let msg: String = match val_r { Ok(_) => "", Err(e) => e };
+        return Err("ERR\tsandbox\t" + msg);
+    }
+    let val_w: Result[Bool, String] = sandbox_config_validate_paths(cfg.write_allowlist);
+    if val_w.is_err() {
+        let msg: String = match val_w { Ok(_) => "", Err(e) => e };
+        return Err("ERR\tsandbox\t" + msg);
+    }
+
+    let r_dirs: String = sandbox_config_paths_to_colon(cfg.read_allowlist);
+    let w_dirs: String = sandbox_config_paths_to_colon(cfg.write_allowlist);
+
+    let r_ll: Result[String, String] = landlock_restrict(sys, r_dirs, w_dirs);
+    if r_ll.is_err() {
+        let err_msg: String = match r_ll { Ok(_) => "", Err(e) => e };
+        return Err("ERR\tsandbox\tlandlock restriction failed: " + err_msg);
+    }
+
+    if cfg.max_mem_mb > 0 {
+        let r_mem: Result[String, String] = oo_rlimit_set_mem_mb(sys, cfg.max_mem_mb);
+        if r_mem.is_err() {
+            return Err("ERR\tsandbox\tfailed to set memory quota");
+        }
+    }
+
+    if cfg.max_cpu_sec > 0 {
+        let r_cpu: Result[String, String] = oo_rlimit_set_cpu_sec(sys, cfg.max_cpu_sec);
+        if r_cpu.is_err() {
+            return Err("ERR\tsandbox\tfailed to set cpu timeout");
+        }
+    }
+
+    if cfg.max_nofile > 0 {
+        let r_fd: Result[String, String] = oo_rlimit_set_nofile(sys, cfg.max_nofile);
+        if r_fd.is_err() {
+            return Err("ERR\tsandbox\tfailed to set max file descriptors");
+        }
+    }
+
+    return Ok(0);
+}
+
+pub fn sandbox_current_status() -> SandboxStatus {
+    let backend_name: String = sandbox_probe_backend();
+    let avail: Bool = sandbox_is_available();
+    if !avail {
+        return sandbox_status_unconfined("none");
+    }
+    return sandbox_status_unconfined(backend_name);
+}

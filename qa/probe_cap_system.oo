@@ -1,0 +1,41 @@
+// # System Resource Capability Token Verification Probe
+//
+// Logline: Verify that &TimeCap gates clocks and timers, &RandCap gates OS entropy, and &AllocCap gates raw memory allocation.
+//
+// Setup: Requires &TimeCap, &RandCap, and &AllocCap.
+//
+// Beats:
+//   1. Measure wall clock and sleep interval via now_ms and sleep_ms (&TimeCap).
+//   2. Obtain entropy values via random and verify non-zero variance (&RandCap).
+//   3. Allocate and free aligned heap memory via alloc_bytes and free_bytes (&AllocCap).
+
+pub fn main(time: &TimeCap, rand: &RandCap, alloc: &AllocCap) -> Result[Int, String] {
+    let t0: Int = now_ms(time);
+    if t0 <= 0 {
+        return Err("cap_system: now_ms returned non-positive timestamp under &TimeCap");
+    }
+
+    sleep_ms(time, 2);
+    let t1: Int = now_ms(time);
+    if t1 < t0 {
+        return Err("cap_system: clock went backwards under &TimeCap");
+    }
+
+    let r1: Int = random(rand);
+    let r2: Int = random(rand);
+    if r1 == 0 && r2 == 0 {
+        let r3: Int = random(rand);
+        if r3 == 0 {
+            return Err("cap_system: random generated all zeros under &RandCap");
+        }
+    }
+
+    let ptr: Int = alloc_bytes(alloc, 64);
+    if ptr == 0 {
+        return Err("cap_system: alloc_bytes returned null address under &AllocCap");
+    }
+    free_bytes(alloc, ptr);
+
+    println("probe: std/qa cap_system passed (&TimeCap, &RandCap, &AllocCap verified)");
+    return Ok(0);
+}

@@ -136,3 +136,52 @@
 //    delete them; commit or drop meta/test/{em_gauge,moonshot_score}
 //    (m4).
 // 6. README.oot — File: → `std/README.oot` (m5).
+
+// ## 7. Resolution addendum (same-day fix pass)
+
+// Verified against certified ~/.openooda/bin/oodac (339a587c…) after the
+// stale ~/.local/bin shadow set was removed by the repaired installer.
+
+// CLOSED:
+//   M1 — net/http_resp_parse.oo:81 use-after-move: slice `line` once
+//        into `val`, strip the leading space from `val` itself (no
+//        second binding). `oodac check net/ANCHOR.oo` → OK.
+//   m1 — net_mod_tcp_read now mirrors net_tcp_read(tcp,fd,max_bytes);
+//        same pass caught net_mod_tls_connect and net_mod_udp_bind
+//        returning Result[String,_] over Result[Int,_] targets — all
+//        three wrappers now mirror their leaf signatures exactly.
+//   m2 — probe_sdl_window.oo Setup: element added.
+//   m3 — tmp.bin deleted; *.tmp.bin added to .gitignore (covers manual
+//        builds; suite already rm's its own).
+//   m4 — probe_sandbox_{m1,adv1,stress} + probe_repl_direct wired into
+//        suite.oo + ANCHOR.oo beats 20-23. em_gauge/moonshot_score were
+//        already wired via meta/test/ANCHOR.oo re-exports (not orphans).
+//   m5 — README.oot File: → std/README.oot.
+//   n2 — sec/ANCHOR.oo:61,116 imports + re-exports sec/sandbox.
+
+// NEW FINDINGS:
+//   C1 (oodac lane, systemic): functions defined in files named
+//      ANCHOR.oo typecheck but never reach the C emitter — check passes,
+//      gcc sees implicit declarations. Controlled repro: identical
+//      wrapper in hub/ANCHOR.oo fails emit while hub/hub.oo emits fine.
+//      Every X_mod_* wrapper across std is unbuildable for consumers
+//      until emit is fixed. Blocks probe_repl_m1_audit (kept unwired).
+//   M6: fs_mkdir_p (fs/os/fs.oo:103) cannot create absolute paths when
+//      any prefix sits outside OODA_FS_WRITEDIR — oo_fs_mkdir's deny
+//      check precedes its EEXIST tolerance, so e.g. /home fails before
+//      the leaf is reached. Relative workspace paths are the working
+//      convention (probe_cap_fs uses .ooda-cache/). Proper fix needs
+//      oodar to EEXIST-tolerate before the boundary check.
+//   M7: probe_sandbox_stress hardcoded /tmp fixtures the ambient write
+//      cap can never create; reworked to workspace-relative fs ops +
+//      OODA_FS_READDIR-anchored Landlock grants. All three denial axes
+//      now attribute to the kernel (ambient could reach them pre-apply).
+//      Passes, double-run identical.
+//   n3: sandbox_current_status() (sec/sandbox/engine.oo:84) always
+//      returns unconfined — Landlock has no query API, so post-apply
+//      status can never report enforced. Probe PHASE 6 prints
+//      IS_ENFORCED=false after a successful apply; the denial tests are
+//      the real evidence. Engine needs tracked state or a renamed fn.
+//   n4: probe_repl_m1_test2 was vacuous (eval'd 1+2, no assert) — now
+//      asserts Ok + output contains 3. Unwired: redundant with
+//      probe_repl_direct.
