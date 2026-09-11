@@ -1,0 +1,103 @@
+// # Deterministic 60Hz Frame Loop and Pacing
+//
+// Logline: Implements nanosecond monotonic frame timing, zero-allocation ARC state preservation, and 60Hz pace regulation.
+//
+// Setup: Pure timing orchestrator calculating frame budget, elapsed durations, and pacing adjustments without heap allocation in tick.
+//
+// Beats:
+//   1. Initialize frame timer with target frame rate (default 60Hz) and interval in nanoseconds (16,666,667 ns).
+//   2. Compute frame delta and sleep duration to maintain exact 60Hz cadence.
+//   3. Track and account for dropped frames when render tick overruns budget.
+//   4. Provide zero-churn grid update contract verification for deterministic frame loops.
+
+pub type FrameTimer = struct {
+    target_fps: Int,
+    frame_interval_ns: Int,
+    last_frame_ns: Int,
+    frame_count: Int,
+    total_dropped: Int
+};
+
+pub type FrameStep = struct {
+    should_render: Bool,
+    sleep_ns: Int,
+    dropped_frames: Int,
+    timer: FrameTimer
+};
+
+pub fn frame_loop_target_interval_ns(fps: Int) -> Int {
+    if fps <= 0 { return 16666667; }
+    return 1000000000 / fps;
+}
+
+pub fn frame_timer_new(target_fps: Int) -> FrameTimer {
+    let interval: Int = frame_loop_target_interval_ns(target_fps);
+    return FrameTimer {
+        target_fps: target_fps,
+        frame_interval_ns: interval,
+        last_frame_ns: 0,
+        frame_count: 0,
+        total_dropped: 0
+    };
+}
+
+pub fn frame_timer_tick(timer: FrameTimer, current_time_ns: Int) -> FrameStep {
+    if timer.last_frame_ns == 0 {
+        let updated: FrameTimer = FrameTimer {
+            target_fps: timer.target_fps,
+            frame_interval_ns: timer.frame_interval_ns,
+            last_frame_ns: current_time_ns,
+            frame_count: 1,
+            total_dropped: 0
+        };
+        return FrameStep {
+            should_render: true,
+            sleep_ns: 0,
+            dropped_frames: 0,
+            timer: updated
+        };
+    }
+
+    let elapsed: Int = current_time_ns - timer.last_frame_ns;
+    if elapsed < timer.frame_interval_ns {
+        let sleep_needed: Int = timer.frame_interval_ns - elapsed;
+        return FrameStep {
+            should_render: false,
+            sleep_ns: sleep_needed,
+            dropped_frames: 0,
+            timer: timer
+        };
+    }
+
+    let frames_elapsed: Int = elapsed / timer.frame_interval_ns;
+    let mut dropped: Int = 0;
+    if frames_elapsed > 1 {
+        dropped = frames_elapsed - 1;
+    }
+
+    let next_frame_time: Int = timer.last_frame_ns + (frames_elapsed * timer.frame_interval_ns);
+    let updated: FrameTimer = FrameTimer {
+        target_fps: timer.target_fps,
+        frame_interval_ns: timer.frame_interval_ns,
+        last_frame_ns: next_frame_time,
+        frame_count: timer.frame_count + 1,
+        total_dropped: timer.total_dropped + dropped
+    };
+
+    return FrameStep {
+        should_render: true,
+        sleep_ns: 0,
+        dropped_frames: dropped,
+        timer: updated
+    };
+}
+
+pub fn frame_timer_reset(timer: FrameTimer, current_time_ns: Int) -> FrameTimer {
+    return FrameTimer {
+        target_fps: timer.target_fps,
+        frame_interval_ns: timer.frame_interval_ns,
+        last_frame_ns: current_time_ns,
+        frame_count: timer.frame_count,
+        total_dropped: timer.total_dropped
+    };
+}

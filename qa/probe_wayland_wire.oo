@@ -110,7 +110,34 @@ pub fn main() -> Result[Int, String] {
     let ev_resumed: String = match ev_resumed_res { Ok(s) => s, Err(_) => "" };
     if ev_resumed != "RESUMED" { return Err("parse resumed event value mismatch"); }
 
-    // 5. Negative-Trust Fail-Closed Falsification
+    // 5. Deterministic 60Hz Frame Loop Pacing (16,666,666 ns budget)
+    let ft0: FrameTimer = frame_timer_new(60);
+    if ft0.target_fps != 60 { return Err("target_fps != 60"); }
+    if ft0.frame_interval_ns != 16666666 { return Err("frame interval != 16666666 ns"); }
+
+    // First tick establishes baseline
+    let s1: FrameStep = frame_timer_tick(ft0, 1000000000);
+    if !s1.should_render { return Err("first frame tick should render"); }
+    if s1.timer.frame_count != 1 { return Err("first frame count != 1"); }
+
+    // Tick after 5ms (budget not yet reached -> sleep needed)
+    let s2: FrameStep = frame_timer_tick(s1.timer, 1005000000);
+    if s2.should_render { return Err("frame tick before interval should not render"); }
+    if s2.sleep_ns != 11666666 { return Err("sleep_ns mismatch for 5ms elapsed"); }
+
+    // Tick after 16.666ms (budget reached -> render next frame)
+    let s3: FrameStep = frame_timer_tick(s1.timer, 1016666666);
+    if !s3.should_render { return Err("frame tick at 16.666ms should render"); }
+    if s3.timer.frame_count != 2 { return Err("frame count != 2"); }
+    if s3.dropped_frames != 0 { return Err("dropped_frames should be 0"); }
+
+    // Tick after 50ms (budget exceeded by ~3 frames -> dropped frames detected)
+    let s4: FrameStep = frame_timer_tick(s3.timer, 1066666666);
+    if !s4.should_render { return Err("frame tick at overrun should render"); }
+    if s4.dropped_frames != 2 { return Err("overrun should report 2 dropped frames"); }
+    if s4.timer.total_dropped != 2 { return Err("total_dropped count != 2"); }
+
+    // 6. Negative-Trust Fail-Closed Falsification
     let mut truncated: List[Int] = list_new();
     truncated = list_push(truncated, 1);
     truncated = list_push(truncated, 0);
@@ -127,6 +154,6 @@ pub fn main() -> Result[Int, String] {
     let bad2: WaylandMsgHeader = wayland_parse_msg_header(illegal_len, 0);
     if bad2.ok { return Err("size < 8 did not fail"); }
 
-    println("PROBE OK\twayland_wire\tall 5 sections verified (wire + core + layer_shell + idle + negative)");
+    println("PROBE OK\twayland_wire\tall 6 sections verified (wire + core + layer_shell + idle + frame_loop + negative)");
     return Ok(0);
 }
