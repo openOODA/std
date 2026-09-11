@@ -71,16 +71,18 @@ pub fn fuzz_report_new() -> FuzzReport {
     };
 }
 
-pub fn fuzz_record_pass(mut rep: FuzzReport) -> FuzzReport {
-    rep.total_runs = rep.total_runs + 1;
-    rep.passed_runs = rep.passed_runs + 1;
-    return rep;
+pub fn fuzz_record_pass(rep: FuzzReport) -> FuzzReport {
+    let mut r: FuzzReport = rep;
+    r.total_runs = r.total_runs + 1;
+    r.passed_runs = r.passed_runs + 1;
+    return r;
 }
 
-pub fn fuzz_record_fail(mut rep: FuzzReport, counterexample_msg: String) -> FuzzReport {
-    rep.total_runs = rep.total_runs + 1;
-    rep.failed_runs = rep.failed_runs + 1;
-    rep.counterexample = counterexample_msg;
-    rep.is_success = false;
-    return rep;
+pub fn fuzz_record_fail(rep: FuzzReport, counterexample_msg: String) -> FuzzReport {
+    let mut r: FuzzReport = rep;
+    r.total_runs = r.total_runs + 1;
+    r.failed_runs = r.failed_runs + 1;
+    r.counterexample = counterexample_msg;
+    r.is_success = false;
+    return r;
 }

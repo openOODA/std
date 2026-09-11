@@ -1,0 +1,237 @@
+// # Declarative Swarm Manifest Parser Module
+//
+// Logline: Parse and emit declarative swarm.oot configuration files defining actor topologies, roles, caps, and fuel.
+//
+// Setup: Pure parser converting declarative text into SwarmManifest models without ambient authority.
+//
+// Beats:
+//   1. Define SwarmManifest data structure.
+//   2. Emit standardized swarm.oot configuration templates for swarm init.
+//   3. Parse declarative swarm.oot text, stripping comments and validating role definitions.
+//   4. Validate role assignments (Planner, Coder, Tester, Auditor) and capability bounds.
+//   5. Load manifest from filesystem under FsReadCap.
+
+import "std/core/primitives/list.oo";
+import "std/fs/os/fs.oo";
+import "std/app/agent/swarm/agent_cell.oo";
+
+pub type SwarmManifest = struct {
+    name: String,
+    strategy: Int,
+    max_restarts: Int,
+    roles: List[AgentRole],
+    initial_task: String
+};
+
+fn manifest_is_digit(ch: String) -> Bool {
+    return ch == "0" || ch == "1" || ch == "2" || ch == "3" || ch == "4" || ch == "5" || ch == "6" || ch == "7" || ch == "8" || ch == "9";
+}
+
+fn manifest_parse_nonneg_int(s: String) -> Result[Int, String] {
+    let t: String = str_trim(s);
+    let n: Int = chars_len(t);
+    if n == 0 { return Err("empty integer"); }
+    let mut acc: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(t, i);
+        if !manifest_is_digit(ch) { return Err("non-digit character: " + ch); }
+        let d: Int = if ch == "0" { 0 } else if ch == "1" { 1 } else if ch == "2" { 2 } else if ch == "3" { 3 } else if ch == "4" { 4 } else if ch == "5" { 5 } else if ch == "6" { 6 } else if ch == "7" { 7 } else if ch == "8" { 8 } else { 9 };
+        acc = acc * 10 + d;
+        i = i + 1;
+    }
+    return Ok(acc);
+}
+
+fn manifest_parse_pos_int(s: String) -> Result[Int, String] {
+    let r: Result[Int, String] = manifest_parse_nonneg_int(s);
+    if r.is_err() { return r; }
+    let v: Int = match r { Ok(x) => x, Err(_) => 0 };
+    if v <= 0 { return Err("integer must be positive (> 0)"); }
+    return Ok(v);
+}
+
+fn manifest_parse_caps(v: String) -> Result[AgentCaps, String] {
+    let mut can_read: Bool = false;
+    let mut can_write: Bool = false;
+    let mut can_exec: Bool = false;
+    let mut can_eval: Bool = false;
+    let s: String = str_trim(v);
+    if s == "none" || chars_len(s) == 0 { return Ok(agent_caps_new(false, false, false, false)); }
+    let n: Int = chars_len(s);
+    let mut start: Int = 0;
+    let mut i: Int = 0;
+    while i <= n {
+        if i == n || char_at(s, i) == "," {
+            let tok: String = str_trim(str_slice(s, start, i));
+            if chars_len(tok) > 0 {
+                if tok == "read" { can_read = true; }
+                else if tok == "write" { can_write = true; }
+                else if tok == "exec" { can_exec = true; }
+                else if tok == "eval" { can_eval = true; }
+                else if tok == "none" { }
+                else { return Err("MANIFEST_PARSE_FAILED: unknown capability token '" + tok + "'"); }
+            }
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+    return Ok(agent_caps_new(can_read, can_write, can_exec, can_eval));
+}
+
+fn manifest_split_lines(content: String) -> List[String] {
+    let mut lines: List[String] = list_new();
+    let n: Int = chars_len(content);
+    let mut start: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(content, i);
+        if ch == "\n" { lines = list_push(lines, str_slice(content, start, i)); start = i + 1; }
+        i = i + 1;
+    }
+    if start < n { lines = list_push(lines, str_slice(content, start, n)); }
+    return lines;
+}
+
+pub fn swarm_manifest_template() -> String {
+    return "# openOODA Swarm Topology Manifest\n# Strategy: OneForOne\n# MaxRestarts: 3\n# Task: Execute autonomous OODA cycle\n\n[agent:planner]\nrole = Planner\nfuel = 1000\ninbox_cap = 64\ncaps = read\n\n[agent:coder]\nrole = Coder\nfuel = 2000\ninbox_cap = 64\ncaps = read,write,exec,eval\n\n[agent:tester]\nrole = Tester\nfuel = 1500\ninbox_cap = 64\ncaps = read,exec,eval\n\n[agent:auditor]\nrole = Auditor\nfuel = 1000\ninbox_cap = 64\ncaps = read\n";
+}
+
+pub fn manifest_template() -> String {
+    return swarm_manifest_template();
+}
+
+pub fn swarm_manifest_parse(content: String) -> Result[SwarmManifest, String] {
+    let lines: List[String] = manifest_split_lines(content);
+    let num_lines: Int = list_len(lines);
+    let mut swarm_name: String = "swarm";
+    let mut strategy: Int = 0;
+    let mut max_restarts: Int = 3;
+    let mut initial_task: String = "";
+    let mut roles: List[AgentRole] = list_new();
+
+    let mut in_section: Bool = false;
+    let mut cur_role_name: String = "";
+    let mut cur_fuel: Int = 1000;
+    let mut cur_inbox_cap: Int = 64;
+    let mut cur_caps: AgentCaps = agent_caps_new(true, false, false, false);
+
+    let mut i: Int = 0;
+    while i < num_lines {
+        let raw_line: String = list_get(lines, i);
+        let line: String = str_trim(raw_line);
+        if chars_len(line) == 0 { i = i + 1; continue; }
+        if str_starts_with(line, "#") {
+            if str_contains(line, "Strategy:") {
+                if str_contains(line, "OneForAll") { strategy = 1; }
+                else if str_contains(line, "OneForOne") { strategy = 0; }
+            }
+            if str_contains(line, "MaxRestarts:") {
+                let r_idx: Int = str_index_of(line, "MaxRestarts:");
+                let sub_s: String = str_slice(line, r_idx + 12, chars_len(line));
+                let parsed_r: Result[Int, String] = manifest_parse_nonneg_int(sub_s);
+                if parsed_r.is_ok() { max_restarts = match parsed_r { Ok(v) => v, Err(_) => 3 }; }
+            }
+            if str_contains(line, "Task:") {
+                let t_idx: Int = str_index_of(line, "Task:");
+                initial_task = str_trim(str_slice(line, t_idx + 5, chars_len(line)));
+            }
+        } else if str_starts_with(line, "[") {
+            if !str_ends_with(line, "]") {
+                return Err("MANIFEST_PARSE_FAILED: unclosed section header: " + line);
+            }
+            if in_section {
+                if chars_len(cur_role_name) == 0 {
+                    return Err("MANIFEST_PARSE_FAILED: agent section missing role property");
+                }
+                roles = list_push(roles, agent_role_with_inbox(cur_role_name, cur_caps, cur_fuel, cur_inbox_cap));
+            }
+            in_section = true;
+            cur_role_name = "";
+            cur_fuel = 1000;
+            cur_inbox_cap = 64;
+            cur_caps = agent_caps_new(true, false, false, false);
+        } else if str_contains(line, "=") {
+            let eq_idx: Int = str_index_of(line, "=");
+            let k: String = str_trim(str_slice(line, 0, eq_idx));
+            let v: String = str_trim(str_slice(line, eq_idx + 1, chars_len(line)));
+            if in_section {
+                if k == "role" { cur_role_name = v; }
+                else if k == "fuel" {
+                    let pf: Result[Int, String] = manifest_parse_pos_int(v);
+                    if pf.is_err() { return Err("MANIFEST_PARSE_FAILED: invalid fuel value '" + v + "'"); }
+                    cur_fuel = match pf { Ok(f) => f, Err(_) => 1000 };
+                }
+                else if k == "inbox_cap" {
+                    let pc: Result[Int, String] = manifest_parse_pos_int(v);
+                    if pc.is_err() { return Err("MANIFEST_PARSE_FAILED: invalid inbox_cap value '" + v + "'"); }
+                    cur_inbox_cap = match pc { Ok(c) => c, Err(_) => 64 };
+                }
+                else if k == "caps" {
+                    let pcaps: Result[AgentCaps, String] = manifest_parse_caps(v);
+                    if pcaps.is_err() {
+                        let ce: String = match pcaps { Ok(_) => "", Err(e) => e };
+                        return Err(ce);
+                    }
+                    cur_caps = match pcaps { Ok(c) => c, Err(_) => cur_caps };
+                }
+                else { return Err("MANIFEST_PARSE_FAILED: unknown role property '" + k + "'"); }
+            } else {
+                if k == "task" { initial_task = v; }
+                else if k == "name" { swarm_name = v; }
+                else if k == "strategy" {
+                    if v == "OneForAll" { strategy = 1; }
+                    else if v == "OneForOne" { strategy = 0; }
+                    else { return Err("MANIFEST_PARSE_FAILED: unknown supervision strategy '" + v + "'"); }
+                }
+                else if k == "max_restarts" {
+                    let pr: Result[Int, String] = manifest_parse_nonneg_int(v);
+                    if pr.is_err() { return Err("MANIFEST_PARSE_FAILED: invalid max_restarts value '" + v + "'"); }
+                    max_restarts = match pr { Ok(m) => m, Err(_) => 3 };
+                }
+            }
+        }
+        i = i + 1;
+    }
+
+    if in_section {
+        if chars_len(cur_role_name) == 0 {
+            return Err("MANIFEST_PARSE_FAILED: agent section missing role property");
+        }
+        roles = list_push(roles, agent_role_with_inbox(cur_role_name, cur_caps, cur_fuel, cur_inbox_cap));
+    }
+
+    if list_len(roles) == 0 {
+        return Err("MANIFEST_PARSE_FAILED: no role sections found");
+    }
+
+    return Ok(SwarmManifest {
+        name: swarm_name,
+        strategy: strategy,
+        max_restarts: max_restarts,
+        roles: roles,
+        initial_task: initial_task
+    });
+}
+
+pub fn manifest_parse(content: String) -> Result[SwarmManifest, String] {
+    return swarm_manifest_parse(content);
+}
+
+pub fn swarm_manifest_load(fs_r: &FsReadCap, path: String) -> Result[SwarmManifest, String] {
+    let read_res: Result[String, String] = fs_read_file(fs_r, path);
+    if read_res.is_err() {
+        let err_msg: String = match read_res { Ok(_) => "", Err(e) => e };
+        return Err("MANIFEST_LOAD_FAILED: " + err_msg);
+    }
+    let content: String = match read_res { Ok(s) => s, Err(_) => "" };
+    return swarm_manifest_parse(content);
+}
+
+pub fn swarm_load_manifest(fs_r: &FsReadCap, path: String) -> Result[SwarmManifest, String] {
+    return swarm_manifest_load(fs_r, path);
+}
+
+pub fn manifest_load(fs_r: &FsReadCap, path: String) -> Result[SwarmManifest, String] {
+    return swarm_manifest_load(fs_r, path);
+}

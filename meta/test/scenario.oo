@@ -28,8 +28,10 @@ pub fn scenario(p: &ProcessCap, fs: &FsReadCap, name: String) -> Result[Void, St
 
 pub fn check(p: &ProcessCap, cmd: String, within: Int) -> Result[Void, String]
     requires chars_len(cmd) > 0
-    requires within > 0
 {
+    if within <= 0 {
+        return Err("check failed: within must be positive");
+    }
     let r: Result[String, String] = process_exec(p, cmd);
     if r.is_err() {
         return Err("check failed (timeout " + within.to_string() + "s): " + cmd);

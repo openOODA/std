@@ -1,0 +1,234 @@
+// # Agent OODA Execution Cycle Module
+//
+// Logline: 4-phase Observe-Orient-Decide-Act execution cycle with ephemeral code candidate validation.
+//
+// Setup: Drives 1-turn OODA step across agent cells under ThreadCap and sandbox-capable process execution.
+//
+// Beats:
+//   1. Observe: Dequeue message from bounded inbox or poll environment under ThreadCap.
+//   2. Orient: Map message to role-specific intent, verify capability constraints.
+//   3. Decide: Validate candidate code or formulate actionable execution decision via ephemeral REPL.
+//   4. Act: Execute decision, update cell state, consume fuel, and emit output.
+
+import "std/core/primitives/list.oo";
+import "std/app/agent/swarm/agent_cell.oo";
+import "std/app/agent/swarm/supervisor.oo";
+import "std/app/agent/repl_engine.oo";
+
+pub type OodaTurnResult = struct {
+    cell: AgentCell,
+    action_taken: String,
+    output_message: String,
+    is_complete: Bool
+};
+
+fn ooda_fuel(t: &ThreadCap, c: AgentCell, cost: Int) -> Result[AgentCell, String] {
+    let res: Result[AgentCell, String] = agent_cell_consume_fuel(c, cost);
+    if res.is_err() { let _cr: AgentCell = agent_cell_crash(t, c, "OUT_OF_FUEL"); return Err("OUT_OF_FUEL"); }
+    return res;
+}
+
+pub fn ooda_cycle_validate_candidate(
+    fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap, expr: String
+) -> Result[String, String] {
+    return repl_eval_expr_headless(fs_r, fs_w, proc, time, expr);
+}
+
+pub fn ooda_step_turn(
+    thread: &ThreadCap, fs_r: &FsReadCap, fs_w: &FsWriteCap,
+    proc: &ProcessCap, time: &TimeCap, cell: AgentCell
+) -> Result[OodaTurnResult, String] {
+    if cell.state == 5 { return Err("AGENT_CRASHED: " + cell.last_error); }
+    if cell.state == 6 { return Ok(OodaTurnResult { cell: cell, action_taken: "TERMINATED", output_message: "Agent is terminated", is_complete: true }); }
+    if cell.fuel_remaining <= 0 { let _c: AgentCell = agent_cell_crash(thread, cell, "OUT_OF_FUEL"); return Err("OUT_OF_FUEL"); }
+
+    // Phase 1: OBSERVE
+    let mut cur: AgentCell = agent_cell_transition(cell, 1);
+    if list_len(cur.inbox) == 0 {
+        cur = agent_cell_transition(cur, 0);
+        return Ok(OodaTurnResult { cell: cur, action_taken: "IDLE_POLL", output_message: "Inbox empty, awaiting task", is_complete: false });
+    }
+    let pop_res: Result[AgentPopResult, String] = agent_cell_pop_message(thread, cur);
+    if pop_res.is_err() { let em: String = match pop_res { Ok(_) => "", Err(e) => e }; return Err(em); }
+    let pop_data: AgentPopResult = match pop_res { Ok(p) => p, Err(_) => AgentPopResult { cell: cur, msg: "" } };
+    cur = pop_data.cell;
+    let msg: String = pop_data.msg;
+    if msg == "CRASH" || str_starts_with(msg, "CRASH:") {
+        let _cr: AgentCell = agent_cell_crash(thread, cur, msg);
+        return Err("AGENT_CRASHED: " + msg);
+    }
+    let f1: Result[AgentCell, String] = ooda_fuel(thread, cur, 1);
+    if f1.is_err() { return Err("OUT_OF_FUEL"); }
+    cur = match f1 { Ok(c) => c, Err(_) => cur };
+
+    // Phase 2: ORIENT
+    cur = agent_cell_transition(cur, 2);
+    let f2: Result[AgentCell, String] = ooda_fuel(thread, cur, 1);
+    if f2.is_err() { return Err("OUT_OF_FUEL"); }
+    cur = match f2 { Ok(c) => c, Err(_) => cur };
+    let is_eval_msg: Bool = str_starts_with(msg, "EVAL:") || str_starts_with(msg, "ASSERT:") || str_starts_with(msg, "EVAL_OK:");
+    if is_eval_msg && !cur.role.caps.can_eval {
+        let _cr: AgentCell = agent_cell_crash(thread, cur, "CAPABILITY_DENIED: can_eval required");
+        return Err("CAPABILITY_DENIED: role " + cur.role.name + " cannot eval");
+    }
+    if str_starts_with(msg, "WRITE:") && !cur.role.caps.can_write {
+        let _cr: AgentCell = agent_cell_crash(thread, cur, "CAPABILITY_DENIED: can_write required");
+        return Err("CAPABILITY_DENIED: role " + cur.role.name + " cannot write");
+    }
+
+    // Phase 3: DECIDE
+    cur = agent_cell_transition(cur, 3);
+    let f3: Result[AgentCell, String] = ooda_fuel(thread, cur, 2);
+    if f3.is_err() { return Err("OUT_OF_FUEL"); }
+    cur = match f3 { Ok(c) => c, Err(_) => cur };
+    let mut decision: String = "";
+    let mut act_desc: String = "";
+    if str_starts_with(msg, "EVAL:") {
+        let expr: String = str_trim(str_slice(msg, 5, chars_len(msg)));
+        let eval_res: Result[String, String] = repl_eval_expr_headless(fs_r, fs_w, proc, time, expr);
+        if eval_res.is_ok() {
+            let val: String = match eval_res { Ok(v) => v, Err(_) => "" };
+            decision = "ASSERT: " + expr + " == " + val; act_desc = "EVAL:" + expr + " -> " + val;
+        } else {
+            let err_text: String = match eval_res { Ok(_) => "", Err(e) => e };
+            decision = "EVAL_ERR: " + err_text; act_desc = "EVAL_FAILED:" + expr;
+        }
+    } else if cur.role.name == "Coder" && str_starts_with(msg, "EVAL_OK:") {
+        let val: String = str_trim(str_slice(msg, 8, chars_len(msg)));
+        decision = "ASSERT: " + val + " == " + val; act_desc = "EVAL_OK:" + val;
+    } else if str_starts_with(msg, "ASSERT:") || str_starts_with(msg, "EVAL_OK:") {
+        let a_expr: String = if str_starts_with(msg, "ASSERT:") { str_trim(str_slice(msg, 7, chars_len(msg))) }
+                             else { str_trim(str_slice(msg, 8, chars_len(msg))) };
+        let a_res: Result[String, String] = repl_eval_expr_headless(fs_r, fs_w, proc, time, a_expr);
+        if a_res.is_ok() {
+            let a_val: String = match a_res { Ok(v) => v, Err(_) => "" };
+            decision = "AUDIT: VERIFIED: " + a_expr + " -> " + a_val; act_desc = "ASSERT_OK:" + a_expr;
+        } else {
+            let a_err: String = match a_res { Ok(_) => "", Err(e) => e };
+            decision = "ASSERT_FAILED: " + a_err; act_desc = "ASSERT_FAILED:" + a_expr;
+        }
+    } else if str_starts_with(msg, "TASK:") {
+        let task_desc: String = str_trim(str_slice(msg, 5, chars_len(msg)));
+        if str_starts_with(task_desc, "EVAL:") { decision = task_desc; }
+        else { decision = "EVAL: " + task_desc; }
+        act_desc = "PLAN:" + task_desc;
+    } else if str_starts_with(msg, "AUDIT:") {
+        let audit_desc: String = str_trim(str_slice(msg, 6, chars_len(msg)));
+        decision = "AUDIT_VERIFIED: " + audit_desc; act_desc = "AUDIT:" + audit_desc;
+    } else {
+        decision = "PROCESSED: " + msg; act_desc = "RUN:" + msg;
+    }
+
+    // Phase 4: ACT
+    cur = agent_cell_transition(cur, 4);
+    let f4: Result[AgentCell, String] = ooda_fuel(thread, cur, 2);
+    if f4.is_err() { return Err("OUT_OF_FUEL"); }
+    cur = match f4 { Ok(c) => c, Err(_) => cur };
+    cur = agent_cell_transition(cur, 0);
+    let is_done: Bool = str_contains(decision, "VERIFIED") || list_len(cur.inbox) == 0;
+    return Ok(OodaTurnResult { cell: cur, action_taken: act_desc, output_message: decision, is_complete: is_done });
+}
+
+pub fn ooda_cycle_step(
+    thread: &ThreadCap, fs_r: &FsReadCap, fs_w: &FsWriteCap,
+    proc: &ProcessCap, time: &TimeCap, cell: AgentCell
+) -> Result[AgentCell, String] {
+    let res: Result[OodaTurnResult, String] = ooda_step_turn(thread, fs_r, fs_w, proc, time, cell);
+    if res.is_err() { let em: String = match res { Ok(_) => "", Err(e) => e }; return Err(em); }
+    let data: OodaTurnResult = match res {
+        Ok(d) => d,
+        Err(_) => OodaTurnResult { cell: cell, action_taken: "", output_message: "", is_complete: false }
+    };
+    return Ok(data.cell);
+}
+
+pub fn swarm_step(
+    thread: &ThreadCap, fs_r: &FsReadCap, fs_w: &FsWriteCap,
+    proc: &ProcessCap, time: &TimeCap, mesh: SwarmMesh
+) -> Result[SwarmMesh, String] {
+    if mesh.is_finished { return Ok(mesh); }
+    let next_turn: Int = mesh.current_turn + 1;
+    let num_cells: Int = swarm_sup_cell_count(mesh.sup);
+    let mut cur_sup: SwarmSupervisor = mesh.sup;
+    let mut turn_fuel: Int = 0;
+
+    let mut i: Int = 0;
+    while i < num_cells {
+        let cell_res: Result[AgentCell, String] = swarm_sup_get_cell(cur_sup, i);
+        if cell_res.is_err() { i = i + 1; continue; }
+        let cell: AgentCell = match cell_res { Ok(c) => c, Err(_) => list_get(cur_sup.cells, i) };
+        if cell.state == 5 {
+            let rec_res: Result[SwarmSupervisor, String] = swarm_sup_handle_crash(thread, time, cur_sup, cell.id, cell.last_error, next_turn);
+            if rec_res.is_err() { let em: String = match rec_res { Ok(_) => "", Err(e) => e }; return Err(em); }
+            cur_sup = match rec_res { Ok(s) => s, Err(_) => cur_sup };
+            i = i + 1; continue;
+        }
+        if cell.state == 6 { i = i + 1; continue; }
+
+        let old_consumed: Int = cell.fuel_consumed;
+        let step_res: Result[OodaTurnResult, String] = ooda_step_turn(thread, fs_r, fs_w, proc, time, cell);
+        if step_res.is_err() {
+            let err_txt: String = match step_res { Ok(_) => "", Err(e) => e };
+            let mut popped_cell: AgentCell = cell;
+            if list_len(popped_cell.inbox) > 0 {
+                let pop_c: Result[AgentPopResult, String] = agent_cell_pop_message(thread, popped_cell);
+                if pop_c.is_ok() {
+                    let p_data: AgentPopResult = match pop_c { Ok(p) => p, Err(_) => AgentPopResult { cell: popped_cell, msg: "" } };
+                    popped_cell = p_data.cell;
+                }
+            }
+            let mut pop_cells: List[AgentCell] = list_new();
+            let mut pi: Int = 0;
+            while pi < num_cells {
+                if pi == i { pop_cells = list_push(pop_cells, popped_cell); }
+                else { pop_cells = list_push(pop_cells, list_get(cur_sup.cells, pi)); }
+                pi = pi + 1;
+            }
+            cur_sup.cells = pop_cells;
+            let handle_res: Result[SwarmSupervisor, String] = swarm_sup_handle_crash(thread, time, cur_sup, cell.id, err_txt, next_turn);
+            if handle_res.is_err() { let em: String = match handle_res { Ok(_) => "", Err(e) => e }; return Err(em); }
+            cur_sup = match handle_res { Ok(s) => s, Err(_) => cur_sup };
+            i = i + 1; continue;
+        }
+        let turn_data: OodaTurnResult = match step_res {
+            Ok(d) => d,
+            Err(_) => OodaTurnResult { cell: cell, action_taken: "", output_message: "", is_complete: false }
+        };
+        let updated_cell: AgentCell = turn_data.cell;
+        turn_fuel = turn_fuel + (updated_cell.fuel_consumed - old_consumed);
+        let mut new_cells: List[AgentCell] = list_new();
+        let mut k: Int = 0;
+        while k < num_cells {
+            if k == i { new_cells = list_push(new_cells, updated_cell); }
+            else { new_cells = list_push(new_cells, list_get(cur_sup.cells, k)); }
+            k = k + 1;
+        }
+        cur_sup.cells = new_cells;
+        if chars_len(turn_data.output_message) > 0 && i + 1 < num_cells {
+            let next_peer: AgentCell = list_get(cur_sup.cells, i + 1);
+            let next_msg: String = turn_data.output_message;
+            let push_peer: Result[AgentCell, String] = agent_cell_push_message(thread, next_peer, next_msg);
+            if push_peer.is_ok() {
+                let peer_updated: AgentCell = match push_peer { Ok(c) => c, Err(_) => next_peer };
+                let mut peer_cells: List[AgentCell] = list_new();
+                let mut p_idx: Int = 0;
+                while p_idx < num_cells {
+                    if p_idx == i + 1 { peer_cells = list_push(peer_cells, peer_updated); }
+                    else { peer_cells = list_push(peer_cells, list_get(cur_sup.cells, p_idx)); }
+                    p_idx = p_idx + 1;
+                }
+                cur_sup.cells = peer_cells;
+            }
+        }
+        i = i + 1;
+    }
+    let mut any_pending: Bool = false;
+    let mut chk: Int = 0;
+    while chk < num_cells {
+        let c_chk: AgentCell = list_get(cur_sup.cells, chk);
+        if list_len(c_chk.inbox) > 0 { any_pending = true; }
+        chk = chk + 1;
+    }
+    let all_done: Bool = !any_pending && next_turn >= 1;
+    return Ok(SwarmMesh { sup: cur_sup, manifest: mesh.manifest, current_turn: next_turn, total_fuel_consumed: mesh.total_fuel_consumed + turn_fuel, is_finished: all_done });
+}

@@ -1,22 +1,25 @@
 // # Agent Submodule Hub -- Zero-Drag
 //
-// Logline: Unified entry point for the standard agent domain library. Re-exports a stable agent_mod_* surface for the most-used public API (synthesizer, repair, repl_engine, pair_programmer, evolution). Moved out of std/ai/ in Phase 3.5: these are dev/agent tools, not AI primitives.
+// Logline: Unified entry point for standard agent domain library re-exporting synth, repair, pair, evolution, repl, and swarm surfaces.
 //
-// Setup: Imports private agent siblings; agent operations may take AiCap, FsReadCap, or ProcessCap at the call site.
+// Setup: Imports private agent siblings; agent operations take explicit capabilities at call site.
 //
 // Beats:
 //   1. Re-export the SMT synthesizer surface as agent_mod_synth_*.
 //   2. Re-export the repair surface as agent_mod_repair_*.
 //   3. Re-export the pair-programmer surface as agent_mod_pair_*.
 //   4. Re-export the evolution surface as agent_mod_evolution_*.
-//   5. Token ledger library lives in token/ (LLM context counts, not Cap tokens).
+//   5. Re-export the REPL evaluation engine as agent_mod_repl_*.
+//   6. Token ledger library lives in token/ (LLM context counts, not Cap tokens).
+//   7. Re-export the swarm actor mesh runtime as agent_mod_swarm_*.
 
-import "synthesizer.oo";
-import "repair.oo";
-import "repl_engine.oo";
-import "pair_programmer.oo";
-import "evolution.oo";
-import "token/ANCHOR.oo";
+import "std/app/agent/synthesizer.oo";
+import "std/app/agent/repair.oo";
+import "std/app/agent/repl_engine.oo";
+import "std/app/agent/pair_programmer.oo";
+import "std/app/agent/evolution.oo";
+import "std/app/agent/token/ANCHOR.oo";
+import "std/app/agent/swarm/ANCHOR.oo";
 
 // Public synthesizer surface: agent_mod_synth_*
 pub fn agent_mod_synth_from_contract(spec: SynthSpec) -> Result[SynthResult, String] { return synthesize_from_contract(spec); }
@@ -30,4 +33,59 @@ pub fn agent_mod_pair_propose_module(ctx: AgentContext, name: String) -> CodePro
 // Public evolution surface: agent_mod_evolution_*
 pub fn agent_mod_evolution_evolve(init_code: String, cfg: EvolutionConfig) -> EvolutionResult { return evolve_population(init_code, cfg); }
 
-// External callers must import this ANCHOR.oo and use the agent_mod_* surface.
+// Public REPL surface: agent_mod_repl_*
+pub fn agent_mod_repl_new(fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap) -> ReplSession {
+    return repl_session_new(fs_r, fs_w, proc, time);
+}
+
+pub fn agent_mod_repl_eval_turn(sess: &mut ReplSession, fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap, line: String) -> ReplOutput {
+    return repl_eval_turn(sess, fs_r, fs_w, proc, time, line);
+}
+
+pub fn agent_mod_repl_eval_headless(fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap, expr: String) -> Result[String, String] {
+    return repl_eval_expr_headless(fs_r, fs_w, proc, time, expr);
+}
+
+pub fn agent_mod_repl_type_inquiry(fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, expr: String) -> Result[String, String] {
+    return repl_meta_type_inquiry(fs_r, fs_w, proc, expr);
+}
+
+pub fn agent_mod_repl_active_caps(sess: &ReplSession) -> String {
+    return repl_session_active_caps(sess);
+}
+
+pub fn agent_mod_repl_active_vars(sess: &ReplSession) -> String {
+    return repl_session_active_vars(sess);
+}
+
+// Public swarm actor surface: agent_mod_swarm_*
+pub fn agent_mod_swarm_create(thread: &ThreadCap, manifest: SwarmManifest) -> Result[SwarmMesh, String] {
+    return swarm_create(thread, manifest);
+}
+
+pub fn agent_mod_swarm_load_manifest(fs_r: &FsReadCap, path: String) -> Result[SwarmManifest, String] {
+    return swarm_load_manifest(fs_r, path);
+}
+
+pub fn agent_mod_swarm_step(
+    thread: &ThreadCap,
+    fs_r: &FsReadCap,
+    fs_w: &FsWriteCap,
+    proc: &ProcessCap,
+    time: &TimeCap,
+    mesh: SwarmMesh
+) -> Result[SwarmMesh, String] {
+    return swarm_step(thread, fs_r, fs_w, proc, time, mesh);
+}
+
+pub fn agent_mod_swarm_status(mesh: SwarmMesh) -> String {
+    return swarm_status(mesh);
+}
+
+pub fn agent_mod_swarm_manifest_template() -> String {
+    return swarm_manifest_template();
+}
+
+pub fn agent_mod_swarm_manifest_parse(content: String) -> Result[SwarmManifest, String] {
+    return swarm_manifest_parse(content);
+}

@@ -19,6 +19,16 @@ import "fuzz.oo";
 import "gpu_cross_val.oo";
 import "multi_compiler.oo";
 import "mutation_l2.oo";
+import "em_gauge.oo";
+import "moonshot_score.oo";
+
+// Public E-M math and Moonshot scoring surfaces: test_mod_em_*, test_mod_moonshot_*
+pub fn test_mod_em_metrics_new(t: Int, d: Int, w: Int, v: Int) -> EmMetrics { return em_metrics_new(t, d, w, v); }
+pub fn test_mod_em_calculate(m: EmMetrics) -> EmScoreResult { return em_calculate(m); }
+pub fn test_mod_em_assert_not_stalled(res: EmScoreResult) -> Result[Bool, String] { return em_assert_not_stalled(res); }
+pub fn test_mod_moonshot_criteria_new(caps: Bool, c: Bool, zh: Bool, fc: Bool, cmp: Bool, np: Bool, dr: Bool, p: Bool, st: Bool, ns: Bool) -> FunctionAuditCriteria { return moonshot_criteria_new(caps, c, zh, fc, cmp, np, dr, p, st, ns); }
+pub fn test_mod_moonshot_score_function(c: FunctionAuditCriteria) -> Int { return moonshot_score_function(c); }
+pub fn test_mod_moonshot_evaluate_threshold(score: Int, target: Int, name: String) -> Result[Bool, String] { return moonshot_evaluate_threshold(score, target, name); }
 
 // Public adversarial probe surface: test_mod_adversarial_*
 pub fn test_mod_adversarial_create_domain(name: String, pos: Int, neg: Int, killed: Int) -> StdDomainProbe { return adversarial_probe_create_domain(name, pos, neg, killed); }
@@ -40,8 +50,8 @@ pub fn test_mod_fuzz_int_range(seed: Int, min_val: Int, max_val: Int) -> Int { r
 pub fn test_mod_fuzz_boundary_int(step: Int) -> Int { return fuzz_boundary_int(step); }
 pub fn test_mod_fuzz_boundary_string(step: Int) -> String { return fuzz_boundary_string(step); }
 pub fn test_mod_fuzz_report_new() -> FuzzReport { return fuzz_report_new(); }
-pub fn test_mod_fuzz_record_pass(mut rep: FuzzReport) -> FuzzReport { return fuzz_record_pass(rep); }
-pub fn test_mod_fuzz_record_fail(mut rep: FuzzReport, counterexample_msg: String) -> FuzzReport { return fuzz_record_fail(rep, counterexample_msg); }
+pub fn test_mod_fuzz_record_pass(rep: FuzzReport) -> FuzzReport { return fuzz_record_pass(rep); }
+pub fn test_mod_fuzz_record_fail(rep: FuzzReport, counterexample_msg: String) -> FuzzReport { return fuzz_record_fail(rep, counterexample_msg); }
 
 // Public GPU cross-validation surface: test_mod_gpu_xval_*
 pub fn test_mod_gpu_xval_evaluate_gemm(m: Int, n: Int, k: Int) -> TensorParityResult { return gpu_cross_val_evaluate_gemm(m, n, k); }

@@ -1,63 +1,252 @@
 // # Interactive REPL Evaluation Engine
 //
-// Logline: Parses, evaluates, and prints interactive expressions, variable bindings, and function invocations.
+// Logline: Sovereign incremental evaluation engine maintaining persistent session context across interactive inputs.
 //
-// Setup: Interactive shell runtime for rapid testing and real-time AST evaluation in pure .oo.
+// Setup: FsReadCap validates paths; FsWriteCap writes .ooda-cache/repl/; ProcessCap invokes oodac; TimeCap tracks turns.
 //
 // Beats:
-//   1. Define ReplSession, ReplLine, and ReplEvalResult structures.
-//   2. Parse expressions vs variable declarations dynamically.
-//   3. Maintain persistent interactive session environment.
-//   4. Format and print evaluated return values.
-// RULES.oot 1.4: Pure interactive REPL evaluation.
-// RULES.oot 1.7: Strictly under 256 lines.
+//   1. Maintain accumulated imports, types, functions, and let bindings in ReplSession.
+//   2. Classify input into meta-commands, declarations, variable bindings, and expressions.
+//   3. Synthesize ephemeral probe harnesses under .ooda-cache/repl/ with variable silencers.
+//   4. Inquire static types without runtime execution via compiler sentinel mismatch.
+//   5. Compile native execution probes with oodac and execute via sys_exec.
 
-type ReplLine = struct {
-    line_num: Int,
-    raw_input: String,
-    is_statement: Bool
-};
+import "std/fs/os/fs.oo";
 
-type ReplSession = struct {
-    session_id: Int,
-    bindings_count: Int,
-    last_eval_result: String,
-    is_active: Bool
-};
+pub type ReplSession = struct { compiler_bin: String, session_id: Int, is_active: Bool, turn_count: Int, imports: List[String], types: List[String], functions: List[String], bindings: List[String], var_names: List[String], var_types: List[String] };
+pub type ReplOutput = struct { output_text: String, error_msg: String, is_exit: Bool, is_error: Bool };
 
-type ReplEvalResult = struct {
-    output_text: String,
-    value_type: String,
-    success: Bool
-};
+fn repl_out_ok(txt: String) -> ReplOutput { return ReplOutput { output_text: txt, error_msg: "", is_exit: false, is_error: false }; }
+fn repl_out_err(msg: String) -> ReplOutput { return ReplOutput { output_text: "", error_msg: msg, is_exit: false, is_error: true }; }
+fn repl_res_err(res: Result[String, String]) -> String { let em: String = match res { Ok(_) => "", Err(e) => e }; return em; }
+fn repl_res_ok(res: Result[String, String]) -> String { let s: String = match res { Ok(v) => v, Err(_) => "" }; return s; }
 
-pub fn repl_engine_session_new(id: Int) -> ReplSession {
-    return ReplSession {
-        session_id: id,
-        bindings_count: 0,
-        last_eval_result: "",
-        is_active: true
-    };
+fn repl_find_compiler(fs_r: &FsReadCap) -> String { return if fs_path_exists(fs_r, "/home/jeryd/.openooda/bin/oodac") { "/home/jeryd/.openooda/bin/oodac" } else if fs_path_exists(fs_r, "oodac/bin/oodac") { "oodac/bin/oodac" } else { "oodac" }; }
+fn repl_temp_path(sess: &ReplSession, kind: String, ext: String) -> String { return ".ooda-cache/repl/" + kind + "_" + sess.session_id.to_string() + "_" + sess.turn_count.to_string() + "." + ext; }
+
+pub fn repl_session_new(fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap) -> ReplSession {
+    let _mk: Result[Void, String] = fs_mkdir_p(fs_w, ".ooda-cache/repl");
+    let mut sid: Int = now_ms(time); let ns: Result[String, String] = sys_exec(proc, "date", "+%N");
+    if ns.is_ok() { sid = sid * 10000 + (repl_parse_int(str_trim(repl_res_ok(ns))) % 10000); }
+    return ReplSession { compiler_bin: repl_find_compiler(fs_r), session_id: sid, is_active: true, turn_count: 0, imports: list_new(), types: list_new(), functions: list_new(), bindings: list_new(), var_names: list_new(), var_types: list_new() };
 }
 
-pub fn repl_engine_eval_line(session: ReplSession, input_str: String) -> ReplEvalResult {
-    let mut out: String = "";
-    let mut typ: String = "Int";
+pub fn repl_session_active_caps(sess: &ReplSession) -> String { return "Active session capabilities (4 granted):\n  - &FsReadCap    (workspace read confinement)\n  - &FsWriteCap   (cache probe generation)\n  - &ProcessCap   (compiler invocation & execution)\n  - &TimeCap      (monotonic turn timestamps)"; }
 
-    if input_str == "1 + 2" {
-        out = "3";
-        typ = "Int";
-    } else if input_str == "\"hello\" + \" world\"" {
-        out = "hello world";
-        typ = "String";
-    } else {
-        out = "OK";
-        typ = "Void";
+pub fn repl_session_active_vars(sess: &ReplSession) -> String {
+    let n: Int = list_len(sess.var_names);
+    if n == 0 { return "No variable bindings in current session."; }
+    let mut out: String = "Active variable bindings (" + n.to_string() + "):\n";
+    let mut i: Int = 0; while i < n { out = out + "  " + list_get(sess.var_names, i) + " : " + list_get(sess.var_types, i) + if i + 1 < n { "\n" } else { "" }; i = i + 1; }
+    return out;
+}
+
+pub fn repl_check_balanced(s: String) -> Bool {
+    let n: Int = chars_len(s); let mut p: Int = 0; let mut b: Int = 0; let mut c: Int = 0; let mut in_str: Bool = false; let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(s, i);
+        if in_str { if ch == "\\" { i = i + 1; } else if ch == "\"" { in_str = false; } }
+        else {
+            if ch == "\"" { in_str = true; } else if ch == "(" { p = p + 1; } else if ch == ")" { p = p - 1; }
+            else if ch == "[" { b = b + 1; } else if ch == "]" { b = b - 1; } else if ch == "{" { c = c + 1; } else if ch == "}" { c = c - 1; }
+            if p < 0 || b < 0 || c < 0 { return false; }
+        }
+        i = i + 1;
+    }
+    return p == 0 && b == 0 && c == 0 && !in_str;
+}
+
+pub fn repl_has_trailing_op(s: String) -> Bool {
+    let n: Int = chars_len(s); let mut in_str: Bool = false; let mut i: Int = 0;
+    while i < n {
+        let ch: String = char_at(s, i);
+        if in_str { if ch == "\\" { i = i + 1; } else if ch == "\"" { in_str = false; } }
+        else if ch == "\"" { in_str = true; }
+        else if ch == "+" || ch == "-" || ch == "*" || ch == "/" || ch == "%" || ch == "=" || ch == "&" || ch == "|" || ch == "^" || ch == "<" || ch == ">" || ch == "!" || ch == "." || ch == ":" {
+            let mut j: Int = i + 1; while j < n && (char_at(s, j) == " " || char_at(s, j) == "\t") { j = j + 1; }
+            if j >= n { return true; }
+            let nxt: String = char_at(s, j); if nxt == ";" || nxt == ")" || nxt == "]" || nxt == "}" { return true; }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn repl_extract_let_var(line: String) -> String {
+    let mut s: String = str_trim(line);
+    if str_starts_with(s, "let ") { s = str_trim(str_slice(s, 4, chars_len(s))); } if str_starts_with(s, "mut ") { s = str_trim(str_slice(s, 4, chars_len(s))); }
+    let n: Int = chars_len(s); let mut i: Int = 0;
+    while i < n { let c: String = char_at(s, i); if c == " " || c == ":" || c == "=" || c == ";" { return str_slice(s, 0, i); } i = i + 1; }
+    return s;
+}
+
+fn repl_extract_let_rhs(stmt: String) -> String {
+    let idx: Int = str_index_of(stmt, "="); if idx < 0 { return ""; }
+    let mut s: String = str_trim(str_slice(stmt, idx + 1, chars_len(stmt)));
+    return if str_ends_with(s, ";") { str_trim(str_slice(s, 0, chars_len(s) - 1)) } else { s };
+}
+
+fn repl_extract_json_msg(raw: String) -> String {
+    let idx: Int = str_index_of(raw, "\"msg\":\""); if idx < 0 { return str_trim(raw); }
+    let start: Int = idx + 7; let n: Int = chars_len(raw); let mut end: Int = start;
+    while end < n && char_at(raw, end) != "\"" { end = end + 1; }
+    return str_slice(raw, start, end);
+}
+
+fn repl_extract_inferred_type(msg: String) -> String {
+    let idx: Int = str_index_of(msg, "but initializer has type "); if idx < 0 { return ""; }
+    let start: Int = idx + 25; let n: Int = chars_len(msg); let mut end: Int = start;
+    while end < n { let c: String = char_at(msg, end); if c == "\"" || c == "\n" || c == "\r" || c == "\t" || c == " " || c == "," || c == "}" { break; } end = end + 1; }
+    return str_slice(msg, start, end);
+}
+
+fn repl_is_id(c: String) -> Bool { return str_contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", c); }
+fn repl_is_valid_id(s: String) -> Bool {
+    let n: Int = chars_len(s); if n == 0 || !str_contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_", char_at(s, 0)) { return false; }
+    let mut i: Int = 1; while i < n { if !repl_is_id(char_at(s, i)) { return false; } i = i + 1; }
+    return true;
+}
+fn repl_has_var(text: String, v: String) -> Bool {
+    let vl: Int = chars_len(v); let tl: Int = chars_len(text);
+    if vl == 0 || tl < vl { return false; }
+    let mut in_str: Bool = false; let mut i: Int = 0;
+    while i < tl {
+        let ch: String = char_at(text, i);
+        if in_str { if ch == "\\" { i = i + 1; } else if ch == "\"" { in_str = false; } }
+        else if ch == "\"" { in_str = true; }
+        else if i + vl <= tl && str_slice(text, i, i + vl) == v {
+            if (i == 0 || !repl_is_id(char_at(text, i - 1))) && (i + vl == tl || !repl_is_id(char_at(text, i + vl))) { return true; }
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn repl_write_probe(sess: &ReplSession, fs_w: &FsWriteCap, file_path: String, is_exec: Bool, expr: String, expr_ty: String, cand: String, cand_var: String) -> Result[Void, String] {
+    let mut code: String = "// # Ephemeral REPL Probe\n// Logline: Transient execution harness\n// Setup: Ephemeral\n// Beats: 1. run\n";
+    if !is_exec { code = code + "type __ReplSentinelType__ = struct { __dummy: Int };\nfn str_slice(s: String, a: Int, b: Int) -> String { return \"\"; }\nfn chars_len(s: String) -> Int { return 0; }\nfn char_at(s: String, i: Int) -> String { return \"\"; }\n"; }
+    let mut i: Int = 0; while i < list_len(sess.imports) { code = code + list_get(sess.imports, i) + "\n"; i = i + 1; }
+    if str_starts_with(cand, "import ") { code = code + cand + "\n"; }
+    i = 0; while i < list_len(sess.types) { code = code + list_get(sess.types, i) + "\n"; i = i + 1; } if str_starts_with(cand, "type ") || str_starts_with(cand, "pub type ") { code = code + cand + "\n"; }
+    i = 0; while i < list_len(sess.functions) { code = code + list_get(sess.functions, i) + "\n"; i = i + 1; } if str_starts_with(cand, "fn ") || str_starts_with(cand, "pub fn ") { code = code + cand + "\n"; }
+    code = code + "pub fn main(time: &TimeCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, sys: &ProcessCap, env: &EnvCap, alloc: &AllocCap) {\n";
+    i = 0; while i < list_len(sess.bindings) { code = code + "    { " + list_get(sess.bindings, i) + "\n"; i = i + 1; } if str_starts_with(cand, "let ") { code = code + "    { " + cand + "\n"; }
+    let cand_rhs: String = repl_extract_let_rhs(cand);
+    i = 0; while i < list_len(sess.var_names) {
+        let v: String = list_get(sess.var_names, i);
+        let emit: Bool = if chars_len(cand) > 0 { v != cand_var && !repl_has_var(cand_rhs, v) } else { !repl_has_var(expr, v) };
+        if emit { code = code + "    let _s_" + i.to_string() + " = " + v + ";\n"; }
+        i = i + 1;
+    }
+    if chars_len(cand_var) > 0 && !repl_has_var(cand_rhs, cand_var) { code = code + "    let _s_cand = " + cand_var + ";\n"; }
+    if chars_len(expr) > 0 {
+        if !is_exec { code = code + "    let mut __sentinel: __ReplSentinelType__ = " + expr + ";\n    let _s_sent = __sentinel;\n"; }
+        else {
+            code = code + "    let _repl_res = " + expr + ";\n";
+            if expr_ty == "String" { code = code + "    println(_repl_res);\n"; } else if expr_ty == "Bool" { code = code + "    if _repl_res { println(\"true\"); } else { println(\"false\"); }\n"; } else { code = code + "    println((_repl_res).to_string());\n"; }
+        }
+    }
+    let mut b_count: Int = list_len(sess.bindings) + if str_starts_with(cand, "let ") { 1 } else { 0 };
+    while b_count > 0 { code = code + "    }\n"; b_count = b_count - 1; }
+    return fs_write_file(fs_w, file_path, code + "}\n");
+}
+
+fn repl_inquire_type(sess: &ReplSession, fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, expr: String) -> Result[String, String] {
+    let s: String = str_trim(expr); let p_path: String = repl_temp_path(sess, "inq", "oo");
+    if repl_write_probe(sess, fs_w, p_path, false, s, "", "", "").is_err() { return Err("Failed to write type probe"); }
+    let res: Result[String, String] = sys_exec(proc, sess.compiler_bin, "check", "--json-errors", p_path);
+    let _rm: Result[Void, String] = fs_remove_file(fs_w, p_path);
+    let raw: String = match res { Ok(out) => out, Err(err) => err };
+    let ty: String = repl_extract_inferred_type(raw); if chars_len(ty) > 0 { return Ok(ty); }
+    if str_trim(raw) == "[]" { return if str_starts_with(s, "\"") && str_ends_with(s, "\"") { Ok("String") } else { Ok("Int") }; }
+    return Err(repl_extract_json_msg(raw));
+}
+
+fn repl_check_candidate(sess: &ReplSession, fs_w: &FsWriteCap, proc: &ProcessCap, stmt: String, cand_var: String) -> ReplOutput {
+    let p: String = repl_temp_path(sess, "chk", "oo");
+    if repl_write_probe(sess, fs_w, p, false, "", "", stmt, cand_var).is_err() { return repl_out_err("Probe write error"); }
+    let res: Result[String, String] = sys_exec(proc, sess.compiler_bin, "check", p);
+    let _del: Result[Void, String] = fs_remove_file(fs_w, p);
+    return if res.is_ok() { repl_out_ok("") } else { repl_out_err(str_trim(repl_res_err(res))) };
+}
+
+fn repl_parse_int(s: String) -> Int {
+    let n: Int = chars_len(s); let mut v: Int = 0; let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "0" { v = v * 10; } else if c == "1" { v = v * 10 + 1; } else if c == "2" { v = v * 10 + 2; } else if c == "3" { v = v * 10 + 3; } else if c == "4" { v = v * 10 + 4; } else if c == "5" { v = v * 10 + 5; } else if c == "6" { v = v * 10 + 6; } else if c == "7" { v = v * 10 + 7; } else if c == "8" { v = v * 10 + 8; } else if c == "9" { v = v * 10 + 9; }
+        i = i + 1;
+    }
+    return v;
+}
+
+pub fn repl_meta_type_inquiry(fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, expr: String) -> Result[String, String] {
+    let sess = ReplSession { compiler_bin: repl_find_compiler(fs_r), session_id: 0, is_active: true, turn_count: 0, imports: list_new(), types: list_new(), functions: list_new(), bindings: list_new(), var_names: list_new(), var_types: list_new() };
+    return repl_inquire_type(&sess, fs_r, fs_w, proc, expr);
+}
+
+pub fn repl_eval_turn(sess: &mut ReplSession, fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap, raw_line: String) -> ReplOutput {
+    let line: String = str_trim(raw_line); let n: Int = chars_len(line);
+    if n == 0 || str_starts_with(line, "//") { return repl_out_ok(""); }
+    sess.turn_count = sess.turn_count + 1;
+
+    if str_starts_with(line, ":") {
+        if line == ":quit" || line == ":q" { sess.is_active = false; return ReplOutput { output_text: "Goodbye.", error_msg: "", is_exit: true, is_error: false }; }
+        if line == ":caps" { return repl_out_ok(repl_session_active_caps(sess)); }
+        if line == ":vars" { return repl_out_ok(repl_session_active_vars(sess)); }
+        if line == ":help" || line == ":h" { return repl_out_ok("Commands: :caps, :type <expr>, :vars, :help, :quit"); }
+        if line == ":type" || str_starts_with(line, ":type ") {
+            let expr: String = str_trim(str_slice(line, 5, n));
+            if chars_len(expr) == 0 { return repl_out_err(":type requires an expression"); }
+            let r: Result[String, String] = repl_inquire_type(sess, fs_r, fs_w, proc, expr);
+            return if r.is_ok() { repl_out_ok(expr + " : " + repl_res_ok(r)) } else { repl_out_err(repl_res_err(r)) };
+        }
+        return repl_out_err("Unknown command: " + line + " (:help for list)");
     }
 
-    return ReplEvalResult {
-        output_text: out,
-        value_type: typ,
-        success: true
-    };
+    if !repl_check_balanced(line) { return repl_out_err("syntax error: unclosed delimiter"); }
+    if repl_has_trailing_op(line) { return repl_out_err("syntax error: trailing operator in expression"); }
+
+    if str_starts_with(line, "import ") || str_starts_with(line, "type ") || str_starts_with(line, "pub type ") || str_starts_with(line, "fn ") || str_starts_with(line, "pub fn ") {
+        let stmt: String = if str_starts_with(line, "import ") && !str_ends_with(line, ";") { line + ";" } else { line + "" };
+        let c_out: ReplOutput = repl_check_candidate(sess, fs_w, proc, stmt, ""); if c_out.is_error { return c_out; }
+        if str_starts_with(line, "import ") { sess.imports = list_push(sess.imports, stmt + ""); }
+        else if str_starts_with(line, "type ") || str_starts_with(line, "pub type ") { sess.types = list_push(sess.types, stmt + ""); }
+        else { sess.functions = list_push(sess.functions, stmt + ""); }
+        return repl_out_ok("");
+    }
+
+    if str_starts_with(line, "let ") {
+        let stmt: String = if !str_ends_with(line, ";") { line + ";" } else { line + "" };
+        let vname: String = repl_extract_let_var(stmt);
+        if !repl_is_valid_id(vname) { return repl_out_err("syntax error: invalid variable name"); }
+        let rhs: String = repl_extract_let_rhs(stmt);
+        if chars_len(rhs) == 0 || repl_has_trailing_op(rhs) { return repl_out_err("syntax error: trailing operator in expression"); }
+        let c_out: ReplOutput = repl_check_candidate(sess, fs_w, proc, stmt, vname); if c_out.is_error { return c_out; }
+        let ty_res: Result[String, String] = repl_inquire_type(sess, fs_r, fs_w, proc, rhs);
+        let vtype: String = if ty_res.is_ok() { repl_res_ok(ty_res) } else { "auto" };
+        let mut idx: Int = 0 - 1; let mut j: Int = 0;
+        while j < list_len(sess.var_names) { if list_get(sess.var_names, j) == vname { idx = j; } j = j + 1; }
+        if idx >= 0 { sess.var_types = list_set(sess.var_types, idx, vtype + ""); }
+        else { sess.var_names = list_push(sess.var_names, vname + ""); sess.var_types = list_push(sess.var_types, vtype + ""); }
+        if vname != rhs { sess.bindings = list_push(sess.bindings, stmt + ""); }
+        return repl_out_ok("");
+    }
+
+    let ty_res: Result[String, String] = repl_inquire_type(sess, fs_r, fs_w, proc, line);
+    if ty_res.is_err() { return repl_out_err(repl_res_err(ty_res)); }
+    let expr_ty: String = repl_res_ok(ty_res);
+    let p_src: String = repl_temp_path(sess, "eval", "oo"); let p_bin: String = repl_temp_path(sess, "eval", "bin");
+    if repl_write_probe(sess, fs_w, p_src, true, line, expr_ty, "", "").is_err() { return repl_out_err("Probe write error"); }
+    let b_res: Result[String, String] = sys_exec(proc, sess.compiler_bin, "build", "--backend", "c", p_src, "-o", p_bin);
+    let _del_src: Result[Void, String] = fs_remove_file(fs_w, p_src);
+    if b_res.is_err() { let _db: Result[Void, String] = fs_remove_file(fs_w, p_bin); return repl_out_err(str_trim(repl_res_err(b_res))); }
+    let r_res: Result[String, String] = sys_exec(proc, p_bin);
+    let _del_bin: Result[Void, String] = fs_remove_file(fs_w, p_bin);
+    return if r_res.is_ok() { repl_out_ok(str_trim(repl_res_ok(r_res))) } else { repl_out_err(str_trim(repl_res_err(r_res))) };
+}
+
+pub fn repl_eval_expr_headless(fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap, expr: String) -> Result[String, String] {
+    let mut sess: ReplSession = repl_session_new(fs_r, fs_w, proc, time); let out: ReplOutput = repl_eval_turn(&mut sess, fs_r, fs_w, proc, time, expr);
+    return if out.is_error { Err(out.error_msg) } else { Ok(out.output_text) };
 }

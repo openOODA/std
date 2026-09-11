@@ -1,6 +1,6 @@
 // # Sec Submodule Hub -- Zero-Drag
 //
-// Logline: Unified entry point for the standard sec (security) domain library. Re-exports a stable sec_mod_* surface for the most-used public API (capability rights, host scope, path scope, fuel budget, tamper shield, watermark, redteam vectors, attestation, safety matrix, fuzz runner, mutation engine, rlimit). Private siblings (Bell-LaPadula, Biba, Clark-Wilson, Dolev-Yao, capability unforgeability, fail-secure, Kerckhoffs, least privilege, non-interference, provable security, sel4 isolation, TLS 1.3 handshake, zero trust, AC theory) remain non-public in sec/laws/.
+// Logline: Unified entry point for the standard sec (security) domain library. Re-exports a stable sec_mod_* surface for the most-used public API (capability rights, host scope, path scope, fuel budget, tamper shield, watermark, redteam vectors, attestation, safety matrix, fuzz runner, mutation engine, rlimit, kernel sandbox). Private siblings (Bell-LaPadula, Biba, Clark-Wilson, Dolev-Yao, capability unforgeability, fail-secure, Kerckhoffs, least privilege, non-interference, provable security, sel4 isolation, TLS 1.3 handshake, zero trust, AC theory) remain non-public in sec/laws/.
 //
 // Setup: Imports private sec siblings; most operations take SysCap / FsReadCap / FsWriteCap / EnvCap at the call site. Pure security math (capability rights, host scope, path scope, tamper shield, watermark) takes no caps.
 //
@@ -9,7 +9,7 @@
 //   2. Re-export the tamper shield, watermark, and fuel budget surface as sec_mod_tamper_*, sec_mod_watermark_*, sec_mod_fuel_*.
 //   3. Re-export the agent send, redteam vectors, and policy path surface as sec_mod_msg_*, sec_mod_redteam_*, sec_mod_policy_*.
 //   4. Re-export the safety matrix, fuzz runner, mutation engine, attestation, TEE quote, and rlimit surface as sec_mod_safety_*, sec_mod_fuzz_*, sec_mod_mutation_*, sec_mod_attest_*, sec_mod_tee_*, sec_mod_rlimit_*.
-//   5. Re-export the new subdirs: sec/hash/, sec/simd/, sec/symmetric/, sec/asymmetric/, sec/mac/, sec/zk/, sec/enclave/, sec/laws/.
+//   5. Re-export the subdirs: sec/hash/, sec/simd/, sec/symmetric/, sec/asymmetric/, sec/mac/, sec/zk/, sec/enclave/, sec/laws/, sec/sandbox/.
 //   6. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _stubs files.
 
 import "sec.oo";
@@ -58,6 +58,7 @@ import "rasp/ANCHOR.oo";
 import "string_encrypt/ANCHOR.oo";
 import "sys/ANCHOR.oo";
 import "capability/ANCHOR.oo";
+import "sandbox/ANCHOR.oo";
 
 // Public sec version: sec_mod_defense_*
 pub fn sec_mod_defense_version() -> String { return sec_defense_version(); }
@@ -111,6 +112,15 @@ pub fn sec_mod_attest_measurement_create(domain: String, label: String, hash_hex
 pub fn sec_mod_tee_vendor_sev_snp() -> Int { return tee_vendor_sev_snp(); }
 pub fn sec_mod_airgap_verify_elf64_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Bool { return airgap_verify_elf64_magic(b0, b1, b2, b3); }
 pub fn sec_mod_untrusted_blob_in(hay: String, blob: String) -> Bool { return untrusted_blob_in(hay, blob); }
+
+// Public kernel sandbox surface: sec_mod_sandbox_*
+pub fn sec_mod_sandbox_config_default() -> SandboxConfig { return sec_sandbox_config_default(); }
+pub fn sec_mod_sandbox_config_paths_to_colon(paths: List[String]) -> String { return sec_sandbox_config_paths_to_colon(paths); }
+pub fn sec_mod_sandbox_probe_backend() -> String { return sec_sandbox_probe_backend(); }
+pub fn sec_mod_sandbox_is_available() -> Bool { return sec_sandbox_is_available(); }
+pub fn sec_mod_sandbox_apply_matrix(sys: &SysCap, cfg: SandboxConfig) -> Result[Int, String] { return sec_sandbox_apply_matrix(sys, cfg); }
+pub fn sec_mod_sandbox_current_status() -> SandboxStatus { return sec_sandbox_current_status(); }
+pub fn sec_mod_sandbox_engine_version() -> String { return sec_sandbox_engine_version(); }
 
 // Private sibling inventory (DO NOT IMPORT DIRECTLY):
 //   _law files in sec/laws/ (e.g. bell_lapadula_law.oo, biba_law.oo, capability_unforgeability_law.oo, clark_wilson_law.oo, least_privilege_law.oo, provable_security_law.oo)

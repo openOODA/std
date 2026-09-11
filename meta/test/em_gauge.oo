@@ -1,0 +1,85 @@
+// # Boyd E-M Specific Excess Power & Maneuverability Gauge
+//
+// Logline: Computes specific excess power Ps = ((T - D) / W) * V and flags aerodynamic stalls.
+//
+// Setup: Pure math. Takes EmMetrics (thrust, drag, weight, velocity) and yields EmScoreResult.
+//
+// Beats:
+//   1. Define EmMetrics input vector and EmScoreResult output structure.
+//   2. Validate non-zero weight to eliminate division-by-zero panics.
+//   3. Compute specific excess power Ps with integer precision.
+//   4. Evaluate aerodynamic stall state and assign energy rating.
+
+type EmMetrics = struct {
+    thrust_ops: Int,
+    drag_penalties: Int,
+    weight_nodes: Int,
+    velocity_khz: Int
+};
+
+type EmScoreResult = struct {
+    excess_thrust: Int,
+    specific_excess_power: Int,
+    is_stalled: Bool,
+    rating: String
+};
+
+pub fn em_gauge_metrics_new(thrust: Int, drag: Int, weight: Int, velocity: Int) -> EmMetrics {
+    return EmMetrics {
+        thrust_ops: thrust,
+        drag_penalties: drag,
+        weight_nodes: weight,
+        velocity_khz: velocity
+    };
+}
+pub fn em_metrics_new(thrust: Int, drag: Int, weight: Int, velocity: Int) -> EmMetrics {
+    return em_gauge_metrics_new(thrust, drag, weight, velocity);
+}
+
+pub fn em_gauge_calculate(m: EmMetrics) -> EmScoreResult {
+    if m.weight_nodes <= 0 {
+        return EmScoreResult {
+            excess_thrust: 0,
+            specific_excess_power: 0,
+            is_stalled: true,
+            rating: "INVALID_ZERO_WEIGHT"
+        };
+    }
+    let excess: Int = m.thrust_ops - m.drag_penalties;
+    if excess <= 0 {
+        return EmScoreResult {
+            excess_thrust: excess,
+            specific_excess_power: 0,
+            is_stalled: true,
+            rating: "AERODYNAMIC_STALL"
+        };
+    }
+    let ps: Int = (excess * m.velocity_khz) / m.weight_nodes;
+    let mut rate: String = "SUBSONIC";
+    if ps >= 1000 {
+        rate = "SUPERMANEUVERABLE";
+    } else if ps >= 500 {
+        rate = "SUPERCRUISE";
+    } else if ps < 50 {
+        rate = "HIGH_DRAG";
+    }
+    return EmScoreResult {
+        excess_thrust: excess,
+        specific_excess_power: ps,
+        is_stalled: false,
+        rating: rate
+    };
+}
+pub fn em_calculate(m: EmMetrics) -> EmScoreResult {
+    return em_gauge_calculate(m);
+}
+
+pub fn em_gauge_assert_not_stalled(res: EmScoreResult) -> Result[Bool, String] {
+    if res.is_stalled {
+        return Err("E-M Gate Failure: Function in aerodynamic stall (Ps <= 0 or T <= D)");
+    }
+    return Ok(true);
+}
+pub fn em_assert_not_stalled(res: EmScoreResult) -> Result[Bool, String] {
+    return em_gauge_assert_not_stalled(res);
+}

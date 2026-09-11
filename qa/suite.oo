@@ -92,13 +92,18 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
     ps = list_push(ps, "qa/probe_sandbox_m1.oo");
     ps = list_push(ps, "qa/probe_sandbox_adv1.oo");
     ps = list_push(ps, "qa/probe_sandbox_stress.oo");
+    ps = list_push(ps, "qa/probe_swarm.oo");
 
     let mut i: Int = 0;
     while i < list_len(ps) {
         let path: String = list_get(ps, i);
         println("  Running " + path);
         let r: Result[Int, String] = run_probe_twice(p, oodac, path);
-        if r.is_err() { return r; }
+        if r.is_err() {
+            let em: String = match r { Ok(_) => "", Err(e) => e };
+            println("ERR " + path + ": " + em);
+            return r;
+        }
         i = i + 1;
     }
     println("std test suite: ALL PROBES PASSED (double-run identical)");

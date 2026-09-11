@@ -1,0 +1,17 @@
+// # Swarm Actor Mesh Hub -- Zero-Drag
+//
+// Logline: Unified entry point for standard library autonomous agent swarms, re-exporting lifecycle, cycle, and supervisor runtime.
+//
+// Setup: Re-exports public swarm surface. Swarm stepping requires ThreadCap, ProcessCap, FsReadCap, FsWriteCap, TimeCap.
+//
+// Beats:
+//   1. Re-export AgentCaps, AgentRole, AgentCell from agent_cell.oo.
+//   2. Re-export OodaTurnResult and swarm_step from ooda_cycle.oo.
+//   3. Re-export SwarmSupervisor, SwarmAutopsy, and SwarmMesh from supervisor.oo.
+//   4. Re-export SwarmManifest parser and template generator from manifest.oo.
+//   5. Provide public front door for driver CLI and standard library consumers.
+
+import "std/app/agent/swarm/agent_cell.oo";
+import "std/app/agent/swarm/supervisor.oo";
+import "std/app/agent/swarm/ooda_cycle.oo";
+import "std/app/agent/swarm/manifest.oo";

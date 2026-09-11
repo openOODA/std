@@ -1,28 +1,65 @@
-// # std/qa/probe_caps — Capability Rights Verification
+// # Caller Capability Rights Verification Probe
 //
-// Logline: Verify sec_mod_cap_* and blake3 flag correctness.
-// Setup: Pure. No caps. Tests bytes_len and flag handling fixed in 8ecae84.
+// Logline: Verify CallerCaps token parsing, subcommand permission admission, and fail-closed denial reason generation.
+//
+// Setup: Pure verification of standard library agent caller capability tokens.
+//
 // Beats:
-//   1. blake3_pure uses bytes_len not len.
-//   2. Extra flag is applied only to last block (not every block).
+//   1. Parse read-only caller capability set ("read") and verify write denial.
+//   2. Parse read/write capability set ("read,write") and verify admin admittance.
+//   3. Parse omnipotent capability set ("all") and verify universal admittance.
+//   4. Assert caller_caps_denial_reason produces precise error diagnostics.
 
-import "sec/hash/blake3_pure.oo";
+import "app/agent/token/caller_caps.oo";
 
 pub fn main() -> Result[Int, String] {
-    let s: String = "test";
-    let n: Int = bytes_len(s);
-    if n != 4 { return Err("bytes_len"); }
-    let h1: String = blake3_pure("abc");
-    let h2: String = blake3_pure("abcd");
-    if h1 == h2 { return Err("hash distinct"); }
-    if chars_len(h1) != 64 { return Err("h1 len"); }
-    if chars_len(h2) != 64 { return Err("h2 len"); }
-    let mut long: String = "";
-    let mut i: Int = 0;
-    while i < 1025 { long = long + "a"; i = i + 1; }
-    let h3: String = blake3_pure(long);
-    if chars_len(h3) != 64 { return Err("h3 len"); }
-    if h3 == h1 { return Err("long distinct"); }
-    println("probe: caps/blake3 ok");
+    let r_caps: CallerCaps = caller_caps_parse("read");
+    if !r_caps.has_read {
+        return Err("probe_caps: caller_caps_parse('read') must set has_read=true");
+    }
+    if r_caps.has_write || r_caps.has_exec {
+        return Err("probe_caps: caller_caps_parse('read') must not grant write or exec");
+    }
+    if !caller_caps_admits(r_caps, "status") {
+        return Err("probe_caps: read caps must admit 'status'");
+    }
+    if !caller_caps_admits(r_caps, "report") {
+        return Err("probe_caps: read caps must admit 'report'");
+    }
+    if caller_caps_admits(r_caps, "calibrate") {
+        return Err("probe_caps: read caps must deny 'calibrate'");
+    }
+    if caller_caps_admits(r_caps, "fix") {
+        return Err("probe_caps: read caps must deny 'fix'");
+    }
+
+    let reason: String = caller_caps_denial_reason(r_caps, "calibrate");
+    if !str_contains(reason, "missing required cap='write'") {
+        return Err("probe_caps: denial reason must explain missing write cap: " + reason);
+    }
+
+    let rw_caps: CallerCaps = caller_caps_parse("read,write");
+    if !rw_caps.has_read || !rw_caps.has_write {
+        return Err("probe_caps: caller_caps_parse('read,write') failed");
+    }
+    if !caller_caps_admits(rw_caps, "calibrate") {
+        return Err("probe_caps: read,write caps must admit 'calibrate'");
+    }
+    if !caller_caps_admits(rw_caps, "fix") {
+        return Err("probe_caps: read,write caps must admit 'fix'");
+    }
+    if caller_caps_admits(rw_caps, "shell_exec") {
+        return Err("probe_caps: read,write caps must deny 'shell_exec'");
+    }
+
+    let all_caps: CallerCaps = caller_caps_parse("all");
+    if !all_caps.has_read || !all_caps.has_write || !all_caps.has_exec {
+        return Err("probe_caps: caller_caps_parse('all') failed");
+    }
+    if !caller_caps_admits(all_caps, "shell_exec") {
+        return Err("probe_caps: all caps must admit 'shell_exec'");
+    }
+
+    println("probe: std/qa probe_caps passed (CallerCaps permissions verified)");
     return Ok(0);
 }

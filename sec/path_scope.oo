@@ -135,11 +135,11 @@ pub fn path_scope_join(prefix: String, rel: String) -> Result[String, String] {
         return Err("path scope denied: ..");
     }
     let n: Int = chars_len(prefix);
-    let mut out: String = prefix;
+    let mut sep: String = "";
     if char_at(prefix, n - 1) != "/" {
-        out = out + "/";
+        sep = "/";
     }
-    out = out + rel;
+    let out: String = prefix + sep + rel;
     if !path_scope_allows(prefix, out) {
         return Err("path scope denied: join");
     }

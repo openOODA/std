@@ -1,0 +1,72 @@
+// # Moonshot Function & Module Scorecard Engine
+//
+// Logline: Scores functions and modules on a 1-10 scale against openOODA North Star moonshot criteria.
+//
+// Setup: Evaluates FunctionAuditCriteria across 10 discrete dimensions derived from NORTHSTAR.oot.
+//
+// Beats:
+//   1. Define FunctionAuditCriteria input structure covering all 10 moonshot dimensions.
+//   2. Compute aggregate integer score (0 to 10) by summing verified criteria.
+//   3. Validate score against target release threshold.
+//   4. Format diagnostic failure message for below-threshold scores.
+
+type FunctionAuditCriteria = struct {
+    has_explicit_caps: Bool,
+    has_contract_clauses: Bool,
+    is_zero_heap: Bool,
+    fails_closed: Bool,
+    is_compact_weight: Bool,
+    has_negative_probe: Bool,
+    is_double_run_proven: Bool,
+    is_pure_aligned: Bool,
+    uses_strong_types: Bool,
+    zero_stubs: Bool
+};
+
+pub fn moonshot_criteria_new(
+    caps: Bool,
+    contracts: Bool,
+    zero_heap: Bool,
+    fail_closed: Bool,
+    compact: Bool,
+    neg_probe: Bool,
+    double_run: Bool,
+    pure: Bool,
+    strong_types: Bool,
+    no_stubs: Bool
+) -> FunctionAuditCriteria {
+    return FunctionAuditCriteria {
+        has_explicit_caps: caps,
+        has_contract_clauses: contracts,
+        is_zero_heap: zero_heap,
+        fails_closed: fail_closed,
+        is_compact_weight: compact,
+        has_negative_probe: neg_probe,
+        is_double_run_proven: double_run,
+        is_pure_aligned: pure,
+        uses_strong_types: strong_types,
+        zero_stubs: no_stubs
+    };
+}
+
+pub fn moonshot_score_function(c: FunctionAuditCriteria) -> Int {
+    let mut score: Int = 0;
+    if c.has_explicit_caps { score = score + 1; }
+    if c.has_contract_clauses { score = score + 1; }
+    if c.is_zero_heap { score = score + 1; }
+    if c.fails_closed { score = score + 1; }
+    if c.is_compact_weight { score = score + 1; }
+    if c.has_negative_probe { score = score + 1; }
+    if c.is_double_run_proven { score = score + 1; }
+    if c.is_pure_aligned { score = score + 1; }
+    if c.uses_strong_types { score = score + 1; }
+    if c.zero_stubs { score = score + 1; }
+    return score;
+}
+
+pub fn moonshot_evaluate_threshold(score: Int, target: Int, fn_name: String) -> Result[Bool, String] {
+    if score < target {
+        return Err("Moonshot Gate Failed: Function '" + fn_name + "' scored " + score.to_string() + "/10 (required threshold: " + target.to_string() + "/10)");
+    }
+    return Ok(true);
+}

@@ -1,0 +1,133 @@
+// # std/qa/probe_swarm — Standard Library Swarm Subsystem Verification
+//
+// Logline: Verify actor cells, bounded mailboxes, fuel accounting, and OTP supervision in memory.
+//
+// Setup: Pure native verification of std/app/agent/swarm/ under ThreadCap, TimeCap, and ProcessCap.
+//
+// Beats:
+//   1. Verify cell lifecycle, bounded FIFO inbox, and fuel deduction.
+//   2. Verify declarative manifest parsing and topology creation.
+//   3. Verify Let-It-Crash supervisor recovery and autopsy generation.
+//   4. Verify multi-cell OODA cycle turn execution and state transitions.
+
+import "app/agent/swarm/agent_cell.oo";
+import "app/agent/swarm/supervisor.oo";
+import "app/agent/swarm/manifest.oo";
+import "app/agent/swarm/ooda_cycle.oo";
+
+pub fn main(
+    thread: &ThreadCap, time: &TimeCap,
+    fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap
+) -> Result[Int, String] {
+    // 1. Verify AgentCell creation, bounded inbox, and fuel accounting
+    let caps_r: AgentCaps = agent_caps_new(true, false, false, false);
+    let role_w: AgentRole = agent_role_new("Worker", caps_r, 500);
+    let mut cell: AgentCell = agent_cell_new(1, role_w, 3);
+    if cell.id != 1 || cell.role.name != "Worker" || cell.fuel_remaining != 500 {
+        return Err("probe_swarm: initial cell state invalid");
+    }
+
+    // Push 3 messages to capacity
+    let p1: Result[AgentCell, String] = agent_cell_push_message(thread, cell, "MSG_1");
+    if p1.is_err() { return Err("probe_swarm: push MSG_1 failed"); }
+    cell = match p1 { Ok(c) => c, Err(_) => cell };
+    let p2: Result[AgentCell, String] = agent_cell_push_message(thread, cell, "MSG_2");
+    if p2.is_err() { return Err("probe_swarm: push MSG_2 failed"); }
+    cell = match p2 { Ok(c) => c, Err(_) => cell };
+    let p3: Result[AgentCell, String] = agent_cell_push_message(thread, cell, "MSG_3");
+    if p3.is_err() { return Err("probe_swarm: push MSG_3 failed"); }
+    cell = match p3 { Ok(c) => c, Err(_) => cell };
+
+    // 4th push must fail closed with MAILBOX_FULL
+    let p4: Result[AgentCell, String] = agent_cell_push_message(thread, cell, "MSG_4");
+    if p4.is_ok() { return Err("probe_swarm: push beyond capacity must fail"); }
+
+    // Pop FIFO message
+    let pop_res: Result[AgentPopResult, String] = agent_cell_pop_message(thread, cell);
+    if pop_res.is_err() { return Err("probe_swarm: pop failed"); }
+    let pop_val: AgentPopResult = match pop_res { Ok(p) => p, Err(_) => AgentPopResult { cell: cell, msg: "" } };
+    if pop_val.msg != "MSG_1" { return Err("probe_swarm: FIFO order violated: " + pop_val.msg); }
+    cell = pop_val.cell;
+
+    // Fuel accounting & exhaustion
+    let fuel_res: Result[AgentCell, String] = agent_cell_consume_fuel(cell, 50);
+    if fuel_res.is_err() { return Err("probe_swarm: consume 50 fuel failed"); }
+    cell = match fuel_res { Ok(c) => c, Err(_) => cell };
+    if cell.fuel_remaining != 450 || cell.fuel_consumed != 50 {
+        return Err("probe_swarm: fuel tracking incorrect");
+    }
+    let over_res: Result[AgentCell, String] = agent_cell_consume_fuel(cell, 1000);
+    if over_res.is_ok() { return Err("probe_swarm: over-fuel consumption must fail"); }
+
+    // Lifecycle transitions
+    cell = agent_cell_transition(cell, 1);
+    if agent_state_name(cell.state) != "OBSERVE" { return Err("probe_swarm: state 1 must be OBSERVE"); }
+    cell = agent_cell_transition(cell, 2);
+    if agent_state_name(cell.state) != "ORIENT" { return Err("probe_swarm: state 2 must be ORIENT"); }
+    cell = agent_cell_transition(cell, 3);
+    if agent_state_name(cell.state) != "DECIDE" { return Err("probe_swarm: state 3 must be DECIDE"); }
+    cell = agent_cell_transition(cell, 4);
+    if agent_state_name(cell.state) != "ACT" { return Err("probe_swarm: state 4 must be ACT"); }
+    cell = agent_cell_transition(cell, 0);
+    if agent_state_name(cell.state) != "IDLE" { return Err("probe_swarm: state 0 must be IDLE"); }
+
+    // 2. Declarative manifest parser verification
+    let manifest_src: String = "# openOODA Swarm Topology Manifest\n" +
+        "# Strategy: OneForOne\n# MaxRestarts: 3\n# Task: ProcessData\n\n" +
+        "[agent:alpha]\nrole = Alpha\nfuel = 800\ninbox_cap = 16\ncaps = read,eval\n\n" +
+        "[agent:beta]\nrole = Beta\nfuel = 1200\ninbox_cap = 32\ncaps = read,write\n";
+    let m_res: Result[SwarmManifest, String] = swarm_manifest_parse(manifest_src);
+    if m_res.is_err() { return Err("probe_swarm: manifest parse failed"); }
+    let empty_roles: List[AgentRole] = list_new();
+    let dummy_m: SwarmManifest = SwarmManifest { name: "", strategy: 0, max_restarts: 0, roles: empty_roles, initial_task: "" };
+    let manifest: SwarmManifest = match m_res { Ok(m) => m, Err(_) => dummy_m };
+    if manifest.strategy != 0 || manifest.max_restarts != 3 || manifest.initial_task != "ProcessData" {
+        return Err("probe_swarm: parsed manifest header mismatch");
+    }
+    if list_len(manifest.roles) != 2 { return Err("probe_swarm: role count mismatch"); }
+    let r_alpha: AgentRole = list_get(manifest.roles, 0);
+    if r_alpha.name != "Alpha" || r_alpha.max_fuel != 800 || !r_alpha.caps.can_read || !r_alpha.caps.can_eval {
+        return Err("probe_swarm: role Alpha mismatch");
+    }
+
+    // 3. OTP Supervisor Let-It-Crash Recovery & Autopsy Verification
+    let mut sup: SwarmSupervisor = swarm_sup_new(thread, 0, 3);
+    let c_alpha: AgentCell = agent_cell_new(1, r_alpha, 16);
+    sup = swarm_sup_add_cell(sup, c_alpha);
+    if swarm_sup_cell_count(sup) != 1 { return Err("probe_swarm: cell count mismatch"); }
+
+    let crash_res: Result[SwarmSupervisor, String] = swarm_sup_handle_crash(
+        thread, time, sup, 1, "AGENT_CRASHED: simulated_fault", 1
+    );
+    if crash_res.is_err() { return Err("probe_swarm: crash handling failed"); }
+    sup = match crash_res { Ok(s) => s, Err(_) => sup };
+    if list_len(sup.autopsies) != 1 { return Err("probe_swarm: autopsy record missing"); }
+    let autopsy: SwarmAutopsy = list_get(sup.autopsies, 0);
+    if autopsy.agent_id != 1 || autopsy.role_name != "Alpha" || !str_contains(autopsy.crash_reason, "simulated_fault") {
+        return Err("probe_swarm: autopsy data corrupted");
+    }
+    let rej_cell: AgentCell = list_get(sup.cells, 0);
+    if rej_cell.state != 0 || rej_cell.fuel_remaining != 800 || list_len(rej_cell.inbox) != 0 {
+        return Err("probe_swarm: rejuvenation failed to reset clean state");
+    }
+
+    // 4. Multi-Cell OODA Cycle Turn Execution (swarm_create, swarm_step)
+    let mesh_res: Result[SwarmMesh, String] = swarm_create(thread, manifest);
+    if mesh_res.is_err() { return Err("probe_swarm: swarm_create failed"); }
+    let mut mesh: SwarmMesh = match mesh_res {
+        Ok(m) => m,
+        Err(_) => SwarmMesh { sup: sup, manifest: manifest, current_turn: 0, total_fuel_consumed: 0, is_finished: false }
+    };
+    if list_len(list_get(mesh.sup.cells, 0).inbox) != 1 {
+        return Err("probe_swarm: initial task not queued into first cell");
+    }
+
+    let step_res: Result[SwarmMesh, String] = swarm_step(thread, fs_r, fs_w, proc, time, mesh);
+    if step_res.is_err() { return Err("probe_swarm: swarm_step turn 1 failed"); }
+    mesh = match step_res { Ok(m) => m, Err(_) => mesh };
+    if mesh.current_turn != 1 { return Err("probe_swarm: turn counter not advanced"); }
+    if mesh.total_fuel_consumed <= 0 { return Err("probe_swarm: fuel consumption not tracked"); }
+
+    println("probe: std/swarm: ok");
+    return Ok(0);
+}

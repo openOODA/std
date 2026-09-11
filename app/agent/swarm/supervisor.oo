@@ -1,0 +1,230 @@
+// # Swarm Actor Supervisor Tree Module
+//
+// Logline: OTP-grade supervisor tree with OneForOne and OneForAll strategies, autopsy recording, and rapid restart.
+//
+// Setup: Wraps std/net/sync/actor_supervisor.oo to coordinate agent lifecycle, crash isolation, and bounded restarts.
+//
+// Beats:
+//   1. Wrap ActorSupervisor substrate to maintain child registry and restart budgets.
+//   2. Detect child cell crashes and record structured autopsy flight reports.
+//   3. Enforce restart intensity limits; escalate fail-closed upon budget exhaustion.
+//   4. Execute clean sub-2ms actor cell rejuvenation under OneForOne or OneForAll.
+
+import "std/core/primitives/list.oo";
+import "std/net/sync/actor_supervisor.oo";
+import "std/app/agent/swarm/agent_cell.oo";
+import "std/app/agent/swarm/manifest.oo";
+
+pub type SwarmAutopsy = struct {
+    agent_id: Int,
+    role_name: String,
+    crash_reason: String,
+    turn: Int,
+    fuel_at_crash: Int,
+    timestamp_ns: Int,
+    rejuvenation_ms: Int
+};
+
+pub type SwarmSupervisor = struct {
+    inner_sup: ActorSupervisor,
+    cells: List[AgentCell],
+    autopsies: List[SwarmAutopsy],
+    is_active: Bool
+};
+
+pub type SwarmMesh = struct {
+    sup: SwarmSupervisor,
+    manifest: SwarmManifest,
+    current_turn: Int,
+    total_fuel_consumed: Int,
+    is_finished: Bool
+};
+
+pub fn swarm_sup_strategy_one_for_one() -> Int { return 0; }
+pub fn swarm_sup_strategy_one_for_all() -> Int { return 1; }
+
+pub fn swarm_sup_new(thread: &ThreadCap, strategy: Int, max_restarts: Int) -> SwarmSupervisor {
+    return SwarmSupervisor {
+        inner_sup: actor_sup_create(strategy, max_restarts),
+        cells: list_new(),
+        autopsies: list_new(),
+        is_active: true
+    };
+}
+
+pub fn swarm_sup_add_cell(sup: SwarmSupervisor, cell: AgentCell) -> SwarmSupervisor {
+    let updated_inner: ActorSupervisor = actor_sup_add_child(sup.inner_sup, cell.id);
+    return SwarmSupervisor {
+        inner_sup: updated_inner,
+        cells: list_push(sup.cells, cell),
+        autopsies: sup.autopsies,
+        is_active: sup.is_active
+    };
+}
+
+pub fn swarm_sup_get_cell(sup: SwarmSupervisor, idx: Int) -> Result[AgentCell, String] {
+    let n: Int = list_len(sup.cells);
+    if idx < 0 || idx >= n { return Err("INDEX_OUT_OF_BOUNDS"); }
+    return Ok(list_get(sup.cells, idx));
+}
+
+pub fn swarm_sup_find_cell(sup: SwarmSupervisor, agent_id: Int) -> Result[AgentCell, String] {
+    let n: Int = list_len(sup.cells);
+    let mut i: Int = 0;
+    while i < n {
+        let c: AgentCell = list_get(sup.cells, i);
+        if c.id == agent_id { return Ok(c); }
+        i = i + 1;
+    }
+    return Err("AGENT_NOT_FOUND");
+}
+
+pub fn swarm_sup_cell_count(sup: SwarmSupervisor) -> Int { return list_len(sup.cells); }
+pub fn swarm_sup_autopsy_count(sup: SwarmSupervisor) -> Int { return list_len(sup.autopsies); }
+
+pub fn swarm_sup_latest_autopsy(sup: SwarmSupervisor) -> Result[SwarmAutopsy, String] {
+    let n: Int = list_len(sup.autopsies);
+    if n == 0 { return Err("NO_AUTOPSIES"); }
+    return Ok(list_get(sup.autopsies, n - 1));
+}
+
+pub fn swarm_sup_reset_restarts(thread: &ThreadCap, sup: SwarmSupervisor) -> SwarmSupervisor {
+    return SwarmSupervisor {
+        inner_sup: actor_sup_reset_restarts(thread, sup.inner_sup),
+        cells: sup.cells,
+        autopsies: sup.autopsies,
+        is_active: sup.is_active
+    };
+}
+
+pub fn swarm_sup_handle_crash(
+    thread: &ThreadCap, time: &TimeCap, sup: SwarmSupervisor,
+    agent_id: Int, reason: String, turn: Int
+) -> Result[SwarmSupervisor, String] {
+    let t_start: Int = now_ms(time);
+    let fail_res: Result[ActorSupervisor, String] = actor_sup_handle_failure(thread, sup.inner_sup, agent_id);
+    if fail_res.is_err() {
+        let err_msg: String = match fail_res { Ok(_) => "", Err(e) => e };
+        if str_starts_with(err_msg, "ESCALATE_TO_PARENT_SUPERVISOR") { return Err(err_msg); }
+        return Err("ESCALATE_TO_PARENT_SUPERVISOR: " + err_msg);
+    }
+    let new_inner: ActorSupervisor = match fail_res { Ok(s) => s, Err(_) => sup.inner_sup };
+    let n: Int = list_len(sup.cells);
+    let mut found_idx: Int = -1;
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(sup.cells, i).id == agent_id { found_idx = i; break; }
+        i = i + 1;
+    }
+    if found_idx < 0 { return Err("AGENT_NOT_FOUND"); }
+
+    let target_cell: AgentCell = list_get(sup.cells, found_idx);
+    let now_ts: Int = now_ms(time) * 1000000;
+    let mut new_cells: List[AgentCell] = list_new();
+    if sup.inner_sup.strategy == 0 {
+        let reset_cell: AgentCell = agent_cell_reset(target_cell);
+        let mut j: Int = 0;
+        while j < n {
+            if j == found_idx { new_cells = list_push(new_cells, reset_cell); }
+            else { new_cells = list_push(new_cells, list_get(sup.cells, j)); }
+            j = j + 1;
+        }
+    } else {
+        let mut j: Int = 0;
+        while j < n {
+            new_cells = list_push(new_cells, agent_cell_reset(list_get(sup.cells, j)));
+            j = j + 1;
+        }
+    }
+    let t_end: Int = now_ms(time);
+    let elapsed: Int = t_end - t_start;
+    if elapsed > 2 {
+        return Err("RESTART_BUDGET_EXCEEDED: rejuvenation took " + elapsed.to_string() + "ms (>2ms budget)");
+    }
+    let autopsy: SwarmAutopsy = SwarmAutopsy {
+        agent_id: agent_id,
+        role_name: target_cell.role.name,
+        crash_reason: reason,
+        turn: turn,
+        fuel_at_crash: target_cell.fuel_remaining,
+        timestamp_ns: now_ts,
+        rejuvenation_ms: elapsed
+    };
+    let new_autopsies: List[SwarmAutopsy] = list_push(sup.autopsies, autopsy);
+    return Ok(SwarmSupervisor { inner_sup: new_inner, cells: new_cells, autopsies: new_autopsies, is_active: sup.is_active });
+}
+
+pub fn swarm_create(thread: &ThreadCap, manifest: SwarmManifest) -> Result[SwarmMesh, String] {
+    let mut sup: SwarmSupervisor = swarm_sup_new(thread, manifest.strategy, manifest.max_restarts);
+    let num_roles: Int = list_len(manifest.roles);
+    let mut i: Int = 0;
+    while i < num_roles {
+        let role: AgentRole = list_get(manifest.roles, i);
+        let mut cell: AgentCell = agent_cell_new(i + 1, role, role.inbox_cap);
+        if i == 0 && chars_len(manifest.initial_task) > 0 {
+            let push_res: Result[AgentCell, String] = agent_cell_push_message(thread, cell, manifest.initial_task);
+            if push_res.is_ok() { cell = match push_res { Ok(c) => c, Err(_) => cell }; }
+        }
+        sup = swarm_sup_add_cell(sup, cell);
+        i = i + 1;
+    }
+    return Ok(SwarmMesh { sup: sup, manifest: manifest, current_turn: 0, total_fuel_consumed: 0, is_finished: false });
+}
+
+pub fn swarm_status(mesh: SwarmMesh) -> String {
+    let strat_name: String = if mesh.manifest.strategy == 1 { "OneForAll" } else { "OneForOne" };
+    let status_str: String = if mesh.is_finished { "FINISHED" } else { "ACTIVE" };
+    let mut out: String = "=== openOODA Swarm Mesh Status ===\n";
+    out = out + "Swarm Topology: " + mesh.manifest.name + " (Strategy: " + strat_name + ", Max Restarts: " + mesh.manifest.max_restarts.to_string() + ")\n";
+    out = out + "Current Turn: " + mesh.current_turn.to_string() + " | Fuel Consumed: " + mesh.total_fuel_consumed.to_string() + " | Mesh Status: " + status_str + "\n";
+    out = out + "Supervisor Restarts: " + mesh.sup.inner_sup.current_restarts.to_string() + "/" + mesh.manifest.max_restarts.to_string() + " | Autopsies: " + list_len(mesh.sup.autopsies).to_string() + "\n\n";
+    let n: Int = list_len(mesh.sup.cells);
+    out = out + "Active Agent Cells (" + n.to_string() + "):\n";
+    let mut i: Int = 0;
+    while i < n {
+        let c: AgentCell = list_get(mesh.sup.cells, i);
+        out = out + "  [" + c.id.to_string() + "] " + c.role.name + " (" + agent_state_name(c.state) + ") | Inbox: " + list_len(c.inbox).to_string() + "/" + c.max_inbox_depth.to_string() + " | Fuel: " + c.fuel_remaining.to_string() + " rem, " + c.fuel_consumed.to_string() + " cons";
+        if chars_len(c.last_error) > 0 { out = out + " | Error: " + c.last_error; }
+        out = out + "\n";
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn swarm_send_message(thread: &ThreadCap, mesh: SwarmMesh, agent_id: Int, msg: String) -> Result[SwarmMesh, String] {
+    let n: Int = list_len(mesh.sup.cells);
+    let mut found_idx: Int = -1;
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(mesh.sup.cells, i).id == agent_id { found_idx = i; break; }
+        i = i + 1;
+    }
+    if found_idx < 0 { return Err("AGENT_NOT_FOUND"); }
+    let target: AgentCell = list_get(mesh.sup.cells, found_idx);
+    let push_res: Result[AgentCell, String] = agent_cell_push_message(thread, target, msg);
+    if push_res.is_err() {
+        let em: String = match push_res { Ok(_) => "", Err(e) => e };
+        return Err(em);
+    }
+    let updated_cell: AgentCell = match push_res { Ok(c) => c, Err(_) => target };
+    let mut new_cells: List[AgentCell] = list_new();
+    let mut j: Int = 0;
+    while j < n {
+        if j == found_idx { new_cells = list_push(new_cells, updated_cell); }
+        else { new_cells = list_push(new_cells, list_get(mesh.sup.cells, j)); }
+        j = j + 1;
+    }
+    let mut new_sup: SwarmSupervisor = mesh.sup;
+    new_sup.cells = new_cells;
+    return Ok(SwarmMesh { sup: new_sup, manifest: mesh.manifest, current_turn: mesh.current_turn, total_fuel_consumed: mesh.total_fuel_consumed, is_finished: false });
+}
+
+pub fn swarm_inject_crash(thread: &ThreadCap, time: &TimeCap, mesh: SwarmMesh, agent_id: Int, reason: String) -> Result[SwarmMesh, String] {
+    let rec_res: Result[SwarmSupervisor, String] = swarm_sup_handle_crash(thread, time, mesh.sup, agent_id, reason, mesh.current_turn);
+    if rec_res.is_err() {
+        let em: String = match rec_res { Ok(_) => "", Err(e) => e };
+        return Err(em);
+    }
+    let updated_sup: SwarmSupervisor = match rec_res { Ok(s) => s, Err(_) => mesh.sup };
+    return Ok(SwarmMesh { sup: updated_sup, manifest: mesh.manifest, current_turn: mesh.current_turn, total_fuel_consumed: mesh.total_fuel_consumed, is_finished: mesh.is_finished });
+}
