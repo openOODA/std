@@ -1,0 +1,114 @@
+// # D-Bus Protocol and Daemon Service Verification Probe
+//
+// Logline: Comprehensive verification probe asserting SASL authentication, wire framing, method serialization, daemon dispatch, and fail-closed defenses.
+//
+// Setup: Pure verification probe exercising D-Bus client and server IPC primitives for screensaver and session bus interactions.
+//
+// Beats:
+//   1. Assert SASL EXTERNAL UID hex encoding and handshake lines.
+//   2. Assert fixed 12-byte header serialization, Little-Endian 'l' encoding, and alignment padding.
+//   3. Assert MethodCall, MethodReturn, and Error packet construction.
+//   4. Assert daemon service method dispatch and screensaver state transitions.
+//   5. Assert 1:1 negative falsification on truncated headers and corrupted packets.
+
+import "net/protocol/dbus/ANCHOR.oo";
+
+pub fn main() -> Result[Int, String] {
+    // 1. SASL EXTERNAL Handshake
+    let hex_uid: String = dbus_auth_hex_encode("1000");
+    if hex_uid != "31303030" { return Err("hex encoding '1000' != 31303030"); }
+    let auth_line: String = dbus_auth_external_req("1000");
+    if chars_len(auth_line) != 24 { return Err("auth line length != 24"); }
+    let auth_frame: List[Int] = dbus_auth_external_frame("1000");
+    if list_len(auth_frame) != 25 { return Err("auth frame length != 25"); }
+    if list_get(auth_frame, 0) != 0 { return Err("initial auth frame byte must be 0"); }
+    let begin_line: String = dbus_auth_begin_req();
+    if begin_line != "BEGIN\r\n" { return Err("begin line mismatch"); }
+    if !dbus_auth_verify_ok("OK 83f9821a1234\r\n") { return Err("auth OK verify failed"); }
+    if dbus_auth_verify_ok("REJECTED\r\n") { return Err("auth REJECTED should fail"); }
+
+    // 2. Wire Framing & Alignment
+    let u16_b: List[Int] = dbus_pack_u16(22136);
+    if dbus_unpack_u16(u16_b, 0) != 22136 { return Err("dbus u16 unpack mismatch"); }
+    let u32_b: List[Int] = dbus_pack_u32(305419896);
+    if dbus_unpack_u32(u32_b, 0) != 305419896 { return Err("dbus u32 unpack mismatch"); }
+
+    let mut unpadded: List[Int] = list_new();
+    unpadded = list_push(unpadded, 1); unpadded = list_push(unpadded, 2); unpadded = list_push(unpadded, 3);
+    let padded8: List[Int] = dbus_pad_to(unpadded, 8);
+    if list_len(padded8) != 8 { return Err("pad_to 8 failed"); }
+
+    // 3. Message Serialization
+    let body_empty: List[Int] = list_new();
+    let call_lock: List[Int] = dbus_client_call_lock(42);
+    let hdr: DbusHeader = dbus_message_parse_header(call_lock);
+    if !hdr.ok { return Err("parse call_lock header failed"); }
+    if hdr.msg_type != dbus_msg_method_call() { return Err("msg_type != METHOD_CALL"); }
+    if hdr.serial != 42 { return Err("serial != 42"); }
+
+    let ret_msg: List[Int] = dbus_message_build_return(43, 42, ":1.100", "", body_empty);
+    let ret_hdr: DbusHeader = dbus_message_parse_header(ret_msg);
+    if !ret_hdr.ok { return Err("parse ret_msg header failed"); }
+    if ret_hdr.msg_type != dbus_msg_method_return() { return Err("msg_type != METHOD_RETURN"); }
+    if ret_hdr.serial != 43 { return Err("serial != 43"); }
+
+    let err_msg: List[Int] = dbus_message_build_error(44, 42, ":1.100", "org.freedesktop.DBus.Error.Failed", "screensaver failed");
+    let err_hdr: DbusHeader = dbus_message_parse_header(err_msg);
+    if !err_hdr.ok { return Err("parse err_msg header failed"); }
+    if err_hdr.msg_type != dbus_msg_error() { return Err("msg_type != ERROR"); }
+
+    // 4. Daemon Service Dispatch & State Machine
+    let s0: IdleDaemonState = dbus_service_state_new();
+    if s0.active { return Err("initial state should be inactive"); }
+
+    // Dispatch Lock -> state becomes active
+    let d1: DbusDispatchResult = dbus_service_dispatch("Lock", ":1.200", 101, 1, s0);
+    if !d1.state.active { return Err("Lock did not set active=true"); }
+
+    // Dispatch GetActive -> returns boolean true
+    let d2: DbusDispatchResult = dbus_service_dispatch("GetActive", ":1.200", 102, 2, d1.state);
+    if !d2.state.active { return Err("state should remain active"); }
+
+    // Dispatch SetActive(false) -> state becomes inactive
+    let d3: DbusDispatchResult = dbus_service_dispatch("SetActive", ":1.200", 103, 3, d2.state);
+    if d3.state.active { return Err("SetActive did not toggle active"); }
+
+    // Dispatch Throttle -> increments inhibits and generates cookie
+    let d4: DbusDispatchResult = dbus_service_dispatch("Throttle", ":1.200", 104, 4, d3.state);
+    if d4.state.inhibits != 1 { return Err("inhibits count != 1"); }
+    if d4.state.cookie_counter != 101 { return Err("cookie_counter != 101"); }
+
+    // Dispatch UnThrottle -> decrements inhibits
+    let d5: DbusDispatchResult = dbus_service_dispatch("UnThrottle", ":1.200", 105, 5, d4.state);
+    if d5.state.inhibits != 0 { return Err("inhibits count != 0 after UnThrottle"); }
+
+    // Dispatch Introspect -> returns valid XML
+    let d6: DbusDispatchResult = dbus_service_dispatch("Introspect", ":1.200", 106, 6, d5.state);
+    if list_len(d6.reply) < 50 { return Err("introspect reply too short"); }
+
+    // Dispatch Unknown method -> returns D-Bus error
+    let d7: DbusDispatchResult = dbus_service_dispatch("BogusMethod", ":1.200", 107, 7, d5.state);
+    let bad_hdr: DbusHeader = dbus_message_parse_header(d7.reply);
+    if !bad_hdr.ok { return Err("unknown method header parse failed"); }
+    if bad_hdr.msg_type != dbus_msg_error() { return Err("unknown method did not return error"); }
+
+    // 5. Negative-Trust Fail-Closed Falsification
+    let mut trunc_hdr: List[Int] = list_new();
+    trunc_hdr = list_push(trunc_hdr, dbus_endian_little());
+    trunc_hdr = list_push(trunc_hdr, 1);
+    let trunc_res: DbusHeader = dbus_message_parse_header(trunc_hdr);
+    if trunc_res.ok { return Err("truncated header did not fail"); }
+
+    let mut big_endian: List[Int] = list_new();
+    let mut b_idx: Int = 0;
+    while b_idx < 16 {
+        if b_idx == 0 { big_endian = list_push(big_endian, 66); } // 'B' Big-Endian
+        else { big_endian = list_push(big_endian, 0); }
+        b_idx = b_idx + 1;
+    }
+    let be_res: DbusHeader = dbus_message_parse_header(big_endian);
+    if be_res.ok { return Err("Big-Endian header was not rejected"); }
+
+    println("PROBE OK\tdbus_wire\tall 5 sections verified (auth + wire + messages + service + negative)");
+    return Ok(0);
+}

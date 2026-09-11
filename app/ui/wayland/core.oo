@@ -1,0 +1,155 @@
+// # Wayland Core Protocol Objects
+//
+// Logline: Generates binary request messages for wl_display, wl_registry, wl_compositor, wl_shm, and wl_surface.
+//
+// Setup: Pure wire message construction following the official Wayland protocol specification.
+//
+// Beats:
+//   1. Build wl_display sync and get_registry requests.
+//   2. Build wl_registry bind requests for advertised global interfaces.
+//   3. Build wl_compositor surface and region allocation requests.
+//   4. Build wl_shm pool/buffer creation and wl_surface commit cycles.
+
+import "wayland_wire.oo";
+
+pub fn wl_display_id() -> Int { return 1; }
+
+pub fn wl_display_sync(callback_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let cb: List[Int] = wayland_pack_u32(callback_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(cb, i)); i = i + 1; }
+    return wayland_build_msg(wl_display_id(), 0, payload);
+}
+
+pub fn wl_display_get_registry(registry_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let reg: List[Int] = wayland_pack_u32(registry_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(reg, i)); i = i + 1; }
+    return wayland_build_msg(wl_display_id(), 1, payload);
+}
+
+pub fn wl_registry_bind(reg_id: Int, name: Int, iface: String, version: Int, new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_name: List[Int] = wayland_pack_u32(name);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_name, i)); i = i + 1; }
+    let b_iface: List[Int] = wayland_pack_string(iface);
+    let mut j: Int = 0;
+    while j < list_len(b_iface) { payload = list_push(payload, list_get(b_iface, j)); j = j + 1; }
+    let b_ver: List[Int] = wayland_pack_u32(version);
+    let mut k: Int = 0;
+    while k < 4 { payload = list_push(payload, list_get(b_ver, k)); k = k + 1; }
+    let b_id: List[Int] = wayland_pack_u32(new_id);
+    let mut m: Int = 0;
+    while m < 4 { payload = list_push(payload, list_get(b_id, m)); m = m + 1; }
+    return wayland_build_msg(reg_id, 0, payload);
+}
+
+pub fn wl_compositor_create_surface(comp_id: Int, surface_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(surface_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    return wayland_build_msg(comp_id, 0, payload);
+}
+
+pub fn wl_compositor_create_region(comp_id: Int, region_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(region_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    return wayland_build_msg(comp_id, 1, payload);
+}
+
+pub fn wl_shm_format_argb8888() -> Int { return 0; }
+pub fn wl_shm_format_xrgb8888() -> Int { return 1; }
+
+pub fn wl_shm_create_pool(shm_id: Int, pool_new_id: Int, size_bytes: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(pool_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    let b_sz: List[Int] = wayland_pack_i32(size_bytes);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_sz, j)); j = j + 1; }
+    return wayland_build_msg(shm_id, 0, payload);
+}
+
+pub fn wl_shm_pool_create_buffer(pool_id: Int, buf_new_id: Int, offset: Int, width: Int, height: Int, stride: Int, format: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(buf_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    let b_off: List[Int] = wayland_pack_i32(offset);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_off, j)); j = j + 1; }
+    let b_w: List[Int] = wayland_pack_i32(width);
+    let mut k: Int = 0;
+    while k < 4 { payload = list_push(payload, list_get(b_w, k)); k = k + 1; }
+    let b_h: List[Int] = wayland_pack_i32(height);
+    let mut m: Int = 0;
+    while m < 4 { payload = list_push(payload, list_get(b_h, m)); m = m + 1; }
+    let b_st: List[Int] = wayland_pack_i32(stride);
+    let mut n: Int = 0;
+    while n < 4 { payload = list_push(payload, list_get(b_st, n)); n = n + 1; }
+    let b_fmt: List[Int] = wayland_pack_u32(format);
+    let mut p: Int = 0;
+    while p < 4 { payload = list_push(payload, list_get(b_fmt, p)); p = p + 1; }
+    return wayland_build_msg(pool_id, 0, payload);
+}
+
+pub fn wl_shm_pool_destroy(pool_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(pool_id, 1, payload);
+}
+
+pub fn wl_surface_destroy(surf_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(surf_id, 0, payload);
+}
+
+pub fn wl_surface_attach(surf_id: Int, buf_id: Int, x: Int, y: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_buf: List[Int] = wayland_pack_u32(buf_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_buf, i)); i = i + 1; }
+    let b_x: List[Int] = wayland_pack_i32(x);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_x, j)); j = j + 1; }
+    let b_y: List[Int] = wayland_pack_i32(y);
+    let mut k: Int = 0;
+    while k < 4 { payload = list_push(payload, list_get(b_y, k)); k = k + 1; }
+    return wayland_build_msg(surf_id, 1, payload);
+}
+
+pub fn wl_surface_damage(surf_id: Int, x: Int, y: Int, width: Int, height: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_x: List[Int] = wayland_pack_i32(x);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_x, i)); i = i + 1; }
+    let b_y: List[Int] = wayland_pack_i32(y);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_y, j)); j = j + 1; }
+    let b_w: List[Int] = wayland_pack_i32(width);
+    let mut k: Int = 0;
+    while k < 4 { payload = list_push(payload, list_get(b_w, k)); k = k + 1; }
+    let b_h: List[Int] = wayland_pack_i32(height);
+    let mut m: Int = 0;
+    while m < 4 { payload = list_push(payload, list_get(b_h, m)); m = m + 1; }
+    return wayland_build_msg(surf_id, 2, payload);
+}
+
+pub fn wl_surface_frame(surf_id: Int, callback_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_cb: List[Int] = wayland_pack_u32(callback_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_cb, i)); i = i + 1; }
+    return wayland_build_msg(surf_id, 3, payload);
+}
+
+pub fn wl_surface_commit(surf_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(surf_id, 6, payload);
+}

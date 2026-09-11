@@ -1,0 +1,39 @@
+// # Wayland Client Protocol Subsystem
+//
+// Logline: Sovereign Wayland client wire protocol marshalling, core objects, layer-shell v1, output/seat, and idle notification primitives.
+//
+// Setup: Pure wire-protocol implementation operating over AF_UNIX sockets ($XDG_RUNTIME_DIR/wayland-0).
+//
+// Beats:
+//   1. Re-export wire serialization and 32-bit little-endian message framing.
+//   2. Re-export core Wayland protocol objects (wl_display, wl_registry, wl_compositor, wl_shm, wl_surface).
+//   3. Re-export wlr-layer-shell-unstable-v1 for fullscreen screensaver overlays.
+//   4. Re-export wl_seat input device management and ext-idle-notify-v1 inactivity monitoring.
+
+import "wayland_wire.oo";
+import "core.oo";
+import "layer_shell.oo";
+import "output_seat.oo";
+import "idle_notify.oo";
+import "client.oo";
+
+pub fn wayland_protocol_version() -> String {
+    return "wayland/1.22.0-ext";
+}
+
+pub fn wayland_supported_interfaces() -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, "wl_display");
+    out = list_push(out, "wl_registry");
+    out = list_push(out, "wl_compositor");
+    out = list_push(out, "wl_shm");
+    out = list_push(out, "wl_shm_pool");
+    out = list_push(out, "wl_surface");
+    out = list_push(out, "zwlr_layer_shell_v1");
+    out = list_push(out, "zwlr_layer_surface_v1");
+    out = list_push(out, "wl_output");
+    out = list_push(out, "wl_seat");
+    out = list_push(out, "ext_idle_notifier_v1");
+    out = list_push(out, "ext_idle_notification_v1");
+    return out;
+}

@@ -1,0 +1,85 @@
+// # Wayland Display Output and Input Seat Protocol
+//
+// Logline: Encodes requests and decodes compositor events for wl_output display geometry and wl_seat input device management.
+//
+// Setup: Pure wire encoder and event parser for Wayland multi-monitor geometry and keyboard/pointer input.
+//
+// Beats:
+//   1. Build wl_seat pointer, keyboard, and touch device binding requests.
+//   2. Parse wl_seat capabilities bitmask to detect available input hardware.
+//   3. Parse wl_output mode events to extract monitor resolution and refresh rate.
+//   4. Build wl_output release lifecycle requests.
+
+import "wayland_wire.oo";
+
+pub fn wl_seat_cap_pointer() -> Int { return 1; }
+pub fn wl_seat_cap_keyboard() -> Int { return 2; }
+pub fn wl_seat_cap_touch() -> Int { return 4; }
+
+pub type OutputMode = struct {
+    flags: Int,
+    width: Int,
+    height: Int,
+    refresh_mhz: Int
+};
+
+pub fn wl_seat_get_pointer(seat_id: Int, ptr_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(ptr_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    return wayland_build_msg(seat_id, 0, payload);
+}
+
+pub fn wl_seat_get_keyboard(seat_id: Int, kbd_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(kbd_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    return wayland_build_msg(seat_id, 1, payload);
+}
+
+pub fn wl_seat_get_touch(seat_id: Int, touch_new_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(touch_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    return wayland_build_msg(seat_id, 2, payload);
+}
+
+pub fn wl_seat_release(seat_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(seat_id, 3, payload);
+}
+
+pub fn wl_seat_parse_capabilities(bytes: List[Int], offset: Int) -> Result[Int, String] {
+    if offset + 4 > list_len(bytes) {
+        return Err("ERR\twl_seat_caps: truncated event");
+    }
+    let caps: Int = wayland_unpack_u32(bytes, offset);
+    return Ok(caps);
+}
+
+pub fn wl_output_release(output_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(output_id, 0, payload);
+}
+
+pub fn wl_output_parse_mode(bytes: List[Int], offset: Int) -> Result[OutputMode, String] {
+    if offset + 16 > list_len(bytes) {
+        return Err("ERR\twl_output_mode: truncated event (need 16 bytes)");
+    }
+    let fl: Int = wayland_unpack_u32(bytes, offset);
+    let w: Int = wayland_unpack_i32(bytes, offset + 4);
+    let h: Int = wayland_unpack_i32(bytes, offset + 8);
+    let ref: Int = wayland_unpack_i32(bytes, offset + 12);
+    return Ok(OutputMode { flags: fl, width: w, height: h, refresh_mhz: ref });
+}
+
+pub fn wl_output_parse_scale(bytes: List[Int], offset: Int) -> Result[Int, String] {
+    if offset + 4 > list_len(bytes) {
+        return Err("ERR\twl_output_scale: truncated event");
+    }
+    let factor: Int = wayland_unpack_i32(bytes, offset);
+    return Ok(factor);
+}

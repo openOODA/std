@@ -1,0 +1,98 @@
+// # D-Bus Wire Message Framing and Endian Codecs
+//
+// Logline: Encodes and decodes 8-byte aligned D-Bus wire protocol packets, headers, flags, and endian fields.
+//
+// Setup: Pure network wire serialization engine implementing the D-Bus specification (Little-Endian 'l').
+//
+// Beats:
+//   1. Define message types (method call, return, error, signal) and header field codes.
+//   2. Pack and unpack 16-bit and 32-bit little-endian scalar integers.
+//   3. Implement alignment padding helpers for 4-byte and 8-byte boundaries.
+//   4. Format 12-byte fixed D-Bus message headers.
+
+pub fn dbus_endian_little() -> Int { return 108; } // 'l'
+
+pub fn dbus_msg_method_call() -> Int { return 1; }
+pub fn dbus_msg_method_return() -> Int { return 2; }
+pub fn dbus_msg_error() -> Int { return 3; }
+pub fn dbus_msg_signal() -> Int { return 4; }
+
+pub fn dbus_flag_no_reply() -> Int { return 1; }
+pub fn dbus_flag_no_auto_start() -> Int { return 2; }
+
+pub fn dbus_field_path() -> Int { return 1; }
+pub fn dbus_field_interface() -> Int { return 2; }
+pub fn dbus_field_member() -> Int { return 3; }
+pub fn dbus_field_error_name() -> Int { return 4; }
+pub fn dbus_field_reply_serial() -> Int { return 5; }
+pub fn dbus_field_destination() -> Int { return 6; }
+pub fn dbus_field_sender() -> Int { return 7; }
+pub fn dbus_field_signature() -> Int { return 8; }
+pub fn dbus_field_unix_fds() -> Int { return 9; }
+
+pub fn dbus_pack_u16(val: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, val & 255);
+    out = list_push(out, (val >> 8) & 255);
+    return out;
+}
+
+pub fn dbus_pack_u32(val: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, val & 255);
+    out = list_push(out, (val >> 8) & 255);
+    out = list_push(out, (val >> 16) & 255);
+    out = list_push(out, (val >> 24) & 255);
+    return out;
+}
+
+pub fn dbus_pack_i32(val: Int) -> List[Int] {
+    let mut v: Int = val;
+    if v < 0 { v = 4294967296 + v; }
+    return dbus_pack_u32(v);
+}
+
+pub fn dbus_unpack_u16(bytes: List[Int], offset: Int) -> Int {
+    if offset + 2 > list_len(bytes) { return 0; }
+    let b0: Int = list_get(bytes, offset) & 255;
+    let b1: Int = list_get(bytes, offset + 1) & 255;
+    return b0 | (b1 << 8);
+}
+
+pub fn dbus_unpack_u32(bytes: List[Int], offset: Int) -> Int {
+    if offset + 4 > list_len(bytes) { return 0; }
+    let b0: Int = list_get(bytes, offset) & 255;
+    let b1: Int = list_get(bytes, offset + 1) & 255;
+    let b2: Int = list_get(bytes, offset + 2) & 255;
+    let b3: Int = list_get(bytes, offset + 3) & 255;
+    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+}
+
+pub fn dbus_pad_to(buf: List[Int], alignment: Int) -> List[Int] {
+    let n: Int = list_len(buf);
+    let rem: Int = n % alignment;
+    if rem == 0 { return buf; }
+    let pad_count: Int = alignment - rem;
+    let mut out: List[Int] = buf;
+    let mut i: Int = 0;
+    while i < pad_count {
+        out = list_push(out, 0);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn dbus_build_fixed_header(msg_type: Int, flags: Int, body_len: Int, serial: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, dbus_endian_little());
+    out = list_push(out, msg_type);
+    out = list_push(out, flags);
+    out = list_push(out, 1); // Major protocol version = 1
+    let b_len: List[Int] = dbus_pack_u32(body_len);
+    let mut i: Int = 0;
+    while i < 4 { out = list_push(out, list_get(b_len, i)); i = i + 1; }
+    let b_ser: List[Int] = dbus_pack_u32(serial);
+    let mut j: Int = 0;
+    while j < 4 { out = list_push(out, list_get(b_ser, j)); j = j + 1; }
+    return out;
+}

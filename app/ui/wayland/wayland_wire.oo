@@ -1,0 +1,147 @@
+// # Wayland Client Wire Protocol Framing
+//
+// Logline: Encodes and decodes 32-bit aligned Wayland wire protocol messages, headers, and primitive argument types over UNIX domain sockets.
+//
+// Setup: Pure network wire serialization engine providing fail-closed byte encoding across opcodes, object IDs, integers, and padded strings.
+//
+// Beats:
+//   1. Pack 16-bit and 32-bit little-endian scalar integers into raw byte sequences.
+//   2. Pack null-terminated strings padded to standard 32-bit (4-byte) boundaries.
+//   3. Build Wayland message packets with 8-byte headers (object ID, opcode, byte length).
+//   4. Parse Wayland message headers and validate packet bounds.
+
+pub type WaylandMsgHeader = struct {
+    ok: Bool,
+    object_id: Int,
+    opcode: Int,
+    size_bytes: Int
+};
+
+pub fn wayland_pack_u16(val: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, val & 255);
+    out = list_push(out, (val >> 8) & 255);
+    return out;
+}
+
+pub fn wayland_pack_u32(val: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, val & 255);
+    out = list_push(out, (val >> 8) & 255);
+    out = list_push(out, (val >> 16) & 255);
+    out = list_push(out, (val >> 24) & 255);
+    return out;
+}
+
+pub fn wayland_pack_i32(val: Int) -> List[Int] {
+    let mut v: Int = val;
+    if v < 0 {
+        v = 4294967296 + v;
+    }
+    return wayland_pack_u32(v);
+}
+
+pub fn wayland_pack_fixed(val: Int) -> List[Int] {
+    return wayland_pack_i32(val << 8);
+}
+
+pub fn wayland_pack_string(s: String) -> List[Int] {
+    let slen: Int = chars_len(s);
+    let total_len: Int = slen + 1;
+    let mut out: List[Int] = wayland_pack_u32(total_len);
+    let mut i: Int = 0;
+    while i < slen {
+        let ch: String = char_at(s, i);
+        out = list_push(out, ord(ch));
+        i = i + 1;
+    }
+    out = list_push(out, 0);
+    let pad: Int = (4 - (total_len % 4)) % 4;
+    let mut p: Int = 0;
+    while p < pad {
+        out = list_push(out, 0);
+        p = p + 1;
+    }
+    return out;
+}
+
+pub fn wayland_pack_array(arr: List[Int]) -> List[Int] {
+    let n: Int = list_len(arr);
+    let mut out: List[Int] = wayland_pack_u32(n);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, list_get(arr, i) & 255);
+        i = i + 1;
+    }
+    let pad: Int = (4 - (n % 4)) % 4;
+    let mut p: Int = 0;
+    while p < pad {
+        out = list_push(out, 0);
+        p = p + 1;
+    }
+    return out;
+}
+
+pub fn wayland_build_msg(obj_id: Int, opcode: Int, payload: List[Int]) -> List[Int] {
+    let plen: Int = list_len(payload);
+    let total_len: Int = 8 + plen;
+    let mut out: List[Int] = list_new();
+    let obj_bytes: List[Int] = wayland_pack_u32(obj_id);
+    let mut i: Int = 0;
+    while i < 4 {
+        out = list_push(out, list_get(obj_bytes, i));
+        i = i + 1;
+    }
+    let op_bytes: List[Int] = wayland_pack_u16(opcode);
+    out = list_push(out, list_get(op_bytes, 0));
+    out = list_push(out, list_get(op_bytes, 1));
+    let sz_bytes: List[Int] = wayland_pack_u16(total_len);
+    out = list_push(out, list_get(sz_bytes, 0));
+    out = list_push(out, list_get(sz_bytes, 1));
+    let mut j: Int = 0;
+    while j < plen {
+        out = list_push(out, list_get(payload, j));
+        j = j + 1;
+    }
+    return out;
+}
+
+pub fn wayland_unpack_u16(bytes: List[Int], offset: Int) -> Int {
+    if offset + 2 > list_len(bytes) { return 0; }
+    let b0: Int = list_get(bytes, offset) & 255;
+    let b1: Int = list_get(bytes, offset + 1) & 255;
+    return b0 | (b1 << 8);
+}
+
+pub fn wayland_unpack_u32(bytes: List[Int], offset: Int) -> Int {
+    if offset + 4 > list_len(bytes) { return 0; }
+    let b0: Int = list_get(bytes, offset) & 255;
+    let b1: Int = list_get(bytes, offset + 1) & 255;
+    let b2: Int = list_get(bytes, offset + 2) & 255;
+    let b3: Int = list_get(bytes, offset + 3) & 255;
+    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+}
+
+pub fn wayland_unpack_i32(bytes: List[Int], offset: Int) -> Int {
+    let u: Int = wayland_unpack_u32(bytes, offset);
+    if u >= 2147483648 {
+        return u - 4294967296;
+    }
+    return u;
+}
+
+pub fn wayland_parse_msg_header(bytes: List[Int], offset: Int) -> WaylandMsgHeader {
+    if offset + 8 > list_len(bytes) {
+        return WaylandMsgHeader { ok: false, object_id: 0, opcode: 0, size_bytes: 0 };
+    }
+    let obj: Int = wayland_unpack_u32(bytes, offset);
+    let op: Int = wayland_unpack_u16(bytes, offset + 4);
+    let sz: Int = wayland_unpack_u16(bytes, offset + 6);
+    if sz < 8 {
+        return WaylandMsgHeader { ok: false, object_id: 0, opcode: 0, size_bytes: 0 };
+    }
+    if offset + sz > list_len(bytes) {
+        return WaylandMsgHeader { ok: false, object_id: 0, opcode: 0, size_bytes: 0 };
+    }
+    return WaylandMsgHeader { ok: true, object_id: obj, opcode: op, size_bytes: sz };
+}

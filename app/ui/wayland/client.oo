@@ -1,0 +1,198 @@
+// # Wayland Client Session Orchestrator
+//
+// Logline: Manages object ID allocation, global registry binding, and screensaver overlay surface lifecycle setup.
+//
+// Setup: Pure client protocol session coordinator uniting Wayland core, layer-shell, seat, and idle notification primitives.
+//
+// Beats:
+//   1. Allocate sequential client object IDs starting at 2 (1 is reserved for wl_display).
+//   2. Bind advertised compositor, shm, layer-shell, seat, output, and idle globals.
+//   3. Generate initialization batch requests for the desktop screensaver layer surface.
+//   4. Format and commit 60Hz frame presentation damage notifications.
+
+import "wayland_wire.oo";
+import "core.oo";
+import "layer_shell.oo";
+
+pub type WaylandClient = struct {
+    next_id: Int,
+    display_id: Int,
+    registry_id: Int,
+    compositor_id: Int,
+    shm_id: Int,
+    layer_shell_id: Int,
+    seat_id: Int,
+    output_id: Int,
+    idle_notifier_id: Int
+};
+
+pub type WaylandAlloc = struct {
+    client: WaylandClient,
+    id: Int
+};
+
+pub type WaylandGlobalResult = struct {
+    client: WaylandClient,
+    request: List[Int]
+};
+
+pub fn wayland_client_new() -> WaylandClient {
+    return WaylandClient {
+        next_id: 2,
+        display_id: 1,
+        registry_id: 0,
+        compositor_id: 0,
+        shm_id: 0,
+        layer_shell_id: 0,
+        seat_id: 0,
+        output_id: 0,
+        idle_notifier_id: 0
+    };
+}
+
+pub fn wayland_client_alloc_id(client: WaylandClient) -> WaylandAlloc {
+    let id: Int = client.next_id;
+    let updated: WaylandClient = WaylandClient {
+        next_id: id + 1,
+        display_id: client.display_id,
+        registry_id: client.registry_id,
+        compositor_id: client.compositor_id,
+        shm_id: client.shm_id,
+        layer_shell_id: client.layer_shell_id,
+        seat_id: client.seat_id,
+        output_id: client.output_id,
+        idle_notifier_id: client.idle_notifier_id
+    };
+    return WaylandAlloc { client: updated, id: id };
+}
+
+pub fn wayland_client_bind_registry(client: WaylandClient, registry_id: Int) -> WaylandClient {
+    return WaylandClient {
+        next_id: client.next_id,
+        display_id: client.display_id,
+        registry_id: registry_id,
+        compositor_id: client.compositor_id,
+        shm_id: client.shm_id,
+        layer_shell_id: client.layer_shell_id,
+        seat_id: client.seat_id,
+        output_id: client.output_id,
+        idle_notifier_id: client.idle_notifier_id
+    };
+}
+
+pub fn wayland_client_handle_global(client: WaylandClient, name: Int, iface: String, version: Int) -> WaylandGlobalResult {
+    let reg_id: Int = client.registry_id;
+    if iface == "wl_compositor" {
+        let alloc_comp: WaylandAlloc = wayland_client_alloc_id(client);
+        let new_id: Int = alloc_comp.id;
+        let c1: WaylandClient = alloc_comp.client;
+        let req: List[Int] = wl_registry_bind(reg_id, name, iface, 4, new_id);
+        let updated: WaylandClient = WaylandClient {
+            next_id: c1.next_id,
+            display_id: c1.display_id,
+            registry_id: c1.registry_id,
+            compositor_id: new_id,
+            shm_id: c1.shm_id,
+            layer_shell_id: c1.layer_shell_id,
+            seat_id: c1.seat_id,
+            output_id: c1.output_id,
+            idle_notifier_id: c1.idle_notifier_id
+        };
+        return WaylandGlobalResult { client: updated, request: req };
+    }
+    if iface == "wl_shm" {
+        let alloc_shm: WaylandAlloc = wayland_client_alloc_id(client);
+        let new_id: Int = alloc_shm.id;
+        let c2: WaylandClient = alloc_shm.client;
+        let req: List[Int] = wl_registry_bind(reg_id, name, iface, 1, new_id);
+        let updated: WaylandClient = WaylandClient {
+            next_id: c2.next_id,
+            display_id: c2.display_id,
+            registry_id: c2.registry_id,
+            compositor_id: c2.compositor_id,
+            shm_id: new_id,
+            layer_shell_id: c2.layer_shell_id,
+            seat_id: c2.seat_id,
+            output_id: c2.output_id,
+            idle_notifier_id: c2.idle_notifier_id
+        };
+        return WaylandGlobalResult { client: updated, request: req };
+    }
+    if iface == "zwlr_layer_shell_v1" {
+        let alloc_ls: WaylandAlloc = wayland_client_alloc_id(client);
+        let new_id: Int = alloc_ls.id;
+        let c3: WaylandClient = alloc_ls.client;
+        let req: List[Int] = wl_registry_bind(reg_id, name, iface, 1, new_id);
+        let updated: WaylandClient = WaylandClient {
+            next_id: c3.next_id,
+            display_id: c3.display_id,
+            registry_id: c3.registry_id,
+            compositor_id: c3.compositor_id,
+            shm_id: c3.shm_id,
+            layer_shell_id: new_id,
+            seat_id: c3.seat_id,
+            output_id: c3.output_id,
+            idle_notifier_id: c3.idle_notifier_id
+        };
+        return WaylandGlobalResult { client: updated, request: req };
+    }
+    let empty: List[Int] = list_new();
+    return WaylandGlobalResult { client: client, request: empty };
+}
+
+pub fn wayland_client_init_screensaver_overlay(client: WaylandClient, surface_id: Int, layer_surface_id: Int, width: Int, height: Int) -> List[Int] {
+    let mut batch: List[Int] = list_new();
+    let r1: List[Int] = wl_compositor_create_surface(client.compositor_id, surface_id);
+    let mut i: Int = 0;
+    while i < list_len(r1) { batch = list_push(batch, list_get(r1, i)); i = i + 1; }
+
+    let r2: List[Int] = zwlr_layer_shell_v1_get_layer_surface(
+        client.layer_shell_id,
+        layer_surface_id,
+        surface_id,
+        0,
+        layer_shell_layer_overlay(),
+        "idlescreen"
+    );
+    let mut j: Int = 0;
+    while j < list_len(r2) { batch = list_push(batch, list_get(r2, j)); j = j + 1; }
+
+    let r3: List[Int] = zwlr_layer_surface_v1_set_size(layer_surface_id, width, height);
+    let mut k: Int = 0;
+    while k < list_len(r3) { batch = list_push(batch, list_get(r3, k)); k = k + 1; }
+
+    let r4: List[Int] = zwlr_layer_surface_v1_set_anchor(layer_surface_id, layer_shell_anchor_fill());
+    let mut m: Int = 0;
+    while m < list_len(r4) { batch = list_push(batch, list_get(r4, m)); m = m + 1; }
+
+    let r5: List[Int] = zwlr_layer_surface_v1_set_exclusive_zone(layer_surface_id, 0 - 1);
+    let mut n: Int = 0;
+    while n < list_len(r5) { batch = list_push(batch, list_get(r5, n)); n = n + 1; }
+
+    let r6: List[Int] = wl_surface_commit(surface_id);
+    let mut p: Int = 0;
+    while p < list_len(r6) { batch = list_push(batch, list_get(r6, p)); p = p + 1; }
+
+    return batch;
+}
+
+pub fn wayland_client_present_frame(surface_id: Int, buffer_id: Int, callback_id: Int, width: Int, height: Int) -> List[Int] {
+    let mut batch: List[Int] = list_new();
+    let r1: List[Int] = wl_surface_attach(surface_id, buffer_id, 0, 0);
+    let mut i: Int = 0;
+    while i < list_len(r1) { batch = list_push(batch, list_get(r1, i)); i = i + 1; }
+
+    let r2: List[Int] = wl_surface_damage(surface_id, 0, 0, width, height);
+    let mut j: Int = 0;
+    while j < list_len(r2) { batch = list_push(batch, list_get(r2, j)); j = j + 1; }
+
+    let r3: List[Int] = wl_surface_frame(surface_id, callback_id);
+    let mut k: Int = 0;
+    while k < list_len(r3) { batch = list_push(batch, list_get(r3, k)); k = k + 1; }
+
+    let r4: List[Int] = wl_surface_commit(surface_id);
+    let mut m: Int = 0;
+    while m < list_len(r4) { batch = list_push(batch, list_get(r4, m)); m = m + 1; }
+
+    return batch;
+}

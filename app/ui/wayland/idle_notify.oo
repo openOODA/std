@@ -1,0 +1,50 @@
+// # Wayland ext-idle-notify Protocol Extension
+//
+// Logline: Implements ext_idle_notify_v1 protocol request building and idle/resumed event dispatching for automated screensaver activation.
+//
+// Setup: Pure wire encoder implementing ext-idle-notify-v1 to track user inactivity timers with millisecond precision.
+//
+// Beats:
+//   1. Build ext_idle_notifier_v1 registration requests with timeout duration and target seat.
+//   2. Build notification lifecycle destroy requests.
+//   3. Decode compositor idled events when user inactivity threshold is exceeded.
+//   4. Decode compositor resumed events when user activity is detected.
+
+import "wayland_wire.oo";
+
+pub fn ext_idle_event_idled() -> Int { return 0; }
+pub fn ext_idle_event_resumed() -> Int { return 1; }
+
+pub fn ext_idle_notifier_v1_destroy(notifier_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(notifier_id, 0, payload);
+}
+
+pub fn ext_idle_notifier_v1_get_idle_notification(notifier_id: Int, notif_new_id: Int, timeout_ms: Int, seat_id: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(notif_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    let b_to: List[Int] = wayland_pack_u32(timeout_ms);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_to, j)); j = j + 1; }
+    let b_seat: List[Int] = wayland_pack_u32(seat_id);
+    let mut k: Int = 0;
+    while k < 4 { payload = list_push(payload, list_get(b_seat, k)); k = k + 1; }
+    return wayland_build_msg(notifier_id, 1, payload);
+}
+
+pub fn ext_idle_notification_v1_destroy(notif_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(notif_id, 0, payload);
+}
+
+pub fn ext_idle_parse_event(header: WaylandMsgHeader) -> Result[String, String] {
+    if header.opcode == ext_idle_event_idled() {
+        return Ok("IDLED");
+    }
+    if header.opcode == ext_idle_event_resumed() {
+        return Ok("RESUMED");
+    }
+    return Err("ERR\text_idle_parse_event: unknown opcode");
+}

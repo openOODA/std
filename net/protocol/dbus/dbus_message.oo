@@ -1,0 +1,181 @@
+// # D-Bus Message Framing and Header Parsing
+//
+// Logline: Constructs and parses D-Bus binary messages for method calls, method returns, error replies, and signals.
+//
+// Setup: Pure wire message builder integrating 12-byte fixed header, variable fields array, 8-byte padding, and body payload.
+//
+// Beats:
+//   1. Build method call packets with destination, object path, interface, member, and signature.
+//   2. Build method return packets with reply serial and return signature.
+//   3. Build error return packets with error name and error message body.
+//   4. Parse message header boundaries, message type, and serial tracking numbers.
+
+import "dbus_wire.oo";
+import "dbus_marshal.oo";
+
+pub type DbusHeader = struct {
+    ok: Bool,
+    msg_type: Int,
+    flags: Int,
+    body_len: Int,
+    serial: Int,
+    reply_serial: Int
+};
+
+pub fn dbus_message_build_call(serial: Int, dest: String, path: String, iface: String, member: String, sig: String, body: List[Int]) -> List[Int] {
+    let mut fields: List[Int] = list_new();
+    let f_path: List[Int] = dbus_marshal_field_object_path(dbus_field_path(), path);
+    let mut i: Int = 0;
+    while i < list_len(f_path) { fields = list_push(fields, list_get(f_path, i)); i = i + 1; }
+
+    if chars_len(iface) > 0 {
+        let f_iface: List[Int] = dbus_marshal_field_string(dbus_field_interface(), iface);
+        let mut j: Int = 0;
+        while j < list_len(f_iface) { fields = list_push(fields, list_get(f_iface, j)); j = j + 1; }
+    }
+
+    let f_mem: List[Int] = dbus_marshal_field_string(dbus_field_member(), member);
+    let mut k: Int = 0;
+    while k < list_len(f_mem) { fields = list_push(fields, list_get(f_mem, k)); k = k + 1; }
+
+    if chars_len(dest) > 0 {
+        let f_dest: List[Int] = dbus_marshal_field_string(dbus_field_destination(), dest);
+        let mut m: Int = 0;
+        while m < list_len(f_dest) { fields = list_push(fields, list_get(f_dest, m)); m = m + 1; }
+    }
+
+    if chars_len(sig) > 0 {
+        let f_sig: List[Int] = dbus_marshal_field_signature(dbus_field_signature(), sig);
+        let mut n: Int = 0;
+        while n < list_len(f_sig) { fields = list_push(fields, list_get(f_sig, n)); n = n + 1; }
+    }
+
+    let fields_len: Int = list_len(fields);
+    let body_len: Int = list_len(body);
+    let fixed_hdr: List[Int] = dbus_build_fixed_header(dbus_msg_method_call(), 0, body_len, serial);
+
+    let mut out: List[Int] = fixed_hdr;
+    let b_flen: List[Int] = dbus_pack_u32(fields_len);
+    let mut p: Int = 0;
+    while p < 4 { out = list_push(out, list_get(b_flen, p)); p = p + 1; }
+
+    let mut q: Int = 0;
+    while q < fields_len { out = list_push(out, list_get(fields, q)); q = q + 1; }
+
+    out = dbus_pad_to(out, 8);
+
+    let mut r: Int = 0;
+    while r < body_len { out = list_push(out, list_get(body, r)); r = r + 1; }
+
+    return out;
+}
+
+pub fn dbus_message_build_return(serial: Int, reply_serial: Int, dest: String, sig: String, body: List[Int]) -> List[Int] {
+    let mut fields: List[Int] = list_new();
+    let f_rep: List[Int] = dbus_marshal_field_uint32(dbus_field_reply_serial(), reply_serial);
+    let mut i: Int = 0;
+    while i < list_len(f_rep) { fields = list_push(fields, list_get(f_rep, i)); i = i + 1; }
+
+    if chars_len(dest) > 0 {
+        let f_dest: List[Int] = dbus_marshal_field_string(dbus_field_destination(), dest);
+        let mut j: Int = 0;
+        while j < list_len(f_dest) { fields = list_push(fields, list_get(f_dest, j)); j = j + 1; }
+    }
+
+    if chars_len(sig) > 0 {
+        let f_sig: List[Int] = dbus_marshal_field_signature(dbus_field_signature(), sig);
+        let mut k: Int = 0;
+        while k < list_len(f_sig) { fields = list_push(fields, list_get(f_sig, k)); k = k + 1; }
+    }
+
+    let fields_len: Int = list_len(fields);
+    let body_len: Int = list_len(body);
+    let fixed_hdr: List[Int] = dbus_build_fixed_header(dbus_msg_method_return(), dbus_flag_no_reply(), body_len, serial);
+
+    let mut out: List[Int] = fixed_hdr;
+    let b_flen: List[Int] = dbus_pack_u32(fields_len);
+    let mut p: Int = 0;
+    while p < 4 { out = list_push(out, list_get(b_flen, p)); p = p + 1; }
+
+    let mut q: Int = 0;
+    while q < fields_len { out = list_push(out, list_get(fields, q)); q = q + 1; }
+
+    out = dbus_pad_to(out, 8);
+
+    let mut r: Int = 0;
+    while r < body_len { out = list_push(out, list_get(body, r)); r = r + 1; }
+
+    return out;
+}
+
+pub fn dbus_message_build_error(serial: Int, reply_serial: Int, dest: String, error_name: String, error_msg: String) -> List[Int] {
+    let mut fields: List[Int] = list_new();
+    let f_err: List[Int] = dbus_marshal_field_string(dbus_field_error_name(), error_name);
+    let mut i: Int = 0;
+    while i < list_len(f_err) { fields = list_push(fields, list_get(f_err, i)); i = i + 1; }
+
+    let f_rep: List[Int] = dbus_marshal_field_uint32(dbus_field_reply_serial(), reply_serial);
+    let mut j: Int = 0;
+    while j < list_len(f_rep) { fields = list_push(fields, list_get(f_rep, j)); j = j + 1; }
+
+    if chars_len(dest) > 0 {
+        let f_dest: List[Int] = dbus_marshal_field_string(dbus_field_destination(), dest);
+        let mut k: Int = 0;
+        while k < list_len(f_dest) { fields = list_push(fields, list_get(f_dest, k)); k = k + 1; }
+    }
+
+    let f_sig: List[Int] = dbus_marshal_field_signature(dbus_field_signature(), "s");
+    let mut m: Int = 0;
+    while m < list_len(f_sig) { fields = list_push(fields, list_get(f_sig, m)); m = m + 1; }
+
+    let body: List[Int] = dbus_marshal_string(error_msg);
+    let fields_len: Int = list_len(fields);
+    let body_len: Int = list_len(body);
+    let fixed_hdr: List[Int] = dbus_build_fixed_header(dbus_msg_error(), dbus_flag_no_reply(), body_len, serial);
+
+    let mut out: List[Int] = fixed_hdr;
+    let b_flen: List[Int] = dbus_pack_u32(fields_len);
+    let mut p: Int = 0;
+    while p < 4 { out = list_push(out, list_get(b_flen, p)); p = p + 1; }
+
+    let mut q: Int = 0;
+    while q < fields_len { out = list_push(out, list_get(fields, q)); q = q + 1; }
+
+    out = dbus_pad_to(out, 8);
+
+    let mut r: Int = 0;
+    while r < body_len { out = list_push(out, list_get(body, r)); r = r + 1; }
+
+    return out;
+}
+
+pub fn dbus_message_parse_header(bytes: List[Int]) -> DbusHeader {
+    if list_len(bytes) < 16 {
+        return DbusHeader { ok: false, msg_type: 0, flags: 0, body_len: 0, serial: 0, reply_serial: 0 };
+    }
+    let endian: Int = list_get(bytes, 0) & 255;
+    if endian != dbus_endian_little() {
+        return DbusHeader { ok: false, msg_type: 0, flags: 0, body_len: 0, serial: 0, reply_serial: 0 };
+    }
+    let mtype: Int = list_get(bytes, 1) & 255;
+    let flags: Int = list_get(bytes, 2) & 255;
+    let body_len: Int = dbus_unpack_u32(bytes, 4);
+    let serial: Int = dbus_unpack_u32(bytes, 8);
+    let fields_len: Int = dbus_unpack_u32(bytes, 12);
+    let total_hdr_len: Int = 16 + fields_len;
+    let rem: Int = total_hdr_len % 8;
+    let mut pad: Int = 0;
+    if rem > 0 { pad = 8 - rem; }
+    let body_start: Int = total_hdr_len + pad;
+    if body_start + body_len > list_len(bytes) {
+        return DbusHeader { ok: false, msg_type: 0, flags: 0, body_len: 0, serial: 0, reply_serial: 0 };
+    }
+    return DbusHeader {
+        ok: true,
+        msg_type: mtype,
+        flags: flags,
+        body_len: body_len,
+        serial: serial,
+        reply_serial: 0
+    };
+}

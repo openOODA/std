@@ -1,0 +1,140 @@
+// # D-Bus Client Remote Procedure Call (RPC) Helper
+//
+// Logline: Builds client method calls and parses method returns for daemon screensaver control and queries.
+//
+// Setup: Pure wire client encoder for org.freedesktop.ScreenSaver and io.github.idlescreen.Idle IPC transactions.
+//
+// Beats:
+//   1. Build Lock, GetActive, and SetActive method invocation messages.
+//   2. Build SimulateUserActivity, Throttle, and UnThrottle requests.
+//   3. Decode boolean return values from GetActive replies.
+//   4. Decode uint32 inhibition cookie return values from Throttle replies.
+
+import "dbus_wire.oo";
+import "dbus_marshal.oo";
+import "dbus_message.oo";
+
+pub fn dbus_destination_screensaver() -> String {
+    return "org.freedesktop.ScreenSaver";
+}
+
+pub fn dbus_path_screensaver() -> String {
+    return "/org/freedesktop/ScreenSaver";
+}
+
+pub fn dbus_interface_screensaver() -> String {
+    return "org.freedesktop.ScreenSaver";
+}
+
+pub fn dbus_client_call_lock(serial: Int) -> List[Int] {
+    let body: List[Int] = list_new();
+    return dbus_message_build_call(
+        serial,
+        dbus_destination_screensaver(),
+        dbus_path_screensaver(),
+        dbus_interface_screensaver(),
+        "Lock",
+        "",
+        body
+    );
+}
+
+pub fn dbus_client_call_get_active(serial: Int) -> List[Int] {
+    let body: List[Int] = list_new();
+    return dbus_message_build_call(
+        serial,
+        dbus_destination_screensaver(),
+        dbus_path_screensaver(),
+        dbus_interface_screensaver(),
+        "GetActive",
+        "",
+        body
+    );
+}
+
+pub fn dbus_client_call_set_active(serial: Int, active: Bool) -> List[Int] {
+    let body: List[Int] = dbus_marshal_bool(active);
+    return dbus_message_build_call(
+        serial,
+        dbus_destination_screensaver(),
+        dbus_path_screensaver(),
+        dbus_interface_screensaver(),
+        "SetActive",
+        "b",
+        body
+    );
+}
+
+pub fn dbus_client_call_simulate_activity(serial: Int) -> List[Int] {
+    let body: List[Int] = list_new();
+    return dbus_message_build_call(
+        serial,
+        dbus_destination_screensaver(),
+        dbus_path_screensaver(),
+        dbus_interface_screensaver(),
+        "SimulateUserActivity",
+        "",
+        body
+    );
+}
+
+pub fn dbus_client_call_throttle(serial: Int, app_name: String, reason: String) -> List[Int] {
+    let mut body: List[Int] = dbus_marshal_string(app_name);
+    let b_reas: List[Int] = dbus_marshal_string(reason);
+    let mut i: Int = 0;
+    while i < list_len(b_reas) { body = list_push(body, list_get(b_reas, i)); i = i + 1; }
+    return dbus_message_build_call(
+        serial,
+        dbus_destination_screensaver(),
+        dbus_path_screensaver(),
+        dbus_interface_screensaver(),
+        "Throttle",
+        "ss",
+        body
+    );
+}
+
+pub fn dbus_client_call_unthrottle(serial: Int, cookie: Int) -> List[Int] {
+    let body: List[Int] = dbus_marshal_uint32(cookie);
+    return dbus_message_build_call(
+        serial,
+        dbus_destination_screensaver(),
+        dbus_path_screensaver(),
+        dbus_interface_screensaver(),
+        "UnThrottle",
+        "u",
+        body
+    );
+}
+
+pub fn dbus_client_call_introspect(serial: Int) -> List[Int] {
+    let body: List[Int] = list_new();
+    return dbus_message_build_call(
+        serial,
+        dbus_destination_screensaver(),
+        dbus_path_screensaver(),
+        "org.freedesktop.DBus.Introspectable",
+        "Introspect",
+        "",
+        body
+    );
+}
+
+pub fn dbus_client_parse_bool_return(bytes: List[Int], body_offset: Int) -> Result[Bool, String] {
+    if body_offset + 4 > list_len(bytes) {
+        return Err("ERR\tdbus_parse_bool: body truncated");
+    }
+    let val: Int = dbus_unpack_u32(bytes, body_offset);
+    if val != 0 {
+        return Ok(true);
+    }
+    return Ok(false);
+}
+
+pub fn dbus_client_parse_uint32_return(bytes: List[Int], body_offset: Int) -> Result[Int, String] {
+    if body_offset + 4 > list_len(bytes) {
+        return Err("ERR\tdbus_parse_uint32: body truncated");
+    }
+    let val: Int = dbus_unpack_u32(bytes, body_offset);
+    return Ok(val);
+}

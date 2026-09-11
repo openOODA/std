@@ -1,0 +1,30 @@
+// # D-Bus Wire Protocol & IPC Subsystem Hub
+//
+// Logline: Sovereign standard library D-Bus IPC protocol covering SASL authentication, wire framing, method calls, service dispatcher, and client helpers.
+//
+// Setup: Pure wire-protocol implementation over AF_UNIX domain sockets (/run/user/$UID/bus).
+//
+// Beats:
+//   1. Re-export SASL EXTERNAL authentication handshake helpers.
+//   2. Re-export binary packet wire serialization and 8-byte alignment padding.
+//   3. Re-export message constructors for method calls, returns, errors, and signals.
+//   4. Re-export org.freedesktop.ScreenSaver daemon service dispatcher and CLI client RPC helpers.
+
+import "dbus_wire.oo";
+import "dbus_auth.oo";
+import "dbus_marshal.oo";
+import "dbus_message.oo";
+import "dbus_service.oo";
+import "dbus_client.oo";
+
+pub fn dbus_protocol_version() -> String {
+    return "dbus/1.0.0-sovereign";
+}
+
+pub fn dbus_supported_services() -> List[String] {
+    let mut out: List[String] = list_new();
+    out = list_push(out, "org.freedesktop.ScreenSaver");
+    out = list_push(out, "io.github.idlescreen.Idle");
+    out = list_push(out, "org.freedesktop.DBus.Introspectable");
+    return out;
+}

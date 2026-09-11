@@ -1,0 +1,116 @@
+// # D-Bus Type and Header Field Marshalling
+//
+// Logline: Marshals primitive scalars, strings, object paths, signatures, and variant header fields into D-Bus binary wire sequences.
+//
+// Setup: Pure wire encoder enforcing D-Bus natural byte alignment and Little-Endian format specifications.
+//
+// Beats:
+//   1. Marshal scalar integer, boolean, and byte values.
+//   2. Marshal 4-byte length-prefixed strings and object paths terminated with null bytes.
+//   3. Marshal 1-byte length-prefixed type signatures.
+//   4. Marshal composite header fields with variant type tags.
+
+import "dbus_wire.oo";
+
+pub fn dbus_marshal_byte(val: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, val & 255);
+    return out;
+}
+
+pub fn dbus_marshal_bool(val: Bool) -> List[Int] {
+    if val { return dbus_pack_u32(1); }
+    return dbus_pack_u32(0);
+}
+
+pub fn dbus_marshal_uint32(val: Int) -> List[Int] {
+    return dbus_pack_u32(val);
+}
+
+pub fn dbus_marshal_int32(val: Int) -> List[Int] {
+    return dbus_pack_i32(val);
+}
+
+pub fn dbus_marshal_string(s: String) -> List[Int] {
+    let slen: Int = chars_len(s);
+    let mut out: List[Int] = dbus_pack_u32(slen);
+    let mut i: Int = 0;
+    while i < slen {
+        out = list_push(out, ord(char_at(s, i)));
+        i = i + 1;
+    }
+    out = list_push(out, 0); // null terminator
+    return out;
+}
+
+pub fn dbus_marshal_object_path(p: String) -> List[Int] {
+    return dbus_marshal_string(p);
+}
+
+pub fn dbus_marshal_signature(sig: String) -> List[Int] {
+    let slen: Int = chars_len(sig);
+    let mut out: List[Int] = list_new();
+    out = list_push(out, slen & 255);
+    let mut i: Int = 0;
+    while i < slen {
+        out = list_push(out, ord(char_at(sig, i)));
+        i = i + 1;
+    }
+    out = list_push(out, 0); // null terminator
+    return out;
+}
+
+pub fn dbus_marshal_field_object_path(field_code: Int, path: String) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, field_code & 255);
+    out = list_push(out, 1); // 1-byte signature length
+    out = list_push(out, 111); // 'o'
+    out = list_push(out, 0); // signature null terminator
+    out = dbus_pad_to(out, 4);
+    let b_str: List[Int] = dbus_marshal_object_path(path);
+    let mut i: Int = 0;
+    while i < list_len(b_str) { out = list_push(out, list_get(b_str, i)); i = i + 1; }
+    out = dbus_pad_to(out, 8);
+    return out;
+}
+
+pub fn dbus_marshal_field_string(field_code: Int, s: String) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, field_code & 255);
+    out = list_push(out, 1); // 1-byte signature length
+    out = list_push(out, 115); // 's'
+    out = list_push(out, 0); // signature null terminator
+    out = dbus_pad_to(out, 4);
+    let b_str: List[Int] = dbus_marshal_string(s);
+    let mut i: Int = 0;
+    while i < list_len(b_str) { out = list_push(out, list_get(b_str, i)); i = i + 1; }
+    out = dbus_pad_to(out, 8);
+    return out;
+}
+
+pub fn dbus_marshal_field_uint32(field_code: Int, val: Int) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, field_code & 255);
+    out = list_push(out, 1); // 1-byte signature length
+    out = list_push(out, 117); // 'u'
+    out = list_push(out, 0); // signature null terminator
+    out = dbus_pad_to(out, 4);
+    let b_u32: List[Int] = dbus_pack_u32(val);
+    let mut i: Int = 0;
+    while i < 4 { out = list_push(out, list_get(b_u32, i)); i = i + 1; }
+    out = dbus_pad_to(out, 8);
+    return out;
+}
+
+pub fn dbus_marshal_field_signature(field_code: Int, sig: String) -> List[Int] {
+    let mut out: List[Int] = list_new();
+    out = list_push(out, field_code & 255);
+    out = list_push(out, 1); // 1-byte signature length
+    out = list_push(out, 103); // 'g'
+    out = list_push(out, 0); // signature null terminator
+    let b_sig: List[Int] = dbus_marshal_signature(sig);
+    let mut i: Int = 0;
+    while i < list_len(b_sig) { out = list_push(out, list_get(b_sig, i)); i = i + 1; }
+    out = dbus_pad_to(out, 8);
+    return out;
+}

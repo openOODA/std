@@ -1,0 +1,130 @@
+// # Wayland wlr-layer-shell Protocol Extension
+//
+// Logline: Implements zwlr_layer_shell_v1 request encoding and configure event parsing for desktop screensaver overlays and locks.
+//
+// Setup: Pure wire encoder implementing wlroots layer-shell protocol v1 for fullscreen desktop surface positioning.
+//
+// Beats:
+//   1. Define layer levels (background, bottom, top, overlay) and screen edge anchor bitmasks.
+//   2. Build get_layer_surface binding with surface, output, layer tier, and namespace string.
+//   3. Build layer surface configuration requests: set_size, set_anchor, set_exclusive_zone, ack_configure.
+//   4. Parse server configure events delivering serial, width, and height.
+
+import "wayland_wire.oo";
+
+pub fn layer_shell_layer_background() -> Int { return 0; }
+pub fn layer_shell_layer_bottom() -> Int { return 1; }
+pub fn layer_shell_layer_top() -> Int { return 2; }
+pub fn layer_shell_layer_overlay() -> Int { return 3; }
+
+pub fn layer_shell_anchor_top() -> Int { return 1; }
+pub fn layer_shell_anchor_bottom() -> Int { return 2; }
+pub fn layer_shell_anchor_left() -> Int { return 4; }
+pub fn layer_shell_anchor_right() -> Int { return 8; }
+pub fn layer_shell_anchor_fill() -> Int { return 15; }
+
+pub fn layer_shell_keyboard_none() -> Int { return 0; }
+pub fn layer_shell_keyboard_exclusive() -> Int { return 1; }
+pub fn layer_shell_keyboard_on_demand() -> Int { return 2; }
+
+pub type LayerSurfaceConfigure = struct {
+    ok: Bool,
+    serial: Int,
+    width: Int,
+    height: Int
+};
+
+pub fn zwlr_layer_shell_v1_get_layer_surface(shell_id: Int, layer_surf_new_id: Int, surf_id: Int, output_id: Int, layer: Int, namespace_str: String) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_id: List[Int] = wayland_pack_u32(layer_surf_new_id);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_id, i)); i = i + 1; }
+    let b_surf: List[Int] = wayland_pack_u32(surf_id);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_surf, j)); j = j + 1; }
+    let b_out: List[Int] = wayland_pack_u32(output_id);
+    let mut k: Int = 0;
+    while k < 4 { payload = list_push(payload, list_get(b_out, k)); k = k + 1; }
+    let b_lay: List[Int] = wayland_pack_u32(layer);
+    let mut m: Int = 0;
+    while m < 4 { payload = list_push(payload, list_get(b_lay, m)); m = m + 1; }
+    let b_ns: List[Int] = wayland_pack_string(namespace_str);
+    let mut n: Int = 0;
+    while n < list_len(b_ns) { payload = list_push(payload, list_get(b_ns, n)); n = n + 1; }
+    return wayland_build_msg(shell_id, 0, payload);
+}
+
+pub fn zwlr_layer_surface_v1_set_size(layer_surf_id: Int, width: Int, height: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_w: List[Int] = wayland_pack_u32(width);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_w, i)); i = i + 1; }
+    let b_h: List[Int] = wayland_pack_u32(height);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_h, j)); j = j + 1; }
+    return wayland_build_msg(layer_surf_id, 0, payload);
+}
+
+pub fn zwlr_layer_surface_v1_set_anchor(layer_surf_id: Int, anchor_bitmask: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_anc: List[Int] = wayland_pack_u32(anchor_bitmask);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_anc, i)); i = i + 1; }
+    return wayland_build_msg(layer_surf_id, 1, payload);
+}
+
+pub fn zwlr_layer_surface_v1_set_exclusive_zone(layer_surf_id: Int, zone: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_zone: List[Int] = wayland_pack_i32(zone);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_zone, i)); i = i + 1; }
+    return wayland_build_msg(layer_surf_id, 2, payload);
+}
+
+pub fn zwlr_layer_surface_v1_set_margin(layer_surf_id: Int, top: Int, right: Int, bottom: Int, left: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_t: List[Int] = wayland_pack_i32(top);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_t, i)); i = i + 1; }
+    let b_r: List[Int] = wayland_pack_i32(right);
+    let mut j: Int = 0;
+    while j < 4 { payload = list_push(payload, list_get(b_r, j)); j = j + 1; }
+    let b_b: List[Int] = wayland_pack_i32(bottom);
+    let mut k: Int = 0;
+    while k < 4 { payload = list_push(payload, list_get(b_b, k)); k = k + 1; }
+    let b_l: List[Int] = wayland_pack_i32(left);
+    let mut m: Int = 0;
+    while m < 4 { payload = list_push(payload, list_get(b_l, m)); m = m + 1; }
+    return wayland_build_msg(layer_surf_id, 3, payload);
+}
+
+pub fn zwlr_layer_surface_v1_set_keyboard_interactivity(layer_surf_id: Int, mode: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_m: List[Int] = wayland_pack_u32(mode);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_m, i)); i = i + 1; }
+    return wayland_build_msg(layer_surf_id, 4, payload);
+}
+
+pub fn zwlr_layer_surface_v1_ack_configure(layer_surf_id: Int, serial: Int) -> List[Int] {
+    let mut payload: List[Int] = list_new();
+    let b_s: List[Int] = wayland_pack_u32(serial);
+    let mut i: Int = 0;
+    while i < 4 { payload = list_push(payload, list_get(b_s, i)); i = i + 1; }
+    return wayland_build_msg(layer_surf_id, 6, payload);
+}
+
+pub fn zwlr_layer_surface_v1_destroy(layer_surf_id: Int) -> List[Int] {
+    let payload: List[Int] = list_new();
+    return wayland_build_msg(layer_surf_id, 7, payload);
+}
+
+pub fn zwlr_layer_surface_parse_configure(bytes: List[Int], offset: Int) -> LayerSurfaceConfigure {
+    if offset + 12 > list_len(bytes) {
+        return LayerSurfaceConfigure { ok: false, serial: 0, width: 0, height: 0 };
+    }
+    let serial: Int = wayland_unpack_u32(bytes, offset);
+    let w: Int = wayland_unpack_u32(bytes, offset + 4);
+    let h: Int = wayland_unpack_u32(bytes, offset + 8);
+    return LayerSurfaceConfigure { ok: true, serial: serial, width: w, height: h };
+}

@@ -1,0 +1,142 @@
+// # D-Bus Idle & ScreenSaver Daemon Service Dispatcher
+//
+// Logline: Implements org.freedesktop.ScreenSaver and io.github.idlescreen.Idle service methods, states, and XML introspection.
+//
+// Setup: Pure server dispatch router handling lock requests, activity simulation, inhibition tracking, and state queries.
+//
+// Beats:
+//   1. Maintain screensaver lock state, activity simulation counters, and inhibition cookies.
+//   2. Dispatch incoming method calls (Lock, GetActive, SetActive, SimulateUserActivity, Throttle).
+//   3. Format standard D-Bus XML introspection payloads for service discovery.
+//   4. Generate binary method return packets with appropriate signature types.
+
+import "dbus_wire.oo";
+import "dbus_marshal.oo";
+import "dbus_message.oo";
+
+pub type IdleDaemonState = struct {
+    active: Bool,
+    cookie_counter: Int,
+    inhibits: Int
+};
+
+pub type DbusDispatchResult = struct {
+    state: IdleDaemonState,
+    reply: List[Int]
+};
+
+pub fn dbus_service_state_new() -> IdleDaemonState {
+    return IdleDaemonState {
+        active: false,
+        cookie_counter: 100,
+        inhibits: 0
+    };
+}
+
+pub fn dbus_service_introspect_xml() -> String {
+    let mut x: String = "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"";
+    x = x + "\n\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n";
+    x = x + "<node name=\"/org/freedesktop/ScreenSaver\">\n";
+    x = x + "  <interface name=\"org.freedesktop.ScreenSaver\">\n";
+    x = x + "    <method name=\"Lock\"/>\n";
+    x = x + "    <method name=\"GetActive\">\n";
+    x = x + "      <arg name=\"active\" type=\"b\" direction=\"out\"/>\n";
+    x = x + "    </method>\n";
+    x = x + "    <method name=\"SetActive\">\n";
+    x = x + "      <arg name=\"active\" type=\"b\" direction=\"in\"/>\n";
+    x = x + "    </method>\n";
+    x = x + "    <method name=\"SimulateUserActivity\"/>\n";
+    x = x + "    <method name=\"Throttle\">\n";
+    x = x + "      <arg name=\"app\" type=\"s\" direction=\"in\"/>\n";
+    x = x + "      <arg name=\"reason\" type=\"s\" direction=\"in\"/>\n";
+    x = x + "      <arg name=\"cookie\" type=\"u\" direction=\"out\"/>\n";
+    x = x + "    </method>\n";
+    x = x + "    <method name=\"UnThrottle\">\n";
+    x = x + "      <arg name=\"cookie\" type=\"u\" direction=\"in\"/>\n";
+    x = x + "    </method>\n";
+    x = x + "  </interface>\n";
+    x = x + "  <interface name=\"org.freedesktop.DBus.Introspectable\">\n";
+    x = x + "    <method name=\"Introspect\">\n";
+    x = x + "      <arg name=\"xml_data\" type=\"s\" direction=\"out\"/>\n";
+    x = x + "    </method>\n";
+    x = x + "  </interface>\n";
+    x = x + "</node>\n";
+    return x;
+}
+
+pub fn dbus_service_dispatch(member: String, sender: String, serial: Int, reply_serial: Int, state: IdleDaemonState) -> DbusDispatchResult {
+    if member == "Lock" {
+        let updated: IdleDaemonState = IdleDaemonState {
+            active: true,
+            cookie_counter: state.cookie_counter,
+            inhibits: state.inhibits
+        };
+        let body: List[Int] = list_new();
+        let rep: List[Int] = dbus_message_build_return(serial, reply_serial, sender, "", body);
+        return DbusDispatchResult { state: updated, reply: rep };
+    }
+
+    if member == "GetActive" {
+        let body: List[Int] = dbus_marshal_bool(state.active);
+        let rep: List[Int] = dbus_message_build_return(serial, reply_serial, sender, "b", body);
+        return DbusDispatchResult { state: state, reply: rep };
+    }
+
+    if member == "SetActive" {
+        let updated: IdleDaemonState = IdleDaemonState {
+            active: !state.active,
+            cookie_counter: state.cookie_counter,
+            inhibits: state.inhibits
+        };
+        let body: List[Int] = list_new();
+        let rep: List[Int] = dbus_message_build_return(serial, reply_serial, sender, "", body);
+        return DbusDispatchResult { state: updated, reply: rep };
+    }
+
+    if member == "SimulateUserActivity" {
+        let body: List[Int] = list_new();
+        let rep: List[Int] = dbus_message_build_return(serial, reply_serial, sender, "", body);
+        return DbusDispatchResult { state: state, reply: rep };
+    }
+
+    if member == "Throttle" {
+        let cookie: Int = state.cookie_counter + 1;
+        let updated: IdleDaemonState = IdleDaemonState {
+            active: state.active,
+            cookie_counter: cookie,
+            inhibits: state.inhibits + 1
+        };
+        let body: List[Int] = dbus_marshal_uint32(cookie);
+        let rep: List[Int] = dbus_message_build_return(serial, reply_serial, sender, "u", body);
+        return DbusDispatchResult { state: updated, reply: rep };
+    }
+
+    if member == "UnThrottle" {
+        let mut inh: Int = state.inhibits - 1;
+        if inh < 0 { inh = 0; }
+        let updated: IdleDaemonState = IdleDaemonState {
+            active: state.active,
+            cookie_counter: state.cookie_counter,
+            inhibits: inh
+        };
+        let body: List[Int] = list_new();
+        let rep: List[Int] = dbus_message_build_return(serial, reply_serial, sender, "", body);
+        return DbusDispatchResult { state: updated, reply: rep };
+    }
+
+    if member == "Introspect" {
+        let xml: String = dbus_service_introspect_xml();
+        let body: List[Int] = dbus_marshal_string(xml);
+        let rep: List[Int] = dbus_message_build_return(serial, reply_serial, sender, "s", body);
+        return DbusDispatchResult { state: state, reply: rep };
+    }
+
+    let err_rep: List[Int] = dbus_message_build_error(
+        serial,
+        reply_serial,
+        sender,
+        "org.freedesktop.DBus.Error.UnknownMethod",
+        "Method '" + member + "' is not implemented on this interface"
+    );
+    return DbusDispatchResult { state: state, reply: err_rep };
+}

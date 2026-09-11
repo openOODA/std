@@ -1,0 +1,64 @@
+// # D-Bus SASL EXTERNAL Authentication Handshake
+//
+// Logline: Implements SASL EXTERNAL authentication protocol for establishing D-Bus sessions over UNIX domain sockets.
+//
+// Setup: Pure authentication frame encoder producing credentials and handshake commands for the system/session bus.
+//
+// Beats:
+//   1. Hex-encode operating system user ID (UID) strings for SASL credential submission.
+//   2. Format initial zero-byte auth challenge line (\0AUTH EXTERNAL <hex_uid>\r\n).
+//   3. Format BEGIN session command to transition from auth negotiation to D-Bus message framing.
+//   4. Validate daemon OK response containing bus server GUID.
+
+fn dbus_hex_nibble(n: Int) -> String {
+    let hex_chars: String = "0123456789abcdef";
+    if n >= 0 && n < 16 {
+        return char_at(hex_chars, n);
+    }
+    return "0";
+}
+
+pub fn dbus_auth_hex_encode(s: String) -> String {
+    let slen: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < slen {
+        let code: Int = ord(char_at(s, i)) & 255;
+        let hi: String = dbus_hex_nibble(code / 16);
+        let lo: String = dbus_hex_nibble(code % 16);
+        out = out + hi + lo;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn dbus_auth_external_req(uid_str: String) -> String {
+    let hex_uid: String = dbus_auth_hex_encode(uid_str);
+    return "AUTH EXTERNAL " + hex_uid + "\r\n";
+}
+
+pub fn dbus_auth_external_frame(uid_str: String) -> List[Int] {
+    let req: String = dbus_auth_external_req(uid_str);
+    let mut out: List[Int] = list_new();
+    out = list_push(out, 0);
+    let n: Int = chars_len(req);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, ord(char_at(req, i)));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn dbus_auth_begin_req() -> String {
+    return "BEGIN\r\n";
+}
+
+pub fn dbus_auth_verify_ok(resp: String) -> Bool {
+    let rlen: Int = chars_len(resp);
+    if rlen < 3 { return false; }
+    if char_at(resp, 0) == "O" && char_at(resp, 1) == "K" && char_at(resp, 2) == " " {
+        return true;
+    }
+    return false;
+}
