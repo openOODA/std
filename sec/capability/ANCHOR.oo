@@ -74,3 +74,4 @@ pub fn cap_mod_has_right(cap: &ObjectCapability, required_right: Int) -> Bool { 
 //   object_capability.oo (was sec/objcap.oo / base.oo) — 200-line single-file OCap monolith; only re-exported via cap_mod_create
 //   capability_types.oo — internal type-layout anchors (capability_rights_none, objcap_empty)
 //   rights.oo / attenuate.oo / seal.oo / engine.oo / registry.oo / objcap_stubs.oo / hmac.oo — internal split modules
+//   ocap_to_oodar.oo — cross-repo bridge shim; consumed by oodar/sec/cap/cap_ocap_bridge.c via oodac emit-c (NOT by any other .oo in std/). Do NOT add to ANCHOR.oo's import list.

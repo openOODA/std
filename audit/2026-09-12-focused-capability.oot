@@ -1,0 +1,145 @@
+// # 2026-09-12 Focused Sweep — std/sec/capability/
+//
+// Logline: Volume cert + bridge coverage for the OCap module after
+//          Phases 1-3 of the std/sec/capability → oodar bridge
+//          (oodar v4.3.0 / v4.4.0 / v4.5.0). Closes the focused
+//          sweep of the now-OCap-backed submodule.
+//
+// Setup:  Authored 2026-09-12 by Mavis. Companion CSV at
+//         `std/audit/2026-09-12-capability-bridge.csv`.
+//
+// Beats:
+//   1. Verdict.
+//   2. File-by-file classification.
+//   3. OCap bridge coverage of the 20 NORTHSTAR language tokens.
+//   4. Cross-repo consumer pattern (the oodar bridge).
+//   5. Recommended next actions.
+
+// ## 1. Verdict
+
+// | Status   | Count | Meaning                                              |
+// |----------|------:|------------------------------------------------------|
+// | GREEN    |     7 | Imported by ≥ 1 other .oo in std/                     |
+// | BLOCKED  |     0 | No caller in std/ (and no documented consumer)       |
+// | RESIDUAL |     3 | Intentional: private sibling + cross-repo bridge shim |
+// | ANCHOR   |     1 | sec/capability/ANCHOR.oo (front door, RULES §1.19)   |
+// | TOTAL    |    11 |                                                      |
+
+// Net change vs the 2026-09-11 rollup: +1 file
+// (`ocap_to_oodar.oo`, the bridge shim). No BLOCKED files.
+// ANCHOR.oo was already in the rollup; new file is classified
+// RESIDUAL with a cross-repo consumer (oodar/sec/cap/
+// cap_ocap_bridge.c).
+
+// ## 2. File-by-file
+
+// | Path                                          | Status  | Evidence                                                |
+// |-----------------------------------------------|---------|---------------------------------------------------------|
+// | sec/capability/ANCHOR.oo                      | ANCHOR  | front door; re-exports cap_mod_* for sec/ANCHOR.oo      |
+// | sec/capability/object_capability.oo           | GREEN   | imported by sec/capability/ANCHOR.oo                    |
+// | sec/capability/rights.oo                      | GREEN   | imported by sec/capability/ANCHOR.oo                    |
+// | sec/capability/attenuate.oo                   | GREEN   | imported by sec/capability/ANCHOR.oo                    |
+// | sec/capability/seal.oo                        | GREEN   | imported by net/mesh/open_objcap_hmac.oo                |
+// | sec/capability/objcap_hmac_seal.oo            | GREEN   | imported by net/mesh/open_objcap_hmac.oo                |
+// | sec/capability/engine.oo                      | GREEN   | imported by app/agent/ANCHOR.oo                         |
+// | sec/capability/registry.oo                    | GREEN   | imported by meta/diag/ANCHOR.oo                         |
+// | sec/capability/capability_types.oo            | RESIDUAL| private sibling (science/ANCHOR.oo §2 — do not import)  |
+// | sec/capability/objcap_stubs.oo                | RESIDUAL| private sibling (science/ANCHOR.oo §2 — do not import)  |
+// | sec/capability/ocap_to_oodar.oo               | RESIDUAL| cross-repo bridge shim; consumed by                     |
+// |                                               |         | oodar/sec/cap/cap_ocap_bridge.c (oodac emit-c)           |
+
+// ## 3. OCap bridge coverage of the 20 NORTHSTAR language tokens
+
+// Per NORTHSTAR §1.4 the canonical surface is 20 language tokens.
+// All 20 are now backed by OCap records in ocap_to_oodar.oo:
+
+// | #  | Language token  | Rights mask | Bits used         |
+// |---:|-----------------|------------:|-------------------|
+// |  1 | FsReadCap       |           1 | read              |
+// |  2 | FsWriteCap      |           3 | read + write      |
+// |  3 | NetCap          |           3 | read + write      |
+// |  4 | TcpCap          |           3 | read + write      |
+// |  5 | UdpCap          |           3 | read + write      |
+// |  6 | SysCap          |           7 | read + write + exec |
+// |  7 | ProcessCap      |           7 | read + write + exec |
+// |  8 | EnvCap          |           1 | read              |
+// |  9 | TimeCap         |           1 | read              |
+// | 10 | RandCap         |           1 | read              |
+// | 11 | AllocCap        |           3 | read + write      |
+// | 12 | ThreadCap       |           7 | read + write + exec |
+// | 13 | GpuCap          |           7 | read + write + exec |
+// | 14 | FfiCap          |           7 | read + write + exec |
+// | 15 | FsCap           |          31 | full authority    |
+// | 16 | ArenaCap        |          11 | read + write + delegate |
+// | 17 | MetricsCap      |           1 | read              |
+// | 18 | SignCap         |           3 | read + write      |
+// | 19 | BindCap         |           3 | read + write      |
+// | 20 | CompilerReadCap |           1 | read              |
+
+// Coverage is complete. The 26 substrate caps in oodar's
+// g_tok_* all map to one of the 20 language tokens via the
+// SUBSTRATE_TO_LANGUAGE[26] table in cap_ocap_bridge.c. The 6
+// substrate-only caps (audio/camera/usb/hid/window/frame) all
+// map to FsReadCap for now per the substrate convention.
+
+// Verification: qa/tests_challenger_ocap_bridge.c (oodar,
+// 332 lines, 6 hostile probes including a table-driven probe 6
+// that exercises all 22 oo_cap_require_* gates × 2 passes
+// = 44 forks total). 6/6 PASS in the v4.5.0 release.
+
+// ## 4. Cross-repo consumer pattern
+
+// `ocap_to_oodar.oo` is the canonical example of a cross-repo
+// bridge shim:
+//
+//   std/sec/capability/ocap_to_oodar.oo  (source of truth, .oo)
+//        |
+//        |  oodac emit-c (Makefile emit-std-ocap target)
+//        v
+//   oodar/sec/cap/cap_bridge_emitted.c  (gitignored, build artifact)
+//        |
+//        |  #include in oodar.c
+//        v
+//   oodar/sec/cap/cap_ocap_bridge.c     (the C bridge)
+//        |
+//        v
+//   oodar/sec/cap/cap_require.c         (the 22 cap gates)
+
+// Volume-cert classification under the std-only audit sees 0
+// callers in std/, which by the strict rule would be BLOCKED.
+// The actual consumer (oodar) is outside the audit's scope.
+//
+// Resolution: classify as RESIDUAL with a cross-repo consumer
+// note in the CSV. The audit framework should add a 6th status
+// "CROSS-REPO" in a future revision to handle this pattern
+// explicitly. Defer the audit-framework change to a follow-up
+// session.
+
+// ## 5. Recommended next actions
+
+// 1. Update ANCHOR.oo's "Private sibling inventory" comment to
+//    add ocap_to_oodar.oo alongside object_capability.oo and the
+//    other private siblings. The current comment lists 7 internal
+//    modules; ocap_to_oodar.oo is the 8th. ~5 lines, no behavior
+//    change.
+// 2. Consider extending the audit framework's status taxonomy
+//    to include CROSS-REPO. Currently the audit flags the bridge
+//    shim as RESIDUAL, which is correct but loses the cross-repo
+//    signal. Defer to a follow-up audit sweep.
+// 3. Re-run after Phase 4 (Floor break v5.0.0) — the bitmask
+//    path will be deprecated, and the OCap records become the
+//    structural source of truth. Expect the volume-cert
+//    classification of ocap_to_oodar.oo to upgrade to GREEN
+//    (consumed by all 22 cap gates in oodar).
+
+// ## 6. Cross-references
+
+// | This report                          | Prior                                                  | Verdict |
+// |--------------------------------------|--------------------------------------------------------|---------|
+// | 11 files, 0 BLOCKED in sec/capability| 10 files, 0 BLOCKED in 2026-09-11 rollup (sec/capability) | CONFIRM +1 file |
+// | 20 language tokens backed            | (no prior coverage report)                            | NEW     |
+// | Cross-repo consumer pattern          | (no prior coverage report)                            | NEW     |
+// | Bridge phases 1-3 ship               | oodar v4.3.0 / v4.4.0 / v4.5.0                        | CONFIRM |
+
+// ──▓▓ openOODA std/sec/capability focused sweep 2026-09-12 ──▓▓──
+// :: 11 .oo files; 7 GREEN, 0 BLOCKED, 3 RESIDUAL, 1 ANCHOR; 20/20 NORTHSTAR tokens backed ::
