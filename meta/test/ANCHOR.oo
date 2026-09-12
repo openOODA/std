@@ -20,15 +20,15 @@ import "gpu_cross_val.oo";
 import "multi_compiler.oo";
 import "mutation_l2.oo";
 import "em_gauge.oo";
-import "moonshot_score.oo";
+import "target_score.oo";
 
-// Public E-M math and Target scoring surfaces: test_mod_em_*, test_mod_moonshot_*
+// Public performance math and target scoring surfaces: test_mod_em_*, test_mod_target_*
 pub fn test_mod_em_metrics_new(t: Int, d: Int, w: Int, v: Int) -> EmMetrics { return em_metrics_new(t, d, w, v); }
 pub fn test_mod_em_calculate(m: EmMetrics) -> EmScoreResult { return em_calculate(m); }
 pub fn test_mod_em_assert_not_stalled(res: EmScoreResult) -> Result[Bool, String] { return em_assert_not_stalled(res); }
-pub fn test_mod_moonshot_criteria_new(caps: Bool, c: Bool, zh: Bool, fc: Bool, cmp: Bool, np: Bool, dr: Bool, p: Bool, st: Bool, ns: Bool) -> FunctionAuditCriteria { return moonshot_criteria_new(caps, c, zh, fc, cmp, np, dr, p, st, ns); }
-pub fn test_mod_moonshot_score_function(c: FunctionAuditCriteria) -> Int { return moonshot_score_function(c); }
-pub fn test_mod_moonshot_evaluate_threshold(score: Int, target: Int, name: String) -> Result[Bool, String] { return moonshot_evaluate_threshold(score, target, name); }
+pub fn test_mod_target_criteria_new(caps: Bool, c: Bool, zh: Bool, fc: Bool, cmp: Bool, np: Bool, dr: Bool, p: Bool, st: Bool, ns: Bool) -> FunctionAuditCriteria { return target_criteria_new(caps, c, zh, fc, cmp, np, dr, p, st, ns); }
+pub fn test_mod_target_score_function(c: FunctionAuditCriteria) -> Int { return target_score_function(c); }
+pub fn test_mod_target_evaluate_threshold(score: Int, target: Int, name: String) -> Result[Bool, String] { return target_evaluate_threshold(score, target, name); }
 
 // Public adversarial probe surface: test_mod_adversarial_*
 pub fn test_mod_adversarial_create_domain(name: String, pos: Int, neg: Int, killed: Int) -> StdDomainProbe { return adversarial_probe_create_domain(name, pos, neg, killed); }

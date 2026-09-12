@@ -1,11 +1,11 @@
 // # Target Function & Module Scorecard Engine
 //
-// Logline: Scores functions and modules on a 1-10 scale against openOODA North Star moonshot criteria.
+// Logline: Scores functions and modules on a 1-10 scale against openOODA North Star target criteria.
 //
 // Setup: Evaluates FunctionAuditCriteria across 10 discrete dimensions derived from NORTHSTAR.oot.
 //
 // Beats:
-//   1. Define FunctionAuditCriteria input structure covering all 10 moonshot dimensions.
+//   1. Define FunctionAuditCriteria input structure covering all 10 target dimensions.
 //   2. Compute aggregate integer score (0 to 10) by summing verified criteria.
 //   3. Validate score against target release threshold.
 //   4. Format diagnostic failure message for below-threshold scores.
@@ -23,7 +23,7 @@ type FunctionAuditCriteria = struct {
     zero_stubs: Bool
 };
 
-pub fn moonshot_criteria_new(
+pub fn target_criteria_new(
     caps: Bool,
     contracts: Bool,
     zero_heap: Bool,
@@ -49,7 +49,7 @@ pub fn moonshot_criteria_new(
     };
 }
 
-pub fn moonshot_score_function(c: FunctionAuditCriteria) -> Int {
+pub fn target_score_function(c: FunctionAuditCriteria) -> Int {
     let mut score: Int = 0;
     if c.has_explicit_caps { score = score + 1; }
     if c.has_contract_clauses { score = score + 1; }
@@ -64,7 +64,7 @@ pub fn moonshot_score_function(c: FunctionAuditCriteria) -> Int {
     return score;
 }
 
-pub fn moonshot_evaluate_threshold(score: Int, target: Int, fn_name: String) -> Result[Bool, String] {
+pub fn target_evaluate_threshold(score: Int, target: Int, fn_name: String) -> Result[Bool, String] {
     if score < target {
         return Err("Target Gate Failed: Function '" + fn_name + "' scored " + score.to_string() + "/10 (required threshold: " + target.to_string() + "/10)");
     }
