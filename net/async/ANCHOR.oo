@@ -1,0 +1,29 @@
+// # Asynchronous Network & Event Hub
+//
+// Logline: Unified entry point for asynchronous event multiplexing, timer clocks, and event notification primitives.
+//
+// Setup: Re-exports the event loop, timerfd, and eventfd primitives. Cap-bound operations require &SysCap.
+//
+// Beats:
+//   1. Re-export EventLoop, EventPollItem, and event flag constants.
+//   2. Re-export event loop lifecycle and interest management functions.
+//   3. Re-export timerfd and eventfd constructors.
+
+import "event_loop.oo";
+
+// Public event loop type re-exports
+pub type AsyncEventItem = EventPollItem;
+pub type AsyncEventLoop = EventLoop;
+
+// Public lifecycle and operation re-exports
+pub fn async_loop_create(sys: &SysCap) -> Result[EventLoop, String] { return event_loop_create(sys); }
+pub fn async_loop_add(sys: &SysCap, loop: EventLoop, fd: Int, events: Int, data: Int) -> Result[Bool, String] { return event_loop_add(sys, loop, fd, events, data); }
+pub fn async_loop_modify(sys: &SysCap, loop: EventLoop, fd: Int, events: Int, data: Int) -> Result[Bool, String] { return event_loop_modify(sys, loop, fd, events, data); }
+pub fn async_loop_delete(sys: &SysCap, loop: EventLoop, fd: Int) -> Result[Bool, String] { return event_loop_delete(sys, loop, fd); }
+pub fn async_loop_wait(sys: &SysCap, loop: EventLoop, max_events: Int, timeout_ms: Int) -> Result[List[EventPollItem], String] { return event_loop_wait(sys, loop, max_events, timeout_ms); }
+pub fn async_loop_close(sys: &SysCap, loop: EventLoop) -> Result[Bool, String] { return event_loop_close(sys, loop); }
+
+// High-resolution timer and notification re-exports
+pub fn async_timer_monotonic(sys: &SysCap) -> Result[Int, String] { return timerfd_create_monotonic(sys); }
+pub fn async_timer_arm(sys: &SysCap, tfd: Int, interval_ns: Int) -> Result[Bool, String] { return timerfd_set_interval_ns(sys, tfd, interval_ns); }
+pub fn async_event_signal(sys: &SysCap, initval: Int) -> Result[Int, String] { return eventfd_create(sys, initval); }

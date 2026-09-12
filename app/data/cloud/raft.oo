@@ -25,7 +25,7 @@ type RaftNode = struct {
     snapshot_payload: String
 };
 
-/// Initialize a new sovereign Raft node instance.
+/// Initialize a new primary Raft node instance.
 pub fn raft_node_new(node_id: String, peers: List[String], election_timeout_ms: Int) -> Result[RaftNode, String] {
     if node_id.len() == 0 {
         return Err("ERR\traft_node_new: empty node_id");

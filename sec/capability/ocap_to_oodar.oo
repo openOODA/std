@@ -1,0 +1,123 @@
+// # ocap_to_oodar.oo — Bridge from oodar cap-system to std OCap
+//
+// Logline: Map the 26 oodar substrate cap tokens to the 20 NORTHSTAR
+//          language tokens via ObjectCapability records with rights
+//          masks. The C bridge (oodar/sec/cap/cap_ocap_bridge.c) uses
+//          this to query structured rights on every cap gate.
+//
+// Setup: Pure mapping; no live state. The 20 OCap records are constructed
+//        at process init by the C bridge; this file owns the rights-
+//        mask definition per language token. Per NORTHSTAR §1.4 the
+//        canonical surface is the 20 language tokens; the 26 substrate
+//        caps are the underlying bit positions in oodar/sec/cap/caps.h.
+//
+// Beats:
+//   1. Define the 20 OCap records (one per NORTHSTAR language token).
+//   2. Export cap_mod_ocap_record_for(name) → OCapBridgeRecord lookup.
+//   3. Export cap_mod_ocap_rights_for_name(name) → Int (the rights mask).
+//   4. Export cap_mod_ocap_all_names() → List[String] for the C bridge.
+//
+// Rights-mask semantics (per std/sec/capability/rights.oo):
+//   bit 0 = allow_read (1)
+//   bit 1 = allow_write (2)
+//   bit 2 = allow_execute (4)
+//   bit 3 = allow_delegate (8)
+//   bit 4 = allow_revoke (16)
+//   Full authority = 1+2+4+8+16 = 31.
+//
+// Language token → rights mask:
+//   FsReadCap        = 1 (read)
+//   FsWriteCap       = 3 (read + write; write implies read of metadata)
+//   NetCap           = 3 (read + write)
+//   TcpCap           = 3 (subset of NetCap — read + write)
+//   UdpCap           = 3 (subset of NetCap)
+//   SysCap           = 7 (read + write + execute)
+//   ProcessCap       = 7 (subset of SysCap — read + write + execute)
+//   EnvCap           = 1 (read)
+//   TimeCap          = 1 (read)
+//   RandCap          = 1 (read)
+//   AllocCap         = 3 (read + write)
+//   ThreadCap        = 7 (subset of SysCap)
+//   GpuCap           = 7 (subset of SysCap — kernel dispatch)
+//   FfiCap           = 7 (read + write + execute; very powerful)
+//   FsCap            = 31 (full FS authority; can delegate to children)
+//   ArenaCap         = 11 (read + write + delegate)
+//   MetricsCap       = 1 (read; counters)
+//   SignCap          = 3 (read + write; HMAC + verify)
+//   BindCap          = 3 (subset of NetCap)
+//   CompilerReadCap  = 1 (read; compiler source access)
+
+type OCapBridgeRecord = struct {
+    cap_name: String,
+    language_token: String,
+    rights_mask: Int
+};
+
+fn record_new(name: String, token: String, mask: Int) -> OCapBridgeRecord {
+    return OCapBridgeRecord { cap_name: name, language_token: token, rights_mask: mask };
+}
+
+pub fn ocap_to_oodar_record_for(name: String) -> OCapBridgeRecord {
+    if name == "FsReadCap" { return record_new("FsReadCap", "fsread", 1); }
+    if name == "FsWriteCap" { return record_new("FsWriteCap", "fswrite", 3); }
+    if name == "NetCap" { return record_new("NetCap", "net", 3); }
+    if name == "TcpCap" { return record_new("TcpCap", "tcp", 3); }
+    if name == "UdpCap" { return record_new("UdpCap", "udp", 3); }
+    if name == "SysCap" { return record_new("SysCap", "sys", 7); }
+    if name == "ProcessCap" { return record_new("ProcessCap", "process", 7); }
+    if name == "EnvCap" { return record_new("EnvCap", "env", 1); }
+    if name == "TimeCap" { return record_new("TimeCap", "time", 1); }
+    if name == "RandCap" { return record_new("RandCap", "rand", 1); }
+    if name == "AllocCap" { return record_new("AllocCap", "alloc", 3); }
+    if name == "ThreadCap" { return record_new("ThreadCap", "thread", 7); }
+    if name == "GpuCap" { return record_new("GpuCap", "gpu", 7); }
+    if name == "FfiCap" { return record_new("FfiCap", "ffi", 7); }
+    if name == "FsCap" { return record_new("FsCap", "fs", 31); }
+    if name == "ArenaCap" { return record_new("ArenaCap", "arena", 11); }
+    if name == "MetricsCap" { return record_new("MetricsCap", "metrics", 1); }
+    if name == "SignCap" { return record_new("SignCap", "sign", 3); }
+    if name == "BindCap" { return record_new("BindCap", "bind", 3); }
+    if name == "CompilerReadCap" { return record_new("CompilerReadCap", "compiler_read", 1); }
+    return record_new("", "", 0);
+}
+
+pub fn ocap_to_oodar_rights_for_name(name: String) -> Int {
+    return ocap_to_oodar_record_for(name).rights_mask;
+}
+
+pub fn ocap_to_oodar_all_names() -> List[String] {
+    let mut names: List[String] = list_new();
+    names = list_push(names, "FsReadCap");
+    names = list_push(names, "FsWriteCap");
+    names = list_push(names, "NetCap");
+    names = list_push(names, "TcpCap");
+    names = list_push(names, "UdpCap");
+    names = list_push(names, "SysCap");
+    names = list_push(names, "ProcessCap");
+    names = list_push(names, "EnvCap");
+    names = list_push(names, "TimeCap");
+    names = list_push(names, "RandCap");
+    names = list_push(names, "AllocCap");
+    names = list_push(names, "ThreadCap");
+    names = list_push(names, "GpuCap");
+    names = list_push(names, "FfiCap");
+    names = list_push(names, "FsCap");
+    names = list_push(names, "ArenaCap");
+    names = list_push(names, "MetricsCap");
+    names = list_push(names, "SignCap");
+    names = list_push(names, "BindCap");
+    names = list_push(names, "CompilerReadCap");
+    return names;
+}
+
+pub fn ocap_to_oodar_has_permission(name: String, required: Int) -> Bool {
+    let granted: Int = ocap_to_oodar_rights_for_name(name);
+    return (granted & required) == required;
+}
+
+// rights.oo is intentionally NOT imported — the bitwise AND check
+// above is equivalent to capability_rights_has_permission(granted, required)
+// for single-bit rights. Rights are bits 0-4 (read/write/execute/
+// delegate/revoke), and the check `(granted & required) == required`
+// is exactly the subset rule. Avoids the cross-module import that
+// oodac emit-c can't always satisfy.

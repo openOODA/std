@@ -90,6 +90,7 @@ import "swarm_proto.oo";
 import "tcp_conn.oo";
 import "x402.oo";
 import "x402_spend.oo";
+import "async/ANCHOR.oo";
 
 pub fn net_mod_modules_count() -> Int {
     return net_modules_count();
@@ -142,3 +143,8 @@ pub fn net_mod_url_default_port(scheme: String) -> Int {
 pub fn net_mod_mime_from_path(path: String) -> String {
     return mime_from_path(path);
 }
+
+// Public async event loop re-exports: net_mod_async_*
+pub fn net_mod_async_loop_create(sys: &SysCap) -> Result[EventLoop, String] { return async_loop_create(sys); }
+pub fn net_mod_async_timer_monotonic(sys: &SysCap) -> Result[Int, String] { return async_timer_monotonic(sys); }
+pub fn net_mod_async_event_signal(sys: &SysCap, initval: Int) -> Result[Int, String] { return async_event_signal(sys, initval); }

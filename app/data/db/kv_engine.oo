@@ -26,7 +26,7 @@ type KvEngine = struct {
     next_sstable_id: Int
 };
 
-/// Open a new sovereign KV storage engine.
+/// Open a new primary KV storage engine.
 pub fn kv_open(config: KvConfig) -> Result[KvEngine, String] {
     let wal_res: Result[WalWriter, String] = wal_open(config.db_path + "/wal.log");
     match wal_res {

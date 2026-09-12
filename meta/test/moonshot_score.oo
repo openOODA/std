@@ -1,4 +1,4 @@
-// # Moonshot Function & Module Scorecard Engine
+// # Target Function & Module Scorecard Engine
 //
 // Logline: Scores functions and modules on a 1-10 scale against openOODA North Star moonshot criteria.
 //
@@ -66,7 +66,7 @@ pub fn moonshot_score_function(c: FunctionAuditCriteria) -> Int {
 
 pub fn moonshot_evaluate_threshold(score: Int, target: Int, fn_name: String) -> Result[Bool, String] {
     if score < target {
-        return Err("Moonshot Gate Failed: Function '" + fn_name + "' scored " + score.to_string() + "/10 (required threshold: " + target.to_string() + "/10)");
+        return Err("Target Gate Failed: Function '" + fn_name + "' scored " + score.to_string() + "/10 (required threshold: " + target.to_string() + "/10)");
     }
     return Ok(true);
 }

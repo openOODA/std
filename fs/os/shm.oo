@@ -1,0 +1,207 @@
+// # POSIX Shared Memory and Memory Mapping
+//
+// Logline: Allocate anonymous shared memory buffers and memory-map regions with fail-closed capability gates.
+//
+// Setup: Requires explicit &SysCap capability token. Zero ambient authority.
+//
+// Beats:
+//   1. Define POSIX shm and mmap protection and flag constants.
+//   2. Create anonymous shared memory objects via memfd_create or shm_open.
+//   3. Map shared memory file descriptors into process address space.
+//   4. Unmap buffers and release file descriptor resources cleanly.
+
+import "std/fs/os/os.oo";
+
+// Protection flags
+pub fn shm_prot_none() -> Int { return 0; }
+pub fn shm_prot_read() -> Int { return 1; }
+pub fn shm_prot_write() -> Int { return 2; }
+pub fn shm_prot_exec() -> Int { return 4; }
+
+// Map flags
+pub fn shm_map_shared() -> Int { return 1; }
+pub fn shm_map_private() -> Int { return 2; }
+pub fn shm_map_anonymous() -> Int { return 32; }
+
+// Open flags
+pub fn shm_o_rdonly() -> Int { return 0; }
+pub fn shm_o_rdwr() -> Int { return 2; }
+pub fn shm_o_creat() -> Int { return 64; }
+pub fn shm_o_excl() -> Int { return 128; }
+pub fn shm_o_trunc() -> Int { return 512; }
+
+// Low-level POSIX shm_open syscall
+pub fn shm_open_fd(sys: &SysCap, name: String, oflag: Int, mode: Int) -> Result[Int, String] {
+    if chars_len(name) == 0 {
+        return Err("ERR\tshm_open\tempty name");
+    }
+    if byte_at(name, 0) != 47 {
+        return Err("ERR\tshm_open\tname must start with slash");
+    }
+    let r: Result[Int, String] = oo_shm_open(sys, name, oflag, mode);
+    return r;
+}
+
+// Low-level POSIX shm_unlink syscall
+pub fn shm_unlink_name(sys: &SysCap, name: String) -> Result[Bool, String] {
+    if chars_len(name) == 0 {
+        return Err("ERR\tshm_unlink\tempty name");
+    }
+    let r: Result[Int, String] = oo_shm_unlink(sys, name);
+    if r.is_err() {
+        let msg: String = match r { Ok(_) => "", Err(e) => e };
+        return Err(msg);
+    }
+    return Ok(true);
+}
+
+// Linux memfd_create syscall for anonymous in-memory file descriptors
+pub fn shm_memfd_create(sys: &SysCap, name: String, flags: Int) -> Result[Int, String] {
+    if chars_len(name) == 0 {
+        return Err("ERR\tmemfd_create\tempty name");
+    }
+    let r: Result[Int, String] = oo_memfd_create(sys, name, flags);
+    return r;
+}
+
+// Low-level POSIX ftruncate syscall to set descriptor size
+pub fn shm_ftruncate(sys: &SysCap, fd: Int, length: Int) -> Result[Bool, String] {
+    if fd < 0 {
+        return Err("ERR\tftruncate\tinvalid fd");
+    }
+    if length < 0 {
+        return Err("ERR\tftruncate\tnegative length");
+    }
+    let r: Result[Int, String] = oo_ftruncate(sys, fd, length);
+    if r.is_err() {
+        let msg: String = match r { Ok(_) => "", Err(e) => e };
+        return Err(msg);
+    }
+    return Ok(true);
+}
+
+// Low-level POSIX mmap syscall returning pointer token string ("ptr:0x...")
+pub fn shm_mmap(
+    sys: &SysCap,
+    addr: Int,
+    length: Int,
+    prot: Int,
+    flags: Int,
+    fd: Int,
+    offset: Int
+) -> Result[String, String] {
+    if length <= 0 {
+        return Err("ERR\tmmap\tlength must be positive");
+    }
+    let r: Result[String, String] = oo_mmap(sys, addr, length, prot, flags, fd, offset);
+    return r;
+}
+
+// Low-level POSIX munmap syscall
+pub fn shm_munmap(sys: &SysCap, addr: Int, length: Int) -> Result[Bool, String] {
+    if length <= 0 {
+        return Err("ERR\tmunmap\tlength must be positive");
+    }
+    let r: Result[Int, String] = oo_munmap(sys, addr, length);
+    if r.is_err() {
+        let msg: String = match r { Ok(_) => "", Err(e) => e };
+        return Err(msg);
+    }
+    return Ok(true);
+}
+
+// High-level: Create an anonymous in-memory shared buffer of specified size in bytes
+pub fn shm_create_anonymous(sys: &SysCap, name: String, size_bytes: Int) -> Result[Int, String] {
+    if size_bytes <= 0 {
+        return Err("ERR\tshm\tsize must be positive");
+    }
+    let fd_res: Result[Int, String] = shm_memfd_create(sys, name, 1); // 1 = MFD_CLOEXEC
+    if fd_res.is_err() {
+        // Fallback to POSIX shm_open if memfd fails or unavailable
+        let fallback_name: String = "/" + name;
+        let oflags: Int = shm_o_rdwr() + shm_o_creat() + shm_o_excl();
+        let shm_res: Result[Int, String] = shm_open_fd(sys, fallback_name, oflags, 384); // 0600
+        if shm_res.is_err() {
+            let err_msg: String = match fd_res { Ok(_) => "", Err(e) => e };
+            return Err("ERR\tshm\tfailed to create anonymous buffer: " + err_msg);
+        }
+        let sfd: Int = match shm_res { Ok(val) => val, Err(_) => 0 - 1 };
+        let trunc_res: Result[Bool, String] = shm_ftruncate(sys, sfd, size_bytes);
+        if trunc_res.is_err() {
+            let _u: Result[Bool, String] = shm_unlink_name(sys, fallback_name);
+            let _c: Result[Bool, String] = shm_close_fd(sys, sfd);
+            return Err("ERR\tshm\tftruncate failed on fallback shm");
+        }
+        return Ok(sfd);
+    }
+    let fd: Int = match fd_res { Ok(val) => val, Err(_) => 0 - 1 };
+    let trunc_res: Result[Bool, String] = shm_ftruncate(sys, fd, size_bytes);
+    if trunc_res.is_err() {
+        let _c: Result[Bool, String] = shm_close_fd(sys, fd);
+        return Err("ERR\tshm\tftruncate failed on memfd");
+    }
+    return Ok(fd);
+}
+
+// High-level: Map buffer file descriptor into address space returning pointer token
+pub fn shm_map_buffer(sys: &SysCap, fd: Int, size_bytes: Int, writable: Bool) -> Result[String, String] {
+    if fd < 0 {
+        return Err("ERR\tshm\tinvalid file descriptor");
+    }
+    if size_bytes <= 0 {
+        return Err("ERR\tshm\tsize must be positive");
+    }
+    let mut prot: Int = shm_prot_read();
+    if writable {
+        prot = prot + shm_prot_write();
+    }
+    let flags: Int = shm_map_shared();
+    return shm_mmap(sys, 0, size_bytes, prot, flags, fd, 0);
+}
+
+// High-level: Unmap buffer pointer token
+pub fn shm_unmap_buffer(sys: &SysCap, ptr_tok: String, size_bytes: Int) -> Result[Bool, String] {
+    if !ptr_tok.starts_with("ptr:") {
+        return Err("ERR\tshm\tinvalid pointer token");
+    }
+    let addr: Int = parse_ptr_hex(ptr_tok);
+    if addr == 0 {
+        return Err("ERR\tshm\tfailed to parse pointer token address");
+    }
+    return shm_munmap(sys, addr, size_bytes);
+}
+
+// High-level: Close a file descriptor safely
+pub fn shm_close_fd(sys: &SysCap, fd: Int) -> Result[Bool, String] {
+    if fd < 0 {
+        return Err("ERR\tshm\tinvalid fd");
+    }
+    let r: Result[Int, String] = oo_sys_close(sys, fd);
+    if r.is_err() {
+        let msg: String = match r { Ok(_) => "", Err(e) => e };
+        return Err(msg);
+    }
+    return Ok(true);
+}
+
+// Helper: Parse hex address from "ptr:0x..." token
+fn parse_ptr_hex(s: String) -> Int {
+    let n: Int = chars_len(s);
+    if n < 5 { return 0; }
+    let mut i: Int = 4;
+    if i + 2 <= n && str_slice(s, i, i + 2) == "0x" {
+        i = i + 2;
+    }
+    let mut acc: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        let mut digit: Int = 0 - 1;
+        if b >= 48 && b <= 57 { digit = b - 48; }
+        else if b >= 97 && b <= 102 { digit = b - 97 + 10; }
+        else if b >= 65 && b <= 70 { digit = b - 65 + 10; }
+        if digit < 0 { return 0; }
+        acc = acc * 16 + digit;
+        i = i + 1;
+    }
+    return acc;
+}

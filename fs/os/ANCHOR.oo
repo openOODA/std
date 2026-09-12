@@ -31,6 +31,7 @@ import "fs.oo";
 import "uptime.oo";
 import "microvm_boot.oo";
 import "pipe_redirect.oo";
+import "shm.oo";
 
 // Public cmd surface: os_mod_cmd_*
 pub fn os_mod_cmd_new(prog: String) -> List[String] { return cmd_new(prog); }
@@ -106,6 +107,12 @@ pub fn os_mod_fs_size(fs: &FsReadCap, path: String) -> Int { return fs_file_size
 pub fn os_mod_timespec_new(secs: Int, nanos: Int) -> TimeSpec { return timespec_new(secs, nanos); }
 pub fn os_mod_timespec_diff_seconds(t1: TimeSpec, t2: TimeSpec) -> Float { return timespec_diff_seconds(t1, t2); }
 pub fn os_mod_uptime_format_human(uptime_secs: Int) -> String { return uptime_format_human(uptime_secs); }
+
+// Public shm surface: os_mod_shm_*
+pub fn os_mod_shm_create_anonymous(sys: &SysCap, name: String, size_bytes: Int) -> Result[Int, String] { return shm_create_anonymous(sys, name, size_bytes); }
+pub fn os_mod_shm_map_buffer(sys: &SysCap, fd: Int, size_bytes: Int, writable: Bool) -> Result[String, String] { return shm_map_buffer(sys, fd, size_bytes, writable); }
+pub fn os_mod_shm_unmap_buffer(sys: &SysCap, ptr_tok: String, size_bytes: Int) -> Result[Bool, String] { return shm_unmap_buffer(sys, ptr_tok, size_bytes); }
+pub fn os_mod_shm_close_fd(sys: &SysCap, fd: Int) -> Result[Bool, String] { return shm_close_fd(sys, fd); }
 
 // Private sibling inventory (DO NOT IMPORT DIRECTLY):
 //   _law files (e.g. cgroups_v2_law.oo, os_process_law.oo, syscall_overhead_law.oo)
