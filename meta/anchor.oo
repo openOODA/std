@@ -9,12 +9,12 @@
 // Setup: Imports the test/ and diag/ sub-hubs. Time-bound ops take TimeCap at the call site. Most pure diagnostic types and constructors take no caps. Test harness construction takes no caps; cross-validation and mutation may take CompileCap at the call site.
 //
 // Beats:
-//   1. Re-export the test sub-hub (test_mod_*) by importing meta/test/ANCHOR.oo.
-//   2. Re-export the diag sub-hub (diag_mod_*) by importing meta/diag/ANCHOR.oo.
+//   1. Re-export the test sub-hub (test_mod_*) by importing meta/test/anchor.oo.
+//   2. Re-export the diag sub-hub (diag_mod_*) by importing meta/diag/anchor.oo.
 //   3. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat, _stub files in each subdir.
 
-import "test/ANCHOR.oo";
-import "diag/ANCHOR.oo";
+import "test/anchor.oo";
+import "diag/anchor.oo";
 
 // Public meta version: meta_mod_version_*
 pub fn meta_mod_version() -> String { return "meta/0.1.0"; }

@@ -9,8 +9,8 @@
 //   2. Dispense next sequential ticket number.
 //   3. Advance now_serving ticket upon unlock.
 //   4. Check if a given ticket is currently being served.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Hardware pause / atomic fetch-and-add lowers via compiler intrinsics.
 
 type TicketSpinlock = struct {

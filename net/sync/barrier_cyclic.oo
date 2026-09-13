@@ -9,8 +9,8 @@
 //   2. Threads arrive and wait at the current generation rendezvous.
 //   3. Last arriving thread triggers generation advance and resets arrival count.
 //   4. Broken barrier detection and generation tracking.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Futex-backed blocking lowers to kernel futex primitives.
 
 type CyclicBarrier = struct {

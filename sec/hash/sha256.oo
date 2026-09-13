@@ -8,7 +8,7 @@
 //   1. Pad to 64-byte blocks with 0x80 and 64-bit BE bit length.
 //   2. Schedule 64 words in a loop; run 64 rounds via a worker; add back to state.
 //   3. Emit the 8-word state as 64 lowercase hex chars.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.7: Under 256 lines.
 //
 // emit-llvm hangs on 64 unrolled lets (quadratic env/slit). Loop the schedule and rounds.
 

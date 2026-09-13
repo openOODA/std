@@ -9,8 +9,8 @@
 //   2. Decrement latch count (count_down).
 //   3. Test if countdown latch is completed (count == 0).
 //   4. Query remaining count.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Host futex wait lowers to sys_futex.
 
 type CountdownLatch = struct {

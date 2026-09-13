@@ -2,7 +2,7 @@
 //
 // Logline: Initialize TlsHandshakeState and PeerIdentity; bind cipher, version, and trust fields.
 //
-// Setup: Imports mtls_cert.oo. RULES.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. RULES.oot 1.3 fail-closed residual.
+// Setup: Imports mtls_cert.oo. rules.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. rules.oot 1.3 fail-closed residual.
 //
 // Beats:
 //   1. tls_handshake_state_init: bind session_id, cipher_suite, and tls_version.
@@ -12,9 +12,9 @@
 //
 // residual: raw socket handshake is process_exit in mtls_stubs.
 
-// RULES.oot 1.4: Default-deny for privileged effects.
+// rules.oot 1.4: Default-deny for privileged effects.
 // CAP-G6: preferred &TcpCap for TLS/TCP session effects; &NetCap still works via supersede.
-// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+// rules.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
 
 import "std/sec/net/mtls_cert.oo";
 

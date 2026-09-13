@@ -9,11 +9,12 @@ STD=/home/jeryd/Projects/openOODA/std
 # Pinned workspace toolchain: never inherit $OODA_COMPILER (shell init may
 # point at a stale installed binary without the new lowering).
 OODAC=/home/jeryd/Projects/openOODA/oodac/bin/oodac_bin.core
-BIN=/tmp/ooda_write/probe_wal_disk
-LOG=/tmp/ooda_write/wal_kill.log
+TMPD=$(mktemp -d /tmp/ooda_wal_XXXXXX)
+trap 'rm -rf "$TMPD"' EXIT INT TERM
+BIN="$TMPD/probe_wal_disk"
+LOG="$TMPD/wal_kill.log"
 export OODA_NO_JAIL=1
 export OODA_COMPILER=$OODAC
-mkdir -p /tmp/ooda_write
 cd $STD || exit 1
 rm -f .ooda-cache/ooda-tmp/wal_selftest.log
 "$OODAC" check qa/probe_wal_disk.oo || exit 1

@@ -2,7 +2,7 @@
 //
 // Logline: Provide CFI enforcement mode tags, violation tags, and hardware feature tags.
 //
-// Setup: RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+// Setup: rules.oot 1.4 default-deny; rules.oot 1.3 fail-closed residual.
 //
 // Beats:
 //   1. cfi_mode_*: return disabled/coarse/fine/shadow/full tags.
@@ -12,8 +12,8 @@
 //
 // residual: constants only; live CFI driver is process_exit.
 
-// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
-// RULES.oot 1.3: Fail-closed residual for unimplemented builtins.
+// rules.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
+// rules.oot 1.3: Fail-closed residual for unimplemented builtins.
 
 // standardize: dropped import of cfi_types.oo (pub type emit gcc: type(long long struct)).
 

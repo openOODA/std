@@ -9,8 +9,8 @@
 //   2. Begin and validate read critical section sequence.
 //   3. Acquire exclusive write lock (odd sequence).
 //   4. Release exclusive write lock (even sequence).
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Hardware memory fences lower via compiler barrier intrinsics.
 
 type SeqLock = struct {

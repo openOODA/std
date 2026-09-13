@@ -9,8 +9,8 @@
 //   2. Clone senders (mpsc_clone_sender) and track active producer count.
 //   3. Non-blocking send and try-send operations under ThreadCap.
 //   4. Consumer receive, polling (try_recv), and disconnect detection.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: OS thread parking lowers to futex conditional wakeups via backend runtime.
 
 import "std/core/primitives/result.oo";

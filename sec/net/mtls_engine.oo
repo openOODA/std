@@ -2,7 +2,7 @@
 //
 // Logline: Initialize MtlsSecurityPolicy and mTLS engine; add allowed SANs and gate handshake evaluation.
 //
-// Setup: Imports mtls_types.oo, mtls_cert.oo, and mtls_ops.oo. RULES.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. RULES.oot 1.3 fail-closed residual.
+// Setup: Imports mtls_types.oo, mtls_cert.oo, and mtls_ops.oo. rules.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. rules.oot 1.3 fail-closed residual.
 //
 // Beats:
 //   1. mtls_policy_init: build MtlsSecurityPolicy with fail_closed and require_san_match.
@@ -12,9 +12,9 @@
 //
 // residual: X.509 parse and TLS handshake are process_exit in mtls_stubs.
 
-// RULES.oot 1.4: Default-deny for privileged effects.
+// rules.oot 1.4: Default-deny for privileged effects.
 // CAP-G6: preferred &TcpCap for TLS/TCP session effects; &NetCap still works via supersede.
-// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+// rules.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
 
 import "std/sec/net/mtls_types.oo";
 import "std/sec/net/mtls_cert.oo";

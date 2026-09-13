@@ -2,7 +2,7 @@
 //
 // Logline: Build MtlsCertificate and CertificateChain records; append intermediates and set leaf.
 //
-// Setup: Imports mtls_types.oo. RULES.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. RULES.oot 1.3 fail-closed residual.
+// Setup: Imports mtls_types.oo. rules.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. rules.oot 1.3 fail-closed residual.
 //
 // Beats:
 //   1. mtls_certificate_empty: zeroed MtlsCertificate with is_valid=false.
@@ -12,9 +12,9 @@
 //
 // residual: X.509 DER parse is process_exit in mtls_stubs.
 
-// RULES.oot 1.4: Default-deny for privileged effects.
+// rules.oot 1.4: Default-deny for privileged effects.
 // CAP-G6: preferred &TcpCap for TLS/TCP session effects; &NetCap still works via supersede.
-// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+// rules.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
 
 import "std/sec/net/mtls_types.oo";
 

@@ -9,8 +9,8 @@
 //   2. Register subscriber handles (broadcast_subscribe) with independent read cursors.
 //   3. Publish broadcast events under ThreadCap.
 //   4. Consume events per-receiver without consuming items for other subscribers.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Ring-buffer eviction of slow consumers uses cursor gap thresholding.
 
 import "std/core/primitives/result.oo";

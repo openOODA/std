@@ -62,7 +62,8 @@ pub fn ed25519_sign_hex(seed_hex: String, msg_hex: String) -> Result[String, Str
     let pk_res: Result[String, String] = ed25519_pubkey_from_seed_hex(seed_hex);
     if pk_res.is_err() { return Err("ERR\ted25519\tpk_derive_failed"); }
     let pk_hex: String = unwrap_string(pk_res);
-    let hram_input: String = bytes_to_hex(r_bytes) + pk_hex + msg_hex;
+    let r_hex_str: String = bytes_to_hex(r_bytes);
+    let hram_input: String = r_hex_str + pk_hex + msg_hex;
     let hram_hex: String = sha512(hram_input);
     let k_limbs: List[Int] = hex_to_limbs16(hram_hex);
     let a_limbs: List[Int] = hex_to_limbs16(clamped_hex);
@@ -70,7 +71,8 @@ pub fn ed25519_sign_hex(seed_hex: String, msg_hex: String) -> Result[String, Str
     let ka_mod: List[Int] = ed25519_limbs32_mod_l(ka_full);
     let s_mod: List[Int] = ed25519_limbs16_mod_l(ed25519_limbs16_add(r_limbs, ka_mod));
     let s_bytes: List[Int] = ed25519_limbs16_to_bytes_le(s_mod);
-    let sig_hex: String = bytes_to_hex(r_bytes) + bytes_to_hex(s_bytes);
+    let s_hex_str: String = bytes_to_hex(s_bytes);
+    let sig_hex: String = r_hex_str + s_hex_str;
     return Ok(sig_hex);
 }
 

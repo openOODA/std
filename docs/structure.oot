@@ -1,6 +1,6 @@
 # std/STRUCTURE — How the Repo Is Organized
 
-File: std/docs/STRUCTURE.oot
+File: std/docs/structure.oot
 
 This file describes the layout of the openOODA standard library at
 v1.0.0. Read it before you import anything.
@@ -14,7 +14,7 @@ appear.
 
 The root contains:
 
-  - ANCHOR.oo        Front door for agents. Re-exports the 8 domain hubs.
+  - anchor.oo        Front door for agents. Re-exports the 8 domain hubs.
   - README.oot       Top-level map. States the 6 laws and the domain tree.
   - VERSION          Version and compatibility contract (semver, plus
                      api_surface=8 as a structural check).
@@ -33,7 +33,7 @@ The root contains:
   - sec/             Functional domain: security.
 
 The eight functional domains are the load-bearing structure. Each one
-is a self-contained subtree. Every domain ships its own ANCHOR.oo
+is a self-contained subtree. Every domain ships its own anchor.oo
 that re-exports its sub-hubs.
 
 ## 2. The 8 domains, and why exactly 8
@@ -51,15 +51,15 @@ in one place. No "misc", no "utils", no "common".
   - meta/    Test and diagnostic infrastructure.
 
 This is the Requirement 6 surface. The VERSION file declares
-`api_surface=8`. The loader asserts that the std ANCHOR.oo exposes
+`api_surface=8`. The loader asserts that the std anchor.oo exposes
 exactly 8 public subdirectories. If a future change adds a 9th, the
 loader fails closed. If a future change removes one, the loader
 fails closed. The contract is structural, not behavioral.
 
-## 3. ANCHOR.oo per directory
+## 3. anchor.oo per directory
 
-Every domain has an ANCHOR.oo at its root. Every sub-hub has its
-own ANCHOR.oo. The pattern is the same at every level:
+Every domain has an anchor.oo at its root. Every sub-hub has its
+own anchor.oo. The pattern is the same at every level:
 
   1. Title (// # ...).
   2. Logline (// Logline: ...).
@@ -68,7 +68,7 @@ own ANCHOR.oo. The pattern is the same at every level:
   5. import statements that pull in the next level.
   6. Public functions re-exported as `<domain>_mod_*`.
 
-External callers import the top-level ANCHOR.oo for the domain they
+External callers import the top-level anchor.oo for the domain they
 need. They do not import private siblings directly. Private siblings
 follow a naming convention: `_law`, `_theory`, `_principle`,
 `_invariants`, `_kat`, `_stubs`. These are the certification and
@@ -86,7 +86,7 @@ by the loader, not by review. Two reasons:
      forcing function for clean decomposition.
 
 The cap applies to .oo source files, .oot doc files, README.oot, and
-ANCHOR.oo alike. No file in the tree may exceed it.
+anchor.oo alike. No file in the tree may exceed it.
 
 ## 5. What does not live in std/
 

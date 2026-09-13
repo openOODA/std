@@ -25,7 +25,7 @@
 // | GREEN    |  4496 | Imported by ≥ 1 other .oo                         |
 // | BLOCKED  |   427 | No caller found; candidate for cleanup/promotion |
 // | RESIDUAL |   721 | Intentional (private sibling, scratch, examples, meta/test) |
-// | ANCHOR   |   192 | Front-door ANCHOR.oo files (RULES §1.19)          |
+// | ANCHOR   |   192 | Front-door anchor.oo files (RULES §1.19)          |
 // | PROBE    |    55 | qa/ probes (RULES §1.4)                           |
 // | TOTAL    |  5891 |                                                   |
 
@@ -38,7 +38,7 @@
 //     classify RESIDUAL.
 //   - If basename matches `_law`, `_theory`, `_principle`,
 //     `_invariant`, `_kat`, `_stubs`, `_types` (per
-//     science/ANCHOR.oo §2 — private siblings): classify RESIDUAL.
+//     science/anchor.oo §2 — private siblings): classify RESIDUAL.
 //   - Otherwise: grep across std/ for any other .oo that imports
 //     this basename. ≥ 1 hit → GREEN. 0 hits → BLOCKED.
 //
@@ -68,7 +68,7 @@
 // ## 4. Top BLOCKED candidates (samples)
 
 // These are the BLOCKED files the audit flags as candidates for
-// either cleanup (delete) or promotion (wire into ANCHOR.oo or
+// either cleanup (delete) or promotion (wire into anchor.oo or
 // add a test). Full list at lines 2–429 of the CSV.
 
 // | Path                                              | Domain  |
@@ -96,19 +96,19 @@
 
 // The ./core/collection/ family alone contributes ~30 BLOCKED —
 // classic dead-code pattern where a sibling tree was added but
-// not surfaced in `core/ANCHOR.oo`.
+// not surfaced in `core/anchor.oo`.
 
 // ## 5. Recommended next actions
 
 // 1. Spot-check the BLOCKED list: most should either be (a)
-//    promoted into an ANCHOR.oo, or (b) deleted per
+//    promoted into an anchor.oo, or (b) deleted per
 //    RULES §1.8 ("Delete debug files, obsolete code, and
 //    temporary artifacts when work is complete"). Multi-session
 //    work; not in this commit.
 // 2. Add `audit/*.csv` to .gitignore? The CSV is 141 KB; small
 //    enough to keep in tree. Defer the call.
 // 3. Re-run this audit in 30 days; expect GREEN to grow as new
-//    files get wired into ANCHOR.oo, BLOCKED to shrink as
+//    files get wired into anchor.oo, BLOCKED to shrink as
 //    orphaned files get cleaned up.
 
 // ## 6. Cross-references

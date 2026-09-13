@@ -9,8 +9,8 @@
 //   2. Enter and exit read-side critical sections (rcu_read_lock / rcu_read_unlock).
 //   3. Read current value and atomic RCU pointer update (publish new version, retire old).
 //   4. Synchronize grace period and reclaim retired memory.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Hardware QSBR (quiescent-state based reclamation) uses cooperative thread epochs.
 
 import "std/core/primitives/result.oo";

@@ -2,7 +2,7 @@
 //
 // Logline: Provide Linux audit message type, filter list, action, and architecture constants.
 //
-// Setup: Imports audit_types.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+// Setup: Imports audit_types.oo. rules.oot 1.4 default-deny; rules.oot 1.3 fail-closed residual.
 //
 // Beats:
 //   1. audit_type_*: map AUDIT_SYSCALL/PATH/IPC/SOCKETCALL/CONFIG_CHANGE/EXECVE/USER_AUTH.
@@ -12,8 +12,8 @@
 //
 // residual: constants only; live netlink is process_exit in audit_stubs.
 
-// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
-// RULES.oot 1.3: Fail-closed residual for unimplemented builtins.
+// rules.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
+// rules.oot 1.3: Fail-closed residual for unimplemented builtins.
 
 import "std/sec/sys/auditd_audit_types.oo";
 

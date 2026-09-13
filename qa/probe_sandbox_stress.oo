@@ -82,6 +82,7 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
     if val_pre != "DENIED_DATA" {
         return Err("FAIL: pre-sandbox read content mismatch: " + val_pre);
     }
+    let _rm_pre: Result[Void, String] = fs_remove_file(fs_w, file_outside);
     println("PASS: Pre-confinement read/write access verified");
 
     println("PHASE 3: Apply Landlock matrix under &SysCap");

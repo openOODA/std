@@ -9,8 +9,8 @@
 //   2. Configure process working directory (process_spawn_cwd) and stream redirection.
 //   3. Execute child process under ProcessCap (process_spawn_run).
 //   4. Run shell command directly via sh execution wrapper under ProcessCap.
-// RULES.oot 1.4: Default-deny for OS interactions. Explicit &ProcessCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for OS interactions. Explicit &ProcessCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: POSIX posix_spawnp and fork/exec lower to host runtime via ProcessCap.
 
 import "std/core/primitives/result.oo";

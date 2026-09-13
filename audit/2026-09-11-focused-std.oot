@@ -24,8 +24,8 @@
 // |------|---------|------|
 // | 0 Pre-flight | WIP | 26 dirty: 11 modified + 15 untracked (incl. 1 ELF artifact). Last commit 9f5afb2 2026-09-10. |
 // | 1 File law | 2 FAIL | probe_sdl_window.oo 3-element header; probe_repl_direct.tmp.bin artifact. |
-// | 2 Structure | MIXED | 8 domains, 188 ANCHOR.oo; sec/sandbox/ properly anchored; 6 probes not wired into suite.oo. |
-// | 3 Execution | FAIL | net/ANCHOR.oo fails `oodac check` — committed use-after-move in net/http_resp_parse.oo. |
+// | 2 Structure | MIXED | 8 domains, 188 anchor.oo; sec/sandbox/ properly anchored; 6 probes not wired into suite.oo. |
+// | 3 Execution | FAIL | net/anchor.oo fails `oodac check` — committed use-after-move in net/http_resp_parse.oo. |
 // | 4 Drift | MINOR | std/README.oot File: declares "ooda/std/README.oot". |
 
 // ## 2. Pass-1 — File law
@@ -42,25 +42,25 @@
 
 // Domains (oo file counts): app/ 1878, science/ 1411, sec/ 846,
 // core/ 765, net/ 419, hw/ 336, fs/ 119, meta/ 57, qa/ 56.
-// ANCHOR.oo: 188, all ALLCAPS, all 4-element.
+// anchor.oo: 188, all ALLCAPS, all 4-element.
 
 // Uncommitted inventory (git status 2026-09-11):
-//   M app/agent/{ANCHOR.oo,repl_engine.oo} — repl engine +303 net
-//   M meta/test/{ANCHOR.oo,fuzz.oo,scenario.oo}
+//   M app/agent/{anchor.oo,repl_engine.oo} — repl engine +303 net
+//   M meta/test/{anchor.oo,fuzz.oo,scenario.oo}
 //   M net/tcp.oo — tcp_read gains required max_bytes (breaking)
-//   M qa/{ANCHOR.oo,probe_caps.oo,suite.oo} — 5 cap probes wired
-//   M sec/{ANCHOR.oo,path_scope.oo} — join refactor, equivalent
+//   M qa/{anchor.oo,probe_caps.oo,suite.oo} — 5 cap probes wired
+//   M sec/{anchor.oo,path_scope.oo} — join refactor, equivalent
 //   ?? sec/sandbox/{ANCHOR,config,engine,status}.oo — anchored, headed
 //   ?? qa/probe_{cap_fs,cap_process,cap_system,cap_net,cap_falsify}.oo
-//      — all 5 wired into suite.oo + qa/ANCHOR.oo (docs in same diff)
+//      — all 5 wired into suite.oo + qa/anchor.oo (docs in same diff)
 //   ?? qa/probe_{repl_direct,repl_m1_audit,repl_m1_test2,
 //      sandbox_adv1,sandbox_m1,sandbox_stress}.oo — 6 orphan probes:
-//      NOT in suite.oo, NOT in qa/ANCHOR.oo
+//      NOT in suite.oo, NOT in qa/anchor.oo
 //   ?? qa/probe_repl_direct.tmp.bin — leaked build artifact
 //   ?? meta/test/{em_gauge,moonshot_score}.oo — headed, orphaned
 
 // Wiring verdict: the 5 cap probes follow the law (suite.oo:83-87 +
-// qa/ANCHOR.oo beats 12-16 + imports). The 6 repl/sandbox probes and
+// qa/anchor.oo beats 12-16 + imports). The 6 repl/sandbox probes and
 // 2 meta/test files are uncommitted test gates (§1.4).
 
 // ## 4. Pass-3 — Zero-trust execution (release oodac, C backend)
@@ -74,7 +74,7 @@
 // | probe_cap_falsify | OK | "1:1 negative compile checks verified" | PASS (negative-trust, §1.10) |
 // | probe_repl_direct | OK | "ALL AUDIT CHECKS PASSED EMPIRICALLY" | PASS (orphan — not in suite) |
 // | probe_sandbox_m1 | OK | "ALL ASSERTIONS PASSED (100%)" | PASS (orphan) |
-// | net/ANCHOR.oo | — | `ERR move use after move rest at 83` | **FAIL** |
+// | net/anchor.oo | — | `ERR move use after move rest at 83` | **FAIL** |
 // | net/tcp.oo | OK | — | PASS (modified file itself checks) |
 
 // M1 root cause (net/http_resp_parse.oo:79-85, committed 2026-09-02):
@@ -89,7 +89,7 @@
 // `val` from a second slice of `line`. This is the kind of defect
 // the type system exists to catch; the file predates the check.
 
-// m1 (masked): net/ANCHOR.oo:122 `net_mod_tcp_read(tcp, fd)` calls
+// m1 (masked): net/anchor.oo:122 `net_mod_tcp_read(tcp, fd)` calls
 // net_tcp_read with 2 args; uncommitted net/tcp.oo:31-36 requires 3.
 // Will surface as an arity error once M1 is fixed. Update the wrapper
 // in the same commit as the tcp.oo signature change.
@@ -97,19 +97,19 @@
 // ## 5. Findings by severity
 
 // MAJOR (1):
-//   M1. net/ANCHOR.oo fails `oodac check` on the release binary —
+//   M1. net/anchor.oo fails `oodac check` on the release binary —
 //       use-after-move in net/http_resp_parse.oo:81-84. The net/ front
 //       door does not typecheck; committed since the 2026-09-02 split.
 //       RULES §1.1 (real pipeline — the checker caught a real bug),
 //       §1.4 (committed defect), §1.5.
 
 // MINOR (5):
-//   m1. net/ANCHOR.oo:122 stale 2-arg call into new 3-arg
+//   m1. net/anchor.oo:122 stale 2-arg call into new 3-arg
 //       net_tcp_read — uncommitted signature-change fallout.
 //   m2. qa/probe_sdl_window.oo — missing Setup: element (§1.11).
 //   m3. qa/probe_repl_direct.tmp.bin — 332KB ELF in tree (P10).
 //   m4. 6 orphan probes + 2 orphan meta/test files — pass but not
-//       wired into suite.oo/ANCHOR.oo (§1.4 uncommitted gates).
+//       wired into suite.oo/anchor.oo (§1.4 uncommitted gates).
 //   m5. README.oot File: declares "ooda/std/README.oot" — split-era
 //       rename residue (§1.4).
 
@@ -119,20 +119,20 @@
 //       host deps), but suite.oo:2 says "each qa probe" — overclaim.
 //       Document the exclusion class or add an OODA_QA_HW gate.
 //   n2. sec/sandbox/ is properly anchored and headed but unreferenced
-//       by sec/ANCHOR.oo imports — new module not yet surfaced.
+//       by sec/anchor.oo imports — new module not yet surfaced.
 
 // ## 6. Recommended same-commit repairs (std lane)
 
 // 1. net/http_resp_parse.oo:81 — eliminate the move of `rest`
 //    (e.g. `let mut val = rest;` → slice/copy; or rebind from
-//    `line`). Un-breaks net/ANCHOR.oo check (closes M1).
-// 2. net/ANCHOR.oo:122 — pass max_bytes through net_mod_tcp_read
+//    `line`). Un-breaks net/anchor.oo check (closes M1).
+// 2. net/anchor.oo:122 — pass max_bytes through net_mod_tcp_read
 //    (closes m1; same commit as the tcp.oo signature change).
 // 3. qa/probe_sdl_window.oo — add the missing Setup: element (m2).
 // 4. rm qa/probe_repl_direct.tmp.bin + add `qa/*.tmp.bin` to
 //    .gitignore (m3 — suite already rm's them; the ignore covers
 //    manual runs).
-// 5. Either wire the 6 orphan probes into suite.oo + ANCHOR.oo or
+// 5. Either wire the 6 orphan probes into suite.oo + anchor.oo or
 //    delete them; commit or drop meta/test/{em_gauge,moonshot_score}
 //    (m4).
 // 6. README.oot — File: → `std/README.oot` (m5).
@@ -145,7 +145,7 @@
 // CLOSED:
 //   M1 — net/http_resp_parse.oo:81 use-after-move: slice `line` once
 //        into `val`, strip the leading space from `val` itself (no
-//        second binding). `oodac check net/ANCHOR.oo` → OK.
+//        second binding). `oodac check net/anchor.oo` → OK.
 //   m1 — net_mod_tcp_read now mirrors net_tcp_read(tcp,fd,max_bytes);
 //        same pass caught net_mod_tls_connect and net_mod_udp_bind
 //        returning Result[String,_] over Result[Int,_] targets — all
@@ -154,16 +154,16 @@
 //   m3 — tmp.bin deleted; *.tmp.bin added to .gitignore (covers manual
 //        builds; suite already rm's its own).
 //   m4 — probe_sandbox_{m1,adv1,stress} + probe_repl_direct wired into
-//        suite.oo + ANCHOR.oo beats 20-23. em_gauge/moonshot_score were
-//        already wired via meta/test/ANCHOR.oo re-exports (not orphans).
+//        suite.oo + anchor.oo beats 20-23. em_gauge/moonshot_score were
+//        already wired via meta/test/anchor.oo re-exports (not orphans).
 //   m5 — README.oot File: → std/README.oot.
-//   n2 — sec/ANCHOR.oo:61,116 imports + re-exports sec/sandbox.
+//   n2 — sec/anchor.oo:61,116 imports + re-exports sec/sandbox.
 
 // NEW FINDINGS:
 //   C1 (oodac lane, systemic): functions defined in files named
-//      ANCHOR.oo typecheck but never reach the C emitter — check passes,
+//      anchor.oo typecheck but never reach the C emitter — check passes,
 //      gcc sees implicit declarations. Controlled repro: identical
-//      wrapper in hub/ANCHOR.oo fails emit while hub/hub.oo emits fine.
+//      wrapper in hub/anchor.oo fails emit while hub/hub.oo emits fine.
 //      Every X_mod_* wrapper across std is unbuildable for consumers
 //      until emit is fixed. Blocks probe_repl_m1_audit (kept unwired).
 //   M6: fs_mkdir_p (fs/os/fs.oo:103) cannot create absolute paths when

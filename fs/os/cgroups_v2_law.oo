@@ -4,7 +4,7 @@
 //
 // Setup: Pure Int. cgroup_v2_controller_count() returns the canonical v2 controller set size (12). cgroup_v2_unified_hierarchy_depth(depth) returns 1 if depth is the root (0) and 0 for negative depths (fails closed). Coupled with container runtimes (Docker, Kubernetes) which rely on the unified hierarchy. 0.001% precision: |depth| <= 0 (i.e. depth == 0) for the root check; |controllers - 12| = 0 (exact) for the controller count.
 //
-// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+// rules.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
 //
 // Beats:
 //   1. cgroup_v2_kernel_introduced() returns 405 (Linux 4.5, March 2016).

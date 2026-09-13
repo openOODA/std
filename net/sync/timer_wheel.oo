@@ -9,8 +9,8 @@
 //   2. Schedule relative timeout entries (timer_wheel_schedule) under ThreadCap.
 //   3. Advance wheel ticks (timer_wheel_advance) and collect expired payload IDs.
 //   4. Cancel active timers (timer_wheel_cancel) and query pending deadlines.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Hierarchical multi-level wheels (spokes) cascade into single base wheel.
 
 import "std/core/primitives/result.oo";

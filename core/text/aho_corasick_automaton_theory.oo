@@ -2,7 +2,7 @@
 //
 // Logline: Aho & Corasick 1975 (JACM 18, 6, 333) build a finite-state automaton from a set of patterns and scan a text in time O(n + m + z) where n = text length, m = sum of pattern lengths, z = number of pattern occurrences in the text; the automaton has at most one trie node per character of the total pattern sum plus a root.
 // Setup: Pure Int. ac_automaton_states(patterns) returns n_nodes, the number of trie nodes (one per character of pattern sum, plus root). ac_match_count(patterns, text) returns the integer match count z. Empty patterns or empty text returns 0; well-formed patterns with at least one match return z > 0.
-// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+// rules.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
 //
 // Beats:
 //   1. Closed: |text|=100KB, |patterns|=1KB -> 1 state per char of pattern sum, O(n) scan within 0.001%.

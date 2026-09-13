@@ -9,8 +9,8 @@
 //   2. Lock mutex (acquires on first lock, increments recursion depth if same owner).
 //   3. Try-lock for non-blocking acquisition.
 //   4. Unlock mutex (decrements recursion depth, releases when depth reaches zero).
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Reentrant pthread_mutex lowers to host POSIX mutex.
 
 import "std/core/primitives/result.oo";

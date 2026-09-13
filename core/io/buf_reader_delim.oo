@@ -9,8 +9,8 @@
 //   2. Read until custom delimiter string match (buf_reader_read_until).
 //   3. Read single newline-terminated line (buf_reader_read_line).
 //   4. Stream EOF detection and remaining buffer inspection.
-// RULES.oot 1.4: Default-deny for OS I/O. Explicit &IoCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for OS I/O. Explicit &IoCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Zero-copy delimiter search uses SIMD byte scan via backend runtime.
 
 import "std/core/primitives/result.oo";

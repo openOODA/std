@@ -1,8 +1,8 @@
 // # FS Submodule Hub -- Zero-Drag
 //
-// Logline: Unified entry point for the standard fs (filesystem) domain library. Re-exports the subdir hubs (file, os, process, time, archive, compression) so that callers can `import "std/fs/ANCHOR.oo"` to pull in the full filesystem stack. Each subdir's own ANCHOR.oo is the canonical surface for that subdir; the top-level hub stitches them together.
+// Logline: Unified entry point for the standard fs (filesystem) domain library. Re-exports the subdir hubs (file, os, process, time, archive, compression) so that callers can `import "std/fs/anchor.oo"` to pull in the full filesystem stack. Each subdir's own anchor.oo is the canonical surface for that subdir; the top-level hub stitches them together.
 //
-// Setup: Imports each subdir's ANCHOR.oo. The file subdir (Path, FileInfo, FileReader/Writer, Glob, Watch, Jail, DirEntry, TempFile) takes FsReadCap / FsWriteCap / SysCap at the call site. The os subdir (terminal, fs, file_mode, temp, cpu, gpu, microvm, page tables, cgroups, eBPF, scheduler) takes ProcessCap / ThreadCap / EnvCap / SysCap at the call site. The process subdir (cmd, env, process, process_spawn, signal, rlimit, python) takes ProcessCap / EnvCap / SysCap at the call site. The time subdir (chrono) takes TimeCap at the call site. Archive and compression are pure byte-list / stream operations with no caps.
+// Setup: Imports each subdir's anchor.oo. The file subdir (Path, FileInfo, FileReader/Writer, Glob, Watch, Jail, DirEntry, TempFile) takes FsReadCap / FsWriteCap / SysCap at the call site. The os subdir (terminal, fs, file_mode, temp, cpu, gpu, microvm, page tables, cgroups, eBPF, scheduler) takes ProcessCap / ThreadCap / EnvCap / SysCap at the call site. The process subdir (cmd, env, process, process_spawn, signal, rlimit, python) takes ProcessCap / EnvCap / SysCap at the call site. The time subdir (chrono) takes TimeCap at the call site. Archive and compression are pure byte-list / stream operations with no caps.
 //
 // Beats:
 //   1. Re-export the file/ subdir hub (file path, file_info, file_reader, file_writer, jail, glob, dir_entry, tempfile, stream, watch, fs_ops, src_fs).
@@ -13,12 +13,12 @@
 //   6. Re-export the compression/ subdir hub (huffman, lz4, lz77, brotli, neural image compression v2).
 //   7. Document the private siblings that external callers must NOT import directly: _law, _theory, _principle, _invariants, _kat files in each subdir.
 
-import "file/ANCHOR.oo";
-import "os/ANCHOR.oo";
-import "process/ANCHOR.oo";
-import "time/ANCHOR.oo";
-import "archive/ANCHOR.oo";
-import "compression/ANCHOR.oo";
+import "file/anchor.oo";
+import "os/anchor.oo";
+import "process/anchor.oo";
+import "time/anchor.oo";
+import "archive/anchor.oo";
+import "compression/anchor.oo";
 
 // Public fs version: fs_mod_fs_version_*
 pub fn fs_mod_fs_version() -> String { return "fs/0.1.0"; }

@@ -22,12 +22,12 @@
 // | GREEN    |     7 | Imported by ≥ 1 other .oo in std/                     |
 // | BLOCKED  |     0 | No caller in std/ (and no documented consumer)       |
 // | RESIDUAL |     3 | Intentional: private sibling + cross-repo bridge shim |
-// | ANCHOR   |     1 | sec/capability/ANCHOR.oo (front door, RULES §1.19)   |
+// | ANCHOR   |     1 | sec/capability/anchor.oo (front door, RULES §1.19)   |
 // | TOTAL    |    11 |                                                      |
 
 // Net change vs the 2026-09-11 rollup: +1 file
 // (`ocap_to_oodar.oo`, the bridge shim). No BLOCKED files.
-// ANCHOR.oo was already in the rollup; new file is classified
+// anchor.oo was already in the rollup; new file is classified
 // RESIDUAL with a cross-repo consumer (oodar/sec/cap/
 // cap_ocap_bridge.c).
 
@@ -35,16 +35,16 @@
 
 // | Path                                          | Status  | Evidence                                                |
 // |-----------------------------------------------|---------|---------------------------------------------------------|
-// | sec/capability/ANCHOR.oo                      | ANCHOR  | front door; re-exports cap_mod_* for sec/ANCHOR.oo      |
-// | sec/capability/object_capability.oo           | GREEN   | imported by sec/capability/ANCHOR.oo                    |
-// | sec/capability/rights.oo                      | GREEN   | imported by sec/capability/ANCHOR.oo                    |
-// | sec/capability/attenuate.oo                   | GREEN   | imported by sec/capability/ANCHOR.oo                    |
+// | sec/capability/anchor.oo                      | ANCHOR  | front door; re-exports cap_mod_* for sec/anchor.oo      |
+// | sec/capability/object_capability.oo           | GREEN   | imported by sec/capability/anchor.oo                    |
+// | sec/capability/rights.oo                      | GREEN   | imported by sec/capability/anchor.oo                    |
+// | sec/capability/attenuate.oo                   | GREEN   | imported by sec/capability/anchor.oo                    |
 // | sec/capability/seal.oo                        | GREEN   | imported by net/mesh/open_objcap_hmac.oo                |
 // | sec/capability/objcap_hmac_seal.oo            | GREEN   | imported by net/mesh/open_objcap_hmac.oo                |
-// | sec/capability/engine.oo                      | GREEN   | imported by app/agent/ANCHOR.oo                         |
-// | sec/capability/registry.oo                    | GREEN   | imported by meta/diag/ANCHOR.oo                         |
-// | sec/capability/capability_types.oo            | RESIDUAL| private sibling (science/ANCHOR.oo §2 — do not import)  |
-// | sec/capability/objcap_stubs.oo                | RESIDUAL| private sibling (science/ANCHOR.oo §2 — do not import)  |
+// | sec/capability/engine.oo                      | GREEN   | imported by app/agent/anchor.oo                         |
+// | sec/capability/registry.oo                    | GREEN   | imported by meta/diag/anchor.oo                         |
+// | sec/capability/capability_types.oo            | RESIDUAL| private sibling (science/anchor.oo §2 — do not import)  |
+// | sec/capability/objcap_stubs.oo                | RESIDUAL| private sibling (science/anchor.oo §2 — do not import)  |
 // | sec/capability/ocap_to_oodar.oo               | RESIDUAL| cross-repo bridge shim; consumed by                     |
 // |                                               |         | oodar/sec/cap/cap_ocap_bridge.c (oodac emit-c)           |
 
@@ -117,7 +117,7 @@
 
 // ## 5. Recommended next actions
 
-// 1. Update ANCHOR.oo's "Private sibling inventory" comment to
+// 1. Update anchor.oo's "Private sibling inventory" comment to
 //    add ocap_to_oodar.oo alongside object_capability.oo and the
 //    other private siblings. The current comment lists 7 internal
 //    modules; ocap_to_oodar.oo is the 8th. ~5 lines, no behavior

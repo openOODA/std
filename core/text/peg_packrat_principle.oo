@@ -2,7 +2,7 @@
 //
 // Logline: Parsing Expression Grammars (Ford 2004, TOPLAS 26, 5) describe recursive-descent parsing with ordered choice; Packrat parsing (Ford 2002, ICFP) memoizes each (rule, position) so that memoized parsers run in linear time O(n) in the input length n for grammars expressible in PEG.
 // Setup: Pure Int. peg_packrat_memo_hits(grammar, input) returns the number of memoization cache hits when a recursive-descent parser is run with memoization; peg_packrat_linear(grammar) returns 1 if the grammar is one of the recognized memoizable PEG forms. A "no memo" recursive-descent run yields 0 hits. Negative hits or unknown grammars fail closed.
-// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+// rules.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
 //
 // Beats:
 //   1. Closed: a memoized PEG run on input with repeated subexpressions yields a positive memo hit count.

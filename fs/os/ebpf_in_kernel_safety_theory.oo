@@ -4,7 +4,7 @@
 //
 // Setup: Pure Int. ebpf_verifier_max_insn() returns the canonical instruction cap (1,000,000). ebpf_verifier_bpf_call_count() returns the canonical max call count (256). 0.001% precision tolerance: |insn - 1,000,000| <= 10 (1M * 1e-5 = 10). Hostile (zero, negative) inputs fail closed. Coupled: in-kernel sandbox coupling inherits the ebpf_probe sandbox claim.
 //
-// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+// rules.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
 //
 // Beats:
 //   1. ebpf_verifier_max_insn() returns 1,000,000 (BPF_MAXINSNS since Linux 5.2; the cap is also a Hoerrlen 2018 invariant).

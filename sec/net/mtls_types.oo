@@ -2,7 +2,7 @@
 //
 // Logline: Define MtlsCertificate, CertificateChain, TlsHandshakeState, and PeerIdentity records.
 //
-// Setup: RULES.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. RULES.oot 1.3 fail-closed residual.
+// Setup: rules.oot 1.4 default-deny; CAP-G6 prefer &TcpCap. rules.oot 1.3 fail-closed residual.
 //
 // Beats:
 //   1. MtlsCertificate: bind subject_cn, issuer_cn, sans, validity, is_ca, is_valid.
@@ -12,9 +12,9 @@
 //
 // residual: struct-only module; no TLS FFI.
 
-// RULES.oot 1.4: Default-deny for privileged effects.
+// rules.oot 1.4: Default-deny for privileged effects.
 // CAP-G6: preferred &TcpCap for TLS/TCP session effects; &NetCap still works via supersede.
-// RULES.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
+// rules.oot 1.3: Fail-closed residual for unimplemented builtins / compiler limitations.
 
 // -------------------------------------------------------------------
 // Core Data Structures & Realistic mTLS Types

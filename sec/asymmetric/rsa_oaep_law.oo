@@ -4,7 +4,7 @@
 //
 // Setup: Pure Int. RSA-OAEP pads before encrypting; the law tracks the ideal raw-RSA core (m^e mod n) and the round-trip property. Hostile n<=1, e<=0, d<=0, exp<0, or pad m out of range returns Err. m=0 encrypt is Ok(0).
 //
-// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and %.
+// rules.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and %.
 //
 // Beats:
 //   1. rsa_encrypt(m, e, n) = m^e mod n via square-and-multiply using only *.

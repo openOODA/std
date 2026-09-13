@@ -2,7 +2,7 @@
 //
 // Logline: Run each wired qa probe twice in fresh processes under the
 // primary compiler. Fail closed on miss AND on any output difference.
-// (Display-dependent sdl_*/graphics probes stay manual — see ANCHOR.oo.)
+// (Display-dependent sdl_*/graphics probes stay manual — see anchor.oo.)
 //
 // Setup: Double-run identity law (the immune system: AI writes the code,
 // this machinery makes it trustworthy). Builds and executes the domain
@@ -27,6 +27,7 @@ fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[String,
     }
     let r: Result[String, String] = sys_exec(p, tmp_bin);
     let _del: Result[String, String] = sys_exec(p, "rm", "-f", tmp_bin);
+    let _del_scratch: Result[String, String] = sys_exec(p, "rm", "-rf", "scratch");
     if r.is_err() {
         let e: String = match r { Ok(_) => "", Err(m) => m };
         return Err("exec fail " + path + ": " + e);

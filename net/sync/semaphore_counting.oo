@@ -9,8 +9,8 @@
 //   2. Acquire permits with bounds check and capacity decrement.
 //   3. Non-blocking try_acquire for optimistic acquisition.
 //   4. Release permits back into the pool.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Blocking semaphore wait lowers to futex / sem_wait in host runtime.
 
 import "std/core/primitives/result.oo";

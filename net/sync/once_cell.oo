@@ -9,8 +9,8 @@
 //   2. Attempt atomic initialization (once_cell_set) with double-initialization rejection.
 //   3. Query initialized value (once_cell_get) with Result unwrapping.
 //   4. Atomic get-or-init lazy evaluation fallback under ThreadCap.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Hardware memory fences lower via atomic compiler backend.
 
 import "std/core/primitives/result.oo";

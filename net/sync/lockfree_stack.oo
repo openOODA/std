@@ -9,8 +9,8 @@
 //   2. Push item onto top of stack via CAS publication.
 //   3. Pop item from top of stack via CAS publication.
 //   4. Query stack emptiness and element count.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Atomic 128-bit CAS lowers to host cmpxchg16b instruction.
 
 import "std/core/primitives/list.oo";

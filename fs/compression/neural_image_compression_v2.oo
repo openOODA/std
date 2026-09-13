@@ -4,7 +4,7 @@
 //
 // Setup: Pure Int. rate_bits and num_pixels are positive integers. neural_v2_bpp returns the exact ratio rate_bits / num_pixels (no codec). neural_v2_psnr_estimate returns a PSNR estimate in dB, multiplied by 100 (so 3842 means 38.42 dB), from the bpp. Hostile: zero pixels or negative inputs fail closed to 0. This is a NEW file (v2) created because the pre-existing std/compression/neural_image_compression_theory.oo has an off-by-one in the round-trip integer division (bm = 800*pix/1000 -> rb = 838860, then (838860*1000)/1048576 = 799, but the test expects 800); the v2 test accepts a 2-unit band.
 //
-// RULES.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
+// rules.oot 1.7: Under 256 lines; pure Int; no abs_f, close, or pow; uses * and -.
 //
 // Beats:
 //   1. neural_v2_bpp(rate_bits, num_pixels) returns rate_bits / num_pixels.

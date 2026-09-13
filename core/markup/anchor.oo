@@ -2,7 +2,7 @@
 //
 // Logline: Unified entry point for the standard markup domain library. Re-exports a stable markup_mod_* surface for the most-used public API (JSON parse/write/stream/schema, CBOR major types and decoder, MsgPack encode/decode, XML parse/tokenize, YAML parse/tokenize, TOML parse/get, Protobuf wire types and field values). Private siblings (laws, theories, principles, invariants, KATs) remain non-public.
 //
-// Setup: Imports private markup siblings; no caps required for pure parse/format/stream operations. File-backed JSON/XML parsers may take FsReadCap at the call site.
+// Setup: Imports format and markup siblings; no caps required for pure parse/format/stream operations. File-backed JSON/XML parsers may take FsReadCap at the call site.
 //
 // Beats:
 //   1. Re-export the JSON parse/write/stream/schema/ast surface as markup_mod_json_*.
@@ -11,23 +11,23 @@
 //   4. Re-export the XML, YAML, and TOML parse/tokenize/get surface as markup_mod_xml_*, markup_mod_yaml_*, markup_mod_toml_*.
 //   5. Re-export the Protobuf wire types and field values surface as markup_mod_pb_*. Document the private siblings.
 
-import "format/json_query.oo";
-import "format/json_parser.oo";
-import "format/json_writer.oo";
-import "format/json_ast.oo";
-import "format/json_schema.oo";
-import "format/cbor.oo";
-import "format/cbor_decoder.oo";
-import "format/msgpack.oo";
-import "format/msgpack_decoder.oo";
+import "std/core/format/json_query.oo";
+import "std/core/format/json_parser.oo";
+import "std/core/format/json_writer.oo";
+import "std/core/format/json_ast.oo";
+import "std/core/format/json_schema.oo";
+import "std/core/format/cbor.oo";
+import "std/core/format/cbor_decoder.oo";
+import "std/core/format/msgpack.oo";
+import "std/core/format/msgpack_decoder.oo";
 import "xml.oo";
 import "xml_tokenizer.oo";
-import "format/yaml.oo";
-import "format/yaml_tokenizer.oo";
-import "format/toml.oo";
-import "format/toml_parser_legacy.oo";
-import "format/protobuf_wire_legacy.oo";
-import "format/protobuf_types_legacy.oo";
+import "std/core/format/yaml.oo";
+import "std/core/format/yaml_tokenizer.oo";
+import "std/core/format/toml.oo";
+import "std/core/format/toml_parser_legacy.oo";
+import "std/core/format/protobuf_wire_legacy.oo";
+import "std/core/format/protobuf_types_legacy.oo";
 
 // Public JSON surface: markup_mod_json_*
 pub fn markup_mod_json_escape(s: String) -> String { return json_escape(s); }

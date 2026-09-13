@@ -2,7 +2,7 @@
 //
 // Logline: Fail-closed process_exit residuals for securityfs read, policy write, EVM xattr set, and TPM quote.
 //
-// Setup: Imports ima_engine.oo. RULES.oot 1.4 default-deny; RULES.oot 1.3 fail-closed residual.
+// Setup: Imports ima_engine.oo. rules.oot 1.4 default-deny; rules.oot 1.3 fail-closed residual.
 //
 // Beats:
 //   1. ima_read_ascii_runtime_measurements_sys: refuse securityfs /sys/kernel/security/ima read.
@@ -12,8 +12,8 @@
 //
 // residual: not a real IMA client; integrate host kernel IMA driver.
 
-// RULES.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
-// RULES.oot 1.3: Fail-closed residual for unimplemented builtins.
+// rules.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
+// rules.oot 1.3: Fail-closed residual for unimplemented builtins.
 
 import "std/sec/sys/ima_engine.oo";
 

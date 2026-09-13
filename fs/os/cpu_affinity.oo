@@ -9,8 +9,8 @@
 //   2. Enable and clear specific CPU core bindings under ThreadCap.
 //   3. Query core membership (cpu_set_is_set) and active core count (cpu_set_count).
 //   4. Initialize full affinity mask binding all available processors.
-// RULES.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
-// RULES.oot 1.7: Under 256 lines.
+// rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
+// rules.oot 1.7: Under 256 lines.
 // residual: Linux sched_setaffinity / POSIX pthread_setaffinity_np lower via platform scheduler.
 
 type CpuSet = struct {
