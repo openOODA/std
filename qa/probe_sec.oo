@@ -15,6 +15,7 @@ pub fn main() -> Result[Int, String] {
     let empty: String = sha3_256("");
     let kat: String = "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a";
     if empty != kat {
+        println("sec: sha3_256 empty KAT mismatch got " + empty);
         return Err("sec: sha3_256 empty KAT mismatch got " + empty);
     }
     let abc: String = sha3_256("abc");

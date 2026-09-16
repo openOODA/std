@@ -34,6 +34,7 @@ jobs:
           OODA_COMPILER: ${{ github.workspace }}/oodac/bin/oodac
           OODA_FS_READDIR: ${{ github.workspace }}
           OODA_FS_WRITEDIR: ${{ github.workspace }}
+          OO_LIST_AMBIENT_QUOTA: "1073741824"
         run: |
           set -euo pipefail
           # Product oodac build is LLVM IR + clang + oodar (not --backend c).
