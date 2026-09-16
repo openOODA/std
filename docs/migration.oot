@@ -93,16 +93,17 @@ loader will reject them from outside the repo.
 
 ## 5. The api_surface=8 contract
 
-The VERSION file in this repo declares `api_surface=8`. This is a
-structural check, not a behavioral one. At load time the loader
-reads std/anchor.oo and counts the public sub-directories that it
-re-exports. If the count is not 8, the loader fails closed. This
-guarantees that no future patch can quietly add a 9th domain or
-remove one of the 8. The contract is binary: 8 or fail.
+anchor.oo in this repo declares `api_surface=8` via
+std_mod_subdir_count(). This is a structural check, not a
+behavioral one. At load time the loader reads std/anchor.oo and
+counts the public sub-directories that it re-exports. If the count
+is not 8, the loader fails closed. This guarantees that no future
+patch can quietly add a 9th domain or remove one of the 8. The
+contract is binary: 8 or fail.
 
 Consumers of std/ do not need to re-implement this check. The
 loader does it for them. But consumers should still pin the std
-version in their own lockfile. See INSTALL.oot for the version
+version in their own lockfile. See install.oot for the version
 compatibility contract.
 
 ## 6. What to do if a module is missing
@@ -113,3 +114,11 @@ listed there as having moved, follow the move. If it is not in the
 table, the module was removed. The removal is intentional. Check
 the audit/ directory and the qa/ directory for the replacement or
 for the formal proof that the removed surface was redundant.
+
+## 7. LLVM product path
+
+`oodac build` is LLVM IR + clang + oodar. That is the product
+compile of every std qa probe and imported module. C99 is the
+oodar host runtime, not an oodac emit backend. Old `emit-c` /
+`--backend c` invocations are residual (exit 2). Rebuild with
+`oodac build`; do not restore C lowering.

@@ -1,6 +1,6 @@
 # std/INSTALL — Installing the Standard Library
 
-File: std/docs/INSTALL.oot
+File: std/docs/install.oot
 
 This file describes how to install the openOODA standard library
 via opm, and what version compatibility contract you must respect.
@@ -35,15 +35,18 @@ the cap set that was negotiated at install time.
 
 ## 2. The version compatibility contract
 
-The VERSION file at the root of std/ declares the contract. It is
-not a hint. It is enforced by the loader.
+There is no VERSION file (RFC 0006). The git tag is the std
+release. Product compile is `oodac build` (LLVM IR + clang +
+oodar). C99 is the oodar host runtime, not an oodac emit
+backend. `emit-c` / `--backend c` residual (exit 2).
 
-  std=1.0.0         The std library release. Semver.
+The documented contract:
+
+  std=1.0.x         The std library release. Semver. Git tag.
   ooda=2.10.0       The minimum ooda toolchain version that works.
   ooda_max=2.99.0   The maximum ooda toolchain version that works.
   oodac=2.10.0      The minimum oodac compiler version that works.
-  api_surface=8     The structural check: std/anchor.oo exposes
-                    exactly 8 public sub-directories.
+  api_surface=8     std_mod_subdir_count() in anchor.oo is 8.
 
 The rule is simple. std/ refuses to load if the installed ooda
 toolchain is below 2.10.0, above 2.99.0, or if oodac is below
@@ -65,8 +68,8 @@ Before you ship a program that depends on std/, verify four things:
      compatible 1.x.y patch. Different majors are not compatible.
   2. ooda --version. The version must be in [2.10.0, 2.99.0]. If
      it is not, upgrade or downgrade your toolchain to land in
-     range. Do not edit the VERSION file in std/ to bypass the
-     check; the loader reads the shipped VERSION, not a local copy.
+     range. Pin via opm.lock and the git tag; do not invent a
+     VERSION file (RFC 0006).
   3. oodac --version. Must be at least 2.10.0. Newer patch
      versions are fine.
   4. The api_surface check. Run any program that imports std/.

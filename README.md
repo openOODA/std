@@ -19,6 +19,9 @@
 ## This repo: std
 
 Standard library across 8 domains (math, science, AI, encoding, …).
+Proof is `oodac build` (LLVM IR + clang + oodar) + run. C99 is the
+oodar host runtime, not an oodac emit backend. `emit-c` /
+`--backend c` are residual (exit 2).
 
 ## Install
 

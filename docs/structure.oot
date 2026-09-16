@@ -9,15 +9,13 @@ v1.0.0. Read it before you import anything.
 
 The repository has one tree. There is no monorepo sub-module. Every
 file lives under the root, with a stable path freeze declared in
-README.oot. After the 1.0.0 cut, no new top-level directories will
+readme.oot. After the 1.0.0 cut, no new top-level directories will
 appear.
 
 The root contains:
 
   - anchor.oo        Front door for agents. Re-exports the 8 domain hubs.
-  - README.oot       Top-level map. States the 6 laws and the domain tree.
-  - VERSION          Version and compatibility contract (semver, plus
-                     api_surface=8 as a structural check).
+  - readme.oot       Top-level map. States the 6 laws and the domain tree.
   - LICENSE          Dual MIT / Apache-2.0 license.
   - docs/            This directory. 4 .oot files plus the index.
   - examples/        Small programs that exercise one or two modules.
@@ -50,8 +48,8 @@ in one place. No "misc", no "utils", no "common".
   - hw/      Hardware theory: cache, branch, memory, GPU, silicon.
   - meta/    Test and diagnostic infrastructure.
 
-This is the Requirement 6 surface. The VERSION file declares
-`api_surface=8`. The loader asserts that the std anchor.oo exposes
+This is the Requirement 6 surface. std_mod_subdir_count() in
+anchor.oo is 8. The loader asserts that the std anchor.oo exposes
 exactly 8 public subdirectories. If a future change adds a 9th, the
 loader fails closed. If a future change removes one, the loader
 fails closed. The contract is structural, not behavioral.
@@ -85,7 +83,7 @@ by the loader, not by review. Two reasons:
      right answer is to split, not to expand the cap. The cap is a
      forcing function for clean decomposition.
 
-The cap applies to .oo source files, .oot doc files, README.oot, and
+The cap applies to .oo source files, .oot doc files, readme.oot, and
 anchor.oo alike. No file in the tree may exceed it.
 
 ## 5. What does not live in std/

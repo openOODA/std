@@ -5,20 +5,20 @@
 # driver SIGKILLs it mid-sleep, and a FRESH process must replay all 3.
 # A truncated copy must replay the verified prefix with the truncated flag.
 set -u
-STD=/home/jeryd/Projects/openOODA/std
-# Pinned workspace toolchain: never inherit $OODA_COMPILER (shell init may
-# point at a stale installed binary without the new lowering).
-OODAC=/home/jeryd/Projects/openOODA/oodac/bin/oodac_bin.core
+STD="$(cd "$(dirname "$0")/.." && pwd)"
+# Pinned workspace product oodac (LLVM IR + clang + oodar). Never inherit
+# $OODA_COMPILER (shell init may point at a stale installed binary).
+OODAC="$(cd "$STD/../oodac/bin" && pwd)/oodac"
 TMPD=$(mktemp -d /tmp/ooda_wal_XXXXXX)
 trap 'rm -rf "$TMPD"' EXIT INT TERM
 BIN="$TMPD/probe_wal_disk"
 LOG="$TMPD/wal_kill.log"
 export OODA_NO_JAIL=1
 export OODA_COMPILER=$OODAC
-cd $STD || exit 1
+cd "$STD" || exit 1
 rm -f .ooda-cache/ooda-tmp/wal_selftest.log
 "$OODAC" check qa/probe_wal_disk.oo || exit 1
-"$OODAC" build --backend c qa/probe_wal_disk.oo -o $BIN || exit 1
+"$OODAC" build qa/probe_wal_disk.oo -o $BIN || exit 1
 "$BIN" write "$LOG" 30000 &
 WPID=$!
 sleep 1

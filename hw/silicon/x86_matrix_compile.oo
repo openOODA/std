@@ -1,12 +1,12 @@
 // # Slice Source Native ELF Compile Driver
 //
-// Logline: Validates slice source then runs the shipped oodac C backend build so the image is lowered from that source.
+// Logline: Validates slice source then runs product oodac build (LLVM IR + clang + oodar) so the image is lowered from that source.
 //
-// Setup: ProcessCap starts ./oodac_bin --backend c build. Empty source fails closed without invoking the compiler.
+// Setup: ProcessCap starts ./oodac_bin build. Empty source fails closed without invoking the compiler.
 //
 // Beats:
 //   1. Reject empty source and source without fn main or a slice PASS tag.
-//   2. Build the on-disk slice path to a dest ELF with oodac --backend c build.
+//   2. Build the on-disk slice path to a dest ELF with oodac build.
 //   3. Read the first 64 file bytes via od and require ELF magic.
 //   4. Return those header bytes; the dest file is the executable image.
 
@@ -71,7 +71,7 @@ pub fn matrix_compile_path(p: &ProcessCap, fs: &FsReadCap, src: String, path: St
             if !src.contains(tag) {
                 return Err("ERR\tmatrix_compile_path\tno_pass_tag");
             }
-            let cmd: String = "./oodac_bin --backend c build " + path + " " + dest;
+            let cmd: String = "./oodac_bin build " + path + " -o " + dest;
             let hdrp: String = dest + ".hdr.txt";
             let mut t: Int = 0;
             while t < 3 {

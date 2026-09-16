@@ -24,7 +24,7 @@ pub fn wav_parse_header(bytes: List[Int]) -> Result[WavHeader, String] {
     }
     // Check 'WAVE' (87, 65, 86, 69)
     if list_get(bytes, 8) != 87 || list_get(bytes, 9) != 65 || list_get(bytes, 10) != 86 || list_get(bytes, 11) != 69 {
-        return Err("ERR\twav_parse: missing 'WAVE' format format descriptor");
+        return Err("ERR\twav_parse: missing 'WAVE' format descriptor");
     }
     let num_channels: Int = list_get(bytes, 22) | (list_get(bytes, 23) << 8);
     let sample_rate: Int = list_get(bytes, 24) | (list_get(bytes, 25) << 8) | (list_get(bytes, 26) << 16) | (list_get(bytes, 27) << 24);

@@ -5,8 +5,8 @@
 // (Display-dependent sdl_*/graphics probes stay manual — see anchor.oo.)
 //
 // Setup: Double-run identity law (the immune system: AI writes the code,
-// this machinery makes it trustworthy). Builds and executes the domain
-// probes plus api_surface. Compiler resolves with zero user config.
+// this machinery makes it trustworthy). Product `oodac build` (LLVM IR
+// + clang + oodar). Compiler resolves with zero user config.
 //
 // Beats:
 //   1. Resolve primary compiler binary (OODA_COMPILER, OODA_TOOLCHAIN, HOME).
@@ -20,7 +20,7 @@ import "std/fs/file/path.oo";
 
 fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[String, String] {
     let tmp_bin: String = path + ".tmp.bin";
-    let b: Result[String, String] = sys_exec(p, oodac, "build", "--backend", "c", path, "-o", tmp_bin);
+    let b: Result[String, String] = sys_exec(p, oodac, "build", path, "-o", tmp_bin);
     if b.is_err() {
         let e: String = match b { Ok(_) => "", Err(m) => m };
         return Err("compile fail " + path + ": " + e);

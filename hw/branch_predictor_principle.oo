@@ -48,7 +48,7 @@ pub fn bp_ght_update(slot: Int, actual_taken: Int) -> Result[Int, String] {
     return bp_counter_state(slot, actual_taken);
 }
 
-// DomainCert for the golden golden case: counter=2, taken=1 -> 3 (strongly taken).
+// DomainCert for the golden case: counter=2, taken=1 -> 3 (strongly taken).
 pub fn bp_golden_cert() -> DomainCert {
     let s: Int = bp_got(bp_counter_state(2, 1));
     let mut holds: Int = 0;

@@ -24,9 +24,10 @@ jobs:
         with:
           repository: openOODA/oodar
           path: oodar
-      - name: require compiler
+      - name: require compiler and clang
         run: |
           test -x oodac/bin/oodac || chmod +x oodac/bin/oodac
+          command -v clang >/dev/null || { echo "clang required for oodac build (LLVM IR + oodar)"; exit 1; }
       - name: double-run identical-twice suite
         working-directory: ${{ github.workspace }}/std
         env:
@@ -35,7 +36,8 @@ jobs:
           OODA_FS_WRITEDIR: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          "${OODA_COMPILER}" build --backend c qa/suite.oo -o /tmp/std_suite
+          # Product oodac build is LLVM IR + clang + oodar (not --backend c).
+          "${OODA_COMPILER}" build qa/suite.oo -o /tmp/std_suite
           /tmp/std_suite
   auto-release:
     uses: openOODA/openOODA/.github/workflows/auto-release.yml@v2.10.23

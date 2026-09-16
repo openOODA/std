@@ -9,7 +9,7 @@
 //   2. Classify input into meta-commands, declarations, variable bindings, and expressions.
 //   3. Synthesize ephemeral probe harnesses under .ooda-cache/repl/ with variable silencers.
 //   4. Inquire static types without runtime execution via compiler sentinel mismatch.
-//   5. Compile native execution probes with oodac and execute via sys_exec.
+//   5. Compile probes with product `oodac build` (LLVM IR + clang + oodar).
 
 import "std/fs/os/fs.oo";
 
@@ -238,7 +238,7 @@ pub fn repl_eval_turn(sess: &mut ReplSession, fs_r: &FsReadCap, fs_w: &FsWriteCa
     let expr_ty: String = repl_res_ok(ty_res);
     let p_src: String = repl_temp_path(sess, "eval", "oo"); let p_bin: String = repl_temp_path(sess, "eval", "bin");
     if repl_write_probe(sess, fs_w, p_src, true, line, expr_ty, "", "").is_err() { return repl_out_err("Probe write error"); }
-    let b_res: Result[String, String] = sys_exec(proc, sess.compiler_bin, "build", "--backend", "c", p_src, "-o", p_bin);
+    let b_res: Result[String, String] = sys_exec(proc, sess.compiler_bin, "build", p_src, "-o", p_bin);
     let _del_src: Result[Void, String] = fs_remove_file(fs_w, p_src);
     if b_res.is_err() { let _db: Result[Void, String] = fs_remove_file(fs_w, p_bin); return repl_out_err(str_trim(repl_res_err(b_res))); }
     let r_res: Result[String, String] = sys_exec(proc, p_bin);
