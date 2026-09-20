@@ -28,7 +28,8 @@
 //   21. probe_sandbox_adv1.oo — adversarial sandbox configs: bad paths, huge fds, fail-closed refusals
 //   22. probe_sandbox_stress.oo — real Landlock confinement: allowed rw vs kernel-denied read/write
 //   23. probe_swarm.oo — verify actor cells, bounded mailboxes, fuel accounting, and OTP supervision in memory
-//   24. suite.oo runs the wired probes twice under double-run discipline (see suite.oo).
+//   24. probe_cap_env.oo — verify 8 capability dimensions for &EnvCap under Negative Trust
+//   25. suite.oo runs the wired probes twice under double-run discipline (see suite.oo).
 //
 // probe_sdl_*/graphics probes need a display.
 
@@ -56,3 +57,4 @@ import "probe_sandbox_m1.oo";
 import "probe_sandbox_adv1.oo";
 import "probe_sandbox_stress.oo";
 import "probe_swarm.oo";
+import "probe_cap_env.oo";
