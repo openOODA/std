@@ -31,15 +31,6 @@ pub fn list_last(xs: List[Int]) -> Result[Int, String] {
 
 pub fn list_set(xs: List[Int], idx: Int, val: Int) -> List[Int] {
     let n: Int = list_len(xs);
-    let mut out: List[Int] = list_new();
-    let mut i: Int = 0;
-    while i < n {
-        if i == idx {
-            out = list_push(out, val);
-        } else {
-            out = list_push(out, list_get(xs, i));
-        }
-        i = i + 1;
-    }
-    return out;
+    if idx < 0 || idx >= n { return xs; }
+    return list_set(xs, idx, val);
 }

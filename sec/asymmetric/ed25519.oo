@@ -81,7 +81,6 @@ pub fn ed25519_verify_hex(pubkey_hex: String, msg_hex: String, sig_hex: String) 
     let r_hex: String = str_slice(sig_hex, 0, 64);
     let s_hex: String = str_slice(sig_hex, 64, 128);
     let r_bytes: List[Int] = hex_to_bytes(r_hex);
-    let s_bytes: List[Int] = hex_to_bytes(s_hex);
     let pk_bytes: List[Int] = hex_to_bytes(pubkey_hex);
     let ar: Result[List[Int], String] = ed25519_curve_decompress(pk_bytes);
     if ar.is_err() { return false; }
@@ -186,3 +185,4 @@ fn unwrap_string(r: Result[String, String]) -> String {
     }
     return "";
 }
+
