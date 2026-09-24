@@ -1,0 +1,61 @@
+# std/QA/COVERAGE — Per-Domain Probe Coverage
+
+File: std/qa/coverage.oot
+Version: v1.0.49
+
+Method: for each of the 8 domains, public files = total .oo files
+minus private-pattern files (names containing _law, _theory,
+_principle, _invariant, _kat, _stub, literature_kat — the siblings
+domain anchors mark DO NOT IMPORT). Covered files = distinct files
+directly imported by qa/probe_*.oo (69 total, `grep ^import`).
+Coverage = covered / public. Reproduce with the scan in this file's
+history (orphan/import-graph pass over ^import lines).
+
+## Per-domain numbers (v1.0.49, after 9-file dead-code purge)
+
+  domain    total  private  public  probed  coverage  probes
+  core        765      139     626       1      0.2%  probe_core
+  fs          120       52      68       5      7.4%  probe_fs + cap/env/process
+  net         428       48     380       4      1.1%  probe_net + dbus/wayland wire
+  sec         847       86     761       4      0.5%  probe_sec + sandbox x3
+  science    1413      120    1293       1      0.1%  probe_science
+  app        1808      128    1680      52      3.1%  probe_app + swarm + data/sql/wal + media x20
+  hw          336       15     321       1      0.3%  probe_hw
+  meta         57       24      33       1      3.0%  probe_meta
+  TOTAL      5774      612    5162      69      1.3%
+
+Display-gated media/sdl probes count above but need a display to
+run under suite.oo double-run discipline.
+
+## Named gaps (every probed-out sub-hub is a gap)
+
+core: GAP cli, collection (+advanced), encoding (+binary_formats,
+  formats, wire), format, io, markup, math (+all 25 math/* sub-hubs),
+  principles, proofs (+formal_proofs, proof_verifiers), text.
+  PROBED ONLY primitives/semver_string.oo.
+fs: GAP archive, compression. THIN file, os, process, time (1 file each).
+net: GAP actor, async, mesh, protocol (except dbus), sync,
+  telemetry, transport. PROBED ONLY url, tcp, http_cap, protocol/dbus.
+sec: GAP ai, asymmetric, capability, control, cps, ct, defense,
+  enclave, exploit, laws, mac, net, rasp, simd, string_encrypt,
+  symmetric, sys, zk. PROBED ONLY hash/sha3, sandbox trio.
+science: GAP bio (+6 sub-hubs), chem (+3), comm, econ (+14),
+  phys except classical/ideal_gas. PROBED ONLY 1 phys file.
+app: GAP ai (+algo, deep, graph_gnn, meta, ml, multimodal,
+  nerf_3dgs), data except db/database fragments, robot (+12
+  sub-hubs), ui except media/wayland fragments. PROBED agent,
+  data/db+database, ui/media+wayland only.
+hw: GAP bare_metal, drivers_hal, gpu, hardware, mem, runtime,
+  silicon (150+ case files), soak, unikernel. PROBED ONLY
+  amdahls_law_hw.oo.
+meta: GAP test, diag except metrics_counter. PROBED ONLY 1 file.
+
+## Anchor-wiring gaps (public surface unreachable from domain anchor)
+
+  - core/math/anchor.oo wires 11 files; math/exact, math/extended,
+    math/scicomp and 20+ other math/* sub-hubs are not wired.
+  - net/anchor.oo wires no subdir anchor except async/; actor,
+    mesh, protocol, sync, telemetry, transport float unwired.
+  - core/format ships 3 wired legacy files (protobuf_*_legacy,
+    toml_parser_legacy via markup anchor); json_stream_legacy
+    purged v1.0.49 as unreferenced duplicate.

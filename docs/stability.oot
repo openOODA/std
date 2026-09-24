@@ -1,0 +1,60 @@
+# std/STABILITY — Per-Domain API Stability Promises
+
+File: std/docs/stability.oot
+Version: v1.0.49 (root VERSION file is the canonical stamp;
+anchor.oo std_mod_version() mirrors it as std/1.0.49).
+
+Rule 0 (all domains): a `v1.0.N -> v1.0.N+1` bump never renames or
+removes an anchor-wired `pub fn`/`pub type` without a one-version
+deprecation note in this file. Private siblings (_law, _theory,
+_principle, _invariant, _kat, _stub, _core/_codec/_io internals)
+carry NO stability promise and must not be imported directly.
+
+## 1. core/ — frozen
+`core_mod_version`, `core_mod_subdir_*`, semver_string fns,
+encoding/json_stream fns, markup JSON/YAML/TOML fns: stable.
+New math/collection variants ship as new files; old files stay.
+
+## 2. fs/ — frozen, caps frozen
+Path, chrono, process/env, archive/compression byte APIs: stable.
+Cap-gated fns keep their exact cap parameter types (&FsReadCap,
+&FsWriteCap, &ProcessCap, &EnvCap, &TimeCap, &SysCap).
+
+## 3. net/ — frozen surface, growing subdirs
+`net_mod_*` wrappers (modules, http, tcp, tls, udp, url, mime,
+async): stable. Unwired subdirs (actor/mesh/sync/telemetry/
+transport/protocol) may gain anchors; existing file paths stay.
+
+## 4. sec/ — frozen, additive only
+`sec_mod_*` rights/scope/tamper/watermark/fuel/msg/policy/
+safety/attest/sandbox fns: stable. New FIPS modules (fips203/204/
+205) are the canonical PQC/digest surface; older adv/dup files
+are removed as dead code (see v1.0.49 purge), never renamed.
+
+## 5. science/ — frozen
+Bio/chem/comm/econ/phys public fns: stable and pure (no caps).
+Constants track CODATA 2022; a CODATA revision ships as a new
+dated module, never an in-place value change.
+
+## 6. app/ — agent/data frozen, ai/robot/ui additive
+pair_programmer, swarm, db/wal/sql_executor, media codec fns:
+stable. app/robot/motors_ops.oo is the canonical motor surface
+(split motors_ops_* files purged v1.0.49). New models/robots/
+codecs ship as new files.
+
+## 7. hw/ — theory, no API
+hw/ exposes no public functions (anchor-only door). Law/theory
+statements are versioned text; corrections bump the std patch
+version and note the file here.
+
+## 8. meta/ — frozen
+metrics_counter, backtrace, trace_span, test harness fns: stable.
+New diag backends ship as new files; existing names stay.
+
+## v1.0.49 purge record (removed, zero inbound imports each)
+core/format/json_stream_legacy.oo; app/robot/motors_ops_{encoder,
+pid,pwm,thermal}.oo; hw/silicon/x86_float_encoder.oo;
+net/sync/semaphore_counting.oo; core/math/rational_big.oo;
+sec/hash/sha3_io.oo. Each file's full pub surface is duplicated
+in an anchor-wired successor; deletion cannot break any build
+because no .oo file imported them.
