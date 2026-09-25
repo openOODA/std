@@ -8,6 +8,8 @@
 //   1. Verify protocol standard port mapping.
 //   2. Construct and inspect structured URL records.
 //   3. Validate HTTPS and HTTP scheme predicates.
+//   4. Parse full URLs: explicit port, query, fragment, defaults.
+//   5. Reject empty and schemeless input; unknown schemes port 0.
 
 import "net/url.oo";
 
@@ -21,12 +23,55 @@ pub fn main() -> Result[Int, String] {
     if url_default_port("ssh") != 22 {
         return Err("net: ssh default port must be 22");
     }
+    if url_default_port("ws") != 80 || url_default_port("wss") != 443 || url_default_port("ftp") != 21 {
+        return Err("net: ws/wss/ftp ports mismatch");
+    }
+    if url_default_port("gopher") != 0 {
+        return Err("net: unknown scheme must port 0");
+    }
     let u: ParsedUrl = url_new("https", "openooda.org", 443, "/index.html");
     if !url_is_https(u) {
         return Err("net: url must be identified as https");
     }
     if url_is_http(u) {
         return Err("net: https url must not be http");
+    }
+    let d: ParsedUrl = url_new("https", "openooda.org", 0, "/");
+    if d.port != 443 {
+        return Err("net: port 0 must fill default 443");
+    }
+    let p: ParsedUrl = url_parse("https://openooda.org:8443/a/b?x=1&y=2#frag");
+    if !p.is_valid {
+        return Err("net: full url must parse valid");
+    }
+    if p.scheme != "https" || p.host != "openooda.org" || p.port != 8443 {
+        return Err("net: parsed origin mismatch");
+    }
+    if p.path != "/a/b" || p.query != "x=1&y=2" || p.fragment != "frag" {
+        return Err("net: parsed path/query/fragment mismatch");
+    }
+    if url_get_param(p.query, "x") != "1" || url_get_param(p.query, "y") != "2" {
+        return Err("net: query params mismatch");
+    }
+    if url_get_param(p.query, "nope") != "" {
+        return Err("net: missing param must be empty");
+    }
+    let np: ParsedUrl = url_parse("http://h/path");
+    if !np.is_valid || np.port != 80 || np.path != "/path" {
+        return Err("net: default port/path parse mismatch");
+    }
+    let bare: ParsedUrl = url_parse("https://h");
+    if !bare.is_valid || bare.path != "/" {
+        return Err("net: missing path must default /");
+    }
+    if url_parse("").is_valid {
+        return Err("net: empty must be invalid");
+    }
+    if url_parse("not-a-url").is_valid {
+        return Err("net: schemeless must be invalid");
+    }
+    if url_parse("https:/oops").is_valid {
+        return Err("net: single slash must be invalid");
     }
     println("probe: std/net: ok");
     return Ok(0);

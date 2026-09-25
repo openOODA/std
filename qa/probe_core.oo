@@ -8,6 +8,8 @@
 //   1. Parse semantic version components (major, minor, patch).
 //   2. Validate semantic version structure.
 //   3. Reject invalid versions and assert core compliance.
+//   4. Reject leading zeros, short forms, prerelease/build, empties, v-prefix.
+//   5. Accept zeros and large components; parse round-trips.
 
 import "core/primitives/semver_string.oo";
 
@@ -27,6 +29,47 @@ pub fn main() -> Result[Int, String] {
     }
     if semver_is_valid("invalid-version") {
         return Err("core: invalid version should fail");
+    }
+    if semver_is_valid("01.2.3") {
+        return Err("core: leading-zero major should fail");
+    }
+    if semver_is_valid("1.02.3") {
+        return Err("core: leading-zero minor should fail");
+    }
+    if semver_is_valid("1.2") {
+        return Err("core: short version should fail");
+    }
+    if semver_is_valid("1.2.3-alpha") {
+        return Err("core: prerelease should fail closed");
+    }
+    if semver_is_valid("1.2.3+build") {
+        return Err("core: build metadata should fail closed");
+    }
+    if semver_is_valid("") {
+        return Err("core: empty should fail");
+    }
+    if semver_is_valid("1.2.3.4") {
+        return Err("core: four parts should fail");
+    }
+    if semver_is_valid("v1.2.3") {
+        return Err("core: v-prefix should fail");
+    }
+    if semver_is_valid("1.2.3 ") {
+        return Err("core: trailing space should fail");
+    }
+    if !semver_is_valid("0.0.0") {
+        return Err("core: zeros should be valid");
+    }
+    if semver_major("10.20.30") != "10" || semver_minor("10.20.30") != "20" || semver_patch("10.20.30") != "30" {
+        return Err("core: multi-digit components mismatch");
+    }
+    let pr: Result[String, String] = semver_parse("1.2.3");
+    if pr.is_err() {
+        return Err("core: parse valid should be Ok");
+    }
+    let pb: Result[String, String] = semver_parse("nope");
+    if pb.is_ok() {
+        return Err("core: parse invalid should be Err");
     }
     println("probe: std/core: ok");
     return Ok(0);
