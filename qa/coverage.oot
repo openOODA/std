@@ -59,3 +59,13 @@ meta: GAP test, diag except metrics_counter. PROBED ONLY 1 file.
   - core/format ships 3 wired legacy files (protobuf_*_legacy,
     toml_parser_legacy via markup anchor); json_stream_legacy
     purged v1.0.49 as unreferenced duplicate.
+
+## Emitter-blocked probes (2026-09-25, oodac 0.11.15)
+
+  40/55 probes build and pass. 15 fail at emit-llvm while `check`
+  passes (check/emit divergence in oodac, not std defects):
+  science, cap_net, cap_system, data, dbus_wire, wayland_wire,
+  sandbox_adv1, sandbox_m1, sandbox_stress, sdl_blit, sdl_window,
+  sdl_gl, anim_2d, wal_disk, swarm. Full gap inventory with minimal
+  repros: oodac/docs/llvm_emit_gaps.oot. Measure serially; parallel
+  probe builds collide on shared cache/tmp.
