@@ -6,7 +6,7 @@
 //
 // Beats:
 //   1. Probe host kernel sandbox backend and check availability.
-//   2. Apply Landlock filesystem allowlist restrictions under &SysCap.
+//   2. Apply Landlock filesystem allowlist restrictions under &SysCap (directory-gated).
 //   3. Apply memory, CPU timeout, and file descriptor limits via rlimits.
 //   4. Report active sandbox containment status.
 
@@ -30,6 +30,18 @@ pub fn sandbox_is_available() -> Bool {
     return avail > 0;
 }
 
+fn sandbox_paths_are_dirs(sys: &SysCap, paths: List[String]) -> Bool {
+    let n: Int = list_len(paths);
+    let mut i: Int = 0;
+    while i < n {
+        if !oo_sys_path_is_dir(sys, list_get(paths, i)) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
 pub fn sandbox_apply_matrix(sys: &SysCap, cfg: SandboxConfig) -> Result[Int, String] {
     if !sandbox_is_available() {
         if cfg.fail_closed {
@@ -46,6 +58,12 @@ pub fn sandbox_apply_matrix(sys: &SysCap, cfg: SandboxConfig) -> Result[Int, Str
     if val_w.is_err() {
         let msg: String = match val_w { Ok(_) => "", Err(e) => e };
         return Err("ERR\tsandbox\t" + msg);
+    }
+    if !sandbox_paths_are_dirs(sys, cfg.read_allowlist) {
+        return Err("ERR\tsandbox\tread path is not a directory");
+    }
+    if !sandbox_paths_are_dirs(sys, cfg.write_allowlist) {
+        return Err("ERR\tsandbox\twrite path is not a directory");
     }
 
     let r_dirs: String = sandbox_config_paths_to_colon(cfg.read_allowlist);
