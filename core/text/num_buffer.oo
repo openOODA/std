@@ -72,6 +72,11 @@ pub fn int_to_hex(n: Int) -> String {
     return nb.value;
 }
 
+pub fn int_to_str(n: Int) -> String {
+    let nb: NumBuffer = int_format_stack(n, 10);
+    return nb.value;
+}
+
 pub fn int_to_bin(n: Int) -> String {
     let nb: NumBuffer = int_format_stack(n, 2);
     return nb.value;
