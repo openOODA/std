@@ -110,9 +110,13 @@ pub fn ed25519_limbs32_high_is_zero(a: List[Int]) -> Bool {
 }
 
 pub fn ed25519_limbs32_mod_l(a: List[Int]) -> List[Int] {
+    // Fold high*2^256 -> high*c1 each pass; c1 is 252 bits so high shrinks
+    // ~16x per pass and full 512-bit inputs need ~64 passes to reach zero.
+    // (Bound was 4, which silently returned garbage for high != 0; fixed
+    // 2026-09-27 via ed25519 oracle. Early exit fires as soon as high is 0.)
     let mut work: List[Int] = a;
     let mut iter: Int = 0;
-    while iter < 4 {
+    while iter < 256 {
         if ed25519_limbs32_high_is_zero(work) {
             let low: List[Int] = ed25519_limbs32_split(work);
             return ed25519_limbs16_mod_l(low);

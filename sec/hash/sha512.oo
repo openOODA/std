@@ -196,7 +196,9 @@ pub fn s5_addst(x: S5W, y: S5W) -> S5W {
 }
 
 pub fn sha512_hex(data: String) -> String {
-    let n: Int = data.len();
+    // bytes_len, NOT .len(): .len() counts Unicode scalars, truncating any
+    // input with bytes >= 0x80 (found via ed25519 oracle, 2026-09-27).
+    let n: Int = bytes_len(data);
     let rem: Int = n % 128;
     let mut blocks: Int = n / 128;
     if rem <= 111 {

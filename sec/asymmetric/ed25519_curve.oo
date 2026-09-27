@@ -12,6 +12,7 @@
 
 import "std/core/primitives/list.oo";
 import "std/sec/ct/ct_primitives.oo";
+import "std/sec/asymmetric/ed25519_field.oo";
 
 fn ed25519_curve_z(n: Int) -> List[Int] {
     let mut o: List[Int] = list_new();
@@ -134,11 +135,9 @@ fn ed25519_curve_put(p: List[Int], part: Int, f: List[Int]) -> List[Int] {
 fn ed25519_curve_pt() -> List[Int] { return ed25519_curve_z(64); }
 fn ed25519_curve_d() -> List[Int] {
     let mut o: List[Int] = ed25519_curve_n();
-    o = list_set(o, 0, 30883); o = list_set(o, 1, 4953); o = list_set(o, 2, 19914); o = list_set(o, 3, 30187);
-    o = list_set(o, 4, 55467); o = list_set(o, 5, 16705); o = list_set(o, 6, 2637); o = list_set(o, 7, 112);
-    o = list_set(o, 8, 59544); o = list_set(o, 9, 30585); o = list_set(o, 10, 16505); o = list_set(o, 11, 36039);
-    o = list_set(o, 12, 65139); o = list_set(o, 13, 11119); o = list_set(o, 14, 27886);
-    return list_set(o, 15, 20995);
+    o = list_set(o, 0, 30883); o = list_set(o, 1, 4953); o = list_set(o, 2, 19914); o = list_set(o, 3, 30187); o = list_set(o, 4, 55467); o = list_set(o, 5, 16705); o = list_set(o, 6, 2637); o = list_set(o, 7, 112);
+    o = list_set(o, 8, 59544); o = list_set(o, 9, 30585); o = list_set(o, 10, 16505); o = list_set(o, 11, 36039); o = list_set(o, 12, 65139); o = list_set(o, 13, 11119); o = list_set(o, 14, 27886); o = list_set(o, 15, 20995);
+    return o;
 }
 pub fn ed25519_curve_identity() -> List[Int] {
     let mut p: List[Int] = ed25519_curve_pt();
@@ -183,22 +182,17 @@ pub fn ed25519_curve_add_if(cond: Int, p: List[Int], q: List[Int]) -> List[Int] 
     }
     return out;
 }
-pub fn ed25519_curve_scalarmult(p: List[Int], s: Int) -> List[Int] {
-    let mut q: List[Int] = ed25519_curve_identity();
-    let mut i: Int = 31;
-    while i >= 0 {
-        q = ed25519_curve_double(q);
-        if ((s >> i) & 1) == 1 { q = ed25519_curve_add(q, p); }
-        i = i - 1;
-    }
-    return q;
-}
 pub fn ed25519_curve_base() -> List[Int] {
     let y: List[Int] = ed25519_curve_mulf(ed25519_curve_from(4), ed25519_curve_inv(ed25519_curve_from(5)));
     let y2: List[Int] = ed25519_curve_sq(y);
     let u: List[Int] = ed25519_curve_subf(y2, ed25519_curve_one());
     let v: List[Int] = ed25519_curve_addf(ed25519_curve_one(), ed25519_curve_mulf(ed25519_curve_d(), y2));
-    let x: List[Int] = ed25519_curve_sqrt(ed25519_curve_mulf(u, ed25519_curve_inv(v)));
+    let mut x: List[Int] = ed25519_curve_sqrt(ed25519_curve_mulf(u, ed25519_curve_inv(v)));
+    // The standard base has EVEN x (compress(B) ends 0x66); sqrt returns an
+    // arbitrary root, so force even parity (same fix as decompress).
+    if (list_get(ed25519_curve_packfe(x), 0) & 1) != 0 {
+        x = ed25519_curve_subf(ed25519_curve_n(), x);
+    }
     let mut p: List[Int] = ed25519_curve_pt();
     p = ed25519_curve_put(p, 0, x);
     p = ed25519_curve_put(p, 1, y);
@@ -211,12 +205,17 @@ fn ed25519_curve_packfe(f: List[Int]) -> List[Int] {
     t = list_set(t, 15, list_get(t, 15) & 32767);
     t = list_set(t, 0, list_get(t, 0) + m * 19);
     t = ed25519_curve_car(t);
+    // Full reduction: fold-only code emitted [p, 2^255) unreduced (p+1 as ...ffee). Two passes suffice.
+    t = ed25519_field_sub_p_if_ge(t);
+    t = ed25519_field_sub_p_if_ge(t);
     let mut out: List[Int] = list_new();
+    let mut carry: Int = 0;
     let mut i: Int = 0;
     while i < 16 {
-        let w: Int = list_get(t, i);
+        let w: Int = list_get(t, i) + carry;
         out = list_push(out, w & 255);
         out = list_push(out, (w >> 8) & 255);
+        carry = w >> 16;
         i = i + 1;
     }
     return out;

@@ -50,13 +50,16 @@ pub fn ed25519_curve_scalarmult_bytes(p: List[Int], scalar_bytes: List[Int]) -> 
 }
 
 pub fn ed25519_curve_neg(p: List[Int]) -> List[Int] {
+    // Negate (X,Y,Z,T) -> (-X,Y,Z,-T). X is limbs 0..15, T is limbs 48..63;
+    // per-limb negation is valid: downstream addf/subf/mulf/car all accept
+    // signed limbs (fixed 2026-09-27: was negating limbs 0 and 3 only).
     let mut out: List[Int] = list_new();
     let n: Int = list_len(p);
     let mut i: Int = 0;
     while i < n {
         let v: Int = list_get(p, i);
-        if i == 0 { out = list_push(out, 0 - v); }
-        else if i == 3 { out = list_push(out, 0 - v); }
+        if i < 16 { out = list_push(out, 0 - v); }
+        else if i >= 48 { out = list_push(out, 0 - v); }
         else { out = list_push(out, v); }
         i = i + 1;
     }
@@ -80,6 +83,9 @@ pub fn ed25519_limbs16_add(a: List[Int], b: List[Int]) -> List[Int] {
 }
 
 pub fn ed25519_limbs16_mul(a: List[Int], b: List[Int]) -> List[Int] {
+    // Schoolbook into wide accumulators, then one normalize pass.
+    // (Rewritten 2026-09-27: the old inline carry dropped overflow when
+    // acc[k+2] was 0xFFFF. Bounds: acc < 2^36, carry < 2^20, no Int64 overflow.)
     let mut acc: List[Int] = list_new();
     let mut i: Int = 0;
     while i < 32 {
@@ -91,27 +97,19 @@ pub fn ed25519_limbs16_mul(a: List[Int], b: List[Int]) -> List[Int] {
         let av: Int = list_get(a, ai);
         let mut bj: Int = 0;
         while bj < 16 {
-            let bv: Int = list_get(b, bj);
-            let prod: Int = av * bv;
             let k: Int = ai + bj;
-            let lo: Int = prod & 65535;
-            let hi: Int = prod >> 16;
-            let cur: Int = list_get(acc, k) + lo;
-            acc = list_set(acc, k, cur & 65535);
-            if k + 1 < 32 {
-                let cur2: Int = list_get(acc, k + 1) + hi + (cur >> 16);
-                acc = list_set(acc, k + 1, cur2 & 65535);
-                if k + 2 < 32 {
-                    let carry2: Int = cur2 >> 16;
-                    if carry2 != 0 {
-                        let cur3: Int = list_get(acc, k + 2) + carry2;
-                        acc = list_set(acc, k + 2, cur3 & 65535);
-                    }
-                }
-            }
+            acc = list_set(acc, k, list_get(acc, k) + av * list_get(b, bj));
             bj = bj + 1;
         }
         ai = ai + 1;
+    }
+    let mut carry: Int = 0;
+    let mut k: Int = 0;
+    while k < 32 {
+        let cur: Int = list_get(acc, k) + carry;
+        acc = list_set(acc, k, cur & 65535);
+        carry = cur >> 16;
+        k = k + 1;
     }
     return acc;
 }
@@ -148,21 +146,4 @@ pub fn ed25519_limbs16_to_bytes_le(a: List[Int]) -> List[Int] {
     return out;
 }
 
-pub fn ed25519_curve_order_limbs16() -> List[Int] {
-    let mut out: List[Int] = list_new();
-    out = list_push(out, 53571);
-    out = list_push(out, 23796);
-    out = list_push(out, 12706);
-    out = list_push(out, 4712);
-    out = list_push(out, 22701);
-    out = list_push(out, 31201);
-    out = list_push(out, 41694);
-    out = list_push(out, 61204);
-    let mut i: Int = 8;
-    while i < 15 {
-        out = list_push(out, 0);
-        i = i + 1;
-    }
-    out = list_push(out, 4096);
-    return out;
-}
+

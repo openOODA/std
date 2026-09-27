@@ -90,7 +90,9 @@ pub fn s2_addst(x: S2W, y: S2W) -> S2W {
 }
 
 pub fn sha256_hex(data: String) -> String {
-    let n: Int = data.len();
+    // bytes_len, NOT .len(): .len() counts Unicode scalars, truncating any
+    // input with bytes >= 0x80 (found via ed25519 oracle, 2026-09-27).
+    let n: Int = bytes_len(data);
     let rem: Int = n % 64;
     let mut blocks: Int = n / 64;
     if rem <= 55 {

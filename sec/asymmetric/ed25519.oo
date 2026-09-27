@@ -17,25 +17,37 @@ import "std/sec/asymmetric/ed25519_scalarmult_wide.oo";
 import "std/sec/asymmetric/ed25519_bigint.oo";
 import "std/core/primitives/result.oo";
 import "std/sec/ct/ct_primitives.oo";
+import "std/core/encoding/hex.oo";
+
+// Ed25519 hashes RAW BYTES (RFC 8032). The _hex APIs take hex text, so
+// every hash site must hex-decode first. Hashing the hex text itself is
+// a verified-wrong variant (rejected the oracle vector, 2026-09-27).
+fn sha512_of_hex(hexdata: String) -> Result[String, String] {
+    let raw: Result[String, String] = hex_decode(hexdata);
+    if raw.is_err() { return Err("ERR\ted25519\thex_decode_failed"); }
+    return Ok(sha512(match raw { Ok(s) => s, Err(_) => "" }));
+}
 
 pub fn ed25519_hash_seed(seed_hex: String) -> String {
-    return sha512(seed_hex);
+    let hr: Result[String, String] = sha512_of_hex(seed_hex);
+    return match hr { Ok(s) => s, Err(_) => "" };
 }
 
 pub fn ed25519_scalar_clamp_hex(seed_hash_hex: String) -> String {
-    let n: Int = chars_len(seed_hash_hex);
-    if n < 64 { return seed_hash_hex; }
-    let pre: String = str_slice(seed_hash_hex, 0, 64);
-    let last: String = str_slice(pre, 62, 64);
-    let last_int: Int = hex_nibble_val(char_at(last, 0)) * 16 + hex_nibble_val(char_at(last, 1));
-    let clamped_last: Int = (last_int & 248) | 64;
-    let hi: String = str_slice(pre, 0, 62);
-    let lo: String = hex_byte_to_str(clamped_last, false);
-    return hi + lo;
+    // RFC 8032 §5.1.5 on the FIRST 32 bytes (little-endian scalar):
+    // byte0 &= 248; byte31 &= 63; byte31 |= 64.
+    if chars_len(seed_hash_hex) < 64 { return seed_hash_hex; }
+    let b0: Int = hex_nibble_val(char_at(seed_hash_hex, 0)) * 16 + hex_nibble_val(char_at(seed_hash_hex, 1));
+    let b31: Int = hex_nibble_val(char_at(seed_hash_hex, 62)) * 16 + hex_nibble_val(char_at(seed_hash_hex, 63));
+    let c0: String = hex_byte_to_str(b0 & 248, false);
+    let c31: String = hex_byte_to_str((b31 & 63) | 64, false);
+    return c0 + str_slice(seed_hash_hex, 2, 62) + c31;
 }
 
 pub fn ed25519_pubkey_from_seed_hex(seed_hex: String) -> Result[String, String] {
-    let h: String = sha512(seed_hex);
+    let hr: Result[String, String] = sha512_of_hex(seed_hex);
+    if hr.is_err() { return Err("ERR\ted25519\tbad_seed_hex"); }
+    let h: String = match hr { Ok(s) => s, Err(_) => "" };
     let clamped_hex: String = ed25519_scalar_clamp_hex(h);
     let limbs: List[Int] = hex_to_limbs16(clamped_hex);
     let base: List[Int] = ed25519_curve_base();
@@ -48,11 +60,15 @@ pub fn ed25519_pubkey_from_seed_hex(seed_hex: String) -> Result[String, String] 
 }
 
 pub fn ed25519_sign_hex(seed_hex: String, msg_hex: String) -> Result[String, String] {
-    let h: String = sha512(seed_hex);
+    let hr: Result[String, String] = sha512_of_hex(seed_hex);
+    if hr.is_err() { return Err("ERR\ted25519\tbad_seed_hex"); }
+    let h: String = match hr { Ok(s) => s, Err(_) => "" };
     let clamped_hex: String = ed25519_scalar_clamp_hex(h);
     let prefix_hex: String = str_slice(h, 64, 128);
     let nonce_input: String = prefix_hex + msg_hex;
-    let r_hex: String = sha512(nonce_input);
+    let nr: Result[String, String] = sha512_of_hex(nonce_input);
+    if nr.is_err() { return Err("ERR\ted25519\tbad_nonce_hex"); }
+    let r_hex: String = match nr { Ok(s) => s, Err(_) => "" };
     let r_limbs: List[Int] = hex_to_limbs16(r_hex);
     let base: List[Int] = ed25519_curve_base();
     let r_point: List[Int] = ed25519_curve_scalarmult_wide(base, r_limbs);
@@ -64,12 +80,18 @@ pub fn ed25519_sign_hex(seed_hex: String, msg_hex: String) -> Result[String, Str
     let pk_hex: String = unwrap_string(pk_res);
     let r_hex_str: String = bytes_to_hex(r_bytes);
     let hram_input: String = r_hex_str + pk_hex + msg_hex;
-    let hram_hex: String = sha512(hram_input);
+    let kr: Result[String, String] = sha512_of_hex(hram_input);
+    if kr.is_err() { return Err("ERR\ted25519\tbad_hram_hex"); }
+    let hram_hex: String = match kr { Ok(s) => s, Err(_) => "" };
     let k_limbs: List[Int] = hex_to_limbs16(hram_hex);
     let a_limbs: List[Int] = hex_to_limbs16(clamped_hex);
-    let ka_full: List[Int] = ed25519_limbs16_mul(a_limbs, k_limbs);
+    // Reduce 512-bit k and r first: mul/add only keep 16x16->32 / 16+16 limbs,
+    // so feeding 32-limb values silently dropped their high halves (2026-09-27).
+    let k_mod: List[Int] = ed25519_limbs32_mod_l(k_limbs);
+    let r_mod: List[Int] = ed25519_limbs32_mod_l(r_limbs);
+    let ka_full: List[Int] = ed25519_limbs16_mul(a_limbs, k_mod);
     let ka_mod: List[Int] = ed25519_limbs32_mod_l(ka_full);
-    let s_mod: List[Int] = ed25519_limbs16_mod_l(ed25519_limbs16_add(r_limbs, ka_mod));
+    let s_mod: List[Int] = ed25519_limbs16_mod_l(ed25519_limbs16_add(r_mod, ka_mod));
     let s_bytes: List[Int] = ed25519_limbs16_to_bytes_le(s_mod);
     let s_hex_str: String = bytes_to_hex(s_bytes);
     let sig_hex: String = r_hex_str + s_hex_str;
@@ -89,7 +111,9 @@ pub fn ed25519_verify_hex(pubkey_hex: String, msg_hex: String, sig_hex: String) 
     let s_limbs: List[Int] = hex_to_limbs16(s_hex);
     let sb: List[Int] = ed25519_curve_scalarmult_wide(base, s_limbs);
     let hram_input: String = r_hex + pubkey_hex + msg_hex;
-    let hram_hex: String = sha512(hram_input);
+    let kr: Result[String, String] = sha512_of_hex(hram_input);
+    if kr.is_err() { return false; }
+    let hram_hex: String = match kr { Ok(s) => s, Err(_) => "" };
     let k_limbs: List[Int] = hex_to_limbs16(hram_hex);
     let ka: List[Int] = ed25519_curve_scalarmult_wide(a_pt, k_limbs);
     let neg_ka: List[Int] = ed25519_curve_neg(ka);
