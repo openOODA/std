@@ -1,0 +1,65 @@
+// # std/qa/probe_curve25519 — X25519 RFC 7748 Vectors
+//
+// Logline: Verify sec/asymmetric curve25519 scalarmult against RFC 7748
+// section 5.2 vectors (independent check: python cryptography exchange).
+//
+// Setup: Pure compute. Hex inputs decode to byte lists; outputs re-encode.
+//
+// Beats:
+//   1. scalarmult matches RFC 7748 vector 1.
+//   2. scalarmult matches RFC 7748 vector 2.
+//   3. derive_public agrees with scalarmult against the base point.
+
+import "sec/asymmetric/curve25519.oo";
+import "core/encoding/hex.oo";
+import "std/core/primitives/list.oo";
+
+fn cx_bytes(hexdata: String) -> List[Int] {
+    let raw: Result[String, String] = hex_decode(hexdata);
+    let s: String = match raw { Ok(v) => v, Err(_) => "" };
+    let mut out: List[Int] = list_new();
+    let n: Int = bytes_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        out = list_push(out, byte_at(s, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn cx_hex(bytes: List[Int]) -> String {
+    let h: String = "0123456789abcdef";
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < list_len(bytes) {
+        let b: Int = list_get(bytes, i);
+        out = out + char_at(h, (b >> 4) & 15) + char_at(h, b & 15);
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn main() -> Result[Int, String] {
+    let s1: List[Int] = cx_bytes("a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4");
+    let u1: List[Int] = cx_bytes("e6db6867583030db3594c1a424b15f7c726624ec26b3353b10a903a6d0ab1c4c");
+    let g1: String = cx_hex(curve25519_scalarmult(s1, u1));
+    if g1 != "c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552" {
+        println("curve25519: vector 1 mismatch got " + g1);
+        return Err("curve25519: vector 1 mismatch");
+    }
+    let s2: List[Int] = cx_bytes("4b66e9d4d1b4673c5ad22691957d6af5c11b6421e0ea01d42ca4169e7918ba0d");
+    let u2: List[Int] = cx_bytes("e5210f12786811d3f4b7959d0538ae2c31dbe7106fc03c3efc4cd549c715a493");
+    let g2: String = cx_hex(curve25519_scalarmult(s2, u2));
+    if g2 != "95cbde9476e8907d7aade45cb4b873f88b595a68799fa152e6f8f7647aac7957" {
+        println("curve25519: vector 2 mismatch got " + g2);
+        return Err("curve25519: vector 2 mismatch");
+    }
+    let dp: String = cx_hex(curve25519_derive_public(s1));
+    let sp: String = cx_hex(curve25519_scalarmult(s1, curve25519_base_point()));
+    if dp != sp {
+        println("curve25519: derive_public disagrees with scalarmult");
+        return Err("curve25519: derive_public mismatch");
+    }
+    println("probe: std curve25519 oracle ok");
+    return Ok(0);
+}

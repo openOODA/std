@@ -97,26 +97,15 @@ fn c_mul(a: List[Int], b: List[Int]) -> List[Int] {
     return c_car(c_car(o));
 }
 
-fn c_dup(a: &List[Int]) -> List[Int] {
-    let mut b: List[Int] = list_new();
-    let mut i: Int = 0;
-    while i < list_len(*a) { b = list_push(b, list_get(*a, i)); i = i + 1; }
-    return b;
-}
-
-fn c_sq(a: List[Int]) -> List[Int] {
-    let d: List[Int] = c_dup(&a);
-    return c_mul(d, a);
-}
+fn c_sq(a: List[Int]) -> List[Int] { return c_mul(a, a); }
 
 fn c_inv(a: List[Int]) -> List[Int] {
-    let abase: List[Int] = c_dup(&a); // pristine master; dup fresh per use (values move)
-    let mut r: List[Int] = c_mul(c_sq(c_dup(&abase)), c_dup(&abase));
+    let mut r: List[Int] = c_mul(c_sq(a), a);
     let mut i: Int = 252;
     while i >= 0 {
         r = c_sq(r);
         if i != 2 {
-            if i != 4 { r = c_mul(r, c_dup(&abase)); }
+            if i != 4 { r = c_mul(r, a); }
         }
         i = i - 1;
     }
@@ -185,7 +174,12 @@ pub fn curve25519_scalarmult(scalar: List[Int], u_point: List[Int]) -> List[Int]
     let x1: List[Int] = c_unpack(u_point);
     let mut x2: List[Int] = list_set(c_z(16), 0, 1);
     let mut z2: List[Int] = c_z(16);
-    let mut x3: List[Int] = c_dup(&x1); // dup: x1 is reused in the ladder below
+    // Clone by pushes: reads keep x1 alive for line-212 reuse, while
+    // `let x3 = x1` would move x1. (A &List borrow form also checks but
+    // the LLVM backend cannot deref aggregate refs, so it never builds.)
+    let mut x3: List[Int] = list_new();
+    let mut ci: Int = 0;
+    while ci < list_len(x1) { x3 = list_push(x3, list_get(x1, ci)); ci = ci + 1; }
     let mut z3: List[Int] = list_set(c_z(16), 0, 1);
     let a24: List[Int] = c_a24();
     let mut swap: Int = 0;

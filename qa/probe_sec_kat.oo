@@ -1,0 +1,66 @@
+// # std/qa/probe_sec_kat — Hash and MAC Known-Answer Tests
+//
+// Logline: Verify sec/hash sha256/sha512 and sec/mac hmac against FIPS 180-4
+// and RFC 4231 vectors (independent check: python hashlib/hmac).
+//
+// Setup: Pure compute. ASCII messages hash directly; the binary HMAC key is
+// hex-decoded first (hashes raw bytes, never hex text).
+//
+// Beats:
+//   1. sha256 matches 3 FIPS vectors (empty, abc, 56-byte).
+//   2. sha512 matches 3 FIPS vectors (empty, abc, 56-byte).
+//   3. hmac_sha256 matches 2 RFC 4231 vectors (binary key, short key).
+//   4. hmac_verify accepts the true tag and rejects a flipped tag.
+
+import "sec/hash/sha256.oo";
+import "sec/hash/sha512.oo";
+import "sec/mac/hmac.oo";
+import "core/encoding/hex.oo";
+
+pub fn main() -> Result[Int, String] {
+    if sha256("") != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+        println("sec_kat: sha256 empty mismatch got " + sha256(""));
+        return Err("sec_kat: sha256 empty mismatch");
+    }
+    if sha256("abc") != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+        println("sec_kat: sha256 abc mismatch got " + sha256("abc"));
+        return Err("sec_kat: sha256 abc mismatch");
+    }
+    let m56: String = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    if sha256(m56) != "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1" {
+        println("sec_kat: sha256 m56 mismatch got " + sha256(m56));
+        return Err("sec_kat: sha256 m56 mismatch");
+    }
+    if sha512("") != "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e" {
+        return Err("sec_kat: sha512 empty mismatch");
+    }
+    if sha512("abc") != "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f" {
+        return Err("sec_kat: sha512 abc mismatch");
+    }
+    if sha512(m56) != "204a8fc6dda82f0a0ced7beb8e08a41657c16ef468b228a8279be331a703c33596fd15c13b1b07f9aa1d3bea57789ca031ad85c7a71dd70354ec631238ca3445" {
+        return Err("sec_kat: sha512 m56 mismatch");
+    }
+    let k1r: Result[String, String] = hex_decode("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+    if k1r.is_err() {
+        return Err("sec_kat: hmac key decode failed");
+    }
+    let k1: String = match k1r { Ok(s) => s, Err(_) => "" };
+    let t1: String = hmac_sha256(k1, "Hi There");
+    if t1 != "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7" {
+        println("sec_kat: hmac case1 mismatch got " + t1);
+        return Err("sec_kat: hmac case1 mismatch");
+    }
+    let t2: String = hmac_sha256("Jefe", "what do ya want for nothing?");
+    if t2 != "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843" {
+        println("sec_kat: hmac case2 mismatch got " + t2);
+        return Err("sec_kat: hmac case2 mismatch");
+    }
+    if !hmac_verify(k1, "Hi There", t1) {
+        return Err("sec_kat: hmac_verify rejected true tag");
+    }
+    if hmac_verify(k1, "Hi There", "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff8") {
+        return Err("sec_kat: hmac_verify accepted flipped tag");
+    }
+    println("probe: std sec KAT ok");
+    return Ok(0);
+}
