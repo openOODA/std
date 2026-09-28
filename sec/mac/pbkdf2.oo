@@ -83,7 +83,8 @@ pub fn pbkdf2_hmac_sha256(password: String, salt: String, iterations: Int, dk_le
         return "";
     }
     let mut u: String = pbk_unhex(hmac_sha256(password, pbk_salt1(salt)));
-    let mut t: String = u;
+    // Copy, not move: u is reused in the loop below (plain `= u` moves it).
+    let mut t: String = u + "";
     let mut j: Int = 2;
     while j <= iterations {
         u = pbk_unhex(hmac_sha256(password, u));

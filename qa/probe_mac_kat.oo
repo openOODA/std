@@ -1,0 +1,84 @@
+// # std/qa/probe_mac_kat — HKDF/PBKDF2/TOTP Known-Answer Tests
+//
+// Logline: Verify sec/mac hkdf, pbkdf2, and totp against RFC 5869, stacked
+// PBKDF2-HMAC-SHA256, and RFC 6238 Appendix B vectors (independent check:
+// python cryptography HKDF, hashlib.pbkdf2_hmac, and a textbook TOTP).
+//
+// Setup: Pure compute. Binary inputs hex-decode to raw-byte strings first.
+//
+// Beats:
+//   1. hkdf matches RFC 5869 cases 1 and 3 (SHA-256).
+//   2. pbkdf2 matches 1- and 4096-iteration vectors.
+//   3. totp matches 4 RFC 6238 Appendix B SHA-256 codes.
+//   4. totp rejects bad digits and negative time.
+
+import "sec/mac/hkdf.oo";
+import "sec/mac/pbkdf2.oo";
+import "sec/mac/totp_rfc6238.oo";
+import "core/encoding/hex.oo";
+
+fn mk_raw(hexdata: String) -> String {
+    let r: Result[String, String] = hex_decode(hexdata);
+    return match r { Ok(s) => s, Err(_) => "" };
+}
+
+pub fn main() -> Result[Int, String] {
+    let ikm: String = mk_raw("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b");
+    let salt1: String = mk_raw("000102030405060708090a0b0c");
+    let info1: String = mk_raw("f0f1f2f3f4f5f6f7f8f9");
+    let g1: String = hkdf(salt1, ikm, info1, 42);
+    if g1 != "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865" {
+        println("mac_kat: hkdf case1 mismatch got " + g1);
+        return Err("mac_kat: hkdf case1 mismatch");
+    }
+    let g3: String = hkdf("", ikm, "", 42);
+    if g3 != "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8" {
+        println("mac_kat: hkdf case3 mismatch got " + g3);
+        return Err("mac_kat: hkdf case3 mismatch");
+    }
+    let p1: String = pbkdf2("password", "salt", 1, 32);
+    if p1 != "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b" {
+        println("mac_kat: pbkdf2 iter1 mismatch got " + p1);
+        return Err("mac_kat: pbkdf2 iter1 mismatch");
+    }
+    let p2: String = pbkdf2("password", "salt", 4096, 32);
+    if p2 != "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a" {
+        println("mac_kat: pbkdf2 iter4096 mismatch got " + p2);
+        return Err("mac_kat: pbkdf2 iter4096 mismatch");
+    }
+    let key: String = "12345678901234567890123456789012";
+    let c1: Result[String, String] = totp_rfc6238_code8(key, 59);
+    let v1: String = match c1 { Ok(s) => s, Err(_) => "ERR" };
+    if v1 != "46119246" {
+        println("mac_kat: totp t59 mismatch got " + v1);
+        return Err("mac_kat: totp t59 mismatch");
+    }
+    let c2: Result[String, String] = totp_rfc6238_code8(key, 1111111109);
+    let v2: String = match c2 { Ok(s) => s, Err(_) => "ERR" };
+    if v2 != "68084774" {
+        println("mac_kat: totp t1111111109 mismatch got " + v2);
+        return Err("mac_kat: totp t1111111109 mismatch");
+    }
+    let c3: Result[String, String] = totp_rfc6238_code8(key, 1234567890);
+    let v3: String = match c3 { Ok(s) => s, Err(_) => "ERR" };
+    if v3 != "91819424" {
+        println("mac_kat: totp t1234567890 mismatch got " + v3);
+        return Err("mac_kat: totp t1234567890 mismatch");
+    }
+    let c4: Result[String, String] = totp_rfc6238_code8(key, 2000000000);
+    let v4: String = match c4 { Ok(s) => s, Err(_) => "ERR" };
+    if v4 != "90698825" {
+        println("mac_kat: totp t2000000000 mismatch got " + v4);
+        return Err("mac_kat: totp t2000000000 mismatch");
+    }
+    let bad_d: Result[String, String] = totp_rfc6238_at(key, 59, 7);
+    if bad_d.is_ok() {
+        return Err("mac_kat: totp accepted 7 digits");
+    }
+    let bad_t: Result[String, String] = totp_rfc6238_at(key, 0 - 1, 8);
+    if bad_t.is_ok() {
+        return Err("mac_kat: totp accepted negative time");
+    }
+    println("probe: std mac KAT ok");
+    return Ok(0);
+}
