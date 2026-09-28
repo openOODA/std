@@ -44,14 +44,14 @@ pub fn int_format_stack(n: Int, radix: Int) -> NumBuffer {
         rad = 10;
     }
     let is_neg: Bool = n < 0;
+    // No negation: 0 - n overflows for INT64_MIN (digits came out empty).
+    // Truncated / and % move toward zero, so peel digits off n directly.
     let mut val: Int = n;
-    if is_neg {
-        val = 0 - n;
-    }
     let mut digits: String = "";
     let mut count: Int = 0;
-    while val > 0 {
-        let rem: Int = val % rad;
+    while val != 0 {
+        let raw_rem: Int = val % rad;
+        let rem: Int = if raw_rem < 0 { 0 - raw_rem } else { raw_rem };
         digits = hex_digit(rem) + digits;
         val = val / rad;
         count = count + 1;
@@ -73,6 +73,9 @@ pub fn int_to_hex(n: Int) -> String {
 }
 
 pub fn int_to_str(n: Int) -> String {
+    // NOTE: shadowed fleet-wide by the oodac builtin (ll_builtin_host lowers
+    // int_to_str to oo_int_to_str); this body never emits. Kept for the
+    // import-provided name + documentation. See probe_num_format.oo.
     let nb: NumBuffer = int_format_stack(n, 10);
     return nb.value;
 }

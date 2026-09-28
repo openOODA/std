@@ -1,0 +1,89 @@
+// # std/qa/probe_num_format — Integer Formatter Oracle
+//
+// Logline: Verify core/text num_buffer decimal/hex/binary/octal output
+// against Python formatting, including INT64 edges (independent check:
+// CPython str/format on the same values).
+//
+// Setup: Pure compute. Decimal carries a minus sign; hex/bin/oct render
+// magnitude only for negatives (documented current behavior, zero live
+// dependents on negative non-decimal). NOTE: int_to_str calls lower to the
+// oodac builtin (oo_int_to_str), so decimal rows pin the C behavior while
+// hex/bin/oct/int_format_stack rows exercise this module.
+//
+// Beats:
+//   1. int_to_str matches 22 values incl. INT64_MIN/MAX.
+//   2. int_to_hex/int_to_bin/int_to_oct match 10 magnitudes incl. 2^63-1.
+//   3. Negative hex/bin render magnitude (documented, not two's complement).
+//   4. NumBuffer len matches the emitted string length.
+
+import "core/text/num_buffer.oo";
+
+fn nf_check(got: String, want: String, tag: String) -> Result[Int, String] {
+    if got != want {
+        println("num_format: " + tag + " mismatch got " + got + " want " + want);
+        return Err("num_format: " + tag + " mismatch");
+    }
+    return Ok(0);
+}
+
+fn nf_must(r: Result[Int, String]) -> Bool {
+    return r.is_ok();
+}
+
+pub fn main() -> Result[Int, String] {
+    let min64: Int = 0 - 9223372036854775807 - 1;
+    let max64: Int = 9223372036854775807;
+    if !nf_must(nf_check(int_to_str(0), "0", "dec0")) { return Err("num_format: dec0"); }
+    if !nf_must(nf_check(int_to_str(1), "1", "dec1")) { return Err("num_format: dec1"); }
+    if !nf_must(nf_check(int_to_str(-1), "-1", "dec-1")) { return Err("num_format: dec-1"); }
+    if !nf_must(nf_check(int_to_str(9), "9", "dec9")) { return Err("num_format: dec9"); }
+    if !nf_must(nf_check(int_to_str(-9), "-9", "dec-9")) { return Err("num_format: dec-9"); }
+    if !nf_must(nf_check(int_to_str(10), "10", "dec10")) { return Err("num_format: dec10"); }
+    if !nf_must(nf_check(int_to_str(-10), "-10", "dec-10")) { return Err("num_format: dec-10"); }
+    if !nf_must(nf_check(int_to_str(99), "99", "dec99")) { return Err("num_format: dec99"); }
+    if !nf_must(nf_check(int_to_str(-99), "-99", "dec-99")) { return Err("num_format: dec-99"); }
+    if !nf_must(nf_check(int_to_str(100), "100", "dec100")) { return Err("num_format: dec100"); }
+    if !nf_must(nf_check(int_to_str(-100), "-100", "dec-100")) { return Err("num_format: dec-100"); }
+    if !nf_must(nf_check(int_to_str(255), "255", "dec255")) { return Err("num_format: dec255"); }
+    if !nf_must(nf_check(int_to_str(-255), "-255", "dec-255")) { return Err("num_format: dec-255"); }
+    if !nf_must(nf_check(int_to_str(256), "256", "dec256")) { return Err("num_format: dec256"); }
+    if !nf_must(nf_check(int_to_str(65535), "65535", "dec65535")) { return Err("num_format: dec65535"); }
+    if !nf_must(nf_check(int_to_str(2147483647), "2147483647", "dec31")) { return Err("num_format: dec31"); }
+    if !nf_must(nf_check(int_to_str(-2147483648), "-2147483648", "dec-32")) { return Err("num_format: dec-32"); }
+    if !nf_must(nf_check(int_to_str(4294967295), "4294967295", "dec32")) { return Err("num_format: dec32"); }
+    if !nf_must(nf_check(int_to_str(max64), "9223372036854775807", "decmax")) { return Err("num_format: decmax"); }
+    if !nf_must(nf_check(int_to_str(min64), "-9223372036854775808", "decmin")) { return Err("num_format: decmin"); }
+    if !nf_must(nf_check(int_to_str(123456789012345678), "123456789012345678", "decbig")) { return Err("num_format: decbig"); }
+    if !nf_must(nf_check(int_to_str(-123456789012345678), "-123456789012345678", "dec-big")) { return Err("num_format: dec-big"); }
+    if !nf_must(nf_check(int_to_hex(0), "0", "hex0")) { return Err("num_format: hex0"); }
+    if !nf_must(nf_check(int_to_hex(15), "f", "hex15")) { return Err("num_format: hex15"); }
+    if !nf_must(nf_check(int_to_hex(16), "10", "hex16")) { return Err("num_format: hex16"); }
+    if !nf_must(nf_check(int_to_hex(255), "ff", "hex255")) { return Err("num_format: hex255"); }
+    if !nf_must(nf_check(int_to_hex(256), "100", "hex256")) { return Err("num_format: hex256"); }
+    if !nf_must(nf_check(int_to_hex(65535), "ffff", "hex64k")) { return Err("num_format: hex64k"); }
+    if !nf_must(nf_check(int_to_hex(4294967295), "ffffffff", "hex32")) { return Err("num_format: hex32"); }
+    if !nf_must(nf_check(int_to_hex(max64), "7fffffffffffffff", "hexmax")) { return Err("num_format: hexmax"); }
+    if !nf_must(nf_check(int_to_hex(min64), "8000000000000000", "hexmin")) { return Err("num_format: hexmin"); }
+    if !nf_must(nf_check(int_to_hex(-255), "ff", "hexneg")) { return Err("num_format: hexneg"); }
+    if !nf_must(nf_check(int_to_bin(0), "0", "bin0")) { return Err("num_format: bin0"); }
+    if !nf_must(nf_check(int_to_bin(9), "1001", "bin9")) { return Err("num_format: bin9"); }
+    if !nf_must(nf_check(int_to_bin(255), "11111111", "bin255")) { return Err("num_format: bin255"); }
+    if !nf_must(nf_check(int_to_bin(max64), "111111111111111111111111111111111111111111111111111111111111111", "binmax")) { return Err("num_format: binmax"); }
+    if !nf_must(nf_check(int_to_bin(min64), "1000000000000000000000000000000000000000000000000000000000000000", "binmin")) { return Err("num_format: binmin"); }
+    if !nf_must(nf_check(int_to_oct(0), "0", "oct0")) { return Err("num_format: oct0"); }
+    if !nf_must(nf_check(int_to_oct(99), "143", "oct99")) { return Err("num_format: oct99"); }
+    if !nf_must(nf_check(int_to_oct(max64), "777777777777777777777", "octmax")) { return Err("num_format: octmax"); }
+    if !nf_must(nf_check(int_to_oct(min64), "1000000000000000000000", "octmin")) { return Err("num_format: octmin"); }
+    let lb: NumBuffer = int_format_stack(-100, 10);
+    if lb.len != 4 {
+        println("num_format: len mismatch");
+        return Err("num_format: len mismatch");
+    }
+    let lz: NumBuffer = int_format_stack(0, 16);
+    if lz.len != 1 {
+        println("num_format: zero len mismatch");
+        return Err("num_format: zero len mismatch");
+    }
+    println("probe: std num_format oracle ok");
+    return Ok(0);
+}
