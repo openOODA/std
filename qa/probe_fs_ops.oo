@@ -1,0 +1,117 @@
+// # std/qa/probe_fs_ops — Filesystem Operations Verification
+//
+// Logline: Verify fs directory walk, copy, link, and remove operations
+// end to end in a scratch tree, including writedir containment denials.
+//
+// Setup: Requires &FsReadCap and &FsWriteCap. Builds a scratch tree under
+// .ooda-cache/qa_fs_ops, asserts behavior, removes the tree.
+//
+// Beats:
+//   1. read_dir lists entries; walk covers the tree (membership, not order).
+//   2. copy_file and copy_tree reproduce content.
+//   3. mkdir/rmdir roundtrip; remove_tree deletes recursively.
+//   4. hardlink/symlink work inside writedir; escapes are denied.
+//   5. Missing-source copy and empty-path remove fail closed.
+
+import "fs/os/fs.oo";
+import "std/core/primitives/list.oo";
+
+fn fsops_has(items: List[String], want: String) -> Bool {
+    let mut i: Int = 0;
+    while i < list_len(items) {
+        if list_get(items, i) == want { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+pub fn main(fs_r: &FsReadCap, fs_w: &FsWriteCap) -> Result[Int, String] {
+    let root: String = ".ooda-cache/qa_fs_ops";
+    if fs_path_exists(fs_r, root) {
+        let pre: Result[Void, String] = fs_remove_tree(fs_w, fs_r, root);
+        if pre.is_err() { return Err("fs_ops: setup cleanup failed"); }
+    }
+    let mk: Result[Void, String] = fs_mkdir_p(fs_w, root + "/a/b");
+    if mk.is_err() { return Err("fs_ops: mkdir_p failed"); }
+    if fs_write_file(fs_w, root + "/top.txt", "TOP").is_err() { return Err("fs_ops: write top failed"); }
+    if fs_write_file(fs_w, root + "/a/mid.txt", "MID").is_err() { return Err("fs_ops: write mid failed"); }
+    if fs_write_file(fs_w, root + "/a/b/deep.txt", "DEEP").is_err() { return Err("fs_ops: write deep failed"); }
+
+    let ents: List[String] = fs_read_dir(fs_r, root);
+    if !fsops_has(ents, "a") { return Err("fs_ops: read_dir missing a"); }
+    if !fsops_has(ents, "top.txt") { return Err("fs_ops: read_dir missing top.txt"); }
+
+    let walked: List[String] = fs_walk(fs_r, root);
+    if list_len(walked) != 6 { return Err("fs_ops: walk count mismatch"); }
+    if !fsops_has(walked, root) { return Err("fs_ops: walk missing root"); }
+    if !fsops_has(walked, root + "/top.txt") { return Err("fs_ops: walk missing top"); }
+    if !fsops_has(walked, root + "/a") { return Err("fs_ops: walk missing a"); }
+    if !fsops_has(walked, root + "/a/mid.txt") { return Err("fs_ops: walk missing mid"); }
+    if !fsops_has(walked, root + "/a/b") { return Err("fs_ops: walk missing b"); }
+    if !fsops_has(walked, root + "/a/b/deep.txt") { return Err("fs_ops: walk missing deep"); }
+
+    if fs_copy_file(fs_r, fs_w, root + "/top.txt", root + "/copy.txt").is_err() {
+        return Err("fs_ops: copy_file failed");
+    }
+    let cr: Result[String, String] = fs_read_file(fs_r, root + "/copy.txt");
+    let cv: String = match cr { Ok(s) => s, Err(_) => "" };
+    if cv != "TOP" { return Err("fs_ops: copy content mismatch"); }
+
+    if fs_copy_tree(fs_r, fs_w, root + "/a", root + "/a2").is_err() {
+        return Err("fs_ops: copy_tree failed");
+    }
+    let m2: Result[String, String] = fs_read_file(fs_r, root + "/a2/mid.txt");
+    let m2v: String = match m2 { Ok(s) => s, Err(_) => "" };
+    if m2v != "MID" { return Err("fs_ops: copy_tree mid mismatch"); }
+    let d2: Result[String, String] = fs_read_file(fs_r, root + "/a2/b/deep.txt");
+    let d2v: String = match d2 { Ok(s) => s, Err(_) => "" };
+    if d2v != "DEEP" { return Err("fs_ops: copy_tree deep mismatch"); }
+
+    if fs_mkdir(fs_w, root + "/solo").is_err() { return Err("fs_ops: mkdir failed"); }
+    if !fs_is_dir(fs_r, root + "/solo") { return Err("fs_ops: solo not dir"); }
+    if fs_rmdir(fs_w, root + "/solo").is_err() { return Err("fs_ops: rmdir failed"); }
+    if fs_path_exists(fs_r, root + "/solo") { return Err("fs_ops: solo still exists"); }
+
+    if fs_hardlink(fs_w, root + "/top.txt", root + "/hard.txt").is_err() {
+        return Err("fs_ops: hardlink failed");
+    }
+    let hr: Result[String, String] = fs_read_file(fs_r, root + "/hard.txt");
+    let hv: String = match hr { Ok(s) => s, Err(_) => "" };
+    if hv != "TOP" { return Err("fs_ops: hardlink content mismatch"); }
+
+    if fs_symlink(fs_w, "top.txt", root + "/link.txt").is_err() {
+        return Err("fs_ops: symlink failed");
+    }
+    // Reads open O_NOFOLLOW: symlinks are creatable but unreadable by design.
+    if fs_read_file(fs_r, root + "/link.txt").is_ok() {
+        return Err("fs_ops: symlink read must fail closed");
+    }
+
+    if fs_symlink(fs_w, "/etc/hosts", root + "/evil.txt").is_ok() {
+        return Err("fs_ops: symlink escape must be denied");
+    }
+    if fs_hardlink(fs_w, "/etc/hosts", root + "/evil2.txt").is_ok() {
+        return Err("fs_ops: hardlink escape must be denied");
+    }
+    if fs_copy_file(fs_r, fs_w, root + "/nope.txt", root + "/x.txt").is_ok() {
+        return Err("fs_ops: copy missing source must fail");
+    }
+    if fs_remove_tree(fs_w, fs_r, "").is_ok() {
+        return Err("fs_ops: remove empty path must fail");
+    }
+
+    if fs_remove_tree(fs_w, fs_r, root + "/a2").is_err() {
+        return Err("fs_ops: remove_tree a2 failed");
+    }
+    if fs_path_exists(fs_r, root + "/a2") {
+        return Err("fs_ops: a2 still exists");
+    }
+    if fs_remove_tree(fs_w, fs_r, root).is_err() {
+        return Err("fs_ops: final cleanup failed");
+    }
+    if fs_path_exists(fs_r, root) {
+        return Err("fs_ops: root still exists");
+    }
+    println("probe: std fs_ops ok");
+    return Ok(0);
+}

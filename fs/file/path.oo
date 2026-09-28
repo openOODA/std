@@ -63,7 +63,13 @@ pub fn path_join(base: String, segment: String) -> String {
 // Extract parent directory of path.
 pub fn path_parent(p: String) -> String {
     let n: Int = chars_len(p);
-    if n <= 1 {
+    if n == 0 {
+        return "";
+    }
+    if p == "/" {
+        return "/";
+    }
+    if n == 1 {
         return "";
     }
     let mut last_slash: Int = 0 - 1;
@@ -146,8 +152,10 @@ pub fn path_without_extension(p: String) -> String {
     return str_slice(p, 0, plen - elen);
 }
 
-// Normalize redundant slashes and relative dot segments.
+// Normalize redundant slashes and relative dot segments (POSIX: a ".." that
+// cannot pop is preserved on relative paths, dropped at absolute root).
 pub fn path_normalize(p: String) -> String {
+    let abs: Bool = path_is_absolute(p);
     let parts: List[String] = str_split(p, "/");
     let n: Int = list_len(parts);
     let mut out: List[String] = list_new();
@@ -159,8 +167,9 @@ pub fn path_normalize(p: String) -> String {
             if seg != "." {
                 if seg == ".." {
                     let out_len: Int = list_len(out);
-                    if out_len > 0 {
-                        // Drop last element if not already ..
+                    let top_dotdot: Bool = out_len > 0 && list_get(out, out_len - 1) == "..";
+                    if out_len > 0 && (abs || !top_dotdot) {
+                        // Pop one real segment (absolute root also absorbs).
                         let mut temp: List[String] = list_new();
                         let mut j: Int = 0;
                         while j < out_len - 1 {
@@ -168,6 +177,8 @@ pub fn path_normalize(p: String) -> String {
                             j = j + 1;
                         }
                         out = temp;
+                    } else if !abs {
+                        out = list_push(out, "..");
                     }
                 } else {
                     out = list_push(out, seg);

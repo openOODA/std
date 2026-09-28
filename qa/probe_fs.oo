@@ -1,20 +1,42 @@
 // # std/qa/probe_fs — Filesystem Domain Verification
 //
-// Logline: Verify filesystem domain path manipulation, join, and extension extraction.
+// Logline: Verify filesystem domain path manipulation against Python
+// posixpath, plus join/parent/basename/extension edge cases.
 //
 // Setup: Pure verification of fs standard library path primitives.
 //
 // Beats:
 //   1. Test path joining and relative/absolute classification.
 //   2. Extract basename, parent directory, and file extension.
-//   3. Assert normalized filesystem semantics.
+//   3. Assert normalized filesystem semantics (posixpath oracle).
+//   4. Trailing-slash parent/basename follow GNU coreutils, not posixpath.
 
 import "fs/file/path.oo";
 
+fn fs_check(got: String, want: String, tag: String) -> Bool {
+    if got != want {
+        println("fs: " + tag + " mismatch got [" + got + "] want [" + want + "]");
+        return false;
+    }
+    return true;
+}
+
 pub fn main() -> Result[Int, String] {
-    let joined: String = path_join("usr", "bin");
-    if joined != "usr/bin" {
+    if !fs_check(path_join("usr", "bin"), "usr/bin", "join") {
         return Err("fs: path_join mismatch");
+    }
+    if !fs_check(path_join("a/", "b"), "a/b", "join slash") {
+        return Err("fs: path_join slash mismatch");
+    }
+    if !fs_check(path_join("a", "/b"), "/b", "join abs") {
+        return Err("fs: path_join abs mismatch");
+    }
+    if !fs_check(path_join("", "b"), "b", "join empty") {
+        return Err("fs: path_join empty mismatch");
+    }
+    // Documented: empty segment keeps base (posixpath would append "/").
+    if !fs_check(path_join("a", ""), "a", "join empty seg") {
+        return Err("fs: path_join empty seg mismatch");
     }
     if !path_is_absolute("/etc/hosts") {
         return Err("fs: /etc/hosts must be absolute");
@@ -22,14 +44,106 @@ pub fn main() -> Result[Int, String] {
     if !path_is_relative("local/config") {
         return Err("fs: local/config must be relative");
     }
-    if path_basename("/home/user/doc.txt") != "doc.txt" {
+    if !fs_check(path_basename("/home/user/doc.txt"), "doc.txt", "basename") {
         return Err("fs: path_basename mismatch");
     }
-    if path_extension("archive.tar.gz") != ".gz" {
+    // GNU: trailing slash stripped (posixpath.basename would be "").
+    if !fs_check(path_basename("a/b/"), "b", "basename slash") {
+        return Err("fs: path_basename slash mismatch");
+    }
+    if !fs_check(path_basename("/"), "", "basename root") {
+        return Err("fs: path_basename root mismatch");
+    }
+    if !fs_check(path_extension("archive.tar.gz"), ".gz", "ext") {
         return Err("fs: path_extension mismatch");
     }
-    if path_parent("/home/user/doc.txt") != "/home/user" {
+    if !fs_check(path_extension(".bashrc"), "", "ext dotfile") {
+        return Err("fs: path_extension dotfile mismatch");
+    }
+    if !fs_check(path_extension("a."), ".", "ext trailing dot") {
+        return Err("fs: path_extension trailing dot mismatch");
+    }
+    if !fs_check(path_extension("noext"), "", "ext none") {
+        return Err("fs: path_extension none mismatch");
+    }
+    if !fs_check(path_extension("a..b"), ".b", "ext doubledot") {
+        return Err("fs: path_extension doubledot mismatch");
+    }
+    if !fs_check(path_without_extension("archive.tar.gz"), "archive.tar", "noext") {
+        return Err("fs: path_without_extension mismatch");
+    }
+    if !fs_check(path_without_extension("/d/a.txt"), "/d/a", "noext path") {
+        return Err("fs: path_without_extension path mismatch");
+    }
+    if !fs_check(path_without_extension("noext"), "noext", "noext none") {
+        return Err("fs: path_without_extension none mismatch");
+    }
+    if !fs_check(path_parent("/home/user/doc.txt"), "/home/user", "parent") {
         return Err("fs: path_parent mismatch");
+    }
+    if !fs_check(path_parent("/"), "/", "parent root") {
+        return Err("fs: path_parent root mismatch");
+    }
+    if !fs_check(path_parent("/a"), "/", "parent aslash") {
+        return Err("fs: path_parent aslash mismatch");
+    }
+    if !fs_check(path_parent("a"), "", "parent bare") {
+        return Err("fs: path_parent bare mismatch");
+    }
+    if !fs_check(path_parent(""), "", "parent empty") {
+        return Err("fs: path_parent empty mismatch");
+    }
+    // GNU: trailing slash stripped (posixpath.dirname would be "a/b").
+    if !fs_check(path_parent("a/b/"), "a", "parent slash") {
+        return Err("fs: path_parent slash mismatch");
+    }
+    if !fs_check(path_normalize(""), ".", "norm empty") {
+        return Err("fs: path_normalize empty mismatch");
+    }
+    if !fs_check(path_normalize("."), ".", "norm dot") {
+        return Err("fs: path_normalize dot mismatch");
+    }
+    if !fs_check(path_normalize("./"), ".", "norm dotslash") {
+        return Err("fs: path_normalize dotslash mismatch");
+    }
+    if !fs_check(path_normalize("/"), "/", "norm root") {
+        return Err("fs: path_normalize root mismatch");
+    }
+    if !fs_check(path_normalize(".."), "..", "norm dotdot") {
+        return Err("fs: path_normalize dotdot mismatch");
+    }
+    if !fs_check(path_normalize("../a"), "../a", "norm escapes") {
+        return Err("fs: path_normalize escapes mismatch");
+    }
+    if !fs_check(path_normalize("a/.."), ".", "norm cancel") {
+        return Err("fs: path_normalize cancel mismatch");
+    }
+    if !fs_check(path_normalize("a/../.."), "..", "norm overpop") {
+        return Err("fs: path_normalize overpop mismatch");
+    }
+    if !fs_check(path_normalize("a/../../b"), "../b", "norm overpop b") {
+        return Err("fs: path_normalize overpop b mismatch");
+    }
+    if !fs_check(path_normalize("/../etc"), "/etc", "norm abs escapes") {
+        return Err("fs: path_normalize abs escapes mismatch");
+    }
+    if !fs_check(path_normalize("/a/../.."), "/", "norm abs overpop") {
+        return Err("fs: path_normalize abs overpop mismatch");
+    }
+    if !fs_check(path_normalize("a//b"), "a/b", "norm dblslash") {
+        return Err("fs: path_normalize dblslash mismatch");
+    }
+    if !fs_check(path_normalize("a/./b"), "a/b", "norm dotseg") {
+        return Err("fs: path_normalize dotseg mismatch");
+    }
+    if !fs_check(path_normalize("a/b/"), "a/b", "norm trailslash") {
+        return Err("fs: path_normalize trailslash mismatch");
+    }
+    if !fs_check(path_normalize("a/b/."), "a/b", "norm traildot") {
+        return Err("fs: path_normalize traildot mismatch");
+    }
+    if !fs_check(path_normalize("/home/user/doc.txt"), "/home/user/doc.txt", "norm plain") {
+        return Err("fs: path_normalize plain mismatch");
     }
     println("probe: std/fs: ok");
     return Ok(0);

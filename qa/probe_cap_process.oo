@@ -33,11 +33,22 @@ pub fn main(p: &ProcessCap, env: &EnvCap, sys: &SysCap) -> Result[Int, String] {
         return Err("cap_process: process_args returned invalid list length");
     }
 
-    let r_env: Result[String, String] = env_get(env, "HOME");
-    let mut saw_env: Bool = r_env.is_ok();
-    if !saw_env {
-        let r_env2: Result[String, String] = env_get(env, "PATH");
-        saw_env = r_env2.is_ok();
+    // EnvCap allowlist (oodar sys_env.c): only OODA_*/OO_*/OODACODEX/PWD.
+    if env_get(env, "HOME").is_ok() {
+        return Err("cap_process: env_get HOME must be denied");
+    }
+    if env_get(env, "PATH").is_ok() {
+        return Err("cap_process: env_get PATH must be denied");
+    }
+    if env_get(env, "").is_ok() {
+        return Err("cap_process: env_get empty key must be denied");
+    }
+    if env_get(env, "OODA_DEFINITELY_UNSET_PROBE_KEY").is_ok() {
+        return Err("cap_process: env_get unset key must be denied");
+    }
+    let r_pwd: Result[String, String] = env_get(env, "PWD");
+    if r_pwd.is_err() {
+        return Err("cap_process: env_get PWD must be allowed");
     }
 
     let ep: Result[String, String] = process_epoll_create(sys, 0);
