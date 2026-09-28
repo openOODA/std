@@ -1,36 +1,51 @@
 // # Network Capability Token Verification Probe
 //
-// Logline: Verify that &TcpCap gates network operations, wire request building adheres to capability contracts, and connections fail closed.
+// Logline: Verify that &TcpCap gates network operations, request building
+// emits exact wire bytes, and every failure mode fails closed with Err.
 //
-// Setup: Requires &TcpCap.
+// Setup: Requires &TcpCap. No listener needed: all network assertions are
+// deterministic failures (refused/invalid), never timing-dependent.
 //
 // Beats:
-//   1. Build deterministic HTTP/1.1 wire request via http_cap_build_request.
-//   2. Attempt loopback connect to unassigned port via net_tcp_connect (&TcpCap).
-//   3. Assert connection fails closed gracefully without panics.
+//   1. Build exact HTTP/1.1 wire bytes (GET, POST+body, extra headers).
+//   2. Closed loopback port refuses: connect returns Err, no crash.
+//   3. Invalid IP literal and port 0 fail closed.
+//   4. Write/read on a bogus fd fail closed (no close API: fds are owned).
 
 import "net/http_cap.oo";
 import "net/tcp.oo";
 
 pub fn main(tcp: &TcpCap) -> Result[Int, String] {
     let req: String = http_cap_build_request("127.0.0.1", 8080, "GET", "/cap_probe", list_new(), "");
-    if !str_contains(req, "GET /cap_probe HTTP/1.1") {
-        return Err("cap_net: request builder failed to emit method and path");
+    if req != "GET /cap_probe HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nUser-Agent: openOODA-Net/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n" {
+        return Err("cap_net: GET wire bytes mismatch got " + req);
     }
-    if !str_contains(req, "Host: 127.0.0.1:8080") {
-        return Err("cap_net: request builder failed to emit Host header");
+    let post: String = http_cap_build_request("h", 80, "POST", "/s", list_new(), "hi");
+    if post != "POST /s HTTP/1.1\r\nHost: h:80\r\nUser-Agent: openOODA-Net/1.0\r\nAccept: */*\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi" {
+        return Err("cap_net: POST wire bytes mismatch");
     }
-
-    // Connect to closed loopback port: must return Result (Err on refusal) under &TcpCap
+    let mut hdrs: List[String] = list_new();
+    hdrs = list_push(hdrs, "X-A: b");
+    let custom: String = http_cap_build_request("h", 80, "GET", "/", hdrs, "");
+    if !str_contains(custom, "X-A: b\r\n") {
+        return Err("cap_net: custom header missing from wire bytes");
+    }
     let conn: Result[String, String] = net_tcp_connect(tcp, "127.0.0.1", 1);
-    // Port 1 is closed; either an Err (connection refused) or Ok is valid OS behavior, but must not crash
     if conn.is_ok() {
-        let fd_str: String = match conn { Ok(f) => f, Err(_) => "" };
-        if chars_len(fd_str) == 0 {
-            return Err("cap_net: unexpected empty descriptor returned on Ok");
-        }
+        return Err("cap_net: closed loopback port must refuse");
     }
-
+    if net_tcp_connect(tcp, "256.256.256.256", 80).is_ok() {
+        return Err("cap_net: invalid IP literal must fail closed");
+    }
+    if net_tcp_connect(tcp, "127.0.0.1", 0).is_ok() {
+        return Err("cap_net: port 0 must fail closed");
+    }
+    if net_tcp_write(tcp, 0 - 1, "x").is_ok() {
+        return Err("cap_net: write to bogus fd must fail closed");
+    }
+    if net_tcp_read(tcp, 0 - 1, 16).is_ok() {
+        return Err("cap_net: read from bogus fd must fail closed");
+    }
     println("probe: std/qa cap_net passed (&TcpCap verified)");
     return Ok(0);
 }

@@ -1,8 +1,8 @@
 // # std/qa/probe_core — Core Domain Verification
 //
-// Logline: Verify core domain semantic version parsing and validation.
+// Logline: Verify core domain semantic version parsing and JSON shape checks.
 //
-// Setup: Pure verification of core standard library semver primitives.
+// Setup: Pure verification of core standard library semver and json primitives.
 //
 // Beats:
 //   1. Parse semantic version components (major, minor, patch).
@@ -10,10 +10,48 @@
 //   3. Reject invalid versions and assert core compliance.
 //   4. Reject leading zeros, short forms, prerelease/build, empties, v-prefix.
 //   5. Accept zeros and large components; parse round-trips.
+//   6. JSON parse accepts values and echoes raw text; rejects garbage/trailing.
+//   7. JSON stringify is identity.
 
 import "core/primitives/semver_string.oo";
+import "core/primitives/json.oo";
 
 pub fn main() -> Result[Int, String] {
+    let jr: Result[String, String] = parse("{\"status\":\"ok\"}");
+    if jr.is_err() {
+        return Err("core: json parse of tiny object must be Ok");
+    }
+    let jraw: String = match jr { Ok(v) => v, Err(_) => "" };
+    if jraw != "{\"status\":\"ok\"}" {
+        return Err("core: json parse must echo raw text");
+    }
+    if parse("[1,2,3]").is_err() {
+        return Err("core: json parse of array must be Ok");
+    }
+    if parse("42").is_err() {
+        return Err("core: json parse of number must be Ok");
+    }
+    if parse("-7").is_err() {
+        return Err("core: json parse of negative must be Ok");
+    }
+    if parse("true").is_err() {
+        return Err("core: json parse of literal must be Ok");
+    }
+    if parse("{\"a\":[1,{\"b\":null}],\"c\":\"x\"}").is_err() {
+        return Err("core: json parse of nested must be Ok");
+    }
+    if parse("{\"a\":}").is_ok() {
+        return Err("core: json parse of bad object must be Err");
+    }
+    if parse("not json").is_ok() {
+        return Err("core: json parse of garbage must be Err");
+    }
+    if parse("{\"a\":1} trailing").is_ok() {
+        return Err("core: json parse with trailing bytes must be Err");
+    }
+    if stringify("{\"a\":1}") != "{\"a\":1}" {
+        return Err("core: json stringify must be identity");
+    }
     let s: String = "1.2.3";
     if semver_major(s) != "1" {
         return Err("core: semver major mismatch");

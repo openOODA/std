@@ -1,15 +1,118 @@
-// # std/qa/probe_cap_grant — 20 ⊂ 26 bitmask
+// # std/qa/probe_cap_grant — 20 ⊂ 26 bitmask pinned to cap_table.json
 //
-// Logline: Prove NORTHSTAR language bits are a subset of oodar substrate bits.
+// Logline: Prove NORTHSTAR language bits are a subset of oodar substrate
+// bits, with every (name, value, implemented) triple read from the live
+// oodar/sec/cap/cap_table.json — not hardcoded on both sides.
 //
-// Setup: Pure integers. Bits match oodar/sec/cap/cap_table.json.
+// Setup: FsReadCap reads ../oodar/sec/cap/cap_table.json (CI lays oodar out
+// as a sibling checkout; same locally). Each cap entry is segmented by its
+// "name" key; the segment must carry the exact value and implemented flag.
 //
 // Beats:
-//   1. Language mask is 20 implemented bits.
-//   2. Substrate mask is language plus 6 future hardware bits.
-//   3. Language bits do not overlap future bits. Subset holds.
+//   1. All 20 implemented caps present with exact values, implemented true.
+//   2. All 6 future caps present with exact values, implemented false.
+//   3. Header counts read 20 implemented / 6 future / 26 total.
+//   4. Language mask is a subset of substrate; disjoint from future bits.
 
-pub fn main() -> Result[Int, String] {
+import "fs/os/fs.oo";
+
+fn cap_body(json: String) -> String {
+    let at: Int = str_index_of(json, "\"caps\"");
+    if at < 0 { return ""; }
+    return str_slice(json, at, chars_len(json));
+}
+
+fn cap_seg(body: String, name: String) -> String {
+    let key: String = "\"name\": \"" + name + "\"";
+    let at: Int = str_index_of(body, key);
+    if at < 0 { return ""; }
+    let rest: String = str_slice(body, at + chars_len(key), chars_len(body));
+    let nx: Int = str_index_of(rest, "\"name\": \"");
+    if nx < 0 { return rest; }
+    return str_slice(rest, 0, nx);
+}
+
+fn cap_impl(body: String, name: String, val: Int) -> Result[Int, String] {
+    let seg: String = cap_seg(body, name);
+    if chars_len(seg) == 0 {
+        println("cap_grant: missing entry " + name);
+        return Err("cap_grant: missing entry " + name);
+    }
+    let want: String = "\"value\": " + val.to_string() + ",";
+    if !str_contains(seg, want) {
+        println("cap_grant: value drift for " + name);
+        return Err("cap_grant: value drift for " + name);
+    }
+    if !str_contains(seg, "\"implemented\": true,") {
+        println("cap_grant: " + name + " must be implemented");
+        return Err("cap_grant: " + name + " must be implemented");
+    }
+    return Ok(0);
+}
+
+fn cap_fut(body: String, name: String, val: Int) -> Result[Int, String] {
+    let seg: String = cap_seg(body, name);
+    if chars_len(seg) == 0 {
+        println("cap_grant: missing future entry " + name);
+        return Err("cap_grant: missing future entry " + name);
+    }
+    let want: String = "\"value\": " + val.to_string() + ",";
+    if !str_contains(seg, want) {
+        println("cap_grant: future value drift for " + name);
+        return Err("cap_grant: future value drift for " + name);
+    }
+    if !str_contains(seg, "\"implemented\": false,") {
+        println("cap_grant: " + name + " must stay future");
+        return Err("cap_grant: " + name + " must stay future");
+    }
+    return Ok(0);
+}
+
+pub fn main(fs_r: &FsReadCap) -> Result[Int, String] {
+    let jr: Result[String, String] = fs_read_file(fs_r, "../oodar/sec/cap/cap_table.json");
+    if jr.is_err() {
+        return Err("cap_grant: cannot read cap_table.json");
+    }
+    let full: String = match jr { Ok(s) => s, Err(_) => "" };
+    let body: String = cap_body(full);
+    if chars_len(body) == 0 {
+        return Err("cap_grant: cap table has no caps array");
+    }
+    if cap_impl(body, "NET", 1).is_err() { return Err("cap_grant: NET"); }
+    if cap_impl(body, "PROCESS", 2).is_err() { return Err("cap_grant: PROCESS"); }
+    if cap_impl(body, "FSWRITE", 4).is_err() { return Err("cap_grant: FSWRITE"); }
+    if cap_impl(body, "FSREAD", 8).is_err() { return Err("cap_grant: FSREAD"); }
+    if cap_impl(body, "SYS", 16).is_err() { return Err("cap_grant: SYS"); }
+    if cap_impl(body, "FS", 32).is_err() { return Err("cap_grant: FS"); }
+    if cap_impl(body, "TIME", 64).is_err() { return Err("cap_grant: TIME"); }
+    if cap_impl(body, "RAND", 128).is_err() { return Err("cap_grant: RAND"); }
+    if cap_impl(body, "ALLOC", 256).is_err() { return Err("cap_grant: ALLOC"); }
+    if cap_impl(body, "ARENA", 512).is_err() { return Err("cap_grant: ARENA"); }
+    if cap_impl(body, "FFI", 1024).is_err() { return Err("cap_grant: FFI"); }
+    if cap_impl(body, "METRICS", 2048).is_err() { return Err("cap_grant: METRICS"); }
+    if cap_impl(body, "SIGN", 4096).is_err() { return Err("cap_grant: SIGN"); }
+    if cap_impl(body, "TCP", 131072).is_err() { return Err("cap_grant: TCP"); }
+    if cap_impl(body, "UDP", 262144).is_err() { return Err("cap_grant: UDP"); }
+    if cap_impl(body, "BIND", 524288).is_err() { return Err("cap_grant: BIND"); }
+    if cap_impl(body, "THREAD", 67108864).is_err() { return Err("cap_grant: THREAD"); }
+    if cap_impl(body, "GPU", 134217728).is_err() { return Err("cap_grant: GPU"); }
+    if cap_impl(body, "ENV", 268435456).is_err() { return Err("cap_grant: ENV"); }
+    if cap_impl(body, "COMPILER_READ", 536870912).is_err() { return Err("cap_grant: COMPILER_READ"); }
+    if cap_fut(body, "AUDIO", 1048576).is_err() { return Err("cap_grant: AUDIO"); }
+    if cap_fut(body, "CAMERA", 2097152).is_err() { return Err("cap_grant: CAMERA"); }
+    if cap_fut(body, "USB", 4194304).is_err() { return Err("cap_grant: USB"); }
+    if cap_fut(body, "HID", 8388608).is_err() { return Err("cap_grant: HID"); }
+    if cap_fut(body, "WINDOW", 16777216).is_err() { return Err("cap_grant: WINDOW"); }
+    if cap_fut(body, "FRAME", 33554432).is_err() { return Err("cap_grant: FRAME"); }
+    if !str_contains(full, "\"cap_count\": 26") {
+        return Err("cap_grant: cap_count must be 26");
+    }
+    if !str_contains(full, "\"cap_count_implemented\": 20") {
+        return Err("cap_grant: implemented count must be 20");
+    }
+    if !str_contains(full, "\"cap_count_future_state\": 6") {
+        return Err("cap_grant: future count must be 6");
+    }
     let lang: Int = 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 131072 | 262144 | 524288 | 67108864 | 134217728 | 268435456 | 536870912;
     let future: Int = 1048576 | 2097152 | 4194304 | 8388608 | 16777216 | 33554432;
     let sub: Int = lang | future;
@@ -17,6 +120,6 @@ pub fn main() -> Result[Int, String] {
     if (lang & future) != 0 { return Err("language bits must not include future hardware"); }
     if (8 & lang) != 8 { return Err("FsReadCap bit 3 missing from language mask"); }
     if (2048 & lang) != 2048 { return Err("MetricsCap bit 11 missing from language mask"); }
-    println("probe: cap_grant 20 subset 26 ok");
+    println("probe: cap_grant 20 subset 26 ok (pinned to cap_table.json)");
     return Ok(0);
 }

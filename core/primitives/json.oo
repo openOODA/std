@@ -1,26 +1,40 @@
 // # Shape-check JSON text
 //
-// Logline: parse accepts a first JSON token and returns the raw string; stringify returns the same string.
+// Logline: parse validates one RFC 8259 value and returns the raw string; stringify returns the same string.
 //
 // Setup: This module is pure: no FS, net, or env. parse refuses the empty string.
+// The oodar json_*_internal runtime was removed (v3.1.0 audit); parse now runs
+// the pure-.oo zero-copy parser and stringify is identity.
 //
 // Beats:
-//   1. parse forwards a non-empty raw string to json_parse_internal.
-//   2. stringify forwards to json_stringify_internal and yields the input.
-//   3. verify parse checks a tiny object comes back Ok.
+//   1. parse validates the full text with jzc_parse and returns Ok(raw).
+//   2. parse returns Err on malformed JSON or trailing bytes.
+//   3. stringify is identity (residual: no tree rebuild).
+//   4. verify parse checks a tiny object comes back Ok.
 //
 // residual: not a tree parser; no object query; stringify is identity
+
+import "std/core/encoding/json_zero_copy.oo";
 
 pub fn parse(raw: String) -> Result[String, String]
     requires raw.len() > 0
 {
-    return json_parse_internal(raw);
+    let mut buf: List[Int] = bytes_new();
+    let mut i: Int = 0;
+    while i < bytes_len(raw) {
+        buf = bytes_push(buf, byte_at(raw, i));
+        i = i + 1;
+    }
+    if jzc_parse(buf).is_err() {
+        return Err("ERR\tjson\tparse");
+    }
+    return Ok(raw);
 }
 
 pub fn stringify(obj: String) -> String {
-    return json_stringify_internal(obj);
+    return obj;
 }
 
-verify parse {
-    assert_eq!(parse("{\"status\":\"ok\"}"), Ok("{\"status\":\"ok\"}"));
-}
+// NOTE: the old `verify parse` block was removed: assert_eq! on Result does
+// not lower in the LLVM emitter (ERR llvm undefined assert_eq), and
+// qa/probe_core.oo now pins the same behavior durably.

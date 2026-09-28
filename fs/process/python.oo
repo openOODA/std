@@ -6,19 +6,18 @@
 //
 // Beats:
 //   1. Caller passes &SysCap and a non-empty model name.
-//   2. load_model forwards to python_embed_internal.
-//   3. main asserts the load is Err so callers match on failure.
+//   2. load_model fails closed: the oodar python_embed_internal runtime was
+//      removed (v3.1.0 audit), so there is nothing to forward to.
+//   3. qa/probe_cap_process.oo asserts the load is Err so callers match on failure.
 //
 // residual: no CPython embed; no PyTorch or HuggingFace; Ok is not a loaded model
 
 pub fn load_model(sys: &SysCap, model_name: String) -> Result[String, String]
     requires model_name.len() > 0
 {
-    return python_embed_internal(sys, model_name);
+    return Err("ERR\tpython\tno_cpython");
 }
 
-// Runtime honesty probe: model load must fail closed until CPython is wired.
-pub fn main(sys: &SysCap) {
-    let res: Result[String, String] = load_model(sys, "llama3");
-    assert_eq!(res.is_err(), true);
-}
+// NOTE: this module must not define main: an imported main hijacks the
+// importer's entry point (the probe binary silently runs the wrong main).
+// The fail-closed property is pinned by qa/probe_cap_process.oo instead.

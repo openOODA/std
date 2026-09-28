@@ -1,20 +1,71 @@
-// # std/qa/probe_science — Science Domain Verification
+// # std/qa/probe_science — Science Domain Oracle
 //
-// Logline: Verify science domain ideal gas physics equations and state relations.
+// Logline: Verify science ideal-gas physics against absolute physical
+// constants (STP pressure 101325 Pa, molar values from python float
+// arithmetic) instead of the module's self-referential check, plus
+// every documented error path.
 //
-// Setup: Pure verification of science physical laws and constants.
+// Setup: Pure Float. Tolerances are absolute and tight: pressure
+// within 1 Pa of STP, temperature within 0.01 K.
 //
 // Beats:
-//   1. Verify ideal gas law calculation across pressure, volume, and temperature.
-//   2. Check partial pressure computation.
-//   3. Assert known thermodynamic reference points.
+//   1. R constant and STP pressure/temperature match physics.
+//   2. Volume and density match independent computation.
+//   3. Partial-pressure edges (0, 1, P=0) and rejections.
+//   4. Every non-physical input (n/V/T/P/M <= 0, xi outside [0,1]) is Err.
 
 import "science/phys/classical/ideal_gas_law.oo";
 
-pub fn main() -> Result[Int, String] {
-    if !verify_ideal_gas_law() {
-        return Err("science: ideal gas law verification failed");
+fn sci_got(r: Result[Float, String]) -> Float {
+    match r { Ok(v) => { return v; }, Err(_) => { return 0.0 - 1.0; } }
+}
+
+fn sci_near(got: Float, want: Float, tol: Float, tag: String) -> Result[Int, String] {
+    let mut d: Float = got - want;
+    if d < 0.0 { d = 0.0 - d; }
+    if d > tol {
+        println("science: " + tag + " out of tolerance");
+        return Err("science: " + tag + " out of tolerance");
     }
-    println("probe: std/science: ok");
+    return Ok(0);
+}
+
+fn sci_must_err(ok: Bool, tag: String) -> Result[Int, String] {
+    if ok {
+        println("science: " + tag + " must be Err");
+        return Err("science: " + tag + " must be Err");
+    }
+    return Ok(0);
+}
+
+pub fn main() -> Result[Int, String] {
+    if sci_near(ideal_gas_constant(), 8.314462618, 0.000000001, "R").is_err() { return Err("science: R"); }
+    let p_stp: Float = sci_got(ideal_gas_pressure(1.0, 0.022414, 273.15));
+    if sci_near(p_stp, 101325.0, 1.0, "stp_pressure").is_err() { return Err("science: stp_pressure"); }
+    let t_stp: Float = sci_got(ideal_gas_temperature(101325.0, 0.022414, 1.0));
+    if sci_near(t_stp, 273.15, 0.01, "stp_temp").is_err() { return Err("science: stp_temp"); }
+    let v_2: Float = sci_got(ideal_gas_volume(2.0, 101325.0, 300.0));
+    if sci_near(v_2, 0.0492344196476684, 0.000000001, "vol_2mol").is_err() { return Err("science: vol_2mol"); }
+    let rho: Float = sci_got(ideal_gas_density(2.0, 0.0289654, 0.05));
+    if sci_near(rho, 1.158616, 0.000001, "density_air").is_err() { return Err("science: density_air"); }
+    if sci_near(sci_got(ideal_gas_partial_pressure(0.5, 100000.0)), 50000.0, 0.000001, "pp_half").is_err() { return Err("science: pp_half"); }
+    if sci_near(sci_got(ideal_gas_partial_pressure(1.0, 101325.0)), 101325.0, 0.000001, "pp_full").is_err() { return Err("science: pp_full"); }
+    if sci_near(sci_got(ideal_gas_partial_pressure(0.0, 100000.0)), 0.0, 0.000001, "pp_zero").is_err() { return Err("science: pp_zero"); }
+    if sci_near(sci_got(ideal_gas_partial_pressure(0.25, 0.0)), 0.0, 0.000001, "pp_p0").is_err() { return Err("science: pp_p0"); }
+    if sci_must_err(ideal_gas_pressure(0.0, 1.0, 300.0).is_ok(), "p_n0").is_err() { return Err("science: p_n0"); }
+    if sci_must_err(ideal_gas_pressure(1.0, 0.0, 300.0).is_ok(), "p_v0").is_err() { return Err("science: p_v0"); }
+    if sci_must_err(ideal_gas_pressure(1.0, 1.0, 0.0).is_ok(), "p_t0").is_err() { return Err("science: p_t0"); }
+    if sci_must_err(ideal_gas_pressure(0.0 - 1.0, 1.0, 300.0).is_ok(), "p_nneg").is_err() { return Err("science: p_nneg"); }
+    if sci_must_err(ideal_gas_volume(1.0, 0.0, 300.0).is_ok(), "v_p0").is_err() { return Err("science: v_p0"); }
+    if sci_must_err(ideal_gas_temperature(101325.0, 0.022414, 0.0).is_ok(), "t_n0").is_err() { return Err("science: t_n0"); }
+    if sci_must_err(ideal_gas_density(1.0, 0.0, 1.0).is_ok(), "d_m0").is_err() { return Err("science: d_m0"); }
+    if sci_must_err(ideal_gas_density(1.0, 0.028, 0.0 - 1.0).is_ok(), "d_vneg").is_err() { return Err("science: d_vneg"); }
+    if sci_must_err(ideal_gas_partial_pressure(1.5, 100000.0).is_ok(), "pp_xihi").is_err() { return Err("science: pp_xihi"); }
+    if sci_must_err(ideal_gas_partial_pressure(0.0 - 0.5, 100000.0).is_ok(), "pp_xineg").is_err() { return Err("science: pp_xineg"); }
+    if sci_must_err(ideal_gas_partial_pressure(0.5, 0.0 - 1.0).is_ok(), "pp_pneg").is_err() { return Err("science: pp_pneg"); }
+    if !verify_ideal_gas_law() {
+        return Err("science: verify_ideal_gas_law failed");
+    }
+    println("probe: std/science oracle ok");
     return Ok(0);
 }

@@ -123,20 +123,26 @@ fn aes_add_rk(s: String, w: String, rnd: Int) -> String {
 }
 
 fn aes_inv_shift(s: String) -> String {
-    let mut t: String = s;
-    t = aes_set16(t, 1, aes_get(s, 13));
-    t = aes_set16(t, 5, aes_get(s, 1));
-    t = aes_set16(t, 9, aes_get(s, 5));
-    t = aes_set16(t, 13, aes_get(s, 9));
-    t = aes_set16(t, 2, aes_get(s, 10));
-    t = aes_set16(t, 6, aes_get(s, 14));
-    t = aes_set16(t, 10, aes_get(s, 2));
-    t = aes_set16(t, 14, aes_get(s, 6));
-    t = aes_set16(t, 3, aes_get(s, 7));
-    t = aes_set16(t, 7, aes_get(s, 11));
-    t = aes_set16(t, 11, aes_get(s, 15));
-    t = aes_set16(t, 15, aes_get(s, 3));
-    return t;
+    // InvShiftRows, column-major: new[i] for i in 0..16.
+    // Row 0 unshifted; row 1 right 1; row 2 right 2; row 3 right 3.
+    let mut b: List[Int] = bytes_new();
+    b = bytes_push(b, byte_at(s, 0));
+    b = bytes_push(b, byte_at(s, 13));
+    b = bytes_push(b, byte_at(s, 10));
+    b = bytes_push(b, byte_at(s, 7));
+    b = bytes_push(b, byte_at(s, 4));
+    b = bytes_push(b, byte_at(s, 1));
+    b = bytes_push(b, byte_at(s, 14));
+    b = bytes_push(b, byte_at(s, 11));
+    b = bytes_push(b, byte_at(s, 8));
+    b = bytes_push(b, byte_at(s, 5));
+    b = bytes_push(b, byte_at(s, 2));
+    b = bytes_push(b, byte_at(s, 15));
+    b = bytes_push(b, byte_at(s, 12));
+    b = bytes_push(b, byte_at(s, 9));
+    b = bytes_push(b, byte_at(s, 6));
+    b = bytes_push(b, byte_at(s, 3));
+    return bytes_to_str(b);
 }
 
 fn aes_inv_sub(s: String) -> String {

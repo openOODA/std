@@ -1,21 +1,49 @@
-// # std/qa/probe_hw — Hardware Domain Verification
+// # std/qa/probe_hw — Hardware Domain Oracle
 //
-// Logline: Verify hardware domain multi-core speedup computation.
+// Logline: Verify hw Amdahl/Gustafson fixed-point speedup against
+// independently computed values (python integer arithmetic on the
+// published formulas) plus the module's own golden/hostile/cert checks.
 //
-// Setup: Pure verification of hw Amdahl law computation.
+// Setup: Pure Int. Speedup at fixed-point scale 1000 (1000 = 1.0x).
 //
 // Beats:
-//   1. Compute Amdahl speedup for 50% parallel on 2 cores.
-//   2. Assert fixed-point result is 1333 (1.333x).
-//   3. Print probe success.
+//   1. amdahls_hw_speedup matches 9 oracle rows incl. edges.
+//   2. amdahls_hw_gustafson matches 4 oracle rows incl. edges.
+//   3. Hostile inputs fail closed to 0.
+//   4. verify_amdahls_law_hw (goldens, certs, contention) holds.
 
 import "hw/amdahls_law_hw.oo";
 
-pub fn main() -> Result[Int, String] {
-    let s: Int = amdahls_hw_speedup(500, 2);
-    if s != 1333 {
-        return Err("hw: Amdahl speedup mismatch");
+fn hw_check(got: Int, want: Int, tag: String) -> Result[Int, String] {
+    if got != want {
+        println("hw: " + tag + " mismatch");
+        return Err("hw: " + tag + " mismatch");
     }
-    println("probe: std/hw: ok");
+    return Ok(0);
+}
+
+pub fn main() -> Result[Int, String] {
+    if hw_check(amdahls_hw_speedup(500, 2), 1333, "amd_p5n2").is_err() { return Err("hw: amd_p5n2"); }
+    if hw_check(amdahls_hw_speedup(0, 16), 1000, "amd_serial").is_err() { return Err("hw: amd_serial"); }
+    if hw_check(amdahls_hw_speedup(1000, 16), 16000, "amd_full").is_err() { return Err("hw: amd_full"); }
+    if hw_check(amdahls_hw_speedup(950, 16), 9142, "amd_p95n16").is_err() { return Err("hw: amd_p95n16"); }
+    if hw_check(amdahls_hw_speedup(750, 4), 2285, "amd_p75n4").is_err() { return Err("hw: amd_p75n4"); }
+    if hw_check(amdahls_hw_speedup(750, 16), 3368, "amd_p75n16").is_err() { return Err("hw: amd_p75n16"); }
+    if hw_check(amdahls_hw_speedup(0, 1), 1000, "amd_1core").is_err() { return Err("hw: amd_1core"); }
+    if hw_check(amdahls_hw_speedup(1000, 1), 1000, "amd_full1").is_err() { return Err("hw: amd_full1"); }
+    if hw_check(amdahls_hw_speedup(250, 8), 1280, "amd_p25n8").is_err() { return Err("hw: amd_p25n8"); }
+    if hw_check(amdahls_hw_gustafson(950, 16), 15250, "gus_p95n16").is_err() { return Err("hw: gus_p95n16"); }
+    if hw_check(amdahls_hw_gustafson(0, 16), 1000, "gus_serial").is_err() { return Err("hw: gus_serial"); }
+    if hw_check(amdahls_hw_gustafson(1000, 16), 16000, "gus_full").is_err() { return Err("hw: gus_full"); }
+    if hw_check(amdahls_hw_gustafson(500, 4), 2500, "gus_p5n4").is_err() { return Err("hw: gus_p5n4"); }
+    if hw_check(amdahls_hw_speedup(0 - 1, 16), 0, "hostile_pneg").is_err() { return Err("hw: hostile_pneg"); }
+    if hw_check(amdahls_hw_speedup(1001, 16), 0, "hostile_phi").is_err() { return Err("hw: hostile_phi"); }
+    if hw_check(amdahls_hw_speedup(500, 0), 0, "hostile_n0").is_err() { return Err("hw: hostile_n0"); }
+    if hw_check(amdahls_hw_speedup_contended(950, 16, 0 - 1), 0, "hostile_cneg").is_err() { return Err("hw: hostile_cneg"); }
+    if hw_check(amdahls_hw_speedup_contended(950, 16, 1001), 0, "hostile_chi").is_err() { return Err("hw: hostile_chi"); }
+    if !verify_amdahls_law_hw() {
+        return Err("hw: verify_amdahls_law_hw failed");
+    }
+    println("probe: std/hw oracle ok");
     return Ok(0);
 }

@@ -89,6 +89,22 @@ pub fn main(
     if r_alpha.name != "Alpha" || r_alpha.max_fuel != 800 || !r_alpha.caps.can_read || !r_alpha.caps.can_eval {
         return Err("probe_swarm: role Alpha mismatch");
     }
+    let r_beta: AgentRole = list_get(manifest.roles, 1);
+    if r_beta.name != "Beta" || r_beta.max_fuel != 1200 || !r_beta.caps.can_read || !r_beta.caps.can_write || r_beta.caps.can_eval {
+        return Err("probe_swarm: role Beta mismatch");
+    }
+    if swarm_manifest_parse("[agent:broken\nrole = X\n").is_ok() {
+        return Err("probe_swarm: unclosed section must fail");
+    }
+    if swarm_manifest_parse("[agent:noname]\nfuel = 100\n").is_ok() {
+        return Err("probe_swarm: missing role property must fail");
+    }
+    if swarm_manifest_parse("[agent:a]\nrole = A\nfuel = lots\n").is_ok() {
+        return Err("probe_swarm: invalid fuel must fail");
+    }
+    if swarm_manifest_parse("[agent:a]\nrole = A\ninbox_cap = many\n").is_ok() {
+        return Err("probe_swarm: invalid inbox_cap must fail");
+    }
 
     // 3. OTP Supervisor Let-It-Crash Recovery & Autopsy Verification
     let mut sup: SwarmSupervisor = swarm_sup_new(thread, 0, 3);

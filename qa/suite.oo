@@ -51,6 +51,9 @@ fn run_probe_twice(p: &ProcessCap, oodac: String, path: String) -> Result[Int, S
     if o1 != o2 {
         return Err("non-identical double-run " + path + ": first " + o1 + " vs second " + o2);
     }
+    if o1 == "" {
+        return Err("empty output " + path + ": probe printed nothing (possible main hijack)");
+    }
     return Ok(0);
 }
 
@@ -75,10 +78,38 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
     ps = list_push(ps, "qa/probe_core.oo");
     ps = list_push(ps, "qa/probe_fs.oo");
     ps = list_push(ps, "qa/probe_net.oo");
+    ps = list_push(ps, "qa/probe_net_kat.oo");
+    ps = list_push(ps, "qa/probe_net_cidr.oo");
+    ps = list_push(ps, "qa/probe_camera_2d.oo");
+    ps = list_push(ps, "qa/probe_canvas.oo");
+    ps = list_push(ps, "qa/probe_cube_3d.oo");
+    ps = list_push(ps, "qa/probe_flare_2d.oo");
+    ps = list_push(ps, "qa/probe_font_5x7.oo");
+    ps = list_push(ps, "qa/probe_font_big.oo");
+    ps = list_push(ps, "qa/probe_hdr_3d.oo");
+    ps = list_push(ps, "qa/probe_noise_2d.oo");
+    ps = list_push(ps, "qa/probe_particle_2d.oo");
+    ps = list_push(ps, "qa/probe_pixel_fx.oo");
+    ps = list_push(ps, "qa/probe_pixel.oo");
+    ps = list_push(ps, "qa/probe_post_2d.oo");
+    ps = list_push(ps, "qa/probe_ppm.oo");
+    ps = list_push(ps, "qa/probe_qoi_file.oo");
+    ps = list_push(ps, "qa/probe_raster_3d.oo");
+    ps = list_push(ps, "qa/probe_raster_tex.oo");
+    ps = list_push(ps, "qa/probe_ray_3d.oo");
+    ps = list_push(ps, "qa/probe_shade_3d.oo");
+    ps = list_push(ps, "qa/probe_shadow_3d.oo");
+    ps = list_push(ps, "qa/probe_spin_3d.oo");
+    ps = list_push(ps, "qa/probe_tilemap_2d.oo");
+    ps = list_push(ps, "qa/probe_vector_2d.oo");
+    ps = list_push(ps, "qa/probe_wave_2d.oo");
+    ps = list_push(ps, "qa/probe_wave_3d.oo");
+    ps = list_push(ps, "qa/probe_xform_2d.oo");
     ps = list_push(ps, "qa/probe_sec.oo");
     ps = list_push(ps, "qa/probe_ed25519.oo");
     ps = list_push(ps, "qa/probe_sec_kat.oo");
     ps = list_push(ps, "qa/probe_curve25519.oo");
+    ps = list_push(ps, "qa/probe_sym_kat.oo");
     ps = list_push(ps, "qa/probe_mac_kat.oo");
     ps = list_push(ps, "qa/probe_num_format.oo");
     ps = list_push(ps, "qa/probe_fs_ops.oo");

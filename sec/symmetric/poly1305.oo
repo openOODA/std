@@ -7,7 +7,8 @@
 // Beats:
 //   1. Clamp r: clear top bits of r[3], r[7], r[11], r[15] and bottom bits of r[4], r[8], r[12].
 //   2. For each 16-byte block, append 0x01, load as 5 26-bit limbs, add to h, multiply by r, reduce mod (2^130 - 5).
-//   3. For the final partial block, append 0x00 instead of 0x01.
+//   3. Every block, including a partial final one, gets the 0x01 top bit
+//      at position 8*len (RFC 8439); carries flow upward with h4 wrap * 5.
 //   4. Finalize: add s (mod 2^128) and return 16 bytes.
 
 pub fn poly1305_mac(key: List[Int], msg: List[Int]) -> List[Int] {
@@ -79,16 +80,35 @@ pub fn poly1305_mac(key: List[Int], msg: List[Int]) -> List[Int] {
         if off + 13 < msg_len { b13 = list_get(msg, off + 13) & 255; }
         if off + 14 < msg_len { b14 = list_get(msg, off + 14) & 255; }
         if off + 15 < msg_len { b15 = list_get(msg, off + 15) & 255; }
-        let blk0: Int = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216);
-        let blk1: Int = b4 + (b5 * 256) + (b6 * 65536) + (b7 * 16777216);
-        let blk2: Int = b8 + (b9 * 256) + (b10 * 65536) + (b11 * 16777216);
-        let blk3: Int = b12 + (b13 * 256) + (b14 * 65536) + (b15 * 16777216);
-        let blk4: Int = 1;
-        h0 = (h0 + blk0) & mask26;
-        h1 = (h1 + blk1) & mask26;
-        h2 = (h2 + blk2) & mask26;
-        h3 = (h3 + blk3) & mask26;
-        h4 = (h4 + blk4) & mask26;
+        // Split the 128-bit LE block into 5 26-bit limbs with the same
+        // overlapping-word layout as the r split above.
+        let w0: Int = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216);
+        let w1: Int = b3 + (b4 * 256) + (b5 * 65536) + (b6 * 16777216);
+        let w2: Int = b6 + (b7 * 256) + (b8 * 65536) + (b9 * 16777216);
+        let w3: Int = b9 + (b10 * 256) + (b11 * 65536) + (b12 * 16777216);
+        let w4: Int = b12 + (b13 * 256) + (b14 * 65536) + (b15 * 16777216);
+        h0 = h0 + (w0 & mask26);
+        h1 = h1 + ((w1 >> 2) & mask26);
+        h2 = h2 + ((w2 >> 4) & mask26);
+        h3 = h3 + ((w3 >> 6) & mask26);
+        h4 = h4 + ((w4 >> 8) & mask26);
+        // The 0x01 padding bit at position 8*L (RFC 8439: every block,
+        // including a partial final one, gets the top bit).
+        let mut blen: Int = msg_len - off;
+        if blen > 16 { blen = 16; }
+        if blen == 16 {
+            h4 = h4 + 16777216;
+        } else {
+            let bitpos: Int = blen * 8;
+            let li: Int = bitpos / 26;
+            let lb: Int = bitpos - li * 26;
+            let one: Int = 1 << lb;
+            if li == 0 { h0 = h0 + one; }
+            if li == 1 { h1 = h1 + one; }
+            if li == 2 { h2 = h2 + one; }
+            if li == 3 { h3 = h3 + one; }
+            if li == 4 { h4 = h4 + one; }
+        }
         let t0: Int = h0 * r0;
         let t1: Int = h0 * r1 + h1 * r0;
         let t2: Int = h0 * r2 + h1 * r1 + h2 * r0;
@@ -103,63 +123,81 @@ pub fn poly1305_mac(key: List[Int], msg: List[Int]) -> List[Int] {
         h2 = t2 + (t7 * 5);
         h3 = t3 + (t8 * 5);
         h4 = t4;
+        // Carry upward: h0 -> h1 -> h2 -> h3 -> h4, then wrap the h4
+        // overflow back into h0 times 5 (2^130 = 5 mod 2^130 - 5).
+        let carry0: Int = h0 >> 26;
+        h0 = h0 & mask26;
+        h1 = h1 + carry0;
         let carry1: Int = h1 >> 26;
         h1 = h1 & mask26;
-        h0 = h0 + carry1;
+        h2 = h2 + carry1;
         let carry2: Int = h2 >> 26;
         h2 = h2 & mask26;
-        h1 = h1 + carry2;
+        h3 = h3 + carry2;
         let carry3: Int = h3 >> 26;
         h3 = h3 & mask26;
-        h2 = h2 + carry3;
+        h4 = h4 + carry3;
         let carry4: Int = h4 >> 26;
         h4 = h4 & mask26;
-        h3 = h3 + carry4;
         h0 = h0 + (carry4 * 5);
+        let carry5: Int = h0 >> 26;
+        h0 = h0 & mask26;
+        h1 = h1 + carry5;
         off = off + 16;
     }
-    let hibit: Int = h4 >> 24;
-    let mut nh0: Int = h0;
-    let mut nh1: Int = h1;
-    let mut nh2: Int = h2;
-    let mut nh3: Int = h3;
-    let mut nh4: Int = h4;
-    if hibit == 1 {
-        nh0 = nh0 + 67108863;
-        nh1 = nh1 + 67108863;
-        nh2 = nh2 + 67108863;
-        nh3 = nh3 + 67108863;
-        nh4 = nh4 + 67108858;
-        let c0: Int = nh0 >> 26;
-        nh0 = nh0 & mask26;
-        nh1 = nh1 + c0;
-        let c1: Int = nh1 >> 26;
-        nh1 = nh1 & mask26;
-        nh2 = nh2 + c1;
-        let c2: Int = nh2 >> 26;
-        nh2 = nh2 & mask26;
-        nh3 = nh3 + c2;
-        let c3: Int = nh3 >> 26;
-        nh3 = nh3 & mask26;
-        nh4 = nh4 + c3;
-        let c4: Int = nh4 >> 26;
-        nh4 = nh4 & mask26;
-        nh0 = nh0 + (c4 * 5);
+    // Freeze: finish the carry chain, then conditionally subtract
+    // p = 2^130 - 5 once (fully carried h < 2p, so one subtraction
+    // with borrows suffices; keep h when the final borrow fires).
+    let fz0: Int = h0 >> 26;
+    h0 = h0 & mask26;
+    h1 = h1 + fz0;
+    let fz1: Int = h1 >> 26;
+    h1 = h1 & mask26;
+    h2 = h2 + fz1;
+    let fz2: Int = h2 >> 26;
+    h2 = h2 & mask26;
+    h3 = h3 + fz2;
+    let fz3: Int = h3 >> 26;
+    h3 = h3 & mask26;
+    h4 = h4 + fz3;
+    let fz4: Int = h4 >> 26;
+    h4 = h4 & mask26;
+    h0 = h0 + (fz4 * 5);
+    let fz5: Int = h0 >> 26;
+    h0 = h0 & mask26;
+    h1 = h1 + fz5;
+    let mut g0: Int = h0 - 67108859;
+    let mut g1: Int = h1 - 67108863;
+    let mut g2: Int = h2 - 67108863;
+    let mut g3: Int = h3 - 67108863;
+    let mut g4: Int = h4 - 67108863;
+    if g0 < 0 { g0 = g0 + 67108864; g1 = g1 - 1; }
+    if g1 < 0 { g1 = g1 + 67108864; g2 = g2 - 1; }
+    if g2 < 0 { g2 = g2 + 67108864; g3 = g3 - 1; }
+    if g3 < 0 { g3 = g3 + 67108864; g4 = g4 - 1; }
+    if g4 >= 0 {
+        h0 = g0;
+        h1 = g1;
+        h2 = g2;
+        h3 = g3;
+        h4 = g4;
     }
-    let f0: Int = (nh0 & 67108863) | ((nh1 & 63) << 26);
-    let f1: Int = ((nh1 >> 6) & 1048575) | ((nh2 & 4095) << 20);
-    let f2: Int = ((nh2 >> 12) & 16383) | ((nh3 & 262143) << 14);
-    let f3: Int = ((nh3 >> 18) & 255) | ((nh4 & 16777215) << 8);
-    let g0: Int = f0 + s0;
-    let g1: Int = f1 + s1;
-    let g2: Int = f2 + s2;
-    let g3: Int = f3 + s3;
-    let carry: Int = g3 >> 32;
+    let f0: Int = (h0 & 67108863) | ((h1 & 63) << 26);
+    let f1: Int = ((h1 >> 6) & 1048575) | ((h2 & 4095) << 20);
+    let f2: Int = ((h2 >> 12) & 16383) | ((h3 & 262143) << 14);
+    let f3: Int = ((h3 >> 18) & 255) | ((h4 & 16777215) << 8);
+    // Add s mod 2^128 with real carries; top overflow is dropped.
     let mask32: Int = 4294967295;
-    let final0: Int = g0 & mask32;
-    let final1: Int = g1 & mask32;
-    let final2: Int = g2 & mask32;
-    let final3: Int = (g3 + carry * 5) & mask32;
+    let u0: Int = f0 + s0;
+    let k0: Int = u0 >> 32;
+    let final0: Int = u0 & mask32;
+    let u1: Int = f1 + s1 + k0;
+    let k1: Int = u1 >> 32;
+    let final1: Int = u1 & mask32;
+    let u2: Int = f2 + s2 + k1;
+    let k2: Int = u2 >> 32;
+    let final2: Int = u2 & mask32;
+    let final3: Int = (f3 + s3 + k2) & mask32;
     let mut out: List[Int] = list_new();
     out = list_push(out, (final0 >> 0) & 255);
     out = list_push(out, (final0 >> 8) & 255);

@@ -181,7 +181,7 @@ pub fn chacha20_block(key: String, nonce: String, counter: Int) -> String {
         let mut t7: CCSt = cc_set(t6, 2, w1g.a); t7 = cc_set(t7, 7, w1g.b); t7 = cc_set(t7, 8, w1g.c); t7 = cc_set(t7, 13, w1g.d);
         let w0h: CC4 = CC4 { a: cc_get(t7, 3), b: cc_get(t7, 4), c: cc_get(t7, 9), d: cc_get(t7, 14) };
         let w1h: CC4 = cc_qr(w0h);
-        let mut s: CCSt = cc_set(t7, 3, w1h.a); s = cc_set(s, 4, w1h.b); s = cc_set(s, 9, w1h.c); s = cc_set(s, 14, w1h.d);
+        s = cc_set(t7, 3, w1h.a); s = cc_set(s, 4, w1h.b); s = cc_set(s, 9, w1h.c); s = cc_set(s, 14, w1h.d);
         r = r + 1;
     }
     let mut out: String = "";

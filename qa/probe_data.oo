@@ -33,11 +33,16 @@ fn probe_btree() -> Result[Int, String] {
     if dup.is_err() {
         return Err("data: btree duplicate insert must upsert");
     }
-    // Value assertions deferred: the C emitter lowers neither
-    // Option[String] match arms nor .is_some() yet (Int only).
-    // These calls pin crash-freedom of both search paths meanwhile.
-    let _m1: Option[String] = btree_search(t, "k1");
-    let _m2: Option[String] = btree_search(t, "zzz");
+    let m1: Option[String] = btree_search(t, "k1");
+    let v1: String = match m1 { Some(s) => s, None => "" };
+    if v1 != "v1b" {
+        return Err("data: btree search k1 must return upserted v1b");
+    }
+    let m2: Option[String] = btree_search(t, "zzz");
+    let v2: String = match m2 { Some(s) => s, None => "NONE" };
+    if v2 != "NONE" {
+        return Err("data: btree search miss must be None");
+    }
     let bad: Result[Bool, String] = btree_insert(&mut t, "", "v");
     if bad.is_ok() {
         return Err("data: btree empty key must refuse");

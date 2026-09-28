@@ -77,6 +77,9 @@ pub fn main() -> Result[Int, String] {
     if probe_hdr_close(list_get(hr_glow.px, 0), 0.0) != 1 {
         return Err("hdr probe: bloom corner must stay 0");
     }
+    if probe_hdr_close(list_get(hr_star.px, 36), 900.0) != 1 {
+        return Err("hdr probe: bloom must not mutate caller");
+    }
     let hr_hot: HdrFb = hdr_from_canvas(hr_one, 2.0);
     let hr_img: Canvas = hdr_tonate(hr_hot);
     if list_get(hr_img.px, 0) != 254 {

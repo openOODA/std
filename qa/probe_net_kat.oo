@@ -1,0 +1,131 @@
+// # std/qa/probe_net_kat — Network Parsers Known-Answer Tests
+//
+// Logline: Verify net/ URL/IP/DNS/HTTP/WebSocket/MIME/cookie pure parsers
+// against independent values (python ipaddress for IP/CIDR; RFC wire
+// formats for HTTP/DNS-record/WebSocket-opcode/cookie facts).
+//
+// Setup: Pure compute. No sockets opened.
+//
+// Beats:
+//   1. URL stringify round-trips; default ports normalize away.
+//   2. IPv4 parse/int/classify match ipaddress (loopback, RFC 1918, multicast).
+//   3. DNS type numbers and record format match IANA/RFC 1035.
+//   4. HTTP request serializes exact wire bytes; responses parse.
+//   5. WebSocket opcode names and control detection match RFC 6455.
+//   6. MIME lookup and Set-Cookie serialization match exact strings.
+
+import "net/url.oo";
+import "net/ip_addr.oo";
+import "net/dns_packet.oo";
+import "net/http_req.oo";
+import "net/http_resp_parse.oo";
+import "net/websocket_frame.oo";
+import "net/mime.oo";
+import "net/cookies.oo";
+
+pub fn main() -> Result[Int, String] {
+    let full: ParsedUrl = url_parse("https://openooda.org:8443/a/b?x=1&y=2#frag");
+    if url_to_string(full) != "https://openooda.org:8443/a/b?x=1&y=2#frag" {
+        return Err("net_kat: url round-trip mismatch");
+    }
+    let norm: ParsedUrl = url_parse("https://h:443/p");
+    if url_to_string(norm) != "https://h/p" {
+        return Err("net_kat: default port must normalize away");
+    }
+    let q: ParsedUrl = url_with_query(url_parse("http://h/a"), "k=v");
+    if url_to_string(q) != "http://h/a?k=v" {
+        return Err("net_kat: with_query mismatch");
+    }
+    let lo: Ipv4Addr = ipv4_parse("127.0.0.1");
+    if !lo.is_valid || ipv4_to_int(lo) != 2130706433 {
+        return Err("net_kat: 127.0.0.1 must be 2130706433");
+    }
+    if ipv4_to_string(ipv4_from_int(2130706433)) != "127.0.0.1" {
+        return Err("net_kat: from_int round-trip mismatch");
+    }
+    if ipv4_to_string(ipv4_parse("192.168.1.5")) != "192.168.1.5" {
+        return Err("net_kat: ipv4 parse echo mismatch");
+    }
+    if ipv4_parse("999.1.1.1").is_valid || ipv4_parse("nope").is_valid {
+        return Err("net_kat: bad ipv4 must be invalid");
+    }
+    if !ipv4_is_loopback(lo) || ipv4_is_loopback(ipv4_parse("128.0.0.1")) {
+        return Err("net_kat: loopback classification mismatch");
+    }
+    if !ipv4_is_private(ipv4_parse("10.0.0.1")) || !ipv4_is_private(ipv4_parse("172.16.0.1")) || !ipv4_is_private(ipv4_parse("192.168.0.1")) {
+        return Err("net_kat: RFC 1918 must be private");
+    }
+    if ipv4_is_private(ipv4_parse("8.8.8.8")) || ipv4_is_private(ipv4_parse("172.32.0.1")) || !ipv4_is_private(ipv4_parse("172.31.255.255")) {
+        return Err("net_kat: private edges mismatch");
+    }
+    if !ipv4_is_multicast(ipv4_parse("224.0.0.1")) || !ipv4_is_multicast(ipv4_parse("239.255.255.255")) {
+        return Err("net_kat: multicast must admit 224/4");
+    }
+    if ipv4_is_multicast(ipv4_parse("223.255.255.255")) || ipv4_is_multicast(ipv4_parse("240.0.0.0")) {
+        return Err("net_kat: multicast edges mismatch");
+    }
+    if !ipv6_is_loopback(ipv6_new("::1")) || ipv6_is_loopback(ipv6_new("::2")) {
+        return Err("net_kat: ipv6 loopback mismatch");
+    }
+    if dns_type_a() != 1 || dns_type_ns() != 2 || dns_type_cname() != 5 || dns_type_soa() != 6 || dns_type_mx() != 15 || dns_type_txt() != 16 || dns_type_aaaa() != 28 {
+        return Err("net_kat: dns type numbers mismatch");
+    }
+    if dns_type_name(1) != "A" || dns_type_name(28) != "AAAA" || dns_type_name(99) != "UNKNOWN" {
+        return Err("net_kat: dns type names mismatch");
+    }
+    let rec: DnsRecord = dns_record_new("h.example.", 1, 300, "1.2.3.4");
+    if dns_record_format(rec) != "h.example. 300 IN A 1.2.3.4" {
+        return Err("net_kat: dns record format mismatch");
+    }
+    let req0: HttpRequest = http_req_new("GET", "/a?b=c");
+    let req1: HttpRequest = http_req_set_header(req0, "Host", "h");
+    if http_req_serialize(req1) != "GET /a?b=c HTTP/1.1\r\nHost: h\r\n\r\n" {
+        return Err("net_kat: http request wire mismatch");
+    }
+    let req2: HttpRequest = http_req_set_body(http_req_new("POST", "/s"), "hi");
+    if http_req_serialize(req2) != "POST /s HTTP/1.1\r\n\r\nhi" {
+        return Err("net_kat: http post wire mismatch");
+    }
+    let hr: Result[HttpResponse, String] = http_resp_parse("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi");
+    if hr.is_err() {
+        return Err("net_kat: http response must parse");
+    }
+    let resp: HttpResponse = match hr { Ok(v) => v, Err(_) => HttpResponse { version: "", status: 0, reason: "", headers: list_new(), values: list_new(), body: "" } };
+    if resp.status != 200 || resp.reason != "OK" || resp.body != "hi" {
+        return Err("net_kat: http response fields mismatch");
+    }
+    if resp.version != "HTTP/1.1" {
+        return Err("net_kat: http version mismatch");
+    }
+    if http_resp_parse("").is_ok() || http_resp_parse("garbage").is_ok() {
+        return Err("net_kat: bad http response must be Err");
+    }
+    if ws_frame_opcode_name(0) != "CONTINUATION" || ws_frame_opcode_name(1) != "TEXT" || ws_frame_opcode_name(2) != "BINARY" {
+        return Err("net_kat: ws data opcodes mismatch");
+    }
+    if ws_frame_opcode_name(8) != "CLOSE" || ws_frame_opcode_name(9) != "PING" || ws_frame_opcode_name(10) != "PONG" || ws_frame_opcode_name(3) != "UNKNOWN" {
+        return Err("net_kat: ws control opcodes mismatch");
+    }
+    if !ws_frame_is_control(ws_frame_ping("p")) || ws_frame_is_control(ws_frame_text("t", false)) {
+        return Err("net_kat: ws control detection mismatch");
+    }
+    if mime_from_extension("html") != "text/html" || mime_from_extension("json") != "application/json" || mime_from_extension("png") != "image/png" {
+        return Err("net_kat: mime lookup mismatch");
+    }
+    if !mime_is_json("application/json") || !mime_is_binary("image/png") || mime_is_binary("text/plain") {
+        return Err("net_kat: mime predicates mismatch");
+    }
+    let ck0: HttpCookie = cookie_new("sid", "abc123");
+    if cookie_serialize_set_cookie(ck0) != "sid=abc123; Path=/; SameSite=Lax" {
+        return Err("net_kat: cookie default mismatch got " + cookie_serialize_set_cookie(ck0));
+    }
+    let ck1: HttpCookie = cookie_with_secure(cookie_with_http_only(cookie_with_max_age(cookie_with_domain(ck0, "ex.com"), 3600), true), true);
+    if cookie_serialize_set_cookie(ck1) != "sid=abc123; Path=/; Domain=ex.com; Max-Age=3600; Secure; HttpOnly; SameSite=Lax" {
+        return Err("net_kat: cookie full mismatch");
+    }
+    if cookie_serialize_cookie(ck0) != "sid=abc123" {
+        return Err("net_kat: cookie pair mismatch");
+    }
+    println("probe: std net KAT ok");
+    return Ok(0);
+}

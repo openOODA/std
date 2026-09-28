@@ -119,6 +119,16 @@ pub fn main() -> Result[Int, String] {
     if tile_count(tile_set(m, 9, 9, 0), 0) != 5 {
         return Err("tilemap: oob set must drop");
     }
+    let m_flip: Tilemap = tile_set(m, 1, 0, 0);
+    if tile_get(m_flip, 1, 0) != 0 {
+        return Err("tilemap: set must land in copy");
+    }
+    if tile_get(m, 1, 0) != 1 {
+        return Err("tilemap: set must not mutate caller");
+    }
+    if tile_count(m, 1) != 5 {
+        return Err("tilemap: caller map must stay intact");
+    }
     // Full render: five red tiles and five blue tiles at 16 px each.
     // NOTE: Helpers bind to lets first; nested struct-returning calls as
     // arguments lose retains in the C backend, so never nest them here.

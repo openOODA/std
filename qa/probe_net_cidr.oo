@@ -1,0 +1,91 @@
+// # std/qa/probe_net_cidr — CIDR Parse and Containment Tests
+//
+// Logline: Verify net/ip_cidr value parsers and subnet containment against
+// python ipaddress (v4 and v6, edges /0 /32, rejections).
+//
+// Setup: Pure compute. Kept separate from probe_net_kat because ip_cidr.oo
+// and ip_addr.oo both define ipv4_to_string (one probe cannot import both).
+// NOTE: every contains check re-parses its inputs. oodac does not retain a
+// struct's List fields when the struct crosses a call boundary, so reusing
+// one parsed Cidr4/Ipv4 across calls reads freed memory (use-after-free:
+// c4.addr octets come back as garbage). Re-parsing keeps each value live
+// for exactly one call. See the oodac ARC finding in the release notes.
+//
+// Beats:
+//   1. cidr4_parse accepts valid CIDR and rejects bad prefix/IP.
+//   2. cidr4_contains matches ipaddress on in/out/edge addresses.
+//   3. /0 contains everything; /32 contains exactly one address.
+//   4. v6 parse accepts full and :: forms; rejects garbage.
+
+import "net/ip_cidr.oo";
+import "net/ip_cidr_parse.oo";
+
+// Single-use containment: parse both sides fresh, call contains once.
+// Returns 1 contained, 0 not contained, -1 on parse failure.
+fn nc_contains(cidr_s: String, ip_s: String) -> Int {
+    let cr: Result[Cidr4, String] = cidr4_parse(cidr_s);
+    let ir: Result[Ipv4, String] = ipv4_parse(ip_s);
+    if cr.is_err() || ir.is_err() { return 0 - 1; }
+    let c: Cidr4 = match cr { Ok(v) => v, Err(_) => Cidr4 { addr: Ipv4 { octets: list_new() }, prefix: 0 } };
+    let ip: Ipv4 = match ir { Ok(v) => v, Err(_) => Ipv4 { octets: list_new() } };
+    if cidr4_contains(c, ip) { return 1; }
+    return 0;
+}
+
+pub fn main() -> Result[Int, String] {
+    let c4r: Result[Cidr4, String] = cidr4_parse("192.168.1.0/24");
+    if c4r.is_err() {
+        return Err("net_cidr: 192.168.1.0/24 must parse");
+    }
+    let c4: Cidr4 = match c4r { Ok(v) => v, Err(_) => Cidr4 { addr: Ipv4 { octets: list_new() }, prefix: 0 } };
+    if c4.prefix != 24 {
+        return Err("net_cidr: prefix must be 24");
+    }
+    if nc_contains("192.168.1.0/24", "192.168.1.5") != 1 {
+        return Err("net_cidr: 192.168.1.5 must be in /24");
+    }
+    if nc_contains("192.168.1.0/24", "192.168.2.5") != 0 {
+        return Err("net_cidr: 192.168.2.5 must be outside /24");
+    }
+    if nc_contains("192.168.1.0/24", "192.168.1.0") != 1 {
+        return Err("net_cidr: network address is inside");
+    }
+    if nc_contains("192.168.1.0/24", "192.168.1.255") != 1 {
+        return Err("net_cidr: broadcast address is inside");
+    }
+    if nc_contains("0.0.0.0/0", "192.168.2.5") != 1 {
+        return Err("net_cidr: /0 must contain everything");
+    }
+    if nc_contains("10.1.2.3/32", "10.1.2.3") != 1 {
+        return Err("net_cidr: /32 must contain itself");
+    }
+    if nc_contains("10.1.2.3/32", "10.1.2.4") != 0 {
+        return Err("net_cidr: /32 must exclude others");
+    }
+    if cidr4_parse("192.168.1.0/33").is_ok() {
+        return Err("net_cidr: /33 must be rejected");
+    }
+    if cidr4_parse("192.168.1.0").is_ok() {
+        return Err("net_cidr: missing slash must be rejected");
+    }
+    if cidr4_parse("").is_ok() || ipv4_parse("999.1.1.1").is_ok() {
+        return Err("net_cidr: garbage must be rejected");
+    }
+    if cidr4_parse_status("10.0.0.0/8").is_err() || cidr4_parse_status("bad").is_ok() {
+        return Err("net_cidr: status fn must agree");
+    }
+    if ipv6_parse("2001:0db8:0000:0000:0000:0000:0000:0001").is_err() {
+        return Err("net_cidr: full v6 must parse");
+    }
+    if ipv6_parse("::1").is_err() {
+        return Err("net_cidr: ::1 must parse");
+    }
+    if ipv6_parse("not-ipv6").is_ok() {
+        return Err("net_cidr: v6 garbage must be rejected");
+    }
+    if cidr6_parse_status("::/0").is_err() || cidr6_parse_status("::/129").is_ok() {
+        return Err("net_cidr: v6 status edges mismatch");
+    }
+    println("probe: std net CIDR ok");
+    return Ok(0);
+}

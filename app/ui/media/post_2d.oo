@@ -27,13 +27,15 @@ pub fn post_fog_fb(src: HdrFb, depth: List[Int], near: Int, far: Int, fr: Float,
     if po_span <= 0 {
         return src;
     }
-    let po_rad: List[Float] = src.px;
+    // NOTE: read src.px inline, never `let`-bind it: a bound field alias is
+    // released at scope end without a matching retain, freeing the caller.
     let mut po_px: List[Float] = list_new();
     let mut po_i: Int = 0;
     let po_n: Int = po_w * po_h;
     while po_i < po_n {
         let mut po_t: Float = 0.0;
-        let po_z: Int = list_get(depth, po_i);
+        // Missing depth reads as near (no fog): fail-safe default.
+        let po_z: Int = if po_i < list_len(depth) { list_get(depth, po_i) } else { near };
         if po_z > near {
             po_t = spin_i2f(po_z - near) / spin_i2f(po_span);
         }
@@ -41,9 +43,9 @@ pub fn post_fog_fb(src: HdrFb, depth: List[Int], near: Int, far: Int, fr: Float,
             po_t = 1.0;
         }
         let po_base: Int = po_i * 3;
-        let po_r: Float = list_get(po_rad, po_base);
-        let po_g: Float = list_get(po_rad, po_base + 1);
-        let po_b: Float = list_get(po_rad, po_base + 2);
+        let po_r: Float = list_get(src.px, po_base);
+        let po_g: Float = list_get(src.px, po_base + 1);
+        let po_b: Float = list_get(src.px, po_base + 2);
         po_px = list_push(po_px, po_r + (fr - po_r) * po_t);
         po_px = list_push(po_px, po_g + (fg - po_g) * po_t);
         po_px = list_push(po_px, po_b + (fbl - po_b) * po_t);
@@ -64,13 +66,15 @@ pub fn post_fog_ldr(src: Canvas, depth: List[Int], near: Int, far: Int, fog: Qoi
     if po_span <= 0 {
         return src;
     }
-    let po_flat: List[Int] = src.px;
+    // NOTE: read src.px inline (see post_fog_fb): a bound field alias is
+    // released at scope end without a matching retain, freeing the caller.
     let mut po_px: List[Int] = list_new();
     let mut po_i: Int = 0;
     let po_n: Int = po_w * po_h;
     while po_i < po_n {
         let mut po_t: Int = 0;
-        let po_z: Int = list_get(depth, po_i);
+        // Missing depth reads as near (no fog): fail-safe default.
+        let po_z: Int = if po_i < list_len(depth) { list_get(depth, po_i) } else { near };
         if po_z > near {
             po_t = (po_z - near) * 256 / po_span;
         }
@@ -78,10 +82,10 @@ pub fn post_fog_ldr(src: Canvas, depth: List[Int], near: Int, far: Int, fog: Qoi
             po_t = 256;
         }
         let po_base: Int = po_i * 4;
-        let po_r: Int = list_get(po_flat, po_base);
-        let po_g: Int = list_get(po_flat, po_base + 1);
-        let po_b: Int = list_get(po_flat, po_base + 2);
-        let po_a: Int = list_get(po_flat, po_base + 3);
+        let po_r: Int = list_get(src.px, po_base);
+        let po_g: Int = list_get(src.px, po_base + 1);
+        let po_b: Int = list_get(src.px, po_base + 2);
+        let po_a: Int = list_get(src.px, po_base + 3);
         po_px = list_push(po_px, (po_r * (256 - po_t) + fog.r * po_t) / 256);
         po_px = list_push(po_px, (po_g * (256 - po_t) + fog.g * po_t) / 256);
         po_px = list_push(po_px, (po_b * (256 - po_t) + fog.b * po_t) / 256);
@@ -97,15 +101,15 @@ pub fn post_fog_ldr(src: Canvas, depth: List[Int], near: Int, far: Int, fog: Qoi
 pub fn post_bloom_ldr(src: Canvas, threshold: Int, strength: Int) -> Canvas {
     let po_w: Int = src.width;
     let po_h: Int = src.height;
-    let po_flat: List[Int] = src.px;
+    // NOTE: src.px is read inline (see post_fog_fb): never let-bind it.
     let mut po_hot: List[Int] = list_new();
     let mut po_i: Int = 0;
     let po_n: Int = po_w * po_h;
     while po_i < po_n {
         let po_base: Int = po_i * 4;
-        let po_r: Int = list_get(po_flat, po_base);
-        let po_g: Int = list_get(po_flat, po_base + 1);
-        let po_b: Int = list_get(po_flat, po_base + 2);
+        let po_r: Int = list_get(src.px, po_base);
+        let po_g: Int = list_get(src.px, po_base + 1);
+        let po_b: Int = list_get(src.px, po_base + 2);
         let mut po_m: Int = po_r;
         if po_g > po_m {
             po_m = po_g;
@@ -161,9 +165,9 @@ pub fn post_bloom_ldr(src: Canvas, threshold: Int, strength: Int) -> Canvas {
             let po_ag: Int = (po_sg / 9) * strength / 256;
             let po_ab: Int = (po_sb / 9) * strength / 256;
             let po_base: Int = (po_y * po_w + po_x) * 4;
-            let mut po_or: Int = list_get(po_flat, po_base) + po_ar;
-            let mut po_og: Int = list_get(po_flat, po_base + 1) + po_ag;
-            let mut po_ob: Int = list_get(po_flat, po_base + 2) + po_ab;
+            let mut po_or: Int = list_get(src.px, po_base) + po_ar;
+            let mut po_og: Int = list_get(src.px, po_base + 1) + po_ag;
+            let mut po_ob: Int = list_get(src.px, po_base + 2) + po_ab;
             if po_or > 255 {
                 po_or = 255;
             }
@@ -176,7 +180,7 @@ pub fn post_bloom_ldr(src: Canvas, threshold: Int, strength: Int) -> Canvas {
             po_px = list_push(po_px, po_or);
             po_px = list_push(po_px, po_og);
             po_px = list_push(po_px, po_ob);
-            po_px = list_push(po_px, list_get(po_flat, po_base + 3));
+            po_px = list_push(po_px, list_get(src.px, po_base + 3));
             po_x = po_x + 1;
         }
         po_y = po_y + 1;

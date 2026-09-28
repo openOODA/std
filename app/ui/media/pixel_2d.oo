@@ -69,8 +69,14 @@ pub fn pix_set(sp: Sprite, x: Int, y: Int, idx: Int) -> Sprite {
     if y >= sp.h {
         return sp;
     }
-    // NOTE: Int-list set threads like canvas_set; returns stay balanced.
-    let mut px_px: List[Int] = sp.px;
+    // NOTE: clone before set: list_set mutates in place and sp.px aliases
+    // the caller's list, so setting through the binding corrupts the caller.
+    let mut px_px: List[Int] = list_new();
+    let mut px_ci: Int = 0;
+    while px_ci < list_len(sp.px) {
+        px_px = list_push(px_px, list_get(sp.px, px_ci));
+        px_ci = px_ci + 1;
+    }
     px_px = list_set(px_px, y * sp.w + x, idx);
     return Sprite { w: sp.w, h: sp.h, px: px_px };
 }

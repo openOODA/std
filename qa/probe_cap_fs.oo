@@ -10,6 +10,7 @@
 //   3. Read content via fs_read_file (&FsReadCap) and assert byte-exact match.
 //   4. Create nested directory via fs_mkdir_p (&FsWriteCap) and assert fs_is_dir (&FsReadCap).
 //   5. Remove temporary test artifacts and confirm unlinked status.
+//   6. Missing file fails closed: read/remove Err, exists false, size -1.
 
 import "fs/os/fs.oo";
 
@@ -59,6 +60,20 @@ pub fn main(fs_r: &FsReadCap, fs_w: &FsWriteCap) -> Result[Int, String] {
 
     if fs_path_exists(fs_r, test_file) {
         return Err("cap_fs: file should not exist after fs_remove_file");
+    }
+
+    let missing: String = test_dir + "/definitely_missing_xyz";
+    if fs_read_file(fs_r, missing).is_ok() {
+        return Err("cap_fs: read of missing file must fail closed");
+    }
+    if fs_path_exists(fs_r, missing) {
+        return Err("cap_fs: exists of missing file must be false");
+    }
+    if fs_file_size(fs_r, missing) != 0 - 1 {
+        return Err("cap_fs: size of missing file must be -1");
+    }
+    if fs_remove_file(fs_w, missing).is_ok() {
+        return Err("cap_fs: remove of missing file must fail closed");
     }
 
     println("probe: std/qa cap_fs passed (&FsReadCap, &FsWriteCap verified)");

@@ -1,22 +1,48 @@
 // # std/qa/probe_app — Application Domain Verification
 //
-// Logline: Verify application domain agent coding assistant and proposal verification.
+// Logline: Verify app agent proposal rules: context echoes the stage,
+// compliant proposals verify, and both rejection branches fire.
 //
-// Setup: Pure verification of app layer agent structures and rules.
+// Setup: Pure data. Covers every branch of pair_programmer_verify_proposal.
 //
 // Beats:
-//   1. Instantiate agent context with active development stage.
-//   2. Propose compliant source code module.
-//   3. Verify proposal against contract and size limits.
+//   1. Context carries the requested active stage.
+//   2. Generated proposal verifies Ok.
+//   3. Non-compliant proposal is rejected.
+//   4. Over-256-line proposal is rejected.
 
 import "app/agent/pair_programmer.oo";
 
 pub fn main() -> Result[Int, String] {
     let ctx: AgentContext = pair_programmer_context_new(2);
+    if ctx.active_stage != 2 {
+        return Err("app: context must echo stage");
+    }
     let prop: CodeProposal = pair_programmer_propose_module(ctx, "qa_probe.oo");
+    if prop.module_name != "qa_probe.oo" {
+        return Err("app: proposal must carry module name");
+    }
     let v: Result[Bool, String] = pair_programmer_verify_proposal(prop);
     if v.is_err() {
-        return Err("app: code proposal verification failed");
+        return Err("app: compliant proposal must verify");
+    }
+    let bad: CodeProposal = CodeProposal {
+        module_name: "bad.oo",
+        source_code: "",
+        estimated_lines: 6,
+        is_compliant: false
+    };
+    if pair_programmer_verify_proposal(bad).is_ok() {
+        return Err("app: non-compliant proposal must be rejected");
+    }
+    let big: CodeProposal = CodeProposal {
+        module_name: "big.oo",
+        source_code: "",
+        estimated_lines: 257,
+        is_compliant: true
+    };
+    if pair_programmer_verify_proposal(big).is_ok() {
+        return Err("app: over-256-line proposal must be rejected");
     }
     println("probe: std/app: ok");
     return Ok(0);

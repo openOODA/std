@@ -71,7 +71,14 @@ pub fn tile_set(tm: Tilemap, x: Int, y: Int, v: Int) -> Tilemap {
     if y >= tm.th {
         return tm;
     }
-    let mut tm_tiles: List[Int] = tm.tiles;
+    // NOTE: clone before set: list_set mutates in place and tm.tiles
+    // aliases the caller's list, so setting through the binding corrupts it.
+    let mut tm_tiles: List[Int] = list_new();
+    let mut tm_ci: Int = 0;
+    while tm_ci < list_len(tm.tiles) {
+        tm_tiles = list_push(tm_tiles, list_get(tm.tiles, tm_ci));
+        tm_ci = tm_ci + 1;
+    }
     tm_tiles = list_set(tm_tiles, y * tm.tw + x, v);
     return Tilemap { tw: tm.tw, th: tm.th, ts: tm.ts, tiles: tm_tiles };
 }

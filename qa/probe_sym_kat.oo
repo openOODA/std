@@ -1,0 +1,114 @@
+// # std/qa/probe_sym_kat — Symmetric Cipher Known-Answer Tests
+//
+// Logline: Verify sec/symmetric chacha20/poly1305/aes against RFC 8439,
+// RFC 8439 s2.5.2, and FIPS-197 Appendix B vectors (independent checks:
+// python cryptography for ChaCha20/Poly1305, openssl for AES-128).
+//
+// Setup: Pure compute. Binary keys/nonces are hex-decoded first
+// (ciphers hash raw bytes, never hex text). chacha20_encrypt is a
+// single-block (counter 1, <= 64 byte) API by design.
+//
+// Beats:
+//   1. chacha20_block matches the RFC 8439 s2.3.2 keystream.
+//   2. chacha20_encrypt matches the s2.4.2 prefix cipher; decrypt inverts.
+//   3. poly1305_mac_hex matches s2.5.2 plus 0/1/16/17/100-byte tags.
+//   4. aes_encrypt matches FIPS-197 (openssl oracle); aes_decrypt inverts;
+//      bad key/plain sizes fail closed with STUB_FAIL_CLOSED.
+
+import "sec/symmetric/chacha20.oo";
+import "sec/symmetric/poly1305.oo";
+import "sec/symmetric/aes.oo";
+import "core/encoding/hex.oo";
+
+fn sym_raw(hexstr: String) -> String {
+    let r: Result[String, String] = hex_decode(hexstr);
+    match r { Ok(v) => { return v; }, Err(_) => { return ""; } }
+}
+
+fn sym_bytes(hexstr: String) -> List[Int] {
+    let s: String = sym_raw(hexstr);
+    let mut out: List[Int] = bytes_new();
+    let mut i: Int = 0;
+    while i < bytes_len(s) {
+        out = bytes_push(out, byte_at(s, i));
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn main() -> Result[Int, String] {
+    let key: String = sym_raw("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    if bytes_len(key) != 32 {
+        return Err("sym_kat: key decode failed");
+    }
+    let nonce232: String = sym_raw("000000090000004a00000000");
+    let ks: String = chacha20_block(key, nonce232, 1);
+    if ks != "10f1e7e4d13b5915500fdd1fa32071c4c7d1f4c733c068030422aa9ac3d46c4ed2826446079faa0914c2d705d98b02a2b5129cd1de164eb9cbd083e8a2503c4e" {
+        println("sym_kat: chacha20 block mismatch got " + ks);
+        return Err("sym_kat: chacha20 block mismatch");
+    }
+    let msg: String = "Hello, ChaCha20 single block test!";
+    let ct: String = chacha20_encrypt(key, nonce232, msg);
+    if ct != "58948b88be177956386e9e77c21241e4b4b89aa05fa54861684dc9f1e3a0093da6a3" {
+        println("sym_kat: chacha20 encrypt mismatch got " + ct);
+        return Err("sym_kat: chacha20 encrypt mismatch");
+    }
+    if chacha20_decrypt(key, nonce232, ct) != msg {
+        return Err("sym_kat: chacha20 decrypt must invert encrypt");
+    }
+    if chacha20_encrypt(key, nonce232, "") != "" {
+        return Err("sym_kat: chacha20 empty plaintext must fail closed");
+    }
+    let pkey: List[Int] = sym_bytes("85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b");
+    let pmsg: List[Int] = sym_bytes("43727970746f6772617068696320466f72756d2052657365617263682047726f7570");
+    let tag: String = poly1305_mac_hex(pkey, pmsg);
+    if tag != "a8061dc1305136c6c22b8baf0c0127a9" {
+        println("sym_kat: poly1305 mismatch got " + tag);
+        return Err("sym_kat: poly1305 mismatch");
+    }
+    if poly1305_mac_hex(pkey, sym_bytes("")) != "0103808afb0db2fd4abff6af4149f51b" {
+        return Err("sym_kat: poly1305 empty must equal s");
+    }
+    if poly1305_mac_hex(pkey, sym_bytes("61")) != "70d0a599dbb674b74b2e676f9556612d" {
+        return Err("sym_kat: poly1305 1-byte mismatch");
+    }
+    if poly1305_mac_hex(pkey, sym_bytes("30313233343536373839616263646566")) != "2a522975c7f018fce2b3f18e48176d91" {
+        return Err("sym_kat: poly1305 16-byte mismatch");
+    }
+    if poly1305_mac_hex(pkey, sym_bytes("3031323334353637383961626364656658")) != "bff6584395df838b1d446923dbb1f2b1" {
+        return Err("sym_kat: poly1305 17-byte mismatch");
+    }
+    if poly1305_mac_hex(pkey, sym_bytes("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60616263")) != "86ba671d3e1ce7fda77532255698e77b" {
+        return Err("sym_kat: poly1305 100-byte mismatch");
+    }
+    let akey: String = sym_raw("000102030405060708090a0b0c0d0e0f");
+    let aplain: String = sym_raw("00112233445566778899aabbccddeeff");
+    let acipher: String = aes_encrypt(akey, aplain);
+    if acipher != "69c4e0d86a7b0430d8cdb78070b4c55a" {
+        println("sym_kat: aes encrypt mismatch got " + acipher);
+        return Err("sym_kat: aes encrypt mismatch");
+    }
+    if hex_encode(aes_decrypt(akey, acipher)) != "00112233445566778899aabbccddeeff" {
+        return Err("sym_kat: aes decrypt must invert encrypt");
+    }
+    if aes_encrypt("short", aplain) != "STUB_FAIL_CLOSED" {
+        return Err("sym_kat: aes short key must fail closed");
+    }
+    if aes_encrypt(akey, "not16bytes!") != "STUB_FAIL_CLOSED" {
+        return Err("sym_kat: aes unaligned plain must fail closed");
+    }
+    if hex_encode(aes_decrypt(akey, "69c4e0d86a7b0430d8cdb78070b4c55b")) == "00112233445566778899aabbccddeeff" {
+        return Err("sym_kat: aes flipped cipher must not give FIPS plain");
+    }
+    if aes_decrypt("short", "69c4e0d86a7b0430d8cdb78070b4c55a") != "" {
+        return Err("sym_kat: aes short key must fail closed");
+    }
+    if aes_decrypt(akey, "zz") != "" {
+        return Err("sym_kat: aes bad hex must fail closed");
+    }
+    if aes_decrypt(akey, "001122") != "" {
+        return Err("sym_kat: aes short cipher must fail closed");
+    }
+    println("probe: std symmetric KAT ok");
+    return Ok(0);
+}

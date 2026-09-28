@@ -12,6 +12,7 @@
 
 import "fs/process/process.oo";
 import "fs/process/env.oo";
+import "fs/process/python.oo";
 
 pub fn main(p: &ProcessCap, env: &EnvCap, sys: &SysCap) -> Result[Int, String] {
     let r_echo: Result[String, String] = process_exec(p, "echo CAP_PROCESS_OK");
@@ -64,6 +65,11 @@ pub fn main(p: &ProcessCap, env: &EnvCap, sys: &SysCap) -> Result[Int, String] {
     let pr: Result[String, String] = process_prctl(sys, 0);
     if !pr.is_err() {
         return Err("cap_process: process_prctl must fail closed under &SysCap");
+    }
+
+    let lm: Result[String, String] = load_model(sys, "llama3");
+    if lm.is_ok() {
+        return Err("cap_process: load_model must fail closed until CPython is wired");
     }
 
     println("probe: std/qa cap_process passed (&ProcessCap, &EnvCap, &SysCap verified)");

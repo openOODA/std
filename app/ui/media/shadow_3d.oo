@@ -17,10 +17,11 @@
 pub fn shadow_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy: Int, lx: Int, ly: Int, lz: Int, ambient: Int) -> DepthCanvas {
     let cb_w: Int = rd.cv.width;
     let cb_h: Int = rd.cv.height;
-    let cb_flat0: List[Int] = rd.cv.px;
-    let cb_bg0: Int = list_get(cb_flat0, 0);
-    let cb_bg1: Int = list_get(cb_flat0, 1);
-    let cb_bg2: Int = list_get(cb_flat0, 2);
+    // NOTE: read rd.cv.px inline, never `let`-bind a param field: the
+    // scope-end release has no matching retain and traps (post_2d.oo).
+    let cb_bg0: Int = list_get(rd.cv.px, 0);
+    let cb_bg1: Int = list_get(rd.cv.px, 1);
+    let cb_bg2: Int = list_get(rd.cv.px, 2);
     let mut sw_sax: List[Int] = list_new();
     let mut sw_say: List[Int] = list_new();
     let mut sw_saz: List[Int] = list_new();

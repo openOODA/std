@@ -106,9 +106,14 @@ fn probe_d5_temporal_replay(env: &EnvCap, expected_pwd: String) -> Result[Int, S
 }
 
 fn probe_d6_drag_allocation(env: &EnvCap) -> Result[Int, String] {
+    // 100 consecutive denials: fail-closed must hold under repetition
+    // (no first-N-then-admit, no state leak across queries).
     let mut m: Int = 0;
     while m < 100 {
-        let _r: Result[String, String] = env_get(env, "OODA_DRAG_CHECK_BENCHMARK");
+        let r: Result[String, String] = env_get(env, "OODA_DRAG_CHECK_BENCHMARK");
+        if r.is_ok() {
+            return Err("D6 FAIL: unset key admitted on repetition");
+        }
         m = m + 1;
     }
     return Ok(0);

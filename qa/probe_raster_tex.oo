@@ -105,6 +105,17 @@ pub fn main() -> Result[Int, String] {
     if tx_count_color(over.cv, 0, 0, 255) != 0 {
         return Err("raster_tex: farther texture must show no blue");
     }
+    let mut tx_zi: Int = 0;
+    let mut tx_zhit: Int = 0;
+    while tx_zi < list_len(flat_first.zb) {
+        if list_get(flat_first.zb, tx_zi) == 3 {
+            tx_zhit = tx_zhit + 1;
+        }
+        tx_zi = tx_zi + 1;
+    }
+    if tx_zhit != 6 {
+        return Err("raster_tex: tex tri must not mutate caller zb");
+    }
     // Collinear and empty-palette tris paint nothing.
     let deg: DepthCanvas = raster_tex(tx_empty(), 0, 0, 5, 2, 2, 5, 4, 4, 5, 0, 0, 1, 0, 0, 1, tx_checker(), tx_pal(), 9);
     if tx_water(deg.cv) != 0 {

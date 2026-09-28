@@ -59,6 +59,41 @@ pub fn main() -> Result[Int, String] {
     if !caller_caps_admits(all_caps, "shell_exec") {
         return Err("probe_caps: all caps must admit 'shell_exec'");
     }
+    let all2: CallerCaps = caller_caps_parse("ALL");
+    if !all2.has_exec {
+        return Err("probe_caps: 'ALL' must grant everything");
+    }
+    let star: CallerCaps = caller_caps_parse("*");
+    if !star.has_read || !star.has_write || !star.has_exec {
+        return Err("probe_caps: '*' must grant everything");
+    }
+    let sub: CallerCaps = caller_caps_parse("readonly");
+    if sub.has_read || sub.has_write || sub.has_exec {
+        return Err("probe_caps: 'readonly' must not grant read (token boundary)");
+    }
+    let wronly: CallerCaps = caller_caps_new(false, true, false, "write");
+    if caller_caps_admits(wronly, "calibrate") {
+        return Err("probe_caps: write without read must deny 'calibrate'");
+    }
+    if caller_caps_admits(wronly, "fix") {
+        return Err("probe_caps: write without read must deny 'fix'");
+    }
+    if !caller_caps_admits(all_caps, "frobnicate") {
+        return Err("probe_caps: unknown sub must require exec (all admits)");
+    }
+    if caller_caps_admits(r_caps, "frobnicate") {
+        return Err("probe_caps: unknown sub must deny read caps");
+    }
+    if caller_caps_denial_reason(r_caps, "status") != "" {
+        return Err("probe_caps: admitted sub must have empty denial reason");
+    }
+    let def: CallerCaps = caller_caps_default();
+    if !def.has_read || def.has_write {
+        return Err("probe_caps: default must be read-only");
+    }
+    if sub_required_caps("status") != "read" || sub_required_caps("fix") != "write" || sub_required_caps("shell_exec") != "exec" {
+        return Err("probe_caps: sub_required_caps mapping mismatch");
+    }
 
     println("probe: std/qa probe_caps passed (CallerCaps permissions verified)");
     return Ok(0);

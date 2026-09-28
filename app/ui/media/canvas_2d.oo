@@ -37,6 +37,19 @@ pub fn canvas_new(w: Int, h: Int, c: QoiRgba) -> Result[Canvas, String] {
     return Ok(Canvas { width: w, height: h, px: flat });
 }
 
+fn canvas_clone_px(px: List[Int]) -> List[Int] {
+    // list_set mutates in place and struct copies alias, so canvas_set must
+    // clone before writing or it paints into the caller's canvas.
+    let mut out: List[Int] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(px);
+    while i < n {
+        out = list_push(out, list_get(px, i));
+        i = i + 1;
+    }
+    return out;
+}
+
 pub fn canvas_set(cv: Canvas, x: Int, y: Int, c: QoiRgba) -> Canvas {
     let w: Int = cv.width;
     let h: Int = cv.height;
@@ -45,7 +58,7 @@ pub fn canvas_set(cv: Canvas, x: Int, y: Int, c: QoiRgba) -> Canvas {
     if x >= w { return cv; }
     if y >= h { return cv; }
     let base: Int = (y * w + x) * 4;
-    let mut flat: List[Int] = cv.px;
+    let mut flat: List[Int] = canvas_clone_px(cv.px);
     flat = list_set(flat, base, c.r);
     flat = list_set(flat, base + 1, c.g);
     flat = list_set(flat, base + 2, c.b);
@@ -168,11 +181,12 @@ pub fn canvas_disk(cv: Canvas, cx: Int, cy: Int, r: Int, c: QoiRgba) -> Canvas {
 pub fn canvas_to_image(cv: Canvas) -> Result[QoiImage, String] {
     let w: Int = cv.width;
     let h: Int = cv.height;
-    let flat: List[Int] = cv.px;
+    // NOTE: read cv.px inline, never `let`-bind it: a bound param-field
+    // alias is released at scope end without a matching retain, trapping.
     if w <= 0 || h <= 0 {
         return Err("ERR\tcanvas_to_image: non-positive image dimensions");
     }
-    if list_len(flat) != w * h * 4 {
+    if list_len(cv.px) != w * h * 4 {
         return Err("ERR\tcanvas_to_image: buffer size != width*height*4");
     }
     let header: QoiHeader = QoiHeader { width: w, height: h, channels: 4, colorspace: 0 };
@@ -181,7 +195,7 @@ pub fn canvas_to_image(cv: Canvas) -> Result[QoiImage, String] {
     let n: Int = w * h;
     while i < n {
         let base: Int = i * 4;
-        pixels = list_push(pixels, qoi_rgba_new(list_get(flat, base), list_get(flat, base + 1), list_get(flat, base + 2), list_get(flat, base + 3)));
+        pixels = list_push(pixels, qoi_rgba_new(list_get(cv.px, base), list_get(cv.px, base + 1), list_get(cv.px, base + 2), list_get(cv.px, base + 3)));
         i = i + 1;
     }
     return Ok(QoiImage { header: header, pixels: pixels });

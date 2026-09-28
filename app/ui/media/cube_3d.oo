@@ -111,14 +111,14 @@ fn cube_spin_pt(p: CubePt, deg: Int, dist: Int) -> CubePt {
 }
 
 pub fn cube_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy: Int, lx: Int, ly: Int, lz: Int, ambient: Int, use_lit: Int) -> DepthCanvas {
-    // NOTE: no Canvas copy of rd.cv (see raster_3d.oo note). The Int-list
-    // field binding below is retained by the backend and stays balanced.
+    // NOTE: no Canvas copy of rd.cv (see raster_3d.oo note).
     let cb_w: Int = rd.cv.width;
     let cb_h: Int = rd.cv.height;
-    let cb_flat0: List[Int] = rd.cv.px;
-    let cb_bg0: Int = list_get(cb_flat0, 0);
-    let cb_bg1: Int = list_get(cb_flat0, 1);
-    let cb_bg2: Int = list_get(cb_flat0, 2);
+    // NOTE: read rd.cv.px inline, never `let`-bind a param field: the
+    // scope-end release has no matching retain and traps (post_2d.oo).
+    let cb_bg0: Int = list_get(rd.cv.px, 0);
+    let cb_bg1: Int = list_get(rd.cv.px, 1);
+    let cb_bg2: Int = list_get(rd.cv.px, 2);
     let mut cb_tax: List[Int] = list_new();
     let mut cb_tay: List[Int] = list_new();
     let mut cb_taz: List[Int] = list_new();

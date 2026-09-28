@@ -85,7 +85,14 @@ pub fn raster_tex(rd: DepthCanvas, ax: Int, ay: Int, az: Int, bx: Int, by: Int, 
     if rt_x1 >= rt_w { rt_x1 = rt_w - 1; }
     if rt_y1 >= rt_h { rt_y1 = rt_h - 1; }
     let mut rt_out: Canvas = canvas_set(rd.cv, 0 - 1, 0, list_get(pal.cols, 0));
-    let mut rt_zb: List[Int] = rd.zb;
+    // NOTE: clone before set: list_set mutates in place and rd.zb aliases
+    // the caller's list, so setting through the binding corrupts it.
+    let mut rt_zb: List[Int] = list_new();
+    let mut rt_ci: Int = 0;
+    while rt_ci < list_len(rd.zb) {
+        rt_zb = list_push(rt_zb, list_get(rd.zb, rt_ci));
+        rt_ci = rt_ci + 1;
+    }
     let mut rt_ry: Int = rt_y0;
     while rt_ry <= rt_y1 {
         let mut rt_rx: Int = rt_x0;

@@ -7,7 +7,8 @@
 // Beats:
 //   1. lock and unlock forward a non-negative mutex id to mutex_lock and mutex_unlock.
 //   2. sync_thread_spawn forwards a non-empty name to thread_spawn.
-//   3. main locks, unlocks, and spawns demo under a granted ThreadCap.
+//   3. sync_demo locks, unlocks, and spawns demo under a granted ThreadCap
+//      (named demo, not main: an imported main would hijack the importer).
 //
 // residual: not a full OS scheduler or spinlock product
 
@@ -30,11 +31,19 @@ pub fn sync_thread_spawn(thread: &ThreadCap, name: String) -> Result[String, Str
 }
 
 // Honesty probe: granted ThreadCap → mutex lock/unlock Ok; spawn Ok handle.
-pub fn main(thread: &ThreadCap) {
+// (assert_eq! does not lower in the LLVM emitter, so this spells it out.)
+pub fn sync_demo(thread: &ThreadCap) -> Result[Int, String] {
     let lk: Result[String, String] = sync_mutex_lock(thread, 1);
-    assert_eq!(lk.is_ok(), true);
+    if lk.is_err() {
+        return Err("sync: mutex lock must be Ok");
+    }
     let uk: Result[String, String] = sync_mutex_unlock(thread, 1);
-    assert_eq!(uk.is_ok(), true);
+    if uk.is_err() {
+        return Err("sync: mutex unlock must be Ok");
+    }
     let sp: Result[String, String] = sync_thread_spawn(thread, "demo");
-    assert_eq!(sp.is_ok(), true);
+    if sp.is_err() {
+        return Err("sync: thread spawn must be Ok");
+    }
+    return Ok(0);
 }

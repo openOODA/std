@@ -54,6 +54,12 @@ pub fn main() -> Result[Int, String] {
     if pix_count(sp1, 1) != 1 {
         return Err("pixel: oob write keeps rest");
     }
+    if pix_get(sp0, 0, 0) != 0 {
+        return Err("pixel: set must not mutate caller");
+    }
+    if pix_count(sp0, 0) != 6 {
+        return Err("pixel: caller sprite must stay intact");
+    }
     // Draws: diagonal line, rect outline, clipped fill, full flood.
     let ln: Sprite = pix_line(probe_sprite44(), 0, 0, 3, 3, 2);
     if pix_count(ln, 2) != 4 {

@@ -33,18 +33,32 @@ pub fn hdr_new(hw: Int, hh: Int) -> HdrFb {
 pub fn hdr_from_canvas(cv: Canvas, gain: Float) -> HdrFb {
     let hr_w: Int = cv.width;
     let hr_h: Int = cv.height;
-    let hr_flat: List[Int] = cv.px;
+    // NOTE: read cv.px inline, never `let`-bind a param field (scope-end
+    // release without matching retain traps; see post_2d.oo notes).
     let mut hr_px: List[Float] = list_new();
     let mut hr_i: Int = 0;
     let hr_n: Int = hr_w * hr_h;
     while hr_i < hr_n {
         let hr_base: Int = hr_i * 4;
-        hr_px = list_push(hr_px, spin_i2f(list_get(hr_flat, hr_base)) * gain);
-        hr_px = list_push(hr_px, spin_i2f(list_get(hr_flat, hr_base + 1)) * gain);
-        hr_px = list_push(hr_px, spin_i2f(list_get(hr_flat, hr_base + 2)) * gain);
+        hr_px = list_push(hr_px, spin_i2f(list_get(cv.px, hr_base)) * gain);
+        hr_px = list_push(hr_px, spin_i2f(list_get(cv.px, hr_base + 1)) * gain);
+        hr_px = list_push(hr_px, spin_i2f(list_get(cv.px, hr_base + 2)) * gain);
         hr_i = hr_i + 1;
     }
     return HdrFb { w: hr_w, h: hr_h, px: hr_px };
+}
+
+fn hdr_clone_px(px: List[Float]) -> List[Float] {
+    // list_set mutates in place and struct copies alias, so hdr_add must
+    // clone before writing or it corrupts the caller's framebuffer.
+    let mut out: List[Float] = list_new();
+    let mut i: Int = 0;
+    let n: Int = list_len(px);
+    while i < n {
+        out = list_push(out, list_get(px, i));
+        i = i + 1;
+    }
+    return out;
 }
 
 pub fn hdr_add(fb: HdrFb, x: Int, y: Int, r: Float, g: Float, b: Float) -> HdrFb {
@@ -62,7 +76,7 @@ pub fn hdr_add(fb: HdrFb, x: Int, y: Int, r: Float, g: Float, b: Float) -> HdrFb
     if y >= hr_h {
         return fb;
     }
-    let mut hr_px: List[Float] = fb.px;
+    let mut hr_px: List[Float] = hdr_clone_px(fb.px);
     let hr_base: Int = (y * hr_w + x) * 3;
     hr_px = list_set(hr_px, hr_base, list_get(hr_px, hr_base) + r);
     hr_px = list_set(hr_px, hr_base + 1, list_get(hr_px, hr_base + 1) + g);
@@ -73,7 +87,8 @@ pub fn hdr_add(fb: HdrFb, x: Int, y: Int, r: Float, g: Float, b: Float) -> HdrFb
 pub fn hdr_bloom(fb: HdrFb, threshold: Float, strength: Float) -> HdrFb {
     let hr_w: Int = fb.w;
     let hr_h: Int = fb.h;
-    let hr_src: List[Float] = fb.px;
+    // NOTE: read fb.px inline (see hdr_from_canvas): param-field `let`
+    // bindings trap at scope end.
     let mut hr_blur: List[Float] = list_new();
     let mut hr_y: Int = 0;
     while hr_y < hr_h {
@@ -93,9 +108,9 @@ pub fn hdr_bloom(fb: HdrFb, threshold: Float, strength: Float) -> HdrFb {
                             if hr_nx < hr_w {
                                 if hr_ny < hr_h {
                                     let hr_nb: Int = (hr_ny * hr_w + hr_nx) * 3;
-                                    let hr_pr: Float = list_get(hr_src, hr_nb);
-                                    let hr_pg: Float = list_get(hr_src, hr_nb + 1);
-                                    let hr_pb: Float = list_get(hr_src, hr_nb + 2);
+                                    let hr_pr: Float = list_get(fb.px, hr_nb);
+                                    let hr_pg: Float = list_get(fb.px, hr_nb + 1);
+                                    let hr_pb: Float = list_get(fb.px, hr_nb + 2);
                                     if hr_pr > threshold {
                                         hr_r = hr_r + hr_pr;
                                     }
@@ -120,7 +135,14 @@ pub fn hdr_bloom(fb: HdrFb, threshold: Float, strength: Float) -> HdrFb {
         }
         hr_y = hr_y + 1;
     }
-    let mut hr_px: List[Float] = fb.px;
+    // NOTE: clone before set: list_set mutates in place and fb.px aliases
+    // the caller's list, so setting through the binding corrupts it.
+    let mut hr_px: List[Float] = list_new();
+    let mut hr_ci: Int = 0;
+    while hr_ci < list_len(fb.px) {
+        hr_px = list_push(hr_px, list_get(fb.px, hr_ci));
+        hr_ci = hr_ci + 1;
+    }
     let mut hr_i: Int = 0;
     let hr_n: Int = hr_w * hr_h * 3;
     while hr_i < hr_n {
@@ -133,15 +155,16 @@ pub fn hdr_bloom(fb: HdrFb, threshold: Float, strength: Float) -> HdrFb {
 pub fn hdr_tonate(fb: HdrFb) -> Canvas {
     let hr_w: Int = fb.w;
     let hr_h: Int = fb.h;
-    let hr_src: List[Float] = fb.px;
+    // NOTE: read fb.px inline (see hdr_from_canvas): param-field `let`
+    // bindings trap at scope end.
     let mut hr_flat: List[Int] = list_new();
     let mut hr_i: Int = 0;
     let hr_n: Int = hr_w * hr_h;
     while hr_i < hr_n {
         let hr_base: Int = hr_i * 3;
-        let hr_r: Float = list_get(hr_src, hr_base);
-        let hr_g: Float = list_get(hr_src, hr_base + 1);
-        let hr_b: Float = list_get(hr_src, hr_base + 2);
+        let hr_r: Float = list_get(fb.px, hr_base);
+        let hr_g: Float = list_get(fb.px, hr_base + 1);
+        let hr_b: Float = list_get(fb.px, hr_base + 2);
         hr_flat = list_push(hr_flat, spin_f2i(hr_r / (1.0 + hr_r) * 255.0));
         hr_flat = list_push(hr_flat, spin_f2i(hr_g / (1.0 + hr_g) * 255.0));
         hr_flat = list_push(hr_flat, spin_f2i(hr_b / (1.0 + hr_b) * 255.0));

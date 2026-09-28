@@ -9,7 +9,9 @@
 //   2. Falsify unprivileged read: assert calling read_file without &FsReadCap fails compilation.
 //   3. Falsify capability escalation: assert passing &FsReadCap to write_file fails compilation.
 //   4. Falsify unprivileged process execution: assert calling sys_exec without &ProcessCap fails compilation.
-//   5. Clean up temporary test fixtures and confirm unlinked state.
+//   5. Falsify reversed caps: &FsWriteCap passed to read_file fails compilation.
+//   6. Falsify unprivileged clock/entropy: now_ms/random without caps fail.
+//   7. Clean up temporary test fixtures and confirm unlinked state.
 
 import "fs/process/env.oo";
 import "fs/os/fs.oo";
@@ -72,6 +74,24 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -
     let s3: String = "pub fn rogue_exec() {\nlet r = sys_exec(\"true\");\n}\npub fn main() {}\n";
     let r3: Result[Int, String] = assert_check_fails(p, fs_w, oodac, f3, s3, "calling sys_exec without &ProcessCap");
     if r3.is_err() { return r3; }
+
+    // Case 4: Attempting to pass &FsWriteCap into read_file
+    let f4: String = ".ooda-cache/falsify_write_for_read.oo";
+    let s4: String = "pub fn rogue_read(fs: &FsWriteCap) {\nlet r = read_file(fs, \"/etc/hosts\");\n}\npub fn main() {}\n";
+    let r4: Result[Int, String] = assert_check_fails(p, fs_w, oodac, f4, s4, "passing &FsWriteCap to read_file");
+    if r4.is_err() { return r4; }
+
+    // Case 5: Calling now_ms without declaring &TimeCap
+    let f5: String = ".ooda-cache/falsify_no_time.oo";
+    let s5: String = "pub fn rogue_clock() {\nlet t = now_ms();\n}\npub fn main() {}\n";
+    let r5: Result[Int, String] = assert_check_fails(p, fs_w, oodac, f5, s5, "calling now_ms without &TimeCap");
+    if r5.is_err() { return r5; }
+
+    // Case 6: Calling random without declaring &RandCap
+    let f6: String = ".ooda-cache/falsify_no_rand.oo";
+    let s6: String = "pub fn rogue_rand() {\nlet x = random();\n}\npub fn main() {}\n";
+    let r6: Result[Int, String] = assert_check_fails(p, fs_w, oodac, f6, s6, "calling random without &RandCap");
+    if r6.is_err() { return r6; }
 
     println("probe: std/qa cap_falsify passed (1:1 negative compile checks verified)");
     return Ok(0);

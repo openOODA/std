@@ -1,13 +1,15 @@
 // # std/qa/probe_meta — Meta Domain Verification
 //
-// Logline: Verify meta domain diagnostic metrics counter accumulation.
+// Logline: Verify meta diagnostic counter accumulation, monotonic guard,
+// name retention, and counter independence.
 //
-// Setup: Pure verification of meta diagnostic counters.
+// Setup: Pure data. Covers every branch of the counter module.
 //
 // Beats:
-//   1. Construct monotonic counter with metric name.
-//   2. Perform increment and delta addition operations.
-//   3. Assert cumulative value matches expected count.
+//   1. New counter starts at 0 and keeps its name.
+//   2. inc adds 1; add(n) adds n.
+//   3. add(0) and add(negative) are no-ops (monotonic guard).
+//   4. Two counters accumulate independently.
 
 import "meta/diag/metrics_counter.oo";
 
@@ -16,6 +18,9 @@ pub fn main() -> Result[Int, String] {
     if metrics_counter_get(c0) != 0 {
         return Err("meta: initial counter must be 0");
     }
+    if c0.name != "probe_events" {
+        return Err("meta: counter must keep its name");
+    }
     let c1: MetricsCounter = metrics_counter_inc(c0);
     if metrics_counter_get(c1) != 1 {
         return Err("meta: counter after inc must be 1");
@@ -23,6 +28,22 @@ pub fn main() -> Result[Int, String] {
     let c2: MetricsCounter = metrics_counter_add(c1, 5);
     if metrics_counter_get(c2) != 6 {
         return Err("meta: counter after add 5 must be 6");
+    }
+    let c3: MetricsCounter = metrics_counter_add(c2, 0);
+    if metrics_counter_get(c3) != 6 {
+        return Err("meta: add 0 must be a no-op");
+    }
+    let c4: MetricsCounter = metrics_counter_add(c3, 0 - 3);
+    if metrics_counter_get(c4) != 6 {
+        return Err("meta: add negative must be a no-op");
+    }
+    let other: MetricsCounter = metrics_counter_new("other");
+    let other1: MetricsCounter = metrics_counter_inc(other);
+    if metrics_counter_get(other1) != 1 {
+        return Err("meta: second counter must start at 0 then inc to 1");
+    }
+    if metrics_counter_get(c4) != 6 {
+        return Err("meta: first counter must be unaffected");
     }
     println("probe: std/meta: ok");
     return Ok(0);

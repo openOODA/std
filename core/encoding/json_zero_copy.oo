@@ -2,7 +2,7 @@
 //
 // Logline: Parses one RFC 8259 JSON value from a List[Int] byte buffer and returns child byte offsets for arrays and objects without allocating intermediate strings.
 //
-// Setup: Pure. Input bytes are List[Int] 0..255. Strings and numbers live in the returned JsonValue. Nested children keep their byte offsets in the input buffer.
+// Setup: Pure. Input bytes are List[Int] 0..255. Strings live in the returned JsonValue; every kind records its end offset in num. Nested children keep their byte offsets in the input buffer.
 //
 // Beats:
 //   1. Skip whitespace and dispatch on the next byte to a leaf, array, or object parser.
@@ -164,21 +164,21 @@ pub fn jzc_parse_number(buf: List[Int], pos: Int) -> Result[JsonValue, String] {
     let n: Int = list_len(buf);
     if pos >= n { return Err("ERR\tjzc_parse_number\teof"); }
     let mut j: Int = pos;
-    let mut sign: Int = 1;
     let b0: Int = jzc_at(buf, j);
-    if b0 == 45 { sign = 0 - 1; j = j + 1; }
+    if b0 == 45 { j = j + 1; }
     if j >= n { return Err("ERR\tjzc_parse_number\teof"); }
-    let mut acc: Int = 0;
     let mut any: Int = 0;
     while j < n {
         let d: Int = jzc_digit(jzc_at(buf, j));
         if d < 0 { break; }
-        acc = acc * 10 + d;
         any = 1;
         j = j + 1;
     }
     if any < 1 { return Err("ERR\tjzc_parse_number\tdigit_expected"); }
-    return Ok(jzc_v("number", acc * sign, ""));
+    // num is the end offset (uniform with strings, literals, containers),
+    // not the value: jzc_parse consumes it as an offset. The digits stay
+    // in the caller's buffer (zero-copy); no accessor materializes them.
+    return Ok(jzc_v("number", j, ""));
 }
 
 fn jzc_parse_lit(buf: List[Int], pos: Int, want: String, kind: String, ln: Int) -> Result[JsonValue, String] {

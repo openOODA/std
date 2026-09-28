@@ -27,7 +27,13 @@ pub fn main() -> Result[Int, String] {
     if !dbus_auth_verify_ok("OK 83f9821a1234\r\n") { return Err("auth OK verify failed"); }
     if dbus_auth_verify_ok("REJECTED\r\n") { return Err("auth REJECTED should fail"); }
 
-    // 2. Wire Framing & Alignment
+    // 2. Wire Framing & Alignment (type numbers per D-Bus specification)
+    if dbus_msg_method_call() != 1 || dbus_msg_method_return() != 2 || dbus_msg_error() != 3 || dbus_msg_signal() != 4 {
+        return Err("dbus message type numbers must be 1/2/3/4");
+    }
+    if dbus_endian_little() != 108 {
+        return Err("dbus little-endian marker must be 'l' (108)");
+    }
     let u16_b: List[Int] = dbus_pack_u16(22136);
     if dbus_unpack_u16(u16_b, 0) != 22136 { return Err("dbus u16 unpack mismatch"); }
     let u32_b: List[Int] = dbus_pack_u32(305419896);
