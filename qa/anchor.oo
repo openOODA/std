@@ -65,7 +65,12 @@
 //   58. probe_wave_3d.oo — verify 3D wave synthesis.
 //   59. probe_xform_2d.oo — verify 2D transform stack.
 //
-// probe_sdl_*/graphics probes need a display.
+// probe_sdl_* are excluded by suite.oo with a tripwire: they pass check
+// but the LLVM backend has no ffi_call codegen (emit-llvm fails with
+// 'unknown call ffi_call'). This is a compiler limitation, not a display
+// issue — xvfb cannot help. If a probe ever builds, the suite fails so
+// it gets wired into the double-run set. Wiring them for real needs
+// ffi_call codegen (oodac) plus Xvfb + signed SDL lib in CI.
 
 import "suite.oo";
 import "probe_core.oo";

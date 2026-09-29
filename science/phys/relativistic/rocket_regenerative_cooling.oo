@@ -64,7 +64,7 @@ pub fn regen_solve_heat_transfer(
 ) -> RegenThermalResult {
     let kw: Float = channel.wall_thermal_conductivity;
     let tw: Float = channel.wall_thickness_m;
-    let n_chan: Float = channel.num_channels + 0.0;
+    let n_chan: Float = (channel.num_channels as Float);
     let w_ch: Float = channel.channel_width_m;
     let h_ch: Float = channel.channel_height_m;
     let m_dot: Float = channel.coolant_mass_flow_kg_s;

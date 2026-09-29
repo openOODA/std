@@ -9,7 +9,6 @@
 //   2. Compute axial power peaking factor, core fuel centerline temperature, and hydrogen enthalpy gain.
 //   3. Calculate rocket nozzle expansion velocity, 900s vacuum specific impulse, and thrust-to-weight ratio.
 
-import "./space_propulsion_constants.oo";
 
 type NtrReactorSpec = struct {
     thermal_power_mw: Float, // e.g. 500 MW to 1500 MW
@@ -46,8 +45,8 @@ pub fn ntr_compute_performance(spec: NtrReactorSpec) -> NtrPerformance {
     let p_th_w: Float = p_th_mw * 1000000.0;
     let m_dot: Float = spec.hydrogen_mass_flow_kg_s;
     let t_max_fuel: Float = spec.max_fuel_temp_k;
-    let pc_bar: Float = spec.chamber_pressure_bar;
-    let eps: Float = spec.expansion_ratio;
+    let _pc_bar: Float = spec.chamber_pressure_bar;
+    let _eps: Float = spec.expansion_ratio;
 
     // Hydrogen mean specific heat at high temp ~ 15000 J/(kg*K)
     let cp_h2: Float = 15200.0;

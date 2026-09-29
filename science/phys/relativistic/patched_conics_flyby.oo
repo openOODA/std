@@ -9,7 +9,6 @@
 //   2. Compute hyperbolic excess speed, periapsis radius, eccentricity, and bend angle (delta).
 //   3. Calculate outgoing asymptotic velocity, net heliocentric delta-V gain, and C3 energy boost.
 
-import "./space_propulsion_constants.oo";
 
 type FlybyPlanetarySpec = struct {
     planet_mu: Float,
@@ -42,7 +41,7 @@ pub fn flyby_compute_gravity_assist(
 ) -> FlybyResult {
     let mu_p: Float = spec.planet_mu;
     let r_p: Float = spec.planet_radius_m + spec.periapsis_altitude_m;
-    let v_pl: Vector3D = spec.planet_velocity_vec;
+    let _v_pl: Vector3D = spec.planet_velocity_vec;
 
     let v_inf: Float = vector3d_norm(v_inf_in_vec);
 

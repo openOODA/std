@@ -60,10 +60,9 @@ pub fn stub_blandford_znajek_m87_fixture() -> BlandfordZnajekResult {
     return blandford_znajek_compute(m_m87, 0.9, 0.005);
 }
 
-pub fn stub_schwarzschild_sun_metric_fixture() -> SchwarzschildMetric {
-    let m_sun: Float = const_m_sun();
-    let r_sun: Float = const_r_sun();
-    return schwarzschild_metric_evaluate(m_sun, r_sun, 1.5707963267948966);
+pub fn stub_schwarzschild_geometrized_fixture() -> SchwarzschildMetric {
+    // Module is Int geometrized units (G=c=1): M=1, r=10 -> rs=2, ISCO=6.
+    return schwarzschild_metric_evaluate(1, 10);
 }
 
 pub fn stub_kerr_geodesic_photon_orbit() -> KerrGeodesicState {

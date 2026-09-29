@@ -58,7 +58,7 @@ pub fn lambert_solve_multi_rev(spec: MultiRevLambertSpec) -> MultiRevBranchSolut
 
     // Minimum time of flight for N revolutions: T_min_rev = 2*pi * N * sqrt(a_min^3 / mu)
     let t_period_min: Float = const_two_pi() * sqrt((a_min * a_min * a_min) / mu);
-    let t_min_n_rev: Float = (n_rev + 0.0) * t_period_min;
+    let t_min_n_rev: Float = (n_rev as Float) * t_period_min;
 
     let mut exists: Bool = true;
     if n_rev > 0 && dt < t_min_n_rev {
@@ -67,7 +67,7 @@ pub fn lambert_solve_multi_rev(spec: MultiRevLambertSpec) -> MultiRevBranchSolut
 
     // Estimate semi-major axis for target flight time
     // For N-revs: a ~ (mu * (dt / (2*pi*(N + 0.5)))^2 )^(1/3)
-    let n_eff: Float = (n_rev + 0.0) + (d_nu / const_two_pi());
+    let n_eff: Float = (n_rev as Float) + (d_nu / const_two_pi());
     let mean_motion: Float = const_two_pi() * n_eff / dt;
     let a_est: Float = math_pow(mu / (mean_motion * mean_motion), 0.3333333333333333);
 

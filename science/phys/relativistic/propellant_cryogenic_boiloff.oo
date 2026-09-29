@@ -9,7 +9,6 @@
 //   2. Compute modified Lockheed MLI effective thermal conductivity and heat leak rate.
 //   3. Calculate passive boiloff mass loss rate (%/day) and required reverse-Brayton/pulse-tube cryocooler input power for ZBO.
 
-import "./space_propulsion_constants.oo";
 
 type CryoStorageSpec = struct {
     tank_surface_area_m2: Float,
@@ -39,7 +38,7 @@ pub fn cryo_storage_spec_default_lh2() -> CryoStorageSpec {
 
 pub fn cryo_compute_boiloff(spec: CryoStorageSpec) -> CryoThermalPerformance {
     let a_tank: Float = spec.tank_surface_area_m2;
-    let n_layers: Float = spec.mli_num_layers + 0.0;
+    let n_layers: Float = (spec.mli_num_layers as Float);
     let t_amb: Float = spec.t_ambient_k;
     let p_type: Int = spec.propellant_type;
     let m_cap: Float = spec.tank_capacity_kg;

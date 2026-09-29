@@ -68,7 +68,8 @@ pub fn astro_facade_lane_emden(n: Float) -> LaneEmdenSolution {
     return lane_emden_solve(n, 0.005, 5000);
 }
 
-pub fn astro_facade_chandrasekhar_mass() -> Float {
+pub fn astro_facade_chandrasekhar_mass() -> Int {
+    // Milli-solar-mass Int per stellar_chandrasekhar_mass.oo.
     return chandrasekhar_mass_carbon_oxygen();
 }
 
@@ -92,8 +93,9 @@ pub fn astro_facade_blandford_znajek(mass_kg: Float, a_star: Float, b_tesla: Flo
     return blandford_znajek_compute(mass_kg, a_star, b_tesla);
 }
 
-pub fn astro_facade_schwarzschild_metric(mass_kg: Float, radius_m: Float, theta: Float) -> SchwarzschildMetric {
-    return schwarzschild_metric_evaluate(mass_kg, radius_m, theta);
+pub fn astro_facade_schwarzschild_metric(mass_geom: Int, radius_geom: Int) -> SchwarzschildMetric {
+    // Geometrized Int units (G=c=1) per gr_schwarzschild_metric.oo.
+    return schwarzschild_metric_evaluate(mass_geom, radius_geom);
 }
 
 pub fn astro_facade_kerr_metric(mass_kg: Float, a_star: Float, radius_m: Float, theta: Float) -> KerrSpacetimeGeometry {
@@ -120,14 +122,16 @@ pub fn astro_facade_gw_binary_decay(m1_kg: Float, m2_kg: Float, p_orb_s: Float, 
     return binary_orbital_decay_rate(m1_kg, m2_kg, p_orb_s, e);
 }
 
-pub fn astro_facade_friedmann(params: CosmoParams, z: Float) -> FriedmannExpansionPoint {
-    return friedmann_evaluate_point(params, z);
+pub fn astro_facade_friedmann(h0: Int, om_m_milli: Int, om_r_milli: Int, om_k_milli: Int, om_l_milli: Int, redshift_z: Int) -> FriedmannExpansionPoint {
+    // Int-milli units per cosmological_friedmann_solver.oo.
+    return friedmann_evaluate_point(h0, om_m_milli, om_r_milli, om_k_milli, om_l_milli, redshift_z);
 }
 
 pub fn astro_facade_cosmo_distances(params: CosmoParams, z: Float) -> CosmoDistanceResult {
     return cosmo_distances_evaluate(params, z);
 }
 
-pub fn astro_facade_nfw_halo(radius_kpc: Float, r200_kpc: Float, c: Float, m_solar: Float) -> NfwHaloPoint {
-    return nfw_halo_point_evaluate(radius_kpc, r200_kpc, c, m_solar);
+pub fn astro_facade_nfw_halo(radius: Int, virial_radius: Int, concentration: Int) -> NfwHaloPoint {
+    // Int units per cosmological_dark_matter_nfw_profile.oo.
+    return nfw_halo_point_evaluate(radius, virial_radius, concentration);
 }

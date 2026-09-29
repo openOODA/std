@@ -9,7 +9,6 @@
 //   2. Compute component dry masses (tanks, thrust structure, feed lines, TVC actuators, avionics, interstage).
 //   3. Calculate stage structural mass fraction, unpressurized fairing mass, and reserve propellant residuals.
 
-import "./space_propulsion_constants.oo";
 
 type StageMassInputs = struct {
     propellant_capacity_kg: Float,
@@ -43,7 +42,7 @@ pub fn stage_mass_inputs_default_booster() -> StageMassInputs {
 
 pub fn stage_compute_mass_budget(inputs: StageMassInputs) -> StageMassBreakdown {
     let m_prop: Float = inputs.propellant_capacity_kg;
-    let n_eng: Float = inputs.num_engines + 0.0;
+    let n_eng: Float = (inputs.num_engines as Float);
     let m_eng_single: Float = inputs.single_engine_dry_mass_kg;
     let mat_type: Int = inputs.tank_material_type;
     let is_booster: Bool = inputs.is_booster_stage;

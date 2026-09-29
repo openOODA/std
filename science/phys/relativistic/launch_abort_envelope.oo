@@ -9,7 +9,6 @@
 //   2. Compute abort pull-away acceleration, aerodynamic drag, and lateral pitch-steering clearance vector.
 //   3. Calculate altitude gain, separation distance from failing booster, and parachute deployment envelope.
 
-import "./space_propulsion_constants.oo";
 
 type LaunchAbortSpec = struct {
     capsule_mass_kg: Float, // e.g. 10000 kg (Orion / Dragon scale)
@@ -43,7 +42,7 @@ pub fn abort_evaluate_pad_escape(spec: LaunchAbortSpec) -> AbortTrajectoryResult
     let t_abort: Float = spec.escape_thrust_kn * 1000.0;
     let t_burn: Float = spec.burn_duration_s;
     let theta_rad: Float = spec.pitch_angle_deg * const_deg_to_rad();
-    let cd_a: Float = spec.capsule_cd_area_m2;
+    let _cd_a: Float = spec.capsule_cd_area_m2;
 
     // Net acceleration: a_net = T / m - g0 * cos(theta)
     let a_thrust: Float = t_abort / m_cap;

@@ -3,6 +3,7 @@
 // Logline: Re-exports orbital mechanics, Keplerian solvers, coordinate frames, attitude kinematics, propulsion, and tracking.
 //
 // Setup: Pure facade module importing all 24 modular astrodynamics, trajectory, and celestial navigation submodules.
+//        Every shim below calls a real exported function with real exported types (nothing fictional).
 //
 // Beats:
 //   1. Import 24 specialized spacecraft mechanics, orbital propagation, and attitude dynamics components.
@@ -38,102 +39,98 @@ pub fn astro_shim_vec3(x: Float, y: Float, z: Float) -> Vector3 {
     return vec3_new(x, y, z);
 }
 
-pub fn astro_shim_kepler_orbit(a: Float, e: Float, mu: Float) -> KeplerOrbit {
-    return kepler_orbit_new(a, e, mu);
+pub fn astro_shim_orbital_period(a: Float, mu: Float) -> Result[Float, String] {
+    return kepler_orbital_period(a, mu);
 }
 
-pub fn astro_shim_orbital_elements(a: Float, e: Float, inc: Float, raan: Float, argp: Float, nu: Float) -> OrbitalElements {
-    return orbital_elements_new(a, e, inc, raan, argp, nu);
+pub fn astro_shim_semi_major_axis(r_mag: Float, v_mag: Float, mu: Float) -> Float {
+    return state_to_semi_major_axis(r_mag, v_mag, mu);
 }
 
-pub fn astro_shim_state_vector(pos: Vector3, vel: Vector3) -> StateVector {
-    return state_vector_new(pos, vel);
+pub fn astro_shim_solve_anomaly(m_val: Float, e_val: Float) -> Result[Float, String] {
+    return kepler_solve_eccentric_anomaly(m_val, e_val, 0.000001, 50);
 }
 
-pub fn astro_shim_solve_anomaly(m_val: Float, e_val: Float) -> AnomalySolution {
-    return mean_to_eccentric_anomaly(m_val, e_val, 0.000001, 50);
+pub fn astro_shim_hohmann(r1_km: Float, r2_km: Float, mu: Float) -> Result[TransferDeltaV, String] {
+    return hohmann_calculate_burns(r1_km, r2_km, mu);
 }
 
-pub fn astro_shim_hohmann(r1: Float, r2: Float, mu: Float) -> HohmannTransfer {
-    return hohmann_transfer_compute(r1, r2, mu);
+pub fn astro_shim_bi_elliptic(r1_km: Float, r2_km: Float, rb_km: Float, mu: Float) -> Result[BiEllipticTransferPlan, String] {
+    return bi_elliptic_calculate_burns(r1_km, r2_km, rb_km, mu);
 }
 
-pub fn astro_shim_bi_elliptic(r1: Float, r2: Float, rb: Float, mu: Float) -> BiEllipticTransfer {
-    return bi_elliptic_transfer_compute(r1, r2, rb, mu);
+pub fn astro_shim_tle_period(mean_motion_revs_day: Float) -> Float {
+    return tle_mean_motion_to_period(mean_motion_revs_day);
 }
 
-pub fn astro_shim_tle_record(l1: TleLine1, l2: TleLine2, valid: Bool) -> TleRecord {
-    return tle_record_new(l1, l2, valid);
+pub fn astro_shim_sgp4_mean_anomaly(m0_rad: Float, n0_rad_min: Float, bstar_drag: Float, delta_t_min: Float) -> Float {
+    return sgp4_propagate_mean_anomaly(m0_rad, n0_rad_min, bstar_drag, delta_t_min);
 }
 
-pub fn astro_shim_sgp4_model(tle: TleRecord, mu: Float) -> Sgp4SatModel {
-    return sgp4_init_model(tle, mu);
+pub fn astro_shim_j2_rates(a_km: Float, e: Float, inc_rad: Float, mu: Float, re_km: Float, j2: Float) -> Result[J2DriftRate, String] {
+    return j2_perturbation_rates(a_km, e, inc_rad, mu, re_km, j2);
 }
 
-pub fn astro_shim_j2_rates(elem: OrbitalElements, mu: Float) -> J2PerturbationRates {
-    return j2_perturbation_rates_compute(elem, mu);
-}
-
-pub fn astro_shim_lagrange(m1: Float, m2: Float, dist: Float) -> LagrangeSystem {
-    return lagrange_system_compute(m1, m2, dist);
+pub fn astro_shim_lagrange_l1(mass_ratio_mu: Float) -> LagrangePoint2D {
+    return lagrange_l1_position(mass_ratio_mu);
 }
 
 pub fn astro_shim_lambert(r1: Vector3, r2: Vector3, tof: Float, is_prograde: Bool, mu: Float) -> LambertResult {
     return lambert_solve(r1, r2, tof, is_prograde, mu, 40, 0.0001);
 }
 
-pub fn astro_shim_gravity_assist(v_inf: Float, rp: Float, v_planet: Float, mu: Float) -> PatchedConicFlyby {
-    return gravity_assist_compute(v_inf, rp, v_planet, mu);
+pub fn astro_shim_soi_radius(orbital_radius_m: Float, secondary_mass_kg: Float, primary_mass_kg: Float) -> Float {
+    return patched_conic_soi_radius(orbital_radius_m, secondary_mass_kg, primary_mass_kg);
 }
 
-pub fn astro_shim_eci_to_ecef(eci: Vector3, gmst: Float) -> Vector3 {
-    return eci_to_ecef(eci, gmst);
+pub fn astro_shim_eci_to_ecef(r_eci: Vec3, gmst_rad: Float) -> Vec3 {
+    return eci_to_ecef_position(r_eci, gmst_rad);
 }
 
-pub fn astro_shim_rsw_frame(pos: Vector3, vel: Vector3) -> RswFrame {
-    return compute_rsw_frame(pos, vel);
+pub fn astro_shim_angular_momentum(semi_major_axis: Float, eccentricity: Float, mu: Float) -> Float {
+    return orbital_angular_momentum(semi_major_axis, eccentricity, mu);
 }
 
-pub fn astro_shim_julian_epoch(dt: DateTimeUtc) -> JulianEpoch {
-    return julian_epoch_from_date(dt);
+pub fn astro_shim_julian_date(year: Float, month: Float, day: Float, hour: Float, minute: Float, second: Float) -> Float {
+    return gregorian_to_julian_date(year, month, day, hour, minute, second);
 }
 
-pub fn astro_shim_sidereal_times(dt: DateTimeUtc, lon_deg: Float) -> SiderealTimes {
-    return sidereal_times_compute(dt, lon_deg);
+pub fn astro_shim_local_sidereal(jd: Float, lon_rad: Float) -> Float {
+    return local_sidereal_time_rad(jd, lon_rad);
 }
 
-pub fn astro_shim_quat_from_axis_angle(axis: Vector3, angle_rad: Float) -> Quaternion {
-    return quat_from_axis_angle(axis, angle_rad);
+pub fn astro_shim_quat_new(w: Float, x: Float, y: Float, z: Float) -> Quaternion {
+    return quat_new(w, x, y, z);
 }
 
-pub fn astro_shim_rwa(inertia: Float, max_rpm: Float, max_tau: Float, angle_deg: Float) -> TetrahedralRwa {
-    return tetrahedral_rwa_new(inertia, max_rpm, max_tau, angle_deg);
+pub fn astro_shim_wheel_momentum(inertia_kg_m2: Float, wheel_speed_rad_s: Float) -> Float {
+    return reaction_wheel_momentum(inertia_kg_m2, wheel_speed_rad_s);
 }
 
-pub fn astro_shim_rcs_command(f: Vector3, tau: Vector3) -> RcsCommand {
-    return rcs_command_new(f, tau);
+pub fn astro_shim_rcs_torque_x(pos_y: Float, pos_z: Float, force_y: Float, force_z: Float) -> Float {
+    return rcs_thruster_torque_x(pos_y, pos_z, force_y, force_z);
 }
 
-pub fn astro_shim_delta_v_budget() -> MissionDeltaVBudget {
-    return delta_v_budget_empty();
+pub fn astro_shim_leo_to_gto(r_leo_km: Float, mu_km3_s2: Float) -> Float {
+    return delta_v_leo_to_gto(r_leo_km, mu_km3_s2);
 }
 
-pub fn astro_shim_rocket_stage(num: Int, dry: Float, prop: Float, isp: Float) -> RocketStage {
-    return rocket_stage_new(num, dry, prop, isp);
+pub fn astro_shim_tsiolkovsky(isp_seconds: Float, mass_initial_kg: Float, mass_final_kg: Float) -> Float {
+    return tsiolkovsky_delta_v(isp_seconds, mass_initial_kg, mass_final_kg);
 }
 
-pub fn astro_shim_launch_state(t: Float, alt: Float, down: Float, v: Float, gamma: Float, m: Float, q: Float) -> LaunchState {
-    return launch_state_new(t, alt, down, v, gamma, m, q);
+pub fn astro_shim_dyn_pressure(air_density_kg_m3: Float, velocity_m_s: Float) -> Float {
+    return launch_dynamic_pressure(air_density_kg_m3, velocity_m_s);
 }
 
 pub fn astro_shim_reentry_state(alt: Float, v: Float, gamma: Float, q: Float, g: Float) -> ReEntryState {
     return ReEntryState { altitude_m: alt, velocity_m_s: v, flight_path_angle_rad: gamma, heat_flux_w_m2: q, g_load: g };
 }
 
-pub fn astro_shim_ground_station(id: Int, lat_deg: Float, lon_deg: Float, alt_m: Float, min_el_deg: Float) -> GroundStation {
-    return ground_station_new(id, lat_deg, lon_deg, alt_m, min_el_deg);
+pub fn astro_shim_pass_elevation(s_south: Float, e_east: Float, z_zenith: Float) -> Float {
+    return ground_pass_elevation(s_south, e_east, z_zenith);
 }
 
-pub fn astro_shim_iss_fixture() -> AstroTestFixture {
-    return stub_fixture_get(1);
+pub fn astro_shim_stubs_work() -> Int {
+    return astro_stubs_work();
 }

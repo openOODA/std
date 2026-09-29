@@ -43,6 +43,41 @@ jobs:
           # Product oodac build is LLVM IR + clang + oodar (not --backend c).
           "${OODA_COMPILER}" build qa/suite.oo -o /tmp/std_suite
           /tmp/std_suite
+  # Locks in the check-clean relativistic dir (facade + 179 modules):
+  # every file must pass `oodac check`. Run-all, report-all.
+  relativistic-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout std
+        uses: actions/checkout@v4
+        with:
+          path: std
+      - name: checkout oodac
+        uses: actions/checkout@v4
+        with:
+          repository: openOODA/oodac
+          path: oodac
+      - name: require compiler
+        run: test -x oodac/bin/oodac || chmod +x oodac/bin/oodac
+      - name: check every relativistic module
+        working-directory: ${{ github.workspace }}/std
+        env:
+          OODA_FS_READDIR: ${{ github.workspace }}
+          OODA_FS_WRITEDIR: ${{ github.workspace }}
+        run: |
+          set -uo pipefail
+          OODAC="${{ github.workspace }}/oodac/bin/oodac"
+          pass=0; fail=0
+          while IFS= read -r f; do
+            if "$OODAC" check "$f" >"/tmp/$(basename "$f").log" 2>&1; then
+              pass=$((pass + 1))
+            else
+              fail=$((fail + 1))
+              echo "FAIL $f :: $(head -1 "/tmp/$(basename "$f").log")"
+            fi
+          done < <(git ls-files "science/phys/relativistic/*.oo")
+          echo "relativistic check: pass=$pass fail=$fail"
+          test "$fail" -eq 0 || exit 1
   auto-release:
-    needs: [immune-system]
+    needs: [immune-system, relativistic-check]
     uses: openOODA/openOODA/.github/workflows/auto-release.yml@v2.10.23

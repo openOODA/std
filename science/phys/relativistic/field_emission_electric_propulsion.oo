@@ -9,7 +9,6 @@
 //   2. Compute Taylor cone onset voltage and electric field at needle apex.
 //   3. Calculate emitted ion current, micro-Newton thrust, beam divergence loss, and specific impulse.
 
-import "./space_propulsion_constants.oo";
 
 type FeepEmitterSpec = struct {
     num_emitters: Int,
@@ -40,7 +39,7 @@ pub fn feep_spec_default_indium() -> FeepEmitterSpec {
 }
 
 pub fn feep_compute_performance(spec: FeepEmitterSpec) -> FeepPerformance {
-    let n_emit: Float = spec.num_emitters + 0.0;
+    let n_emit: Float = (spec.num_emitters as Float);
     let v_ext: Float = spec.extraction_voltage_v;
     let r_tip_m: Float = spec.tip_radius_um * 0.000001;
     let gamma_st: Float = spec.liquid_surface_tension_n_m;
@@ -65,7 +64,7 @@ pub fn feep_compute_performance(spec: FeepEmitterSpec) -> FeepPerformance {
     let i_total_amps: Float = i_total_ua * 0.000001;
 
     // Ion exhaust velocity: v_ex = sqrt(2 * q * V / m)
-    let v_ex: Float = sqrt((2.0 * q_e * v_ext) / m_ion);
+    let _v_ex: Float = sqrt((2.0 * q_e * v_ext) / m_ion);
 
     // Thrust: F = gamma_div * I * sqrt(2 * m * V / q)
     let gamma_div: Float = 0.96;

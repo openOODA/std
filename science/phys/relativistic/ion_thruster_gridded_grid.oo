@@ -48,7 +48,7 @@ pub fn ion_compute_performance(spec: GriddedIonSpec) -> GriddedIonPerformance {
     let v_total: Float = v_screen - v_accel; // total acceleration potential
     let d_gap: Float = spec.grid_gap_m;
     let d_hole: Float = spec.aperture_diameter_m;
-    let n_holes: Float = spec.num_apertures + 0.0;
+    let n_holes: Float = (spec.num_apertures as Float);
     let amu: Float = spec.ion_mass_amu;
     let eta_u: Float = spec.propellant_utilization_eff;
 

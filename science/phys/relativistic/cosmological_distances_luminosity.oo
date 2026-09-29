@@ -39,6 +39,18 @@ pub fn cosmo_params_default() -> CosmoParams {
     };
 }
 
+/// Planck 2018 TT,TE,EE+lowE+lensing+BAO base parameters
+/// (H0 = 67.4 km/s/Mpc, Omega_m = 0.315, Omega_L = 0.685, flat).
+pub fn cosmo_params_planck2018() -> CosmoParams {
+    return CosmoParams {
+        h0_km_s_mpc: 67.4,
+        omega_m: 0.315,
+        omega_l: 0.685,
+        omega_k: 0.0,
+        omega_r: 0.000092
+    };
+}
+
 fn cosmo_friedmann_e_z(params: CosmoParams, z: Float) -> Float {
     let one_plus_z: Float = 1.0 + z;
     let z2: Float = one_plus_z * one_plus_z;

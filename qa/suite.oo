@@ -2,7 +2,7 @@
 //
 // Logline: Run each wired qa probe twice in fresh processes under the
 // primary compiler. Fail closed on miss AND on any output difference.
-// (Display-dependent sdl_*/graphics probes stay manual — see anchor.oo.)
+// (The 3 probe_sdl_* stay excluded with a tripwire — see anchor.oo.)
 //
 // Setup: Double-run identity law (the immune system: AI writes the code,
 // this machinery makes it trustworthy). Product `oodac build` (LLVM IR
@@ -11,12 +11,17 @@
 // Beats:
 //   1. Resolve primary compiler binary (OODA_COMPILER, OODA_TOOLCHAIN, HOME).
 //   2. Enumerate qa/probe_*.oo from the filesystem (never a hardcoded list);
-//      the 3 display-dependent probe_sdl_* stay excluded (fail LLVM emit
-//      headless); fail closed if fewer than 61 probes are wired.
-//   3. Compile and execute each probe twice in fresh processes.
-//   4. Byte-compare both runs' outputs; any difference fails the suite.
-//   5. Clean up temporary probe binaries immediately.
-//   6. Exit 0 only when all probes pass both runs identically.
+//      the 3 probe_sdl_* stay excluded (LLVM backend has no ffi_call
+//      codegen — compiler limitation, not a display issue; xvfb cannot
+//      help); the excluded set must match exactly or the suite fails.
+//   3. Tripwire each excluded probe: check must pass (stays valid code)
+//      and build must fail with the KNOWN marker (unknown call ffi_call);
+//      a probe that ever builds fails the suite so it gets wired in.
+//   4. Fail closed if fewer than 61 probes are wired.
+//   5. Compile and execute each probe twice in fresh processes.
+//   6. Byte-compare both runs' outputs; any difference fails the suite.
+//   7. Clean up temporary probe binaries immediately.
+//   8. Exit 0 only when all probes pass both runs identically.
 
 import "std/fs/process/env.oo";
 import "std/fs/file/path.oo";
@@ -38,6 +43,37 @@ fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[String,
         return Err("exec fail " + path + ": " + e);
     }
     return r;
+}
+
+fn list_contains_str(xs: List[String], want: String) -> Bool {
+    let mut i: Int = 0;
+    while i < list_len(xs) {
+        if list_get(xs, i) == want {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn trip_sdl_excluded(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
+    let c: Result[String, String] = sys_exec(p, oodac, "check", path);
+    if c.is_err() {
+        let e: String = match c { Ok(_) => "", Err(m) => m };
+        return Err("excluded " + path + " fails check (must stay valid code): " + e);
+    }
+    let tmp_bin: String = path + ".tripwire.bin";
+    let b: Result[String, String] = sys_exec(p, oodac, "build", path, "-o", tmp_bin);
+    let _del: Result[String, String] = sys_exec(p, "rm", "-f", tmp_bin);
+    if !b.is_err() {
+        return Err("excluded " + path + " now BUILDS (ffi_call codegen landed?) - wire it into the double-run set");
+    }
+    let out: String = match b { Ok(_) => "", Err(m) => m };
+    if !str_contains(out, "unknown call ffi_call") {
+        return Err("excluded " + path + " fails for a NEW reason (known-limitation drift; expected 'unknown call ffi_call')");
+    }
+    println("  Tripwired (check-OK, emit blocked on ffi_call): " + path);
+    return Ok(0);
 }
 
 fn run_probe_twice(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
@@ -81,15 +117,39 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
     let found: List[String] = glob_scan_dir(fs_r, "qa", "probe_*.oo");
     let ordered: List[String] = natural_sort_list(found);
     let mut ps: List[String] = list_new();
+    let mut excluded: List[String] = list_new();
     let mut oi: Int = 0;
     while oi < list_len(ordered) {
         let cand: String = list_get(ordered, oi);
         if str_contains(cand, "probe_sdl_") {
-            println("  Skipping display-dependent " + cand);
+            excluded = list_push(excluded, cand);
         } else {
             ps = list_push(ps, cand);
         }
         oi = oi + 1;
+    }
+    if list_len(excluded) != 3 {
+        return Err("sdl exclusion drift: found " + list_len(excluded).to_string() + " probe_sdl_*, need exactly 3");
+    }
+    if !list_contains_str(excluded, "qa/probe_sdl_blit.oo") {
+        return Err("sdl exclusion drift: qa/probe_sdl_blit.oo missing from excluded set");
+    }
+    if !list_contains_str(excluded, "qa/probe_sdl_gl.oo") {
+        return Err("sdl exclusion drift: qa/probe_sdl_gl.oo missing from excluded set");
+    }
+    if !list_contains_str(excluded, "qa/probe_sdl_window.oo") {
+        return Err("sdl exclusion drift: qa/probe_sdl_window.oo missing from excluded set");
+    }
+    let mut ti: Int = 0;
+    while ti < list_len(excluded) {
+        let tpath: String = list_get(excluded, ti);
+        let tr: Result[Int, String] = trip_sdl_excluded(p, oodac, tpath);
+        if tr.is_err() {
+            let tem: String = match tr { Ok(_) => "", Err(e) => e };
+            println("ERR " + tpath + ": " + tem);
+            return tr;
+        }
+        ti = ti + 1;
     }
     if list_len(ps) < 61 {
         return Err("probe floor violated: wired " + list_len(ps).to_string() + ", need >= 61 under qa/");

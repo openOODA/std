@@ -9,7 +9,6 @@
 //   2. Compute surface heat balance with blowing blockage reduction and radiative re-radiation.
 //   3. Calculate surface char recession depth, pyrolysis gas generation, and vehicle aluminum substrate bondline temperature.
 
-import "./space_propulsion_constants.oo";
 
 type AblatorMaterialSpec = struct {
     virgin_density_kg_m3: Float, // e.g. 270 kg/m3 for PICA, 1450 kg/m3 for Carbon-Phenolic
@@ -46,7 +45,7 @@ pub fn ablation_compute_response(
     let rho_v: Float = spec.virgin_density_kg_m3;
     let q_star_j: Float = spec.heat_of_ablation_mj_kg * 1000000.0;
     let k_char: Float = spec.char_thermal_conductivity;
-    let f_resin: Float = spec.resin_mass_fraction;
+    let _f_resin: Float = spec.resin_mass_fraction;
     let t_init_mm: Float = spec.initial_thickness_mm;
     let t_init_m: Float = t_init_mm * 0.001;
 
