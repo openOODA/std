@@ -136,7 +136,6 @@ pub fn main(time: &TimeCap, ffi: &FfiCap) -> Result[Int, String] {
     let an_empty: DepthCanvas = match an_mk { Ok(a) => a, Err(_) => DepthCanvas { cv: Canvas { width: 0, height: 0, px: list_new() }, zb: list_new() } };
     let an_t0: Int = chrono_now_ms(time);
     let an_shot: DepthCanvas = cube_frame(an_empty, 30, 300, 120, 48, 30, 30, 40, 0 - 100, 24, 1);
-    let an_t1: Int = chrono_now_ms(time);
     let an_ms: Int = chrono_elapsed_ms(time, an_t0);
     if an_ms < 0 {
         return Err("anim probe: negative frame time");
@@ -150,9 +149,7 @@ pub fn main(time: &TimeCap, ffi: &FfiCap) -> Result[Int, String] {
     if an_nruns <= 0 {
         return Err("anim probe: frame must produce runs");
     }
-    println("anim frame ms: " + an_ms.to_string());
     println("anim frame runs: " + an_nruns.to_string());
-    println("anim frame t1: " + an_t1.to_string());
     println("probe: std/gfx anim_2d: ok");
     return Ok(0);
 }

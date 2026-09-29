@@ -10,13 +10,18 @@
 //
 // Beats:
 //   1. Resolve primary compiler binary (OODA_COMPILER, OODA_TOOLCHAIN, HOME).
-//   2. Compile and execute each probe twice in fresh processes.
-//   3. Byte-compare both runs' outputs; any difference fails the suite.
-//   4. Clean up temporary probe binaries immediately.
-//   5. Exit 0 only when all probes pass both runs identically.
+//   2. Enumerate qa/probe_*.oo from the filesystem (never a hardcoded list);
+//      the 3 display-dependent probe_sdl_* stay excluded (fail LLVM emit
+//      headless); fail closed if fewer than 61 probes are wired.
+//   3. Compile and execute each probe twice in fresh processes.
+//   4. Byte-compare both runs' outputs; any difference fails the suite.
+//   5. Clean up temporary probe binaries immediately.
+//   6. Exit 0 only when all probes pass both runs identically.
 
 import "std/fs/process/env.oo";
 import "std/fs/file/path.oo";
+import "std/fs/file/glob.oo";
+import "std/core/text/natural_sort.oo";
 
 fn run_probe_once(p: &ProcessCap, oodac: String, path: String) -> Result[String, String] {
     let tmp_bin: String = path + ".tmp.bin";
@@ -73,67 +78,23 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
     if oodac == "" || !path_exists(fs_r, oodac) {
         return Err("no compiler (OODA_COMPILER, OODA_TOOLCHAIN, or HOME layout)");
     }
-    let probes: List[String] = list_new();
-    let mut ps: List[String] = list_push(probes, "qa/probe_api_surface.oo");
-    ps = list_push(ps, "qa/probe_core.oo");
-    ps = list_push(ps, "qa/probe_fs.oo");
-    ps = list_push(ps, "qa/probe_net.oo");
-    ps = list_push(ps, "qa/probe_net_kat.oo");
-    ps = list_push(ps, "qa/probe_net_cidr.oo");
-    ps = list_push(ps, "qa/probe_camera_2d.oo");
-    ps = list_push(ps, "qa/probe_canvas.oo");
-    ps = list_push(ps, "qa/probe_cube_3d.oo");
-    ps = list_push(ps, "qa/probe_flare_2d.oo");
-    ps = list_push(ps, "qa/probe_font_5x7.oo");
-    ps = list_push(ps, "qa/probe_font_big.oo");
-    ps = list_push(ps, "qa/probe_hdr_3d.oo");
-    ps = list_push(ps, "qa/probe_noise_2d.oo");
-    ps = list_push(ps, "qa/probe_particle_2d.oo");
-    ps = list_push(ps, "qa/probe_pixel_fx.oo");
-    ps = list_push(ps, "qa/probe_pixel.oo");
-    ps = list_push(ps, "qa/probe_post_2d.oo");
-    ps = list_push(ps, "qa/probe_ppm.oo");
-    ps = list_push(ps, "qa/probe_qoi_file.oo");
-    ps = list_push(ps, "qa/probe_raster_3d.oo");
-    ps = list_push(ps, "qa/probe_raster_tex.oo");
-    ps = list_push(ps, "qa/probe_ray_3d.oo");
-    ps = list_push(ps, "qa/probe_shade_3d.oo");
-    ps = list_push(ps, "qa/probe_shadow_3d.oo");
-    ps = list_push(ps, "qa/probe_spin_3d.oo");
-    ps = list_push(ps, "qa/probe_tilemap_2d.oo");
-    ps = list_push(ps, "qa/probe_vector_2d.oo");
-    ps = list_push(ps, "qa/probe_wave_2d.oo");
-    ps = list_push(ps, "qa/probe_wave_3d.oo");
-    ps = list_push(ps, "qa/probe_xform_2d.oo");
-    ps = list_push(ps, "qa/probe_sec.oo");
-    ps = list_push(ps, "qa/probe_ed25519.oo");
-    ps = list_push(ps, "qa/probe_sec_kat.oo");
-    ps = list_push(ps, "qa/probe_curve25519.oo");
-    ps = list_push(ps, "qa/probe_sym_kat.oo");
-    ps = list_push(ps, "qa/probe_mac_kat.oo");
-    ps = list_push(ps, "qa/probe_num_format.oo");
-    ps = list_push(ps, "qa/probe_fs_ops.oo");
-    ps = list_push(ps, "qa/probe_science.oo");
-    ps = list_push(ps, "qa/probe_app.oo");
-    ps = list_push(ps, "qa/probe_hw.oo");
-    ps = list_push(ps, "qa/probe_meta.oo");
-    ps = list_push(ps, "qa/probe_caps.oo");
-    ps = list_push(ps, "qa/probe_cap_grant.oo");
-    ps = list_push(ps, "qa/probe_cap_fs.oo");
-    ps = list_push(ps, "qa/probe_cap_process.oo");
-    ps = list_push(ps, "qa/probe_cap_system.oo");
-    ps = list_push(ps, "qa/probe_cap_net.oo");
-    ps = list_push(ps, "qa/probe_cap_falsify.oo");
-    ps = list_push(ps, "qa/probe_cap_env.oo");
-    ps = list_push(ps, "qa/probe_data.oo");
-    ps = list_push(ps, "qa/probe_wal_disk.oo");
-    ps = list_push(ps, "qa/probe_sql_exec.oo");
-    ps = list_push(ps, "qa/probe_sandbox_m1.oo");
-    ps = list_push(ps, "qa/probe_sandbox_adv1.oo");
-    ps = list_push(ps, "qa/probe_sandbox_stress.oo");
-    ps = list_push(ps, "qa/probe_swarm.oo");
-    ps = list_push(ps, "qa/probe_wayland_wire.oo");
-    ps = list_push(ps, "qa/probe_dbus_wire.oo");
+    let found: List[String] = glob_scan_dir(fs_r, "qa", "probe_*.oo");
+    let ordered: List[String] = natural_sort_list(found);
+    let mut ps: List[String] = list_new();
+    let mut oi: Int = 0;
+    while oi < list_len(ordered) {
+        let cand: String = list_get(ordered, oi);
+        if str_contains(cand, "probe_sdl_") {
+            println("  Skipping display-dependent " + cand);
+        } else {
+            ps = list_push(ps, cand);
+        }
+        oi = oi + 1;
+    }
+    if list_len(ps) < 61 {
+        return Err("probe floor violated: wired " + list_len(ps).to_string() + ", need >= 61 under qa/");
+    }
+    println("std suite: enumerated " + list_len(ps).to_string() + " probes");
 
     let mut i: Int = 0;
     while i < list_len(ps) {

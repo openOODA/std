@@ -1,25 +1,27 @@
 // # std/qa/probe_api_surface — API Surface Verification
 //
 // Logline: Assert standard library exposes the 8 functional domains, legacy
-// compile stays deleted, and every runnable probe is registered in suite.oo.
+// compile stays deleted, and suite.oo's probe enumeration is intact.
 //
-// Setup: FsReadCap checks domain anchors, killed legacy tree, and scans qa/
-// against the suite spawn list so no probe silently stops running.
+// Setup: FsReadCap checks domain anchors, killed legacy tree, and the suite
+// enumeration contract so no probe silently stops running.
 //
 // Beats:
 //   1. Assert all 8 domain directories exist.
 //   2. Assert root anchor.oo exists.
 //   3. Assert forbidden compile/ remains deleted.
-//   4. Assert every qa/probe_*.oo is in suite.oo or the manual display list.
+//   4. Assert suite.oo enumerates qa/probe_*.oo with the sdl exclusion and
+//      the 61 floor, and every manual exemption matches that exclusion.
 //   5. Exit 0 on verified compliance.
 
 import "fs/os/fs.oo";
 
-// Probes that cannot run in CI: sdl_* need a real SDL2 + display, and
-// anim_2d prints wall-clock timings (nondeterministic double-run).
-// Everything else in qa/probe_*.oo must be spawned by qa/suite.oo.
+// Probes that cannot run headless: sdl_* need a real SDL2 + display (fail
+// LLVM emit without one). The suite skips them by the probe_sdl_ pattern;
+// every manual entry here must match that pattern so a runnable probe can
+// never be silently exempted. (anim_2d was exempted for wall-clock prints
+// until it was made deterministic and wired; the exemption died with it.)
 fn surf_manual(name: String) -> Bool {
-    if name == "probe_anim_2d.oo" { return true; }
     if name == "probe_sdl_blit.oo" { return true; }
     if name == "probe_sdl_gl.oo" { return true; }
     if name == "probe_sdl_window.oo" { return true; }
@@ -43,21 +45,41 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, sys: &SysCap, env: &EnvCap, time: 
         return Err("api_surface: cannot read qa/suite.oo");
     }
     let spawns: String = match sr { Ok(s) => s, Err(_) => "" };
+    if !str_contains(spawns, "glob_scan_dir") || !str_contains(spawns, "probe_*.oo") {
+        return Err("api_surface: suite.oo lost probe_*.oo enumeration");
+    }
+    if !str_contains(spawns, "probe_sdl_") {
+        return Err("api_surface: suite.oo lost sdl exclusion");
+    }
+    if !str_contains(spawns, "61") {
+        return Err("api_surface: suite.oo lost 61 floor");
+    }
     let ents: List[String] = fs_read_dir(fs_r, "qa");
     let mut i: Int = 0;
     let mut checked: Int = 0;
+    let mut manual: Int = 0;
     while i < list_len(ents) {
         let e: String = list_get(ents, i);
-        if str_starts_with(e, "probe_") && str_ends_with(e, ".oo") && !surf_manual(e) {
-            checked = checked + 1;
-            if !str_contains(spawns, e) {
-                return Err("api_surface: runnable probe not in suite: " + e);
+        if str_starts_with(e, "probe_") && str_ends_with(e, ".oo") {
+            if surf_manual(e) {
+                manual = manual + 1;
+                if !str_contains(e, "probe_sdl_") {
+                    return Err("api_surface: manual exemption outside sdl pattern: " + e);
+                }
+            } else {
+                if str_contains(e, "probe_sdl_") {
+                    return Err("api_surface: sdl probe missing from manual set: " + e);
+                }
+                checked = checked + 1;
             }
         }
         i = i + 1;
     }
-    if checked < 55 {
-        return Err("api_surface: expected 55+ runnable probes");
+    if manual != 3 {
+        return Err("api_surface: manual set drifted, want exactly the 3 sdl probes");
+    }
+    if checked < 61 {
+        return Err("api_surface: expected 61+ wired probes, found " + checked.to_string());
     }
     println("probe: std/api_surface: ok");
     return Ok(0);
