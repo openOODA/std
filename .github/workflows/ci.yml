@@ -78,6 +78,47 @@ jobs:
           done < <(git ls-files "science/phys/relativistic/*.oo")
           echo "relativistic check: pass=$pass fail=$fail"
           test "$fail" -eq 0 || exit 1
+  # Tree census: counts `oodac check` failures across ALL std modules.
+  # Pre-existing debt outside the gated surface (relativistic dir + suite
+  # are gated above and must be fully clean). This job ratchets: it fails
+  # only if the count GROWS past the baseline. Lower the baseline in a
+  # follow-up commit when cleanup drops the count. Informational: not in
+  # auto-release needs (a red census blocks nothing, but stays visible).
+  # Baseline 1404 measured 2026-09-29 with the resolution-based seed
+  # (120s per-file timeout; timeouts count as failures).
+  tree-census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: checkout std
+        uses: actions/checkout@v4
+        with:
+          path: std
+      - name: checkout oodac
+        uses: actions/checkout@v4
+        with:
+          repository: openOODA/oodac
+          path: oodac
+      - name: require compiler
+        run: test -x oodac/bin/oodac || chmod +x oodac/bin/oodac
+      - name: count tree-wide check failures
+        working-directory: ${{ github.workspace }}/std
+        env:
+          OODA_FS_READDIR: ${{ github.workspace }}
+          OODA_FS_WRITEDIR: ${{ github.workspace }}
+        run: |
+          set -uo pipefail
+          OODAC="${{ github.workspace }}/oodac/bin/oodac"
+          pass=0; fail=0
+          while IFS= read -r f; do
+            if timeout 120 "$OODAC" check "$f" >"/tmp/$(basename "$f").log" 2>&1; then
+              pass=$((pass + 1))
+            else
+              fail=$((fail + 1))
+            fi
+          done < <(git ls-files "*.oo")
+          echo "tree census: pass=$pass fail=$fail baseline=1404"
+          test "$fail" -le 1404 || { echo "FAIL: tree rot grew past baseline ($fail > 1404)"; exit 1; }
   auto-release:
     needs: [immune-system, relativistic-check]
     uses: openOODA/openOODA/.github/workflows/auto-release.yml@v2.10.23
