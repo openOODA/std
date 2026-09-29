@@ -9,6 +9,8 @@
 //   2. Pixel count must equal width times height; bad dimensions fail closed.
 //   3. ppm_write persists the text under &FsWriteCap.
 
+import "std/app/ui/media/qoi_types.oo";
+
 pub fn ppm_encode(img: QoiImage) -> Result[String, String] {
     let w: Int = (img.header).width;
     let h: Int = (img.header).height;

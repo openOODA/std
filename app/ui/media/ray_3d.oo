@@ -14,6 +14,12 @@
 //   2. ry_sky maps miss direction to an exact (40,70,b) gradient.
 //   3. ray_frame composites primary, shadow, and reflection per pixel.
 
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/cube_3d.oo";
+
 fn ry_hit(ox: Float, oy: Float, oz: Float, dx: Float, dy: Float, dz: Float, ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int, cx: Int, cy: Int, cz: Int, tmin: Float, tmax: Float) -> Float {
     let ry_found: Int = shade_ray_tri(ox, oy, oz, dx, dy, dz, ax, ay, az, bx, by, bz, cx, cy, cz, tmin, tmax);
     if ry_found != 1 {

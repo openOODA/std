@@ -9,60 +9,28 @@
 //   2. Re-export public constructors, state solvers, metric evaluators, waveform generators, and cosmological integrators.
 //   3. Provide seamless API interoperability for downstream computational astrophysics and relativistic physics pipelines.
 
-import "./astro_rel_constants.oo";
 import "./stellar_lane_emden_polytrope.oo";
-import "./stellar_structure_equations.oo";
 import "./stellar_chandrasekhar_mass.oo";
 import "./stellar_oppenheimer_volkoff.oo";
 import "./stellar_eddington_luminosity.oo";
-import "./stellar_nucleosynthesis_pp_cno.oo";
-import "./stellar_atmosphere_grey.oo";
-import "./stellar_pulsation_cepheid.oo";
-import "./stellar_supernova_lightcurve.oo";
 
 import "./accretion_disk_shakura_sunyaev.oo";
 import "./accretion_disk_novikov_thorne.oo";
-import "./accretion_disk_advection_dominated.oo";
-import "./accretion_bondi_hoyle_lyttleton.oo";
 import "./relativistic_jets_blandford_znajek.oo";
-import "./relativistic_jets_beaming_doppler.oo";
-import "./pulsar_magnetosphere_goldreich_julian.oo";
-import "./pulsar_dispersion_measure.oo";
-import "./magnetar_crust_cooling.oo";
 
 import "./gr_schwarzschild_metric.oo";
 import "./gr_kerr_metric.oo";
 import "./gr_kerr_black_hole_geodesics.oo";
-import "./gr_kerr_newman_spacetime.oo";
-import "./gr_gravitational_redshift.oo";
 import "./gr_light_deflection_lensing.oo";
-import "./gr_gravitational_time_delay_shapiro.oo";
-import "./gr_geodetic_precession_de_sitter.oo";
-import "./gr_penrose_process_energy.oo";
 import "./gr_hawking_radiation_evaporation.oo";
-import "./gr_wormhole_morris_thorne.oo";
 
 import "./gw_chirp_waveform_imr.oo";
-import "./gw_quadrupole_formula.oo";
 import "./gw_binary_orbital_decay.oo";
-import "./gw_polarization_strain_hplus_hcross.oo";
-import "./gw_matched_filter_snr.oo";
-import "./gw_quasi_normal_modes.oo";
-import "./gw_stochastic_background_omega.oo";
-import "./gw_continuous_pulsar_strain.oo";
 
 import "./cosmological_friedmann_solver.oo";
 import "./cosmological_distances_luminosity.oo";
-import "./cosmological_cmb_recombination.oo";
-import "./cosmological_baryon_acoustic_oscillations.oo";
 import "./cosmological_dark_matter_nfw_profile.oo";
-import "./cosmological_dark_energy_w_eos.oo";
-import "./cosmological_inflation_slow_roll.oo";
-import "./cosmological_big_bang_nucleosynthesis.oo";
 
-import "./nbody_barnes_hut_octree.oo";
-import "./interstellar_extinction_reddening.oo";
-import "./astrophysics_relativity_stubs.oo";
 
 pub fn astro_facade_lane_emden(n: Float) -> LaneEmdenSolution {
     return lane_emden_solve(n, 0.005, 5000);

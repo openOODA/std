@@ -3,14 +3,19 @@
 // Logline: Twelve colored triangles become a spinning cube on a DepthCanvas.
 //
 // Setup: Pure compute, no caps. Cube half-size 60 centered on the origin;
-// the caller places it with dist and aims it with focal/cx/cy. Same-dir
-// spin/raster helpers resolve without import. Camera looks along +z from
-// the origin; world +y is up. Visible faces project to negative area2
-// (clockwise on a y-down screen), so area2 >= 0 culls.
+// the caller places it with dist and aims it with focal/cx/cy. Camera
+// looks along +z from the origin; world +y is up. Visible faces project
+// to negative area2 (clockwise on a y-down screen), so area2 >= 0 culls.
 //
 // Beats:
 //   1. cube_vert/cube_face_tri/cube_face_color describe the mesh.
 //   2. cube_frame rotates, translates, projects, culls, and fills.
+
+import "std/app/ui/media/spin_3d.oo";
+import "std/app/ui/media/shade_3d.oo";
+import "std/app/ui/media/canvas_2d.oo";
+import "std/app/ui/media/qoi_types.oo";
+import "std/app/ui/media/raster_3d.oo";
 
 type CubePt = struct {
     x: Int,
