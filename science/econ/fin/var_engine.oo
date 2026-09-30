@@ -11,6 +11,17 @@
 
 import "./var_ops.oo";
 
+type RiskMetrics = struct {
+    var_confidence_level: Float,
+    time_horizon_days: Int,
+    volatility: Float
+};
+
+type StressScenario = struct {
+    volatility_multiplier: Float,
+    market_shock_pct: Float
+};
+
 pub fn var_calculate_parametric(
     portfolio: &PortfolioValue,
     confidence_level: Float,

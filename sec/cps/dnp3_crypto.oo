@@ -109,6 +109,6 @@ pub fn dnp3_issue_challenge(tcp: &TcpCap, fd: Int) -> Result[Dnp3Challenge, Stri
     return Err("Unimplemented: DNP3 secure-auth challenge issue requires &TcpCap");
 }
 
-pub fn dnp3_verify_hmac(crypto: &CryptoCap, key: &Dnp3SessionKey, msg: String, hmac_val: String) -> Result[Bool, String] {
-    return Err("Unimplemented: DNP3 HMAC verification requires &CryptoCap");
+pub fn dnp3_verify_hmac(crypto: &SignCap, key: &Dnp3SessionKey, msg: String, hmac_val: String) -> Result[Bool, String] {
+    return Err("Unimplemented: DNP3 HMAC verification requires &SignCap");
 }

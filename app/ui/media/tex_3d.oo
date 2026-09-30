@@ -17,6 +17,9 @@
 //   2. Farther textures lose depth ties to nearer flats.
 //   3. Degenerate tris and empty palettes paint nothing.
 
+import "raster_3d.oo";
+import "pixel_2d.oo";
+
 pub fn raster_tex(rd: DepthCanvas, ax: Int, ay: Int, az: Int, bx: Int, by: Int, bz: Int, cx: Int, cy: Int, cz: Int, au: Int, av: Int, bu: Int, bv: Int, cu: Int, cw: Int, tex: Sprite, pal: Palette, transparent: Int) -> DepthCanvas {
     // NOTE: Affine screen-space UVs (no perspective divide): exact at the
     // vertices, linearly blended inside. Weights pair w0->C, w1->A, w2->B

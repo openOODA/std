@@ -79,6 +79,17 @@ pub fn discount_factor_is_valid(df: &DiscountFactor) -> Bool {
 // SwapRate Constructors & Methods
 // -------------------------------------------------------------------
 
+type SwapRate = struct {
+    swap_id: String,
+    tenor_months: Int,
+    rate_bps: Int,
+    fixed_freq: Int,
+    float_freq: Int,
+    day_count: Int,
+    spread_bps: Int,
+    is_active: Bool
+};
+
 pub fn swap_rate_create(
     swap_id: String,
     tenor_months: Int,
@@ -131,6 +142,13 @@ pub fn swap_rate_calculate_fixed_leg_pv(swap: &SwapRate, notional: Int, df: &Dis
 // YieldCurve Constructors & Management Helpers
 // -------------------------------------------------------------------
 
+type YieldCurvePoint = struct {
+    tenor_months: Int,
+    rate_bps: Int,
+    discount_factor: DiscountFactor,
+    is_calibrated: Bool
+};
+
 pub fn yield_curve_point_create(
     tenor_months: Int,
     rate_bps: Int,
@@ -144,6 +162,16 @@ pub fn yield_curve_point_create(
         is_calibrated: true
     };
 }
+
+type YieldCurve = struct {
+    curve_id: String,
+    curve_type: Int,
+    base_date: Int,
+    points: List[YieldCurvePoint],
+    swap_rates: List[SwapRate],
+    interpolation_type: Int,
+    is_calibrated: Bool
+};
 
 pub fn yield_curve_create(curve_id: String, curve_type: Int, base_date: Int, interpolation_type: Int) -> YieldCurve {
     let pts: List[YieldCurvePoint] = list_new();

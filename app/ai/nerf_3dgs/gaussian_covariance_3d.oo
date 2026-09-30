@@ -22,7 +22,7 @@ type Covariance3D = struct {
     cov_zz: Float
 };
 
-pub fn covariance_3d_from_scale_rot(scale: Vec3, rot: Quaternion) -> Covariance3D {
+pub fn covariance_3d_from_scale_rot(scale: Vec3, rot: Quat) -> Covariance3D {
     let r: Mat3 = quat_to_mat3(rot);
 
     // M = R * S (each column of R scaled by scale components)

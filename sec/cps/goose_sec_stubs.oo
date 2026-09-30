@@ -6,12 +6,14 @@
 //
 // Beats:
 //   1. goose_join_multicast: NetCap-bound L2 multicast join stub.
-//   2. goose_verify_signature: CryptoCap-bound Ed25519/RSA verify stub.
+//   2. goose_verify_signature: SignCap-bound Ed25519/RSA verify stub.
+
+import "std/sec/cps/goose_sec_types.oo";
 
 pub fn goose_join_multicast(net: &NetCap, mac: String) -> Result[Int, String] {
     return Err("Unimplemented: GOOSE multicast join requires NetCap raw residual (no SoftGranular) FFI lowering");
 }
 
-pub fn goose_verify_signature(crypto: &CryptoCap, frame: &GooseFrame, sig: &GooseSignature) -> Result[Bool, String] {
-    return Err("Unimplemented: GOOSE signature verify requires CryptoCap FFI lowering");
+pub fn goose_verify_signature(crypto: &SignCap, frame: &GooseFrame, sig: &GooseSignature) -> Result[Bool, String] {
+    return Err("Unimplemented: GOOSE signature verify requires SignCap FFI lowering");
 }

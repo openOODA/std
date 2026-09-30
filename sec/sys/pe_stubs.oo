@@ -14,6 +14,8 @@
 //
 // residual: not a real PE loader; integrate host platform runtime.
 
+import "std/sec/sys/pe_types.oo";
+
 pub fn pe_load_image_sys(sys: &SysCap, filepath: String) -> Result[PeImage, String] {
     // COMPILER LIMITATION: openOODA lacks native C-FFI / Win32 LoadLibraryEx host bindings for kernel image loading.
     // Memory mapping of PE images must be executed by host platform runtime.

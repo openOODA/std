@@ -14,6 +14,9 @@
 //   2. shadow_frame shades by primary hit, shadow ray, then Lambert.
 //   3. Deterministic per angle like cube_frame.
 
+import "raster_3d.oo";
+import "cube_3d.oo";
+
 pub fn shadow_frame(rd: DepthCanvas, deg: Int, dist: Int, focal: Int, cx: Int, cy: Int, lx: Int, ly: Int, lz: Int, ambient: Int) -> DepthCanvas {
     let cb_w: Int = rd.cv.width;
     let cb_h: Int = rd.cv.height;

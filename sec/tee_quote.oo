@@ -1,14 +1,14 @@
 // # TEE Attestation Quote Parsers & Verifiers
 //
-// Logline: Parses raw byte streams for AMD SEV-SNP and Apple Secure Enclave attestation quotes into typed records, then verifies structural integrity and quote field ranges under &CryptoCap.
+// Logline: Parses raw byte streams for AMD SEV-SNP and Apple Secure Enclave attestation quotes into typed records, then verifies structural integrity and quote field ranges under &SignCap.
 //
-// Setup: Imports std/sec/tee_types.oo. The parsers are pure value-returning helpers; the verifiers take &CryptoCap matching the established pattern in ooda/std/sec/cps/{bft_engine, secoc, goose_sec}.oo. Decimal literals are used in place of hex because the .oo lexer does not accept 0xNN constants.
+// Setup: Imports std/sec/tee_types.oo. The parsers are pure value-returning helpers; the verifiers take &SignCap matching the established pattern in ooda/std/sec/cps/{bft_engine, secoc, goose_sec}.oo. Decimal literals are used in place of hex because the .oo lexer does not accept 0xNN constants.
 //
 // Beats:
 //   1. Provide read_u32_le to extract a 4-byte little-endian word from a byte list at a given offset.
 //   2. Provide read_bytes to copy a sub-range of a byte list into a new byte list.
 //   3. Provide tee_quote_parse_sev_snp and tee_quote_parse_apple for the two quote formats.
-//   4. Provide tee_quote_verify_sev_snp and tee_quote_verify_apple under &CryptoCap; both perform structural checks (version range, measurement non-empty, signature non-empty, vendor match) and return Result[Bool, String].
+//   4. Provide tee_quote_verify_sev_snp and tee_quote_verify_apple under &SignCap; both perform structural checks (version range, measurement non-empty, signature non-empty, vendor match) and return Result[Bool, String].
 
 import "std/sec/tee_types.oo";
 
@@ -61,10 +61,10 @@ pub fn tee_quote_parse_sev_snp(raw: List[Int]) -> Result[SevSnpQuoteHeader, Stri
 }
 
 pub fn tee_quote_verify_sev_snp(
-    crypto: &CryptoCap,
+    crypto: &SignCap,
     q: &SevSnpQuoteHeader
 ) -> Result[Bool, String] {
-    // Structural checks first (deterministic; do not require CryptoCap FFI).
+    // Structural checks first (deterministic; do not require SignCap FFI).
     let v: Int = q.version;
     if v < tee_sev_snp_version_min() {
         return Err("E_TEE_VERSION: SEV-SNP quote version below minimum");
@@ -84,11 +84,11 @@ pub fn tee_quote_verify_sev_snp(
     if vid != tee_vendor_sev_snp() {
         return Err("E_TEE_VENDOR: SEV-SNP vendor id mismatch");
     }
-    // CryptoCap FFI lowering for ECDSA-P384 signature verification is reserved
+    // SignCap FFI lowering for ECDSA-P384 signature verification is reserved
     // for the Stage 15 FFI surface. We assert the cap was actually supplied
     // by checking the structural path completes; downstream callers can
     // re-issue an FFI-lowerable verify against the same quote.
-    let _cap_used: &CryptoCap = crypto;
+    let _cap_used: &SignCap = crypto;
     return Ok(true);
 }
 
@@ -129,7 +129,7 @@ pub fn tee_quote_parse_apple(raw: List[Int]) -> Result[AppleSecureEnclaveQuote, 
 }
 
 pub fn tee_quote_verify_apple(
-    crypto: &CryptoCap,
+    crypto: &SignCap,
     q: &AppleSecureEnclaveQuote
 ) -> Result[Bool, String] {
     let v: Int = q.version;
@@ -155,6 +155,6 @@ pub fn tee_quote_verify_apple(
     if list_len(plat) != 8 {
         return Err("E_TEE_PLAT_LEN: Apple SE platform_version must be 8 bytes");
     }
-    let _cap_used: &CryptoCap = crypto;
+    let _cap_used: &SignCap = crypto;
     return Ok(true);
 }

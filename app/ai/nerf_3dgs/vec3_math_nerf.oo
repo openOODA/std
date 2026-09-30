@@ -119,6 +119,25 @@ pub fn quat_identity() -> Quat {
     return Quat { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
 }
 
+pub fn quat_normalize(q: Quat) -> Quat {
+    let n2: Float = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+    if n2 == 0.0 { return quat_identity(); }
+    let inv: Float = 1.0 / quat_sqrt_newton(n2);
+    return Quat { x: q.x * inv, y: q.y * inv, z: q.z * inv, w: q.w * inv };
+}
+
+fn quat_sqrt_newton(x: Float) -> Float {
+    if x <= 0.0 { return 0.0; }
+    let mut g: Float = x;
+    if x > 1.0 { g = x / 2.0; }
+    let mut i: Int = 0;
+    while i < 20 {
+        g = (g + x / g) / 2.0;
+        i = i + 1;
+    }
+    return g;
+}
+
 pub fn quat_to_mat3(q: Quat) -> Mat3 {
     let x: Float = q.x;
     let y: Float = q.y;
@@ -176,7 +195,7 @@ pub fn vec3_cross(a: Vec3, b: Vec3) -> Vec3 {
 }
 
 // Minimal camera projection: orthographic + perspective via focal.
-pub fn camera_project_point(p: Vec3, fx: Float, fy: Float, cx: Float, cy: Float) -> Vec3 {
+pub fn camera_project_point_fxfy(p: Vec3, fx: Float, fy: Float, cx: Float, cy: Float) -> Vec3 {
     let z: Float = if p.z > 0.1 { p.z } else { 0.1 };
     let u: Float = (p.x * fx) / z + cx;
     let v: Float = (p.y * fy) / z + cy;

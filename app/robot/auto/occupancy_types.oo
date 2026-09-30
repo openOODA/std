@@ -232,7 +232,7 @@ pub fn occupancy_isqrt(n: Int) -> Int {
 }
 
 pub fn ray3d_length(ray: Ray3D) -> Int {
-    let diff: Vec3 = vec3_sub(ray.target, ray.origin);
+    let diff: Vector3 = vec3_sub(ray.target, ray.origin);
     let len_sq: Int = vec3_length_squared(diff);
     return occupancy_isqrt(len_sq);
 }

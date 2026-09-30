@@ -13,6 +13,10 @@ type RosNode = struct {
     name: String, ns: String, is_active: Bool, n_spin: Int, n_pub: Int,
     n_sub: Int, n_srv: Int, n_act: Int
 };
+type QosProfile = struct {
+    depth: Int,
+    reliability: Int
+};
 type RosPublisher = struct {
     topic_name: String, msg_type: String, qos: QosProfile, n_sent: Int,
     is_valid: Bool

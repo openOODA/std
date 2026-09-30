@@ -26,12 +26,12 @@ pub fn enclave_engine_init(engine_id_val: String, et: EnclaveType) -> EnclaveEng
 
 pub fn enclave_engine_record_quote(engine: &mut EnclaveEngine, q: EnclaveQuote) {
     let mut eng: mut EnclaveEngine = engine;
-    let old: List[TeeQuote] = eng.quotes;
+    let old: List[EnclaveQuote] = eng.quotes;
     let mut updated: List[EnclaveQuote] = list_new();
     let n: Int = list_len(old);
     let mut i: Int = 0;
     while i < n {
-        let cur: TeeQuote = list_get(old, i);
+        let cur: EnclaveQuote = list_get(old, i);
         updated = list_push(updated, cur);
         let ni: Int = i + 1;
         i = ni;

@@ -14,12 +14,12 @@ import "vec3_math_nerf.oo";
 type Gaussian3D = struct {
     position: Vec3,
     scale: Vec3,
-    rotation: Quaternion,
+    rotation: Quat,
     opacity: Float,
     sh_dc: Vec3
 };
 
-pub fn gaussian_3d_new(pos: Vec3, scale: Vec3, rot: Quaternion, opacity: Float, sh_dc: Vec3) -> Gaussian3D {
+pub fn gaussian_3d_new(pos: Vec3, scale: Vec3, rot: Quat, opacity: Float, sh_dc: Vec3) -> Gaussian3D {
     return Gaussian3D {
         position: pos,
         scale: scale,

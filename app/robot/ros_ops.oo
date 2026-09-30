@@ -16,6 +16,10 @@ import "./ros_types.oo";
 
 import ./ros_msg.oo;
 
+pub fn qos_profile_new(depth: Int, reliability: Int) -> QosProfile {
+    return QosProfile { depth: depth, reliability: reliability };
+}
+
 pub fn qos_profile_default() -> QosProfile { return qos_profile_new(10, 1); }
 
 pub fn qos_profile_sensor_data() -> QosProfile { return qos_profile_new(5, 2); }

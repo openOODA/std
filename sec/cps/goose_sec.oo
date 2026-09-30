@@ -230,7 +230,7 @@ pub fn goose_join_multicast(net: &NetCap, mac: String) -> Result[Int, String] {
     return Err("Unimplemented: GOOSE multicast join requires NetCap raw residual (no SoftGranular) FFI lowering");
 }
 
-pub fn goose_verify_signature(crypto: &CryptoCap, frame: &GooseFrame, sig: &GooseSignature) -> Result[Bool, String] {
+pub fn goose_verify_signature(crypto: &SignCap, frame: &GooseFrame, sig: &GooseSignature) -> Result[Bool, String] {
     // COMPILER LIMITATION: openOODA lacks IEC 61850-9-3 Ed25519/RSA GOOSE signature verify FFI.
-    return Err("Unimplemented: GOOSE signature verify requires CryptoCap FFI lowering");
+    return Err("Unimplemented: GOOSE signature verify requires SignCap FFI lowering");
 }

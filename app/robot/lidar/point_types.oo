@@ -44,6 +44,26 @@ type PointXYZI = struct {
     intensity: Float
 };
 
+type BoundingBox3D = struct {
+    center_x: Float,
+    center_y: Float,
+    center_z: Float,
+    size_x: Float,
+    size_y: Float,
+    size_z: Float,
+    heading_rad: Float,
+    confidence: Float,
+    class_id: Int
+};
+
+type PointXYZIT = struct {
+    x: Float,
+    y: Float,
+    z: Float,
+    intensity: Float,
+    timestamp_offset_us: Float
+};
+
 pub fn point3d_new(x: Float, y: Float, z: Float) -> Point3D {
     return Point3D { x: x, y: y, z: z };
 }

@@ -10,6 +10,9 @@
 //   3. Load from .ooda-cache/ooda-token-baseline.json if it exists; else return default.
 //   4. Save the updated baseline; fail-closed on write failure.
 
+import "pricing.oo";
+import "token_estimator.oo";
+
 type BaselineRecord = struct {
     name: String,
     efficiency_milli: Int,

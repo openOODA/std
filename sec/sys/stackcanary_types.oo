@@ -32,3 +32,23 @@ pub fn stack_integrity_pass(s: StackIntegrity) -> StackIntegrity {
         corrupted_frames: s.corrupted_frames
     };
 }
+
+type StackFrame = struct {
+    function_name: String,
+    frame_pointer: Int,
+    canary_value: Int,
+    is_valid: Bool
+};
+
+type CanaryGuard = struct {
+    guard_id: String,
+    global_canary_secret: Int,
+    null_byte_terminator: Bool,
+    active_frames: List[StackFrame],
+    protection_level: Int,
+    stats_frames_guarded: Int,
+    stats_violations_detected: Int,
+    stats_remediations: Int,
+    is_active: Bool,
+    is_compromised: Bool
+};

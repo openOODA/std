@@ -62,7 +62,7 @@ pub fn http_cap_build_request(host: String, port: Int, method: String, path: Str
 // Capability-gated facade. The &TcpCap and &TcpCap tokens are required by the
 // signature so call sites must obtain both grants. The body validates the port
 // and returns the deterministic request as Ok or a fail-closed Err.
-pub fn http_cap_request(host: String, port: Int, method: String, path: String, headers: List[String], body: String, &hc: &TcpCap, &tc: &TcpCap) -> Result[String, String] {
+pub fn http_cap_request(host: String, port: Int, method: String, path: String, headers: List[String], body: String, hc: &TcpCap, tc: &TcpCap) -> Result[String, String] {
     if chars_len(host) == 0 {
         return Err("HTTP_CAP_ERR: empty host");
     }

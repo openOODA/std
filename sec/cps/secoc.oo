@@ -220,9 +220,9 @@ pub fn secoc_engine_do_work(engine: &SecOcEngine) -> Int {
 
 // Fail-Closed CMAC Stubs
 
-pub fn secoc_compute_cmac(crypto: &CryptoCap, key: &SecOcKey, data: String) -> Result[String, String] {
+pub fn secoc_compute_cmac(crypto: &SignCap, key: &SecOcKey, data: String) -> Result[String, String] {
     // COMPILER LIMITATION: openOODA lacks AES-128 CMAC FFI for AUTOSAR SecOC profile computation.
-    return Err("Unimplemented: AES-128 CMAC compute requires CryptoCap FFI lowering");
+    return Err("Unimplemented: AES-128 CMAC compute requires SignCap FFI lowering");
 }
 
 pub fn secoc_persisted_freshness_load(fs: &FsReadCap) -> Result[Int, String] {

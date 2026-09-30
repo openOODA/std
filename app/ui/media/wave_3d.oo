@@ -18,6 +18,10 @@
 //   3. swell_tri projects one world triangle and paints shade or foam.
 //   4. swell_paint tiles quads into a lit, depth-tested ocean surface.
 
+import "raster_3d.oo";
+import "wave_2d.oo";
+import "shade_3d.oo";
+
 pub fn swell_h(x: Int, z: Int, t: Int, a1: Int, p1: Int, r1: Int, a2: Int, p2: Int, r2: Int) -> Int {
     return wave_h(x + z, t, a1, p1, r1) + wave_h(x - z, t, a2, p2, r2);
 }

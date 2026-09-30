@@ -59,7 +59,7 @@ pub fn gyration_evaluate_ensemble(atoms: List[AtomMassPoint]) -> GyrationResult 
 
     let mut i: Int = 0;
     while i < n {
-        let p: AtomCoordinate = list_get(atoms, i);
+        let p: AtomMassPoint = list_get(atoms, i);
         let m: Float = p.mass_amu;
         tot_mass = tot_mass + m;
         sum_mx = sum_mx + (m * p.x);
@@ -79,7 +79,7 @@ pub fn gyration_evaluate_ensemble(atoms: List[AtomMassPoint]) -> GyrationResult 
     let mut sum_m_r2: Float = 0.0;
     let mut j: Int = 0;
     while j < n {
-        let p: AtomCoordinate = list_get(atoms, j);
+        let p: AtomMassPoint = list_get(atoms, j);
         let dx: Float = p.x - cmx;
         let dy: Float = p.y - cmy;
         let dz: Float = p.z - cmz;

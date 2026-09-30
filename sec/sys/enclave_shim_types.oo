@@ -26,3 +26,39 @@ pub fn enclave_type_new(vendor: Int, is_sgx: Int) -> EnclaveType {
 pub fn enclave_type_vendor(e: EnclaveType) -> Int {
     return e.vendor;
 }
+
+type EnclavePolicy = struct {
+    policy_id: String,
+    require_debug_disabled: Bool,
+    min_isv_svn: Int,
+    allowed_attributes_mask: Int,
+    fail_closed: Bool,
+    is_valid: Bool
+};
+
+type EnclaveMeasurement = struct {
+    isv_svn: Int
+};
+
+type EnclaveReport = struct {
+    measurement: EnclaveMeasurement,
+    attributes: Int
+};
+
+type EnclaveQuote = struct {
+    quote_id: String,
+    report: EnclaveReport,
+    signature: String,
+    collateral: String,
+    is_valid: Bool
+};
+
+type EnclaveEngine = struct {
+    engine_id: String,
+    enclave_type: EnclaveType,
+    policy: EnclavePolicy,
+    quotes: List[EnclaveQuote],
+    verified: Int,
+    rejected: Int,
+    is_halted: Bool
+};

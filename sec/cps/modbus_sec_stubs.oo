@@ -9,6 +9,8 @@
 //   2. modbus_rtu_open: FsCap-bound /dev/ttyUSB* + termios stub.
 //   3. modbus_send_request: TcpCap-bound MBAP encode/decode + send stub.
 
+import "std/sec/cps/modbus_sec_types.oo";
+
 pub fn modbus_tcp_open(tcp: &TcpCap, host: String, port: Int) -> Result[Int, String] {
     return Err("Unimplemented: Modbus TCP socket open requires TcpCap+TCP FFI lowering");
 }

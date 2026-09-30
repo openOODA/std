@@ -121,8 +121,8 @@ pub fn finite_diff_delta(option: &EuropeanOption, bump_pct: Float) -> Float {
         volatility: option.volatility
     };
 
-    let up_res: BlackScholesResult = black_scholes_price(&up_opt);
-    let dn_res: BlackScholesResult = black_scholes_price(&dn_opt);
+    let up_res: BsPriceResult = black_scholes_price(&up_opt);
+    let dn_res: BsPriceResult = black_scholes_price(&dn_opt);
 
     return (up_res.price - dn_res.price) / (2.0 * h);
 }
@@ -131,7 +131,7 @@ pub fn finite_diff_gamma(option: &EuropeanOption, bump_pct: Float) -> Float {
     let s: Float = option.spot;
     let h: Float = s * bump_pct;
 
-    let mid_res: BlackScholesResult = black_scholes_price(option);
+    let mid_res: BsPriceResult = black_scholes_price(option);
     let mut up_opt: EuropeanOption = EuropeanOption {
         is_call: option.is_call,
         spot: s + h,
@@ -151,8 +151,8 @@ pub fn finite_diff_gamma(option: &EuropeanOption, bump_pct: Float) -> Float {
         volatility: option.volatility
     };
 
-    let up_res: BlackScholesResult = black_scholes_price(&up_opt);
-    let dn_res: BlackScholesResult = black_scholes_price(&dn_opt);
+    let up_res: BsPriceResult = black_scholes_price(&up_opt);
+    let dn_res: BsPriceResult = black_scholes_price(&dn_opt);
 
     return (up_res.price - (2.0 * mid_res.price) + dn_res.price) / (h * h);
 }
