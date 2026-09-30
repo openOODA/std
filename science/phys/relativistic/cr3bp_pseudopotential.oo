@@ -1,0 +1,28 @@
+// # CR3BP effective pseudopotential
+//
+// Logline: Circular restricted three-body pseudopotential
+// U = (x^2+y^2)/2 + (1-mu)/r1 + mu/r2 in rotating-frame units,
+// for Lagrange-point and halo-orbit analysis.
+//
+// Setup: Pure compute, no caps. Primary at (-mu,0,0), secondary at
+// (1-mu,0,0). Singularities at either body fail closed.
+//
+// Beats:
+//   1. Distances r1/r2 measured from the two primaries.
+//   2. Zero distance to either body returns Err, never Inf.
+//   3. mu outside [0,1] returns Err.
+
+pub fn cr3bp_pseudopotential(x: Float, y: Float, z: Float, mu: Float) -> Result[Float, String] {
+    if mu < 0.0 || mu > 1.0 {
+        return Err("ERR\tcr3bp_pseudopotential\tinvalid_mu");
+    }
+    let dx1: Float = x + mu;
+    let dx2: Float = x - 1.0 + mu;
+    let r1: Float = sqrt((dx1 * dx1) + (y * y) + (z * z));
+    let r2: Float = sqrt((dx2 * dx2) + (y * y) + (z * z));
+    if r1 <= 0.0 || r2 <= 0.0 {
+        return Err("ERR\tcr3bp_pseudopotential\tsingularity");
+    }
+    let u: Float = ((x * x) + (y * y)) / 2.0 + ((1.0 - mu) / r1) + (mu / r2);
+    return Ok(u);
+}

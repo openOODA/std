@@ -1,0 +1,35 @@
+// # Quaternion-vector attitude helpers
+//
+// Logline: Axis-angle construction and vector rotation over the
+// Quaternion (attitude_quaternion.oo) and Vector3 (lambert_solver.oo)
+// types, which live in separate modules.
+//
+// Setup: Pure compute, no caps. Degenerate zero axis yields identity
+// (fail-soft with a well-defined value, never NaN).
+//
+// Beats:
+//   1. quat_from_axis_angle builds [cos(a/2), axis*sin(a/2)].
+//   2. quat_rotate_vector applies q * [0,v] * conj(q).
+//   3. Zero-length axis returns identity instead of dividing by zero.
+
+import "attitude_quaternion.oo";
+import "lambert_solver.oo";
+import "std/core/math/fast_trig.oo";
+
+pub fn quat_from_axis_angle(axis: Vector3, angle_rad: Float) -> Quaternion {
+    let n2: Float = (axis.x * axis.x) + (axis.y * axis.y) + (axis.z * axis.z);
+    if n2 <= 0.000000000001 {
+        return quat_identity();
+    }
+    let half: Float = angle_rad / 2.0;
+    let s: Float = fast_sin(half) / sqrt(n2);
+    return quat_new(fast_cos(half), axis.x * s, axis.y * s, axis.z * s);
+}
+
+pub fn quat_rotate_vector(q: Quaternion, v: Vector3) -> Vector3 {
+    let p: Quaternion = quat_new(0.0, v.x, v.y, v.z);
+    let t: Quaternion = quat_multiply(q, p);
+    let c: Quaternion = quat_conjugate(q);
+    let r: Quaternion = quat_multiply(t, c);
+    return vec3_new(r.x, r.y, r.z);
+}

@@ -1,0 +1,45 @@
+// # RSW orbital frame from position and velocity
+//
+// Logline: Radial / along-track / cross-track unit frame for orbit
+// visualization, covariance display, and burn decomposition.
+//
+// Setup: Pure compute, no caps. Degenerate zero inputs fall back to the
+// identity frame (r=(1,0,0), s=(0,1,0), w=(0,0,1)) instead of NaN.
+//
+// Beats:
+//   1. r is the normalized position vector.
+//   2. w is the normalized orbit normal (pos x vel).
+//   3. s completes the right-handed triad (w x r).
+
+import "lambert_solver.oo";
+
+type RswFrame = struct {
+    r: Vector3,
+    s: Vector3,
+    w: Vector3
+};
+
+fn rsw_cross(ax: Float, ay: Float, az: Float, bx: Float, by: Float, bz: Float) -> Vector3 {
+    return vec3_new(
+        (ay * bz) - (az * by),
+        (az * bx) - (ax * bz),
+        (ax * by) - (ay * bx)
+    );
+}
+
+fn rsw_normed(v: Vector3, fb_x: Float, fb_y: Float, fb_z: Float) -> Vector3 {
+    let n2: Float = (v.x * v.x) + (v.y * v.y) + (v.z * v.z);
+    if n2 <= 0.000000000001 {
+        return vec3_new(fb_x, fb_y, fb_z);
+    }
+    let inv: Float = 1.0 / sqrt(n2);
+    return vec3_new(v.x * inv, v.y * inv, v.z * inv);
+}
+
+pub fn compute_rsw_frame(pos: Vector3, vel: Vector3) -> RswFrame {
+    let r: Vector3 = rsw_normed(pos, 1.0, 0.0, 0.0);
+    let h: Vector3 = rsw_cross(pos.x, pos.y, pos.z, vel.x, vel.y, vel.z);
+    let w: Vector3 = rsw_normed(h, 0.0, 0.0, 1.0);
+    let s: Vector3 = rsw_cross(w.x, w.y, w.z, r.x, r.y, r.z);
+    return RswFrame { r: r, s: s, w: w };
+}
