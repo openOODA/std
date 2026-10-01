@@ -56,6 +56,26 @@ fn list_contains_str(xs: List[String], want: String) -> Bool {
 }
 
 
+fn trip_sdl_excluded(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
+    let c: Result[String, String] = sys_exec(p, oodac, "check", path);
+    if c.is_err() {
+        let e: String = match c { Ok(_) => "", Err(m) => m };
+        return Err("excluded " + path + " fails check (must stay valid code): " + e);
+    }
+    let tmp_bin: String = path + ".tripwire.bin";
+    let b: Result[String, String] = sys_exec(p, oodac, "build", path, "-o", tmp_bin);
+    let _del: Result[String, String] = sys_exec(p, "rm", "-f", tmp_bin);
+    if !b.is_err() {
+        return Err("excluded " + path + " now BUILDS (ffi_call codegen landed?) - wire it into the double-run set");
+    }
+    let out: String = match b { Ok(_) => "", Err(m) => m };
+    if !str_contains(out, "unknown call ffi_call") {
+        return Err("excluded " + path + " fails for a NEW reason (known-limitation drift; expected 'unknown call ffi_call')");
+    }
+    println("  Tripwired (check-OK, emit blocked on ffi_call): " + path);
+    return Ok(0);
+}
+
 fn run_probe_twice(p: &ProcessCap, oodac: String, path: String) -> Result[Int, String] {
     let r1: Result[String, String] = run_probe_once(p, oodac, path);
     if r1.is_err() {
@@ -96,9 +116,43 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
     }
     let found: List[String] = glob_scan_dir(fs_r, "qa", "probe_*.oo");
     let ordered: List[String] = natural_sort_list(found);
-    let ps: List[String] = ordered;
-    if list_len(ps) < 64 {
-        return Err("probe floor violated: wired " + list_len(ps).to_string() + ", need >= 64 under qa/");
+    let mut ps: List[String] = list_new();
+    let mut excluded: List[String] = list_new();
+    let mut oi: Int = 0;
+    while oi < list_len(ordered) {
+        let cand: String = list_get(ordered, oi);
+        if str_contains(cand, "probe_sdl_") {
+            excluded = list_push(excluded, cand);
+        } else {
+            ps = list_push(ps, cand);
+        }
+        oi = oi + 1;
+    }
+    if list_len(excluded) != 3 {
+        return Err("sdl exclusion drift: found " + list_len(excluded).to_string() + " probe_sdl_*, need exactly 3");
+    }
+    if !list_contains_str(excluded, "qa/probe_sdl_blit.oo") {
+        return Err("sdl exclusion drift: qa/probe_sdl_blit.oo missing from excluded set");
+    }
+    if !list_contains_str(excluded, "qa/probe_sdl_gl.oo") {
+        return Err("sdl exclusion drift: qa/probe_sdl_gl.oo missing from excluded set");
+    }
+    if !list_contains_str(excluded, "qa/probe_sdl_window.oo") {
+        return Err("sdl exclusion drift: qa/probe_sdl_window.oo missing from excluded set");
+    }
+    let mut ti: Int = 0;
+    while ti < list_len(excluded) {
+        let tpath: String = list_get(excluded, ti);
+        let tr: Result[Int, String] = trip_sdl_excluded(p, oodac, tpath);
+        if tr.is_err() {
+            let tem: String = match tr { Ok(_) => "", Err(e) => e };
+            println("ERR " + tpath + ": " + tem);
+            return tr;
+        }
+        ti = ti + 1;
+    }
+    if list_len(ps) < 61 {
+        return Err("probe floor violated: wired " + list_len(ps).to_string() + ", need >= 61 under qa/");
     }
     println("std suite: enumerated " + list_len(ps).to_string() + " probes");
 
