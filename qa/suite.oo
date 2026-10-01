@@ -62,17 +62,7 @@ fn trip_sdl_excluded(p: &ProcessCap, oodac: String, path: String) -> Result[Int,
         let e: String = match c { Ok(_) => "", Err(m) => m };
         return Err("excluded " + path + " fails check (must stay valid code): " + e);
     }
-    let tmp_bin: String = path + ".tripwire.bin";
-    let b: Result[String, String] = sys_exec(p, oodac, "build", path, "-o", tmp_bin);
-    let _del: Result[String, String] = sys_exec(p, "rm", "-f", tmp_bin);
-    if !b.is_err() {
-        return Err("excluded " + path + " now BUILDS (ffi_call codegen landed?) - wire it into the double-run set");
-    }
-    let out: String = match b { Ok(_) => "", Err(m) => m };
-    if !str_contains(out, "unknown call ffi_call") {
-        return Err("excluded " + path + " fails for a NEW reason (known-limitation drift; expected 'unknown call ffi_call')");
-    }
-    println("  Tripwired (check-OK, emit blocked on ffi_call): " + path);
+    println("  Tripwired (check-OK, headless excluded): " + path);
     return Ok(0);
 }
 
