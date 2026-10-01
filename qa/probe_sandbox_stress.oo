@@ -45,35 +45,33 @@ fn probe_check_initial_status() -> Result[Int, String] {
     return Ok(0);
 }
 
-fn probe_find_root(env: &EnvCap) -> Result[String, String] {
+fn probe_find_root(env: &EnvCap, fs_r: &FsReadCap) -> Result[String, String] {
+    let pr: Result[String, String] = env_get(env, "PWD");
+    let pwd: String = match pr { Ok(s) => s, Err(_) => "" };
+    if pwd != "" && path_exists(fs_r, pwd + "/sec") {
+        return Ok(pwd);
+    }
     let rr: Result[String, String] = env_get(env, "OODA_FS_READDIR");
     if rr.is_err() {
         return Err("FAIL: OODA_FS_READDIR unset; cannot anchor sandbox grants");
     }
     let raw_root: String = match rr { Ok(s) => s, Err(_) => "" };
     let parts: List[String] = str_split(raw_root, ":");
-    let mut selected: String = list_get(parts, 0);
     let mut pi: Int = 0;
     while pi < list_len(parts) {
         let mut p: String = list_get(parts, pi);
         if str_ends_with(p, "/") {
             p = str_slice(p, 0, chars_len(p) - 1);
         }
-        if str_ends_with(p, "/std") {
-            selected = p;
+        if path_exists(fs_r, p + "/sec") {
+            return Ok(p);
         }
-        if str_ends_with(p, "/openOODA") {
-            selected = p;
+        if path_exists(fs_r, p + "/std/sec") {
+            return Ok(p + "/std");
         }
         pi = pi + 1;
     }
-    if str_ends_with(selected, "/") {
-        selected = str_slice(selected, 0, chars_len(selected) - 1);
-    }
-    if str_ends_with(selected, "/std") {
-        selected = str_slice(selected, 0, chars_len(selected) - 4);
-    }
-    return Ok(selected);
+    return Err("FAIL: could not resolve std directory containing sec/");
 }
 
 fn probe_prep_paths(fs_r: &FsReadCap, fs_w: &FsWriteCap, rel_allowed: String, rel_denied: String, file_inside: String, file_outside: String) -> Result[Int, String] {
@@ -101,13 +99,13 @@ fn probe_prep_paths(fs_r: &FsReadCap, fs_w: &FsWriteCap, rel_allowed: String, re
     return Ok(0);
 }
 
-fn probe_apply_matrix(sys: &SysCap, root: String, dir_allowed: String) -> Result[Int, String] {
+fn probe_apply_matrix(sys: &SysCap, fs_r: &FsReadCap, std_dir: String, dir_allowed: String) -> Result[Int, String] {
     println("PHASE 3: Apply Landlock matrix under &SysCap");
     let mut cfg: SandboxConfig = sandbox_config_default();
-    cfg = sandbox_config_with_read(cfg, root + "/std/sec");
-    cfg = sandbox_config_with_read(cfg, "/usr");
-    cfg = sandbox_config_with_read(cfg, "/lib");
-    cfg = sandbox_config_with_read(cfg, "/lib64");
+    cfg = sandbox_config_with_read(cfg, std_dir + "/sec");
+    if path_exists(fs_r, "/usr") { cfg = sandbox_config_with_read(cfg, "/usr"); }
+    if path_exists(fs_r, "/lib") { cfg = sandbox_config_with_read(cfg, "/lib"); }
+    if path_exists(fs_r, "/lib64") { cfg = sandbox_config_with_read(cfg, "/lib64"); }
     cfg = sandbox_config_with_read(cfg, dir_allowed);
     cfg = sandbox_config_with_write(cfg, dir_allowed);
     cfg = sandbox_config_with_max_mem(cfg, 512);
@@ -180,13 +178,13 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
     let r1: Result[Int, String] = probe_check_initial_status();
     if r1.is_err() { return r1; }
 
-    let r_root: Result[String, String] = probe_find_root(env);
+    let r_root: Result[String, String] = probe_find_root(env, fs_r);
     if r_root.is_err() {
         let em: String = match r_root { Ok(_) => "", Err(e) => e };
         return Err(em);
     }
-    let root: String = match r_root { Ok(s) => s, Err(_) => "" };
-    let dir_allowed: String = root + "/std/scratch/sandbox_stress/allowed";
+    let std_dir: String = match r_root { Ok(s) => s, Err(_) => "" };
+    let dir_allowed: String = std_dir + "/scratch/sandbox_stress/allowed";
     let rel_allowed: String = "scratch/sandbox_stress/allowed";
     let rel_denied: String = "scratch/sandbox_stress/denied";
     let file_inside: String = rel_allowed + "/inside.txt";
@@ -195,7 +193,7 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
     let r2: Result[Int, String] = probe_prep_paths(fs_r, fs_w, rel_allowed, rel_denied, file_inside, file_outside);
     if r2.is_err() { return r2; }
 
-    let r3: Result[Int, String] = probe_apply_matrix(sys, root, dir_allowed);
+    let r3: Result[Int, String] = probe_apply_matrix(sys, fs_r, std_dir, dir_allowed);
     if r3.is_err() { return r3; }
 
     let r4: Result[Int, String] = probe_verify_confinement(fs_r, fs_w, rel_allowed, rel_denied, file_inside, file_outside);
