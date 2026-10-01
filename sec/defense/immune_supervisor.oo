@@ -75,6 +75,7 @@ pub fn immune_supervisor_verify_and_heal(
     sec_id: Int,
     current_live_bytes: List[Int]
 ) -> IntegrityReport {
+    let mut sup: ImmuneSupervisor = sup;
     let len: Int = list_len(current_live_bytes);
     let mut live_csum: Int = 0;
     let mut i: Int = 0;

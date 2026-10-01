@@ -50,6 +50,7 @@ pub fn forward_cfi_add_target(
     fn_addr: Int,
     sig_hash: Int
 ) -> Bool {
+    let mut tbl: ForwardCfiTable = tbl;
     let t: CFITarget = CFITarget {
         function_address: fn_addr,
         signature_hash: sig_hash,
@@ -65,6 +66,7 @@ pub fn forward_cfi_validate_call(
     target_addr: Int,
     expected_sig_hash: Int
 ) -> Bool {
+    let mut tbl: ForwardCfiTable = tbl;
     let count: Int = tbl.target_count;
     let mut i: Int = 0;
     while i < count {

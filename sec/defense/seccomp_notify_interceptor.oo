@@ -63,6 +63,7 @@ pub fn seccomp_supervisor_add_handler(
     emul_ret: Int,
     err: Int
 ) -> Bool {
+    let mut sup: SeccompSupervisor = sup;
     let h: NotifHandler = NotifHandler {
         syscall_nr: sys_nr,
         allowed: allowed,
@@ -78,6 +79,7 @@ pub fn seccomp_supervisor_handle_notif(
     sup: SeccompSupervisor,
     req: SeccompNotifReq
 ) -> SeccompNotifResp {
+    let mut sup: SeccompSupervisor = sup;
     sup.intercepted_count = sup.intercepted_count + 1;
     let target_nr: Int = req.syscall_nr;
     let req_id: Int = req.id;

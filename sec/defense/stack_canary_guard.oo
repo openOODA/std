@@ -50,6 +50,7 @@ pub fn stack_guard_arm_frame(
     frame_addr: Int,
     canary_type: Int
 ) -> Int {
+    let mut mon: StackGuardMonitor = mon;
     let mut val: Int = 0;
     if canary_type == 1 {
         val = stack_canary_generate_terminator();
@@ -72,6 +73,7 @@ pub fn stack_guard_verify_frame(
     frame_addr: Int,
     observed_val: Int
 ) -> Bool {
+    let mut mon: StackGuardMonitor = mon;
     let count: Int = mon.active_count;
     let mut i: Int = 0;
     while i < count {

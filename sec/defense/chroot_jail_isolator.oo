@@ -44,6 +44,7 @@ pub fn chroot_jail_add_mount(
     tgt_p: String,
     ro: Bool
 ) -> Bool {
+    let mut cfg: ChrootJailConfig = cfg;
     let m: BindMount = BindMount {
         host_path: host_p,
         target_path: tgt_p,

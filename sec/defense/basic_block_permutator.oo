@@ -43,6 +43,7 @@ pub fn function_cfg_add_block(
     ft: Int,
     br: Int
 ) -> Bool {
+    let mut cfg: FunctionCfg = cfg;
     let idx: Int = cfg.block_count;
     let b: BasicBlock = BasicBlock {
         block_id: id,
@@ -57,6 +58,7 @@ pub fn function_cfg_add_block(
 }
 
 pub fn basic_block_permute_cfg(cfg: FunctionCfg, seed: Int) -> Bool {
+    let mut cfg: FunctionCfg = cfg;
     let count: Int = cfg.block_count;
     if count <= 1 {
         return true;

@@ -14,6 +14,7 @@ import "std/sec/defense/ast_morpher_types.oo";
 import "std/sec/defense/ast_morpher_ops.oo";
 
 pub fn ast_morpher_flatten_cfg(fn_ast: AstFunction, seed: Int) -> Int {
+    let mut fn_ast: AstFunction = fn_ast;
     let count: Int = fn_ast.block_count;
     if count == 0 { return 0; }
     let mut i: Int = 0;
@@ -33,6 +34,7 @@ pub fn ast_morpher_flatten_cfg(fn_ast: AstFunction, seed: Int) -> Int {
 }
 
 pub fn ast_morpher_permute_layout(fn_ast: AstFunction, seed: Int) -> Int {
+    let mut fn_ast: AstFunction = fn_ast;
     let count: Int = fn_ast.block_count;
     if count <= 1 { return count; }
     let mut permuted: List[AstBasicBlock] = list_new();
@@ -52,6 +54,7 @@ pub fn ast_morpher_permute_layout(fn_ast: AstFunction, seed: Int) -> Int {
 }
 
 pub fn ast_morpher_eliminate_rop_gadgets(buf: BytecodeBuffer) -> Int {
+    let mut buf: BytecodeBuffer = buf;
     let len: Int = buf.length;
     if len < 2 { return 0; }
     let mut cleaned: List[Int] = list_new();
@@ -75,6 +78,7 @@ pub fn ast_morpher_eliminate_rop_gadgets(buf: BytecodeBuffer) -> Int {
 }
 
 pub fn ast_morpher_apply_all(cfg: AstMorpherConfig, fn_ast: AstFunction, bytecode: BytecodeBuffer) -> AstMorpherResult {
+    let mut fn_ast: AstFunction = fn_ast;
     let seed: Int = cfg.entropy_seed;
     let mut caps_ok: Bool = true;
     if cfg.enforce_zero_trust {

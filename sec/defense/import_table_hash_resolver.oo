@@ -59,6 +59,7 @@ pub fn dynamic_resolver_add_export(
     hash: Int,
     va: Int
 ) -> Bool {
+    let mut ctx: DynamicResolverContext = ctx;
     let entry: ExportDirectoryEntry = ExportDirectoryEntry {
         name_hash: hash,
         virtual_address: va

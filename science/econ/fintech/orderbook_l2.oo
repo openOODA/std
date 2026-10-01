@@ -180,14 +180,14 @@ pub fn orderbook_l2_imbalance_ratio(book: &OrderBookL2, levels: Int) -> Float {
     let mut i: Int = 0;
     while (i < levels) && (i < n_bids) {
         let b: PriceLevel = list_get(book.bids, i);
-        bid_vol = bid_vol + (orderbook_l2_to_fb.quantity);
+        bid_vol = bid_vol + orderbook_l2_to_f(b.quantity);
         i = i + 1;
     }
 
     let mut j: Int = 0;
     while (j < levels) && (j < n_asks) {
         let a: PriceLevel = list_get(book.asks, j);
-        ask_vol = ask_vol + (orderbook_l2_to_fa.quantity);
+        ask_vol = ask_vol + orderbook_l2_to_f(a.quantity);
         j = j + 1;
     }
 
@@ -202,13 +202,13 @@ pub fn orderbook_l2_micro_price(book: &OrderBookL2) -> Float {
     let bbo_res: Result[BboQuote, String] = orderbook_l2_get_bbo(book);
     match bbo_res {
         Ok(bbo) => {
-            let b_qty: Float = orderbook_l2_to_fbbo.best_bid_qty;
-            let a_qty: Float = orderbook_l2_to_fbbo.best_ask_qty;
-            let b_px: Float = orderbook_l2_to_fbbo.best_bid_price;
-            let a_px: Float = orderbook_l2_to_fbbo.best_ask_price;
+            let b_qty: Float = orderbook_l2_to_f(bbo.best_bid_qty);
+            let a_qty: Float = orderbook_l2_to_f(bbo.best_ask_qty);
+            let b_px: Float = orderbook_l2_to_f(bbo.best_bid_price);
+            let a_px: Float = orderbook_l2_to_f(bbo.best_ask_price);
             let total_qty: Float = b_qty + a_qty;
             if total_qty <= 0.0 {
-                return orderbook_l2_to_fbbo.mid_price;
+                return orderbook_l2_to_f(bbo.mid_price);
             }
             // Micro-price = (bid_qty * ask_price + ask_qty * bid_price) / (bid_qty + ask_qty)
             return ((b_qty * a_px) + (a_qty * b_px)) / total_qty;
@@ -232,7 +232,7 @@ pub fn orderbook_l2_depth_vwap(book: &OrderBookL2, is_bid: Bool, target_qty: Int
         if take > remaining {
             take = remaining;
         }
-        notional = notional + (orderbook_l2_to_flvl.price * take);
+        notional = notional + orderbook_l2_to_f(lvl.price * take);
         remaining = remaining - take;
         i = i + 1;
     }

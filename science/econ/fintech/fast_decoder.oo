@@ -150,7 +150,7 @@ pub fn fast_decimal_to_float(dec: &FastDecimal) -> Float {
             e = e - 1;
         }
     }
-    let m_float: Float = fast_decoder_to_fdec.mantissa;
+    let m_float: Float = fast_decoder_to_f(dec.mantissa);
     return m_float * exp_factor;
 }
 

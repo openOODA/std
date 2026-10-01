@@ -67,6 +67,7 @@ pub fn integrity_checker_verify_block(
     actual_bytes: List[Int],
     actual_len: Int
 ) -> Bool {
+    let mut state: IntegrityCheckerState = state;
     let computed_digest: Int = simple_hmac_compute(state.secret_key, actual_bytes, actual_len);
     // Branchless constant-time equality: computes the XOR diff, then uses
     // arithmetic to derive a 0/1 mask. The comparison time and instruction

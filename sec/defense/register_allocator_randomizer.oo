@@ -64,6 +64,7 @@ pub fn random_reg_allocate_vreg(
     ctx: RandomRegContext,
     vreg: Int
 ) -> Int {
+    let mut ctx: RandomRegContext = ctx;
     let count: Int = ctx.reg_count;
     let chosen_idx: Int = (ctx.seed + vreg * 7) % count;
     let chosen_reg: PhysicalRegister = list_get(ctx.available_regs, chosen_idx);

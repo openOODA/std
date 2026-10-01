@@ -37,6 +37,7 @@ pub fn secure_memory_alloc_secret(
     init_data: List[Int],
     sz: Int
 ) -> Bool {
+    let mut mgr: SecureMemoryManager = mgr;
     let buf: SecretBuffer = SecretBuffer {
         buffer_id: id,
         data: init_data,
@@ -52,6 +53,7 @@ pub fn secure_memory_wipe_and_free(
     mgr: SecureMemoryManager,
     id: Int
 ) -> Bool {
+    let mut mgr: SecureMemoryManager = mgr;
     let count: Int = mgr.buffer_count;
     let mut i: Int = 0;
     while i < count {

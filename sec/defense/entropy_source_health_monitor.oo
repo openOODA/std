@@ -41,6 +41,7 @@ pub fn entropy_monitor_feed_sample(
     mon: EntropyMonitor,
     sample: Int
 ) -> EntropyHealthReport {
+    let mut mon: EntropyMonitor = mon;
     // FAIL-CLOSED: this is a structural health monitor, not a statistical
     // battery. The Adaptive Proportion Test (SP 800-90B §4.4.2) requires a
     // windowed count of the most-frequent value and an exact cutoff

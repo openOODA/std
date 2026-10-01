@@ -57,6 +57,7 @@ pub fn ebpf_monitor_process_event(
     ppid: Int,
     uid: Int
 ) -> KernelSecurityEvent {
+    let mut state: EbpfMonitorState = state;
     state.events_processed = state.events_processed + 1;
     let mut anomaly: Bool = false;
 

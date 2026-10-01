@@ -41,6 +41,7 @@ pub fn backward_cfi_register_pad(
     fn_id: Int,
     token: Int
 ) -> Bool {
+    let mut ctx: BackwardCfiContext = ctx;
     let pad: ReturnLandingPad = ReturnLandingPad {
         return_site_address: site_addr,
         caller_function_id: fn_id,
@@ -57,6 +58,7 @@ pub fn backward_cfi_verify_return(
     ret_target_addr: Int,
     expected_token: Int
 ) -> Bool {
+    let mut ctx: BackwardCfiContext = ctx;
     let count: Int = ctx.pad_count;
     let mut i: Int = 0;
     while i < count {

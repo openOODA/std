@@ -33,6 +33,7 @@ pub fn dead_code_emit_neutral_sequence(
     gen: DeadCodeGenerator,
     reg_id: Int
 ) -> List[JunkInstruction] {
+    let mut gen: DeadCodeGenerator = gen;
     let mut seq: List[JunkInstruction] = list_new();
 
     // 1. ADD reg, 0
@@ -57,6 +58,7 @@ pub fn dead_code_emit_opaque_skip(
     gen: DeadCodeGenerator,
     junk_payload_len: Int
 ) -> List[JunkInstruction] {
+    let mut gen: DeadCodeGenerator = gen;
     let mut seq: List[JunkInstruction] = list_new();
 
     // Conditional branch that is always taken: JZ over payload

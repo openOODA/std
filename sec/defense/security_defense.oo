@@ -57,14 +57,13 @@ import "std/sec/defense/secure_key_storage_enclave.oo";
 import "std/sec/defense/side_channel_jitter_injector.oo";
 import "std/sec/defense/entropy_source_health_monitor.oo";
 import "std/sec/defense/secure_zeroization_verifier.oo";
-import "std/sec/defense/security_defense_stubs.oo";
 
 pub fn security_defense_version() -> String {
     return "1.0.0";
 }
 
 pub fn security_defense_module_count() -> Int {
-    return 50;
+    return 49;
 }
 
 pub fn security_defense_landlock_ruleset_default() -> LandlockRuleset {
@@ -90,8 +89,4 @@ pub fn security_defense_forward_cfi_default() -> ForwardCfiTable {
 
 pub fn security_defense_backward_cfi_default() -> BackwardCfiContext {
     return backward_cfi_context_new("CTX_DEFAULT");
-}
-
-pub fn security_defense_test_fixture() -> MockDefenseFixture {
-    return mock_defense_fixture_default();
 }

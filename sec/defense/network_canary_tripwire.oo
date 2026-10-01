@@ -42,6 +42,7 @@ pub fn tripwire_manager_new() -> TripwireManager {
 }
 
 pub fn tripwire_add_canary_port(mgr: TripwireManager, port: Int) -> Bool {
+    let mut mgr: TripwireManager = mgr;
     let cp: CanaryPort = CanaryPort {
         port_number: port,
         is_tripwire: true,
@@ -57,6 +58,7 @@ pub fn tripwire_process_probe(
     port: Int,
     ip_hash: Int
 ) -> Bool {
+    let mut mgr: TripwireManager = mgr;
     let count: Int = mgr.port_count;
     let mut i: Int = 0;
     while i < count {

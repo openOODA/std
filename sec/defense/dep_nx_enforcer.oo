@@ -60,6 +60,7 @@ pub fn dep_policy_register_region(
     prot: PageProtection,
     name: String
 ) -> Bool {
+    let mut enf: DepPolicyEnforcer = enf;
     // FAIL-CLOSED: an RWX page is a code-injection primitive. W^X is the
     // invariant; we reject the region outright. We do NOT track the
     // violation and continue — that would let an attacker create RWX
@@ -91,15 +92,17 @@ pub fn dep_policy_flip_jit_page(
     while i < count {
         let mut reg: MemoryRegion = list_get(enf.regions, i);
         if reg.start_address == addr {
+            let mut prot: PageProtection = reg.prot;
             if to_executable {
                 // Switch RW -> RX
-                reg.prot.write = false;
-                reg.prot.execute = true;
+                prot.write = false;
+                prot.execute = true;
             } else {
                 // Switch RX -> RW
-                reg.prot.write = true;
-                reg.prot.execute = false;
+                prot.write = true;
+                prot.execute = false;
             }
+            reg.prot = prot;
             return true;
         }
         i = i + 1;

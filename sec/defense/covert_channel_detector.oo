@@ -36,6 +36,7 @@ pub fn covert_channel_add_sample(
     pkt_id: Int,
     dt_us: Int
 ) -> Bool {
+    let mut det: CovertChannelDetector = det;
     let s: TimingIntervalSample = TimingIntervalSample {
         packet_id: pkt_id,
         interval_us: dt_us
@@ -46,6 +47,7 @@ pub fn covert_channel_add_sample(
 }
 
 pub fn covert_channel_analyze_bimodal(det: CovertChannelDetector) -> Bool {
+    let mut det: CovertChannelDetector = det;
     let count: Int = det.sample_count;
     if count < 10 {
         return false;

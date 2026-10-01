@@ -37,6 +37,7 @@ pub fn threat_orchestrator_escalate(
     attack_sev: Int,
     target_pid: Int
 ) -> Int {
+    let mut orch: ThreatOrchestrator = orch;
     if attack_sev > orch.current_threat_level {
         orch.current_threat_level = attack_sev;
     }

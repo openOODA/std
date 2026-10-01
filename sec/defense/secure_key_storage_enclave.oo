@@ -42,6 +42,7 @@ pub fn key_enclave_store_key(
     ttl_sec: Int,
     now_ts: Int
 ) -> Bool {
+    let mut enc: KeyEnclaveState = enc;
     if enc.slot_count >= enc.max_slots {
         return false;
     }

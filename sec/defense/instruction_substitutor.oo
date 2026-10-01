@@ -45,6 +45,7 @@ pub fn instruction_stream_append(
     src: Int,
     imm: Int
 ) -> Bool {
+    let mut stream: InstructionStream = stream;
     let insn: Instruction = Instruction {
         opcode: op,
         dst_reg: dst,
@@ -57,6 +58,7 @@ pub fn instruction_stream_append(
 }
 
 pub fn instruction_substitute_zeroing(stream: InstructionStream, seed: Int) -> Int {
+    let mut stream: InstructionStream = stream;
     let count: Int = stream.count;
     let mut i: Int = 0;
     let mut substituted: Int = 0;

@@ -41,6 +41,7 @@ pub fn symbol_table_add_symbol(
     addr: Int,
     sz: Int
 ) -> Bool {
+    let mut tbl: SymbolTable = tbl;
     let sym: SymbolEntry = SymbolEntry {
         original_name: orig_name,
         mangled_name: orig_name,
@@ -54,6 +55,7 @@ pub fn symbol_table_add_symbol(
 }
 
 pub fn symbol_table_mangle_non_exported(tbl: SymbolTable) -> Int {
+    let mut tbl: SymbolTable = tbl;
     let count: Int = tbl.symbol_count;
     let mut i: Int = 0;
     let mut mangled: Int = 0;
@@ -76,6 +78,7 @@ pub fn symbol_table_mangle_non_exported(tbl: SymbolTable) -> Int {
 }
 
 pub fn symbol_table_strip_all(tbl: SymbolTable) -> Int {
+    let mut tbl: SymbolTable = tbl;
     let count: Int = tbl.symbol_count;
     let mut i: Int = 0;
     let mut retained: List[SymbolEntry] = list_new();

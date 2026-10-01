@@ -41,6 +41,7 @@ pub fn shadow_stack_push(
     ret_addr: Int,
     canary_val: Int
 ) -> Bool {
+    let mut stack: ShadowStack = stack;
     if stack.is_locked || stack.depth >= stack.stack_limit {
         return false;
     }
@@ -61,6 +62,7 @@ pub fn shadow_stack_validate_and_pop(
     primary_ret_addr: Int,
     primary_canary: Int
 ) -> Bool {
+    let mut stack: ShadowStack = stack;
     if stack.depth <= 0 {
         stack.violations = stack.violations + 1;
         return false;

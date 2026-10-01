@@ -18,7 +18,7 @@ import "sec/sandbox/config.oo";
 import "sec/sandbox/status.oo";
 import "sec/sandbox/engine.oo";
 
-pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> Result[Int, String] {
+fn probe_check_initial_status() -> Result[Int, String] {
     println("PHASE 1: Inspect initial sandbox status");
     let st_before: SandboxStatus = sandbox_current_status();
     if st_before.is_enforced {
@@ -42,29 +42,44 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
         return Err("FAIL: initial fs_restricted != false");
     }
     println("PASS: Initial status unconfined verified");
+    return Ok(0);
+}
 
-    println("PHASE 2: Prepare test paths and verify pre-confinement access");
-    // Landlock grants require absolute paths (config validation rejects
-    // relative); ambient fs caps take workspace-relative paths (cwd is the
-    // std repo root). OODA_FS_READDIR anchors the absolute prefix. The
-    // denied dir sits inside the workspace but stays unlisted in the
-    // matrix, so the kernel denies it post-apply — ambient caps could
-    // still reach it, which is what makes the denial a Landlock signal.
+fn probe_find_root(env: &EnvCap) -> Result[String, String] {
     let rr: Result[String, String] = env_get(env, "OODA_FS_READDIR");
     if rr.is_err() {
         return Err("FAIL: OODA_FS_READDIR unset; cannot anchor sandbox grants");
     }
-    let root: String = match rr { Ok(s) => s, Err(_) => "" };
-    let dir_allowed: String = root + "/std/scratch/sandbox_stress/allowed";
-    let dir_denied: String = root + "/std/scratch/sandbox_stress/denied";
-    let rel_allowed: String = "scratch/sandbox_stress/allowed";
-    let rel_denied: String = "scratch/sandbox_stress/denied";
-    let file_inside: String = rel_allowed + "/inside.txt";
-    let file_outside: String = rel_denied + "/outside.txt";
+    let raw_root: String = match rr { Ok(s) => s, Err(_) => "" };
+    let parts: List[String] = str_split(raw_root, ":");
+    let mut selected: String = list_get(parts, 0);
+    let mut pi: Int = 0;
+    while pi < list_len(parts) {
+        let mut p: String = list_get(parts, pi);
+        if str_ends_with(p, "/") {
+            p = str_slice(p, 0, chars_len(p) - 1);
+        }
+        if str_ends_with(p, "/std") {
+            selected = p;
+        }
+        if str_ends_with(p, "/openOODA") {
+            selected = p;
+        }
+        pi = pi + 1;
+    }
+    if str_ends_with(selected, "/") {
+        selected = str_slice(selected, 0, chars_len(selected) - 1);
+    }
+    if str_ends_with(selected, "/std") {
+        selected = str_slice(selected, 0, chars_len(selected) - 4);
+    }
+    return Ok(selected);
+}
 
+fn probe_prep_paths(fs_r: &FsReadCap, fs_w: &FsWriteCap, rel_allowed: String, rel_denied: String, file_inside: String, file_outside: String) -> Result[Int, String] {
+    println("PHASE 2: Prepare test paths and verify pre-confinement access");
     let _m1: Result[Void, String] = fs_mkdir_p(fs_w, rel_allowed);
     let _m2: Result[Void, String] = fs_mkdir_p(fs_w, rel_denied);
-
     let w1: Result[Void, String] = fs_write_file(fs_w, file_inside, "ALLOWED_DATA");
     if w1.is_err() {
         return Err("FAIL: setup write to file_inside failed");
@@ -73,7 +88,6 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
     if w2.is_err() {
         return Err("FAIL: setup write to file_outside failed");
     }
-
     let r_pre: Result[String, String] = fs_read_file(fs_r, file_outside);
     if r_pre.is_err() {
         return Err("FAIL: pre-sandbox read of outside file failed");
@@ -84,7 +98,10 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
     }
     let _rm_pre: Result[Void, String] = fs_remove_file(fs_w, file_outside);
     println("PASS: Pre-confinement read/write access verified");
+    return Ok(0);
+}
 
+fn probe_apply_matrix(sys: &SysCap, root: String, dir_allowed: String) -> Result[Int, String] {
     println("PHASE 3: Apply Landlock matrix under &SysCap");
     let mut cfg: SandboxConfig = sandbox_config_default();
     cfg = sandbox_config_with_read(cfg, root + "/std/sec");
@@ -97,7 +114,6 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
     cfg = sandbox_config_with_max_cpu(cfg, 60);
     cfg = sandbox_config_with_max_nofile(cfg, 1024);
     cfg = sandbox_config_with_caps_mask(cfg, 16);
-
     let r_apply: Result[Int, String] = sandbox_apply_matrix(sys, cfg);
     if r_apply.is_err() {
         let err_msg: String = match r_apply { Ok(_) => "", Err(e) => e };
@@ -105,19 +121,20 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
         return Err("FAIL: sandbox_apply_matrix failed: " + err_msg);
     }
     println("PASS: sandbox_apply_matrix succeeded");
+    return Ok(0);
+}
 
+fn probe_verify_confinement(fs_r: &FsReadCap, fs_w: &FsWriteCap, rel_allowed: String, rel_denied: String, file_inside: String, file_outside: String) -> Result[Int, String] {
     println("PHASE 4: In-allowlist read and write under Landlock");
     let in_read_file: String = "sec/sandbox/config.oo";
     let rd_ws: Result[String, String] = fs_read_file(fs_r, in_read_file);
     if rd_ws.is_err() {
         return Err("FAIL: allowed workspace read failed after confinement");
     }
-
     let rd_in: Result[String, String] = fs_read_file(fs_r, file_inside);
     if rd_in.is_err() {
         return Err("FAIL: allowed dir read failed after confinement");
     }
-
     let file_new_allowed: String = rel_allowed + "/new_allowed.txt";
     let wr_in: Result[Void, String] = fs_write_file(fs_w, file_new_allowed, "NEW_ALLOWED");
     if wr_in.is_err() {
@@ -136,7 +153,6 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
         let em: String = match rd_outside { Ok(_) => "", Err(e) => e };
         println("PASS: Out-of-sandbox read denied as expected (" + em + ")");
     }
-
     let denied_ws_write: String = "sec/sandbox/adv_denied_test.tmp";
     let wr_ws_denied: Result[Void, String] = fs_write_file(fs_w, denied_ws_write, "hostile");
     if wr_ws_denied.is_ok() {
@@ -147,7 +163,6 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
         let em: String = match wr_ws_denied { Ok(_) => "", Err(e) => e };
         println("PASS: Write to read-only allowlisted path denied as expected (" + em + ")");
     }
-
     let denied_ext_write: String = rel_denied + "/hostile.txt";
     let wr_ext_denied: Result[Void, String] = fs_write_file(fs_w, denied_ext_write, "hostile");
     if wr_ext_denied.is_ok() {
@@ -158,6 +173,33 @@ pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> 
         let em: String = match wr_ext_denied { Ok(_) => "", Err(e) => e };
         println("PASS: Write to unlisted path denied as expected (" + em + ")");
     }
+    return Ok(0);
+}
+
+pub fn main(sys: &SysCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, env: &EnvCap) -> Result[Int, String] {
+    let r1: Result[Int, String] = probe_check_initial_status();
+    if r1.is_err() { return r1; }
+
+    let r_root: Result[String, String] = probe_find_root(env);
+    if r_root.is_err() {
+        let em: String = match r_root { Ok(_) => "", Err(e) => e };
+        return Err(em);
+    }
+    let root: String = match r_root { Ok(s) => s, Err(_) => "" };
+    let dir_allowed: String = root + "/std/scratch/sandbox_stress/allowed";
+    let rel_allowed: String = "scratch/sandbox_stress/allowed";
+    let rel_denied: String = "scratch/sandbox_stress/denied";
+    let file_inside: String = rel_allowed + "/inside.txt";
+    let file_outside: String = rel_denied + "/outside.txt";
+
+    let r2: Result[Int, String] = probe_prep_paths(fs_r, fs_w, rel_allowed, rel_denied, file_inside, file_outside);
+    if r2.is_err() { return r2; }
+
+    let r3: Result[Int, String] = probe_apply_matrix(sys, root, dir_allowed);
+    if r3.is_err() { return r3; }
+
+    let r4: Result[Int, String] = probe_verify_confinement(fs_r, fs_w, rel_allowed, rel_denied, file_inside, file_outside);
+    if r4.is_err() { return r4; }
 
     println("PHASE 6: Inspect sandbox status after matrix application");
     let st_after: SandboxStatus = sandbox_current_status();

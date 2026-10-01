@@ -26,6 +26,7 @@ pub fn jitter_profile_new(min_iter: Int, max_iter: Int, seed: Int) -> JitterProf
 }
 
 pub fn jitter_inject_delay(prof: JitterProfile) -> Int {
+    let mut prof: JitterProfile = prof;
     let span: Int = prof.max_iterations - prof.min_iterations + 1;
     let next_seed: Int = (prof.seed * 1103515245 + 12345) & 2147483647;
     prof.seed = next_seed;

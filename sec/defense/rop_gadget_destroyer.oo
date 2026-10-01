@@ -25,11 +25,13 @@ pub fn bytecode_buffer_new() -> BytecodeBuffer {
 }
 
 pub fn bytecode_buffer_append(buf: BytecodeBuffer, b: Int) {
+    let mut buf: BytecodeBuffer = buf;
     buf.bytes = list_push(buf.bytes, b & 255);
     buf.length = buf.length + 1;
 }
 
 pub fn rop_gadget_destroyer_scan_and_pad(buf: BytecodeBuffer) -> Int {
+    let mut buf: BytecodeBuffer = buf;
     let len: Int = buf.length;
     if len < 2 {
         return 0;

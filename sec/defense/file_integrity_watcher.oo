@@ -37,6 +37,7 @@ pub fn file_integrity_watcher_add_path(
     hash: Int,
     ro: Bool
 ) -> Bool {
+    let mut watcher: FileIntegrityWatcher = watcher;
     let wp: WatchedPath = WatchedPath {
         path: p,
         expected_hash: hash,
@@ -53,6 +54,7 @@ pub fn file_integrity_watcher_handle_event(
     p: String,
     event_mask: Int
 ) -> Bool {
+    let mut watcher: FileIntegrityWatcher = watcher;
     let count: Int = watcher.watch_count;
     let mut i: Int = 0;
     while i < count {

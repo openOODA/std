@@ -39,6 +39,7 @@ pub fn ast_morpher_opaque_eval_mod7(x: Int, y: Int) -> Bool {
 }
 
 pub fn ast_function_add_block(fn_ast: AstFunction, block: AstBasicBlock) {
+    let mut fn_ast: AstFunction = fn_ast;
     fn_ast.blocks = list_push(fn_ast.blocks, block);
     fn_ast.block_count = fn_ast.block_count + 1;
 }

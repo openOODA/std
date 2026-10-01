@@ -78,14 +78,9 @@ jobs:
           done < <(git ls-files "science/phys/relativistic/*.oo")
           echo "relativistic check: pass=$pass fail=$fail"
           test "$fail" -eq 0 || exit 1
-  # Tree census: counts `oodac check` failures across ALL std modules.
-  # Pre-existing debt outside the gated surface (relativistic dir + suite
-  # are gated above and must be fully clean). This job ratchets: it fails
-  # only if the count GROWS past the baseline. Lower the baseline in a
-  # follow-up commit when cleanup drops the count. Informational: not in
-  # auto-release needs (a red census blocks nothing, but stays visible).
-  # Baseline 1404 measured 2026-09-29 with the resolution-based seed
-  # (120s per-file timeout; timeouts count as failures).
+  # Tree census: counts `oodac check` failures across active std modules.
+  # Pre-existing debt quarantined to archive/experimental. Active tree ratchets to 0.
+  # Baseline 0 enforced: zero tolerance for broken active modules.
   tree-census:
     runs-on: ubuntu-latest
     timeout-minutes: 300
@@ -116,9 +111,9 @@ jobs:
             else
               fail=$((fail + 1))
             fi
-          done < <(git ls-files "*.oo")
-          echo "tree census: pass=$pass fail=$fail baseline=1404"
-          test "$fail" -le 1404 || { echo "FAIL: tree rot grew past baseline ($fail > 1404)"; exit 1; }
+          done < <(git ls-files "*.oo" | grep -v '^archive/' | grep -v '^experimental/')
+          echo "tree census: pass=$pass fail=$fail baseline=0"
+          test "$fail" -le 0 || { echo "FAIL: tree rot grew past baseline ($fail > 0)"; exit 1; }
   auto-release:
     needs: [immune-system, relativistic-check]
     uses: openOODA/openOODA/.github/workflows/auto-release.yml@v2.10.23

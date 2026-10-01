@@ -43,6 +43,7 @@ pub fn audit_ring_buffer_push(
     pid: Int,
     now_ts: Int
 ) -> Int {
+    let mut buf: AuditRingBuffer = buf;
     let next_id: Int = buf.record_count + 1;
     let rec: AuditRecord = AuditRecord {
         event_id: next_id,
