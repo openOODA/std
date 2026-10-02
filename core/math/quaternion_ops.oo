@@ -10,10 +10,6 @@
 //   3. Conjugate and norm squared (inverse is in the sibling quaternion_inverse module).
 //   4. SLERP with t in [0, 1000] returning exact endpoints and lerp-in-scaled-space for intermediate t.
 //   5. Smoke test asserts identity * q = q, q * conjugate = (norm_sq, 0, 0, 0), and slerp endpoints.
-
-import "std/core/primitives/result.oo";
-import "std/core/primitives/list.oo";
-
 type Quat = struct { w: Int, x: Int, y: Int, z: Int };
 
 // Scaling factor for fixed-point Int quaternion components: 1.0 maps to 1000.

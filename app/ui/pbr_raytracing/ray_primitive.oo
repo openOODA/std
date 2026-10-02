@@ -78,6 +78,7 @@ pub fn ray_differential_new(ray: Ray) -> RayDifferential {
 }
 
 pub fn ray_differential_scale(diff: RayDifferential, s: Float) {
+    let mut diff: RayDifferential = diff;
     let r_orig: Vec3 = (diff.ray).origin;
     let r_dir: Vec3 = (diff.ray).direction;
     let rx_o_diff: Vec3 = vec3_scale(&vec3_sub(&diff.rx_origin, &r_orig), s);

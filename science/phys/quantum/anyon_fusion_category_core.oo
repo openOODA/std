@@ -45,6 +45,7 @@ pub fn fusion_category_new(num_species: Int, vacuum_id: Int) -> FusionCategory {
 }
 
 pub fn fusion_category_add_species(cat: FusionCategory, sp: AnyonSpecies) {
+    let mut cat = cat;
     list_push(cat.species, sp);
     let d: Float = sp.quantum_dim;
     cat.total_quantum_dim = sqrt(cat.total_quantum_dim * cat.total_quantum_dim + d * d);

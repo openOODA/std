@@ -11,10 +11,6 @@
 //   4. Forward substitution L * y = b and back substitution U * x = y returning scaled x.
 //   5. Determinant as product of U diagonal entries with pivot-swap sign.
 // residual: matrix_lu_decompose returns Result[List[Int], String] (flat data) due to a codegen bug where match on Result[Matrix, String] emits oo_str_release on a Matrix local. Caller wraps via matrix_from_data. L diagonal is implicit (1.0, not stored) to avoid conflicting with the U diagonal. matrix_det inlines the elimination core to keep the public surface free of Result[Struct, String] types.
-
-import "std/core/primitives/result.oo";
-import "std/core/primitives/list.oo";
-
 type Matrix = struct { rows: Int, cols: Int, data: List[Int] };
 
 pub fn matrix_scale() -> Int { return 1000; }

@@ -68,6 +68,7 @@ pub fn ctqw_approximate_step_2nd_order(
     graph: GraphAdjacency,
     dt: Float
 ) {
+    let mut state = state;
     let n: Int = state.num_nodes;
     let g: Float = state.hopping_rate_gamma;
     let gamma_dt: Float = g * dt;

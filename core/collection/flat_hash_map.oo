@@ -11,11 +11,7 @@
 //   4. Look up a key with PSL-aware early exit, returning Some(val) or None.
 //   5. Test key presence and report current entry count.
 //   6. Remove a key by backward-shifting any downstream entries with non-zero PSL.
-
-import "std/core/primitives/list.oo";
 import "std/core/primitives/option.oo";
-import "std/core/primitives/result.oo";
-
 fn list_set_str(l: List[String], idx: Int, v: String) -> List[String] {
     let n: Int = list_len(l);
     let mut out: List[String] = list_new();

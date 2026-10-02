@@ -68,6 +68,7 @@ pub fn etcd_client_put(
         return Err("etcd key cannot be empty");
     }
 
+    let mut client = client;
     client.current_revision = client.current_revision + 1;
     let rev: Int = client.current_revision;
 
@@ -137,6 +138,7 @@ pub fn etcd_client_delete(
     client: EtcdClient,
     key: String
 ) -> Result[Int, String] {
+    let mut client = client;
     let cur_kvs: List[EtcdKeyValue] = client.kvs;
     let n: Int = list_len(cur_kvs);
     let mut new_kvs: List[EtcdKeyValue] = list_new();
@@ -173,10 +175,10 @@ pub fn etcd_client_txn_compare_version(
         return Err(get_res.unwrap_err());
     }
 
-    let opt_kv: Option[EtcdKeyValue] = get_res.unwrap();
+    let opt_kv = get_res.unwrap();
     if opt_kv.is_none() {
         if expected_version == 0 {
-            etcd_client_put(net, client, key, new_value);
+            let _put1: Result[Int, String] = etcd_client_put(net, client, key, new_value);
             return Ok(true);
         }
         return Ok(false);
@@ -184,7 +186,7 @@ pub fn etcd_client_txn_compare_version(
 
     let existing: EtcdKeyValue = opt_kv.unwrap();
     if existing.version == expected_version {
-        etcd_client_put(net, client, key, new_value);
+        let _put2: Result[Int, String] = etcd_client_put(net, client, key, new_value);
         return Ok(true);
     }
 

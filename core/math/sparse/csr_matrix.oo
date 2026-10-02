@@ -8,9 +8,6 @@
 //   1. Validate row pointers, column indices, and value length before any kernel.
 //   2. Compute y = A x by walking each CSR row span.
 //   3. Scatter A into a dense row-major A^T and report nnz, density, and A_ij.
-
-import "std/core/primitives/result.oo";
-
 fn csr_ok(row_ptr: List[Int], col_idx: List[Int], values: List[Float], rows: Int, cols: Int) -> Result[Int, String] {
     if rows < 0 { return Err("ERR\tcsr\trows"); }
     if cols < 0 { return Err("ERR\tcsr\tcols"); }

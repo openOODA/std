@@ -9,9 +9,6 @@
 //   2. Reject a non-positive pivot as not SPD.
 //   3. Reconstruct A as L L^T for residual checks.
 //   4. Return L as a dense n by n row-major list.
-
-import "std/core/primitives/result.oo";
-
 fn chol_get(a: List[Float], n: Int, i: Int, j: Int) -> Float {
     return list_get(a, i * n + j);
 }

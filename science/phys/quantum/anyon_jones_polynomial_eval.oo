@@ -37,6 +37,7 @@ pub fn braid_word_new(strands: Int) -> BraidWord {
 }
 
 pub fn braid_word_append(bw: BraidWord, strand: Int, is_pos: Int) {
+    let mut bw = bw;
     let cr: BraidCrossing = braid_crossing_new(strand, is_pos);
     list_push(bw.crossings, cr);
     let nc: Int = bw.num_crossings;

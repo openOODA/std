@@ -45,6 +45,7 @@ pub fn taxon_create_full(
 }
 
 pub fn taxon_set_outgroup(taxon: Taxon, is_out: Bool) {
+    let mut taxon = taxon;
     taxon.is_outgroup = is_out;
 }
 
@@ -111,6 +112,7 @@ pub fn phylo_node_is_leaf(node: PhyloNode) -> Bool {
 }
 
 pub fn phylo_node_set_branch_length(node: PhyloNode, len: Float) {
+    let mut node = node;
     let mut br_len_val: Float = len;
     if br_len_val < 0.0 {
         br_len_val = 0.0;
@@ -144,6 +146,7 @@ pub fn substitutions_model_new(model_type: String, ti_tv_ratio: Float) -> Substi
 }
 
 pub fn substitutions_model_set_gamma(model: SubstitutionsModel, shape: Float, pinv: Float) {
+    let mut model = model;
     model.gamma_shape = shape;
     model.pinv = pinv;
     model.is_calibrated = true;
@@ -170,6 +173,7 @@ pub fn tree_alignment_new(n_seqs: Int, length: Int) -> TreeAlignment {
 }
 
 pub fn tree_alignment_add_seq(align: TreeAlignment, taxon_name: String, sequence: String) {
+    let mut align = align;
     let mut align_names: List[String] = align.taxa_names;
     let mut align_seqs: List[String] = align.sequences;
     align_names = list_push(align_names, taxon_name);

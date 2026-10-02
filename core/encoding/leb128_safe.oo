@@ -9,9 +9,6 @@
 //   2. Encode 7 bits at a time with the continuation bit set until the last byte.
 //   3. i64 sign-extension encoding via zigzag on the sign bit.
 //   4. Decoder validates each byte is in [0, 255] and stops on continuation bit clear.
-
-import "std/core/primitives/str.oo";
-
 pub fn leb128_safe_max_bytes() -> Int { return 10; }
 pub fn leb128_safe_continuation_bit() -> Int { return 128; }
 pub fn leb128_safe_value_mask() -> Int { return 127; }

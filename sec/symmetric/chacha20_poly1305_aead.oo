@@ -6,9 +6,6 @@
 //   2. Poly1305 authenticates AAD and ciphertext with r and s from block 0.
 //   3. Seal returns ciphertext then a 16-byte tag.
 //   4. Open fails closed when the tag does not match.
-
-import "std/core/primitives/list.oo";
-
 fn cc_mask(x: Int) -> Int { return x & 4294967295; }
 fn cc_rotl(x: Int, r: Int) -> Int {
     return cc_mask((cc_mask(x) << r) | (cc_mask(x) >> (32 - r)));

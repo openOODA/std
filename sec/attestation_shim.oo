@@ -60,7 +60,7 @@ pub fn shim_marker_quote_nonce() -> Bool {
     return attestation_quote_validate_nonce(&q, "nonce");
 }
 
-pub fn shim_marker_engine_init() -> AttestationEngine {
+pub fn attestation_marker_engine_init() -> AttestationEngine {
     let pol: AttestationPolicy = attestation_policy_init("pol-1", true, false, 50, true);
     return attestation_engine_init("eng-1", pol);
 }

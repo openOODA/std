@@ -54,6 +54,7 @@ pub fn mixed_canonical_site_type(cfg: MixedCanonicalConfig, site: Int) -> Int {
 }
 
 pub fn mixed_canonical_shift_center(cfg: MixedCanonicalConfig, new_center: Int) -> Int {
+    let mut cfg = cfg;
     let n: Int = cfg.num_sites;
     if new_center >= 0 && new_center < n {
         cfg.center_site = new_center;

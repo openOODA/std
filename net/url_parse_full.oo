@@ -10,8 +10,6 @@
 //   3. Split the path, query, and fragment at '?' and '#' boundaries.
 //   4. Lowercase the scheme on parse for canonical output and omit the port when absent.
 //   5. Reassemble scheme + "://" + host + optional ":port" + path + optional "?query" + optional "#fragment".
-
-import "std/core/primitives/result.oo";
 import "std/net/url_parser.oo";
 
 pub fn url_parse(s: String) -> Result[Url, String] {

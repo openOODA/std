@@ -9,9 +9,6 @@
 //   2. push appends a byte at the tail and advances tail; returns Err if the ring is full.
 //   3. pop removes a byte from the head and advances head; returns Err if the ring is empty.
 //   4. is_empty / is_full / peek / clear expose the standard ring-buffer primitives.
-
-import "std/core/primitives/result.oo";
-
 type UartRing = struct {
     capacity: Int,
     head: Int,
@@ -45,6 +42,7 @@ pub fn uart_ring_is_full(r: UartRing) -> Bool { return r.count == r.capacity; }
 pub fn uart_ring_count(r: UartRing) -> Int { return r.count; }
 
 pub fn uart_ring_push_byte(mut_r: UartRing, byte: Int) -> Result[Void, String] {
+    let mut mut_r = mut_r;
     if uart_ring_is_full(mut_r) {
         return Err("E_UART_RING_FULL");
     }
@@ -58,6 +56,7 @@ pub fn uart_ring_push_byte(mut_r: UartRing, byte: Int) -> Result[Void, String] {
 }
 
 pub fn uart_ring_pop_byte(mut_r: UartRing) -> Result[Int, String] {
+    let mut mut_r = mut_r;
     if uart_ring_is_empty(mut_r) {
         return Err("E_UART_RING_EMPTY");
     }
@@ -80,6 +79,7 @@ pub fn uart_ring_peek(r: UartRing) -> Result[Int, String] {
 }
 
 pub fn uart_ring_clear(mut_r: UartRing) {
+    let mut mut_r = mut_r;
     let cap: Int = mut_r.capacity;
     let mut data: List[Int] = list_new();
     let mut i: Int = 0;

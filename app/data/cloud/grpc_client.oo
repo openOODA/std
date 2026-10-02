@@ -86,9 +86,10 @@ pub fn grpc_client_invoke_unary(
         return Err("Service method cannot be empty");
     }
 
+    let mut chan = chan;
     chan.rpc_count = chan.rpc_count + 1;
 
-    let frame: GrpcFrame = grpc_frame_uncompressed(request_payload);
+    let _frame: GrpcFrame = grpc_frame_uncompressed(request_payload);
     let mut resp_headers: List[String] = list_new();
     resp_headers = list_push(resp_headers, "content-type: application/grpc");
     resp_headers = list_push(resp_headers, "grpc-status: 0");

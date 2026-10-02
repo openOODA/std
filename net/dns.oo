@@ -10,9 +10,6 @@
 //   3. Validate IP formatting and handle localhost aliases.
 // rules.oot 1.4: Default-deny for privileged effects. Explicit &NetCap required.
 // rules.oot 1.7: Under 256 lines.
-
-import "std/core/primitives/result.oo";
-
 pub fn dns_resolve(net: &NetCap, host: String) -> Result[String, String] {
     if host.len() == 0 {
         return Err("DNS_ERR: empty host name");

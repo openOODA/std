@@ -30,6 +30,7 @@ pub fn rlwe_lcg_step(seed: Int) -> Int {
 }
 
 pub fn rlwe_sample_uniform_poly(state: RlweSamplerState) -> List[Int] {
+    let mut state = state;
     let mut poly: List[Int] = list_new();
     let mut i: Int = 0;
     let mut cur: Int = state.seed;
@@ -44,6 +45,7 @@ pub fn rlwe_sample_uniform_poly(state: RlweSamplerState) -> List[Int] {
 }
 
 pub fn rlwe_sample_small_error_poly(state: RlweSamplerState) -> List[Int] {
+    let mut state = state;
     let mut poly: List[Int] = list_new();
     let mut i: Int = 0;
     let mut cur: Int = state.seed;

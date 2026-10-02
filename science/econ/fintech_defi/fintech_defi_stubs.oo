@@ -69,7 +69,7 @@ pub fn mock_defi_state_default() -> MockDeFiState {
     };
 }
 
-pub fn mock_generate_tick_price(feed: &MockOrderFeed, seed: Int) -> Int {
+pub fn mock_generate_tick_price(feed: &mut MockOrderFeed, seed: Int) -> Int {
     feed.tick_count = feed.tick_count + 1;
     let delta: Int = ((seed * 17 + feed.tick_count) % 21) - 10;
     return feed.base_price + delta;

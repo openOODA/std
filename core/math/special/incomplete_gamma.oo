@@ -9,9 +9,6 @@
 //   2. Use P(s, x) = 1 - e^{-x} sum_{k=0}^{s-1} x^k / k!.
 //   3. Accumulate the Poisson partial sum by recurrence.
 //   4. Return the regularized value in (0, 1].
-
-import "std/core/primitives/result.oo";
-
 pub fn gamma_p(s: Int, x: Float) -> Result[Float, String] {
     if s < 1 { return Err("ERR\tgamma_p\ts"); }
     if x < 0.0 { return Err("ERR\tgamma_p\tx"); }

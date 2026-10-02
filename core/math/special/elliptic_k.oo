@@ -9,9 +9,6 @@
 //   2. Seed a = 1 and b = sqrt(1 - k^2).
 //   3. Iterate a = (a+b)/2 and b = sqrt(a b) until they meet.
 //   4. Return pi / (2 a).
-
-import "std/core/primitives/result.oo";
-
 pub fn elliptic_k(k: Float) -> Result[Float, String] {
     let mut ak: Float = k;
     if ak < 0.0 { ak = 0.0 - ak; }

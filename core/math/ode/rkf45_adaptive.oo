@@ -9,9 +9,6 @@
 //   2. Form 4th and 5th order updates and the local error.
 //   3. Accept or reject the step from the error versus atol.
 //   4. Scale h by 0.9 (atol/err)^0.25 and integrate to t1.
-
-import "std/core/primitives/result.oo";
-
 fn rkf_pack(y: Float, v: Float, t: Float, h: Float, err: Float, acc: Float) -> List[Float] {
     let mut o: List[Float] = list_new();
     o = list_push(o, y);

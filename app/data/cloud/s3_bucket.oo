@@ -54,6 +54,7 @@ pub fn s3_bucket_new(name: String, region: String) -> S3Bucket {
 
 /// Insert or update an object in the bucket.
 pub fn s3_bucket_put_object(bucket: S3Bucket, obj: S3Object) -> Bool {
+    let mut bucket = bucket;
     let cur_objs: List[S3Object] = bucket.objects;
     let n: Int = list_len(cur_objs);
     let mut new_objs: List[S3Object] = list_new();
@@ -101,6 +102,7 @@ pub fn s3_bucket_get_object(bucket: S3Bucket, key: String) -> Option[S3Object] {
 
 /// Delete an object from the bucket by key.
 pub fn s3_bucket_delete_object(bucket: S3Bucket, key: String) -> Bool {
+    let mut bucket = bucket;
     let cur_objs: List[S3Object] = bucket.objects;
     let n: Int = list_len(cur_objs);
     let mut new_objs: List[S3Object] = list_new();

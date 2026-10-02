@@ -12,9 +12,6 @@
 // rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
 // rules.oot 1.7: Under 256 lines.
 // residual: Host futex wait lowers to futex system call.
-
-import "std/core/primitives/result.oo";
-
 type RwLockReadPrefer = struct {
     reader_count: Int,
     writer_active: Bool

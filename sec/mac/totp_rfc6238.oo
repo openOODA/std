@@ -9,9 +9,6 @@
 //   2. HMAC-SHA256 the 8-byte counter under the key.
 //   3. Dynamic-truncate the digest and reduce modulo 10^digits.
 //   4. Return a zero-padded decimal string.
-
-import "std/core/primitives/list.oo";
-
 fn totp_rfc6238_nibble(ch: Int) -> Int {
     if ch >= 48 {
         if ch <= 57 { return ch - 48; }

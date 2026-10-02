@@ -11,9 +11,6 @@
 //   4. Link a slot at the head so it becomes the most recently used.
 //   5. Put a key/value, updating or inserting, and evicting tail when full.
 //   6. Get a key, promoting it to head, and remove a key outright.
-
-import "std/core/primitives/list.oo";
-
 type LruCache = struct {
     keys: List[String],
     values: List[String],

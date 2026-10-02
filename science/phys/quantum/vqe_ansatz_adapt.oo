@@ -57,6 +57,7 @@ pub fn adapt_vqe_operator_count(state: AdaptVqeState) -> Int {
 }
 
 pub fn adapt_vqe_append_operator(state: AdaptVqeState, op_id: Int, init_param: Float, current_energy: Float, max_grad: Float) {
+    let mut state = state;
     list_push(state.selected_operator_ids, op_id);
     list_push(state.parameters, init_param);
     list_push(state.energy_history, current_energy);

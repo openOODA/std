@@ -23,6 +23,17 @@ fn timer_pwm_channel_to_f(n: Int) -> Float {
     return f;
 }
 
+fn timer_pwm_channel_to_i(x: Float) -> Int {
+    let mut i: Int = 0;
+    let mut cur: Float = x;
+    while cur >= 10000.0 { i = i + 10000; cur = cur - 10000.0; }
+    while cur >= 1000.0 { i = i + 1000; cur = cur - 1000.0; }
+    while cur >= 100.0 { i = i + 100; cur = cur - 100.0; }
+    while cur >= 10.0 { i = i + 10; cur = cur - 10.0; }
+    while cur >= 1.0 { i = i + 1; cur = cur - 1.0; }
+    return i;
+}
+
 type PwmChannel = struct {
     channel_num: Int,     // 1..4
     enabled: Bool,
@@ -103,6 +114,7 @@ pub fn timer_set_frequency(tim: HardwareTimer, target_freq_hz: Int) {
 }
 
 pub fn timer_set_channel_duty_pct(tim: HardwareTimer, ch_num: Int, duty_pct: Float) {
+    let mut tim = tim;
     if ch_num >= 1 {
         if ch_num <= 4 {
             let mut bounded_pct: Float = duty_pct;
@@ -117,7 +129,7 @@ pub fn timer_set_channel_duty_pct(tim: HardwareTimer, ch_num: Int, duty_pct: Flo
             }
             let arr_f: Float = timer_pwm_channel_to_f(tim.auto_reload);
             let ccr_f: Float = (arr_f * bounded_pct) / 100.0;
-            let ccr: Int = ccr_f; // Float to int coercion
+            let ccr: Int = timer_pwm_channel_to_i(ccr_f);
 
             let mut ch: PwmChannel = list_get(tim.channels, ch_num - 1);
             ch.compare_value = ccr;

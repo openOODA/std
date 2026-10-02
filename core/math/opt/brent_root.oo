@@ -9,9 +9,6 @@
 //   2. Try inverse quadratic interpolation, else secant.
 //   3. Fall back to bisection when the trial step is unsafe.
 //   4. Stop when |b-a| is below tol or f(b) is zero.
-
-import "std/core/primitives/result.oo";
-
 fn brent_abs(x: Float) -> Float {
     if x < 0.0 { return 0.0 - x; }
     return x;

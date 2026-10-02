@@ -65,6 +65,7 @@ pub fn otel_span_add_attr_str(
     key: String,
     val: String
 ) -> Bool {
+    let mut span = span;
     let attr: OtelSpanAttribute = OtelSpanAttribute {
         key: key,
         val_str: val,
@@ -82,6 +83,7 @@ pub fn otel_span_add_attr_int(
     key: String,
     val: Int
 ) -> Bool {
+    let mut span = span;
     let attr: OtelSpanAttribute = OtelSpanAttribute {
         key: key,
         val_str: "",
@@ -100,6 +102,7 @@ pub fn otel_span_add_event(
     ts_us: Int,
     msg: String
 ) -> Bool {
+    let mut span = span;
     let ev: OtelSpanEvent = OtelSpanEvent {
         name: name,
         timestamp_us: ts_us,
@@ -116,6 +119,7 @@ pub fn otel_span_finish(
     end_time_us: Int,
     status_ok: Bool
 ) -> Int {
+    let mut span = span;
     span.end_time_us = end_time_us;
     if status_ok {
         span.status_code = 1; // Ok

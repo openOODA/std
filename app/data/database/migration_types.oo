@@ -8,9 +8,6 @@
 //   1. Declare MigrationStep, MigrationState, and MigrationResult record structures.
 //   2. Implement constructors for migration steps and states.
 //   3. Implement serialization and parsing for journal persistence.
-
-import "std/core/primitives/result.oo";
-
 type MigrationStep = struct {
     id: String,
     name: String,
@@ -113,14 +110,17 @@ pub fn migration_state_path(state: MigrationState) -> String {
 }
 
 pub fn migration_state_set_ver(state: MigrationState, ver: String) {
+    let mut state = state;
     state.current_version = ver;
 }
 
 pub fn migration_state_inc(state: MigrationState) {
+    let mut state = state;
     state.count = state.count + 1;
 }
 
 pub fn migration_state_dec(state: MigrationState) {
+    let mut state = state;
     if state.count > 0 {
         state.count = state.count - 1;
     }

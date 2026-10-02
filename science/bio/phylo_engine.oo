@@ -28,6 +28,7 @@ pub fn distance_matrix_new(n_taxa: Int, model: String) -> DistanceMatrix {
 }
 
 pub fn distance_matrix_add_taxon(mat: DistanceMatrix, name: String) {
+    let mut mat = mat;
     let mut taxa_names_lst: List[String] = mat.taxa_names;
     taxa_names_lst = list_push(taxa_names_lst, name);
     mat.taxa_names = taxa_names_lst;
@@ -165,6 +166,7 @@ pub fn phylo_tree_new(tree_id: Int, name: String) -> PhyloTree {
 }
 
 pub fn phylo_tree_add_node(tree: PhyloTree, node: PhyloNode) {
+    let mut tree = tree;
     let mut tree_nds: List[PhyloNode] = tree.nodes;
     tree_nds = list_push(tree_nds, node);
     tree.nodes = tree_nds;

@@ -75,6 +75,7 @@ pub fn fasta_reader_new() -> FastaReader {
 }
 
 pub fn fasta_reader_add_record(reader: FastaReader, rec: FastaRecord) {
+    let mut reader = reader;
     if rec.is_valid {
         reader.records_count = reader.records_count + 1;
         reader.total_bases = reader.total_bases + rec.length;

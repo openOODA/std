@@ -9,9 +9,6 @@
 //   2. Kick velocity a half step from a = -omega^2 y.
 //   3. Drift position then kick the remaining half step.
 //   4. Return final (y, v, E, E0).
-
-import "std/core/primitives/result.oo";
-
 pub fn leapfrog_energy(y: Float, v: Float, omega: Float) -> Float {
     return 0.5 * v * v + 0.5 * omega * omega * y * y;
 }

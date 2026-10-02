@@ -10,9 +10,6 @@
 //   3. Enforce CPU execution timeout (RLIMIT_CPU) in seconds.
 // rules.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
 // rules.oot 1.7: Under 256 lines.
-
-import "std/core/primitives/result.oo";
-
 pub fn rlimit_set_memory_quota(sys_cap: &SysCap, megabytes: Int) -> Result[Bool, String] {
     if megabytes <= 0 {
         return Err("RLIMIT_ERR: memory quota must be positive");

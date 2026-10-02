@@ -25,6 +25,7 @@ pub fn discrete_gaussian_new(sigma: Float, seed: Int) -> DiscreteGaussianSampler
 }
 
 pub fn discrete_gaussian_sample(sampler: DiscreteGaussianSampler) -> Int {
+    let mut sampler = sampler;
     sampler.seed = (sampler.seed * 1664525 + 1013904223) & 2147483647;
     let b1: Int = (sampler.seed >> 8) & 1;
     let b2: Int = (sampler.seed >> 9) & 1;

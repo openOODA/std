@@ -12,9 +12,6 @@
 //   5. Decode a single top-level item and report bytes consumed.
 
 // residual: no float, no tag, no indefinite-length, no bignum; no stream framing
-
-import "std/core/primitives/result.oo";
-
 fn cbor9_arg(v: Int) -> List[Int] {
     let mut o: List[Int] = list_new();
     if v < 0 { return o; }

@@ -39,7 +39,7 @@ pub fn funding_pool_new(
     };
 }
 
-pub fn resolve_funding_deficit(pool: &FundingPoolBalance) -> ClawbackResolution {
+pub fn resolve_funding_deficit(pool: &mut FundingPoolBalance) -> ClawbackResolution {
     let rate: Float = pool.nominal_funding_rate;
     let mut abs_rate: Float = rate;
     if abs_rate < 0.0 {

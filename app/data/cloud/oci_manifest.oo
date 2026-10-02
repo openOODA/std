@@ -10,7 +10,6 @@
 //   3. Save and load manifest definitions using FsReadCap and FsWriteCap.
 
 import "./oci_descriptor.oo";
-import "./oci_layer.oo";
 
 type OciManifest = struct {
     schema_version: Int,
@@ -35,6 +34,7 @@ pub fn oci_manifest_new(config: OciDescriptor) -> OciManifest {
 
 /// Append a layer descriptor to the image manifest.
 pub fn oci_manifest_add_layer(manifest: OciManifest, layer: OciDescriptor) -> Bool {
+    let mut manifest = manifest;
     let cur_layers: List[OciDescriptor] = manifest.layers;
     manifest.layers = list_push(cur_layers, layer);
     manifest.total_size = manifest.total_size + layer.size;

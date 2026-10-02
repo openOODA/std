@@ -12,9 +12,6 @@
 // rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
 // rules.oot 1.7: Under 256 lines.
 // residual: Hardware wait-queue parking lowers via futex phase words.
-
-import "std/core/primitives/result.oo";
-
 type FairRwLock = struct {
     readers_in: Int,
     readers_out: Int,

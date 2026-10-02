@@ -10,27 +10,17 @@
 //   3. Maintain full backwards compatibility with downstream openOODA callers.
 
 import "./oci_descriptor.oo";
-import "./oci_layer.oo";
 import "./oci_manifest.oo";
-import "./s3_auth_v4.oo";
-import "./s3_bucket.oo";
 import "./s3_client.oo";
-import "./raft_state.oo";
-import "./raft_log.oo";
 import "./raft_consensus.oo";
 import "./paxos_proposer.oo";
 import "./paxos_acceptor.oo";
-import "./grpc_frame.oo";
 import "./grpc_client.oo";
 import "./etcd_client.oo";
-import "./etcd_watch.oo";
-import "./otel_span.oo";
 import "./otel_trace.oo";
-import "./otel_exporter.oo";
 import "./rate_limiter_token_bucket.oo";
 import "./rate_limiter_leaky_bucket.oo";
 import "./circuit_breaker_cloud.oo";
-import "./service_mesh_proxy.oo";
 import "./load_balancer_rr.oo";
 import "./cloud_stubs.oo";
 
@@ -88,7 +78,7 @@ pub fn cloud_shim_circuit_breaker(fail_th: Int, succ_th: Int, timeout_ms: Int, n
 }
 
 pub fn cloud_shim_load_balancer() -> LoadBalancerRr {
-    return load_balancer_rr_new();
+    return load_balancer_rr_new(1, 1);
 }
 
 pub fn cloud_shim_fail_closed_ebpf(net: &NetCap, sys: &SysCap) -> Int {

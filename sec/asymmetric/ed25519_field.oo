@@ -8,9 +8,6 @@
 //   1. Subtract p = 2^255-19 with a borrow chain when the input is >= p.
 //   2. Return the input unchanged when it is already below p.
 //   3. Two passes reduce any value below 2^255 + 2^242 into [0, p).
-
-import "std/core/primitives/list.oo";
-
 pub fn ed25519_field_sub_p_if_ge(t: List[Int]) -> List[Int] {
     // p = 2^255 - 19, LE 16-bit limbs: [65517, 65535 x13, 32767].
     let mut d: List[Int] = list_new();

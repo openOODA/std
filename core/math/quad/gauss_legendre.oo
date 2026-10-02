@@ -9,9 +9,6 @@
 //   2. Evaluate the in-module integrand at each node.
 //   3. Return the weighted sum.
 //   4. Fail closed on an unsupported n.
-
-import "std/core/primitives/result.oo";
-
 pub fn gauss_legendre_x2(n: Int) -> Result[Float, String] {
     if n < 1 { return Err("ERR\tgauss\tn"); }
     if n > 3 { return Err("ERR\tgauss\tn"); }

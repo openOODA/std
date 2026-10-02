@@ -13,10 +13,6 @@
 //   6. Reset the ring buffer to empty state without releasing storage.
 //
 // residual: SPSC concurrent variant; memory ordering fences for MPMC.
-
-import "std/core/primitives/result.oo";
-import "std/core/primitives/list.oo";
-
 type RingPow2 = struct {
     data: List[Int],
     head: Int,

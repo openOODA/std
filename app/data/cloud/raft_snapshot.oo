@@ -117,6 +117,7 @@ pub fn raft_snapshot_split_chunks(snap: SnapshotData, term: Int, leader_id: Stri
 
 /// Apply received snapshot chunk to snapshot container.
 pub fn raft_snapshot_apply_chunk(snap: SnapshotData, chunk: InstallSnapshotArgs, cur_term: Int) -> Result[InstallSnapshotReply, String] {
+    let mut snap = snap;
     if chunk.term < cur_term {
         return Err("ERR\traft_snapshot_apply: stale term");
     }

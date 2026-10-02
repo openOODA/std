@@ -23,44 +23,44 @@ type VNode = struct {
     key: String,
     text: String,
     props: List[VProp],
-    children: List[VNode]
+    child_ids: List[Int]
 };
 
-pub fn vnode_element(tag: String, key: String, props: List[VProp], children: List[VNode]) -> VNode { return VNode {
+pub fn vnode_element(tag: String, key: String, props: List[VProp], child_ids: List[Int]) -> VNode { return VNode {
         node_kind: 1,
         tag: tag,
         key: key,
         text: "",
         props: props,
-        children: children
+        child_ids: child_ids
     }; }
 
 pub fn vnode_text(content: String) -> VNode {
     let empty_props: List[VProp] = list_new();
-    let empty_children: List[VNode] = list_new();
+    let empty_children: List[Int] = list_new();
     return VNode {
         node_kind: 2,
         tag: "",
         key: "",
         text: content,
         props: empty_props,
-        children: empty_children
+        child_ids: empty_children
     };
 }
 
-pub fn vnode_component(name: String, key: String, props: List[VProp], children: List[VNode]) -> VNode { return VNode {
+pub fn vnode_component(name: String, key: String, props: List[VProp], child_ids: List[Int]) -> VNode { return VNode {
         node_kind: 3,
         tag: name,
         key: key,
         text: "",
         props: props,
-        children: children
+        child_ids: child_ids
     }; }
 
-pub fn vnode_add_child(node: &mut VNode, child: VNode) {
-    let mut ch: List[VNode] = node.children;
-    ch = list_push(ch, child);
-    node.children = ch;
+pub fn vnode_add_child(node: &mut VNode, child_id: Int) {
+    let mut ch: List[Int] = node.child_ids;
+    ch = list_push(ch, child_id);
+    node.child_ids = ch;
 }
 
 pub fn vnode_get_prop(node: &VNode, key: String) -> Result[String, String] {

@@ -12,9 +12,6 @@
 // rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
 // rules.oot 1.7: Under 256 lines.
 // residual: Ring-buffer eviction of slow consumers uses cursor gap thresholding.
-
-import "std/core/primitives/result.oo";
-
 type BroadcastChannel = struct {
     messages: List[Int],
     capacity: Int,

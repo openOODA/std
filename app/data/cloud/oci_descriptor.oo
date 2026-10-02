@@ -68,6 +68,7 @@ pub fn oci_descriptor_matches(
 
 /// Add an external mirror or distribution URL to the descriptor.
 pub fn oci_descriptor_add_url(desc: OciDescriptor, url: String) -> Bool {
+    let mut desc = desc;
     let cur_urls: List[String] = desc.urls;
     desc.urls = list_push(cur_urls, url);
     return true;
@@ -75,6 +76,7 @@ pub fn oci_descriptor_add_url(desc: OciDescriptor, url: String) -> Bool {
 
 /// Increment annotations count for custom metadata attributes.
 pub fn oci_descriptor_add_annotation(desc: OciDescriptor) -> Int {
+    let mut desc = desc;
     desc.annotations_count = desc.annotations_count + 1;
     return desc.annotations_count;
 }

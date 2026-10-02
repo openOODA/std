@@ -47,6 +47,7 @@ pub fn etcd_watch_hub_register(
     key_prefix: String,
     start_rev: Int
 ) -> Int {
+    let mut hub = hub;
     let wid: Int = hub.next_watch_id;
     hub.next_watch_id = hub.next_watch_id + 1;
 
@@ -64,6 +65,7 @@ pub fn etcd_watch_hub_register(
 
 /// Cancel an active watcher by its watch ID.
 pub fn etcd_watch_hub_cancel(hub: EtcdWatchHub, watch_id: Int) -> Bool {
+    let mut hub = hub;
     let cur_w: List[EtcdWatcher] = hub.watchers;
     let n: Int = list_len(cur_w);
     let mut new_w: List[EtcdWatcher] = list_new();
@@ -89,6 +91,7 @@ pub fn etcd_watch_hub_dispatch_event(
     hub: EtcdWatchHub,
     event: EtcdWatchEvent
 ) -> Int {
+    let mut hub = hub;
     let w_list: List[EtcdWatcher] = hub.watchers;
     let n: Int = list_len(w_list);
     let mut matched_count: Int = 0;

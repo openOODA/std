@@ -40,6 +40,7 @@ pub fn flow_window_add_trade(
     is_buy: Bool,
     shares: Float
 ) {
+    let mut window = window;
     if is_buy {
         window.buy_order_count = window.buy_order_count + 1;
         window.total_buy_shares = window.total_buy_shares + shares;

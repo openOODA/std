@@ -9,9 +9,6 @@
 //   2. Solve the natural-spline tridiagonal system for second derivatives.
 //   3. Locate the span that holds the query.
 //   4. Evaluate the cubic Hermite form on that span.
-
-import "std/core/primitives/result.oo";
-
 pub fn spline_natural_eval(xs: List[Float], ys: List[Float], xq: Float) -> Result[Float, String] {
     let n: Int = list_len(xs);
     if n < 2 { return Err("ERR\tspline\tn"); }

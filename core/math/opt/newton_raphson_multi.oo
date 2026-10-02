@@ -8,9 +8,6 @@
 //   1. F and J live in-module: F=(x+y-3, xy-2), J=[[1,1],[y,x]], det=x-y.
 //   2. Each step is x := x - α J^{-1} F; α halves up to 8 times if ||F|| grows.
 //   3. Fail closed on len!=2, damp<=0, tol<=0, singular J, or max_iter exceeded.
-
-import "std/core/primitives/result.oo";
-
 fn newton_vec2(a: Float, b: Float) -> List[Float] {
     let mut v: List[Float] = list_new();
     v = list_push(v, a);

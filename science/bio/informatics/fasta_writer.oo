@@ -102,6 +102,7 @@ pub fn fasta_format_record(rec: FastaRecord, config: FastaWriterConfig) -> Strin
 }
 
 pub fn fasta_writer_emit(writer: FastaWriter, rec: FastaRecord) -> String {
+    let mut writer = writer;
     let out: String = fasta_format_record(rec, &(writer.config));    writer.records_written = writer.records_written + 1;
     writer.bytes_written = writer.bytes_written + chars_len(out);
     return out;

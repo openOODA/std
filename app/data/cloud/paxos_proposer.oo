@@ -73,6 +73,7 @@ pub fn paxos_proposer_prepare(
     proposer: PaxosProposer,
     value: String
 ) -> PaxosPrepare {
+    let mut proposer = proposer;
     proposer.current_round = proposer.current_round + 1;
     proposer.proposed_val = value;
     proposer.promises_count = 0;
@@ -93,6 +94,7 @@ pub fn paxos_proposer_on_promise(
     proposer: PaxosProposer,
     promise: PaxosPromise
 ) -> Bool {
+    let mut proposer = proposer;
     if promise.accepted == false {
         return false;
     }

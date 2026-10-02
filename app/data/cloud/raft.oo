@@ -47,6 +47,7 @@ pub fn raft_node_new(node_id: String, peers: List[String], election_timeout_ms: 
 
 /// Advance node timer and trigger election if timeout elapsed in Follower or Candidate role.
 pub fn raft_node_tick(node: RaftNode, elapsed_ms: Int) -> Result[Int, String] {
+    let mut node = node;
     if elapsed_ms < 0 {
         return Err("ERR\traft_node_tick: negative elapsed time");
     }
@@ -89,6 +90,7 @@ pub fn raft_node_is_leader(node: RaftNode) -> Bool { return (node.state).role ==
 
 /// Create a verified snapshot and truncate old log entries.
 pub fn raft_node_take_snapshot(node: RaftNode, payload: String, last_index: Int) -> Result[Bool, String] {
+    let mut node = node;
     if last_index < 0 {
         return Err("ERR\traft_node_take_snapshot: invalid index");
     }

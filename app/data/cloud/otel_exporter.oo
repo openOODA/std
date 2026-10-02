@@ -63,11 +63,12 @@ pub fn otel_exporter_flush(
         return Ok(0);
     }
 
-    let payload: String = otel_exporter_serialize_batch(
+    let _payload: String = otel_exporter_serialize_batch(
         &tracer.completed_spans,
         tracer.service_name
     );
 
+    let mut exporter = exporter;
     otel_tracer_clear(tracer);
     exporter.exported_spans_total = exporter.exported_spans_total + pending_count;
 

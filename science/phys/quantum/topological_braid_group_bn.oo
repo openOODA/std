@@ -37,6 +37,7 @@ pub fn braid_group_element_new(strands: Int) -> BraidGroupElement {
 }
 
 pub fn braid_group_append(el: BraidGroupElement, gen: BraidGenerator) {
+    let mut el = el;
     list_push(el.generators, gen);
     let wl: Int = el.word_length;
     el.word_length = wl + 1;

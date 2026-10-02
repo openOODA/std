@@ -11,7 +11,6 @@
 
 import "./circuit_breaker_cloud.oo";
 import "./rate_limiter_token_bucket.oo";
-import "./otel_span.oo";
 
 type MeshRoute = struct {
     path_prefix: String,
@@ -63,6 +62,7 @@ pub fn service_mesh_add_route(
     proxy: ServiceMeshProxy,
     route: MeshRoute
 ) -> Bool {
+    let mut proxy = proxy;
     let cur_routes: List[MeshRoute] = proxy.routes;
     proxy.routes = list_push(cur_routes, route);
     return true;
@@ -97,6 +97,7 @@ pub fn service_mesh_proxy_forward(
     payload: String,
     now_ms: Int
 ) -> Result[String, String] {
+    let mut proxy = proxy;
     // 1. Check Rate Limiter
     let allowed: Bool = token_bucket_try_consume(proxy.limiter, 1, now_ms);
     if allowed == false {

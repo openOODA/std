@@ -74,6 +74,7 @@ pub fn phylo_tree_new(root_id: Int) -> PhyloTree {
 }
 
 pub fn phylo_tree_add_node(tree: PhyloTree, node: PhyloNode) {
+    let mut tree = tree;
     tree.total_nodes = tree.total_nodes + 1;
     if node.is_leaf {
         tree.leaf_count = tree.leaf_count + 1;

@@ -10,9 +10,6 @@
 //   3. Radix-2 butterfly combining with precomputed twiddle factors exp(-2*pi*i*k/n).
 //   4. Inverse FFT via conjugate -> FFT -> conjugate -> divide by n.
 //   5. Smoke test asserts FFT of impulse [1, 0, ..., 0] equals uniform [1, 1, ..., 1] within tolerance.
-
-import "std/core/primitives/list.oo";
-
 type Complex = struct { re: Int, im: Int };
 
 // Scaling factor for fixed-point Int complex values: 1.0 maps to 1000.

@@ -22,6 +22,7 @@ pub fn cbd_sampler_new(eta: Int, seed: Int) -> CbdSampler {
 }
 
 pub fn cbd_sample_single(sampler: CbdSampler) -> Int {
+    let mut sampler = sampler;
     sampler.seed = (sampler.seed * 214013 + 2531011) & 2147483647;
     let mut a_bits: Int = 0;
     let mut b_bits: Int = 0;

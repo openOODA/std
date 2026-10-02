@@ -30,6 +30,7 @@ pub fn shadow_new(num_qubits: Int) -> ClassicalShadow {
 }
 
 pub fn shadow_record_snapshot(shadow: ClassicalShadow, basis: Int, outcome: Int) {
+    let mut shadow = shadow;
     let snap: ShadowSnapshot = ShadowSnapshot {
         basis_choice: basis,
         outcome_bit: outcome

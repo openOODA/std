@@ -8,9 +8,6 @@
 //   1. Parse the // ## CAPs block from a file's top comment.
 //   2. Scan every pub fn signature for &FsCap, &FsWriteCap, &SysCap, &TimeCap, &ProcessCap.
 //   3. Emit CapsAuditFinding list: missing (cap used in sig, not in header), unused (cap in header, not in sig), and no_header (no // ## CAPs found).
-
-import "std/core/primitives/str.oo";
-
 type CapsAuditFinding = struct {
     finding_id: Int,
     file_path: String,

@@ -12,9 +12,6 @@
 // rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
 // rules.oot 1.7: Under 256 lines.
 // residual: OS scheduler parking lowers to futex/condvar primitives via backend runtime.
-
-import "std/core/primitives/result.oo";
-
 type WaitGroup = struct {
     counter: Int,
     waiters: Int

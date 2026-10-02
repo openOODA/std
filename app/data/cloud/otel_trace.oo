@@ -37,6 +37,7 @@ pub fn otel_tracer_start_root_span(
     name: String,
     now_us: Int
 ) -> OtelSpan {
+    let mut tracer = tracer;
     tracer.span_counter = tracer.span_counter + 1;
     let span_id: String = "00f067aa0ba902b7";
     let mut span: OtelSpan = otel_span_new(

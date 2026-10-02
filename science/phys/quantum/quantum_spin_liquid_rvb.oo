@@ -37,6 +37,7 @@ pub fn dimer_covering_new() -> DimerCovering {
 }
 
 pub fn dimer_covering_add(cov: DimerCovering, d: SingletDimer) {
+    let mut cov = cov;
     list_push(cov.dimers, d);
     let nd: Int = cov.num_dimers;
     cov.num_dimers = nd + 1;
@@ -61,6 +62,7 @@ pub fn rvb_state_new(sites: Int) -> RvbState {
 }
 
 pub fn rvb_add_covering(state: RvbState, cov: DimerCovering) {
+    let mut state = state;
     list_push(state.coverings, cov);
     let nc: Int = state.num_coverings;
     state.num_coverings = nc + 1;

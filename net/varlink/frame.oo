@@ -1,0 +1,97 @@
+// # Varlink Frame Accumulator
+//
+// Logline: Reassembles newline-delimited frames from a byte stream with no message boundaries.
+//
+// Setup: Pure, byte indexed, one page shared by every socket transport.
+// Beats:
+//   1. A chunk carrying a newline yields that line and keeps the tail for later.
+//   2. A chunk with no newline is held whole until more bytes arrive.
+//   3. Passing more than one newline yields one frame per call, drained by
+//      pushing an empty chunk, so one read can never smuggle in an unparsed frame.
+//   4. A buffer past the cap is dropped and flagged rather than grown.
+
+import "std/core/primitives/byte.oo";
+
+pub type FrameState = struct {
+    buf: String,
+    line: String,
+    has_line: Bool,
+    overflow: Bool
+};
+
+// One mebibyte. Comfortably above any tool reply and low enough that a hostile
+// or wedged peer cannot grow the daemon without bound.
+pub fn varlink_frame_default_max() -> Int {
+    return 1048576;
+}
+
+// Why every operation below is a byte operation. str_index_of reports byte
+// offsets while str_slice is character indexed, so mixing them truncates
+// silently on any non-ASCII frame. Accumulation uses +, not byte_concat, whose
+// bytes_concat the runtime implements and tests in C but never registered with
+// the emitter, and not str_concat, which the emitter knows but the checker's
+// name list omits. The two vocabularies disagree in both directions; + is the
+// one form both accept.
+
+pub fn varlink_frame_new() -> FrameState {
+    return FrameState { buf: "", line: "", has_line: false, overflow: false };
+}
+
+pub fn varlink_frame_reset(s: FrameState) -> FrameState {
+    return FrameState { buf: "", line: "", has_line: false, overflow: false };
+}
+
+// First newline byte in the buffer, or -1 when the frame is still incomplete.
+fn find_nl(s: String) -> Int {
+    let n: Int = byte_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        if byte_get(s, i) == 10 {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+// A peer that ends a line with CR is tolerated rather than trusted: the CR is
+// dropped so the frame text matches what the peer meant to send.
+fn strip_cr(line: String) -> String {
+    let n: Int = byte_len(line);
+    if n == 0 { return line; }
+    if byte_get(line, n - 1) != 13 { return line; }
+    return byte_sub(line, 0, n - 1);
+}
+
+// Feed one read's worth of bytes. Returns at most one frame; call again with an
+// empty chunk to drain frames already sitting in the buffer.
+pub fn varlink_frame_push(prev: FrameState, chunk: String, max_bytes: Int) -> FrameState {
+    let cap_max: Int = if max_bytes < 1 { varlink_frame_default_max() } else { max_bytes };
+    if prev.overflow {
+        return prev;
+    }
+    let acc: String = prev.buf + chunk;
+    // Refuse before growing. Checking after the newline would let a peer park an
+    // unbounded buffer behind a single trailing newline.
+    if byte_len(acc) > cap_max {
+        return FrameState { buf: "", line: "", has_line: false, overflow: true };
+    }
+    let at: Int = find_nl(acc);
+    if at < 0 {
+        return FrameState { buf: acc, line: "", has_line: false, overflow: false };
+    }
+    let rest: String = byte_sub(acc, at + 1, byte_len(acc));
+    return FrameState {
+        buf: rest,
+        line: strip_cr(byte_sub(acc, 0, at)),
+        has_line: true,
+        overflow: false
+    };
+}
+
+// True once the connection is unrecoverable: the peer exceeded the frame cap.
+// The caller closes instead of resynchronising, because after a drop there is no
+// way to know where the next real frame begins.
+pub fn varlink_frame_is_dead(s: FrameState) -> Bool {
+    return s.overflow;
+}

@@ -80,6 +80,7 @@ pub fn pauli_hamiltonian_new(num_qubits: Int) -> PauliHamiltonian {
 }
 
 pub fn pauli_hamiltonian_add_term(ham: PauliHamiltonian, term: PauliTerm) {
+    let mut ham = ham;
     list_push(ham.terms, term);
     ham.num_terms = ham.num_terms + 1;
 }

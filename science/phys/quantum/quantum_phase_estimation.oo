@@ -100,6 +100,7 @@ pub fn ipe_compute_feedback_angle(state: IpeState) -> Float {
 }
 
 pub fn ipe_record_measurement(state: IpeState, bit_val: Int) {
+    let mut state = state;
     list_push(state.measured_bits, bit_val);
     state.current_bit_index = state.current_bit_index - 1;
 }

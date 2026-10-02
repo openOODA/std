@@ -11,9 +11,6 @@
 //   4. Run scheduler loop bounded by iteration limit under TimeCap and ThreadCap.
 // rules.oot 1.4: Default-deny for concurrency and timing effects. Explicit &ThreadCap and &TimeCap required.
 // rules.oot 1.7: Under 256 lines.
-
-import "std/core/primitives/result.oo";
-
 type FiberScheduler = struct {
     fibers: List[String],
     current_index: Int,

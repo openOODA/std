@@ -80,6 +80,7 @@ pub fn mock_microstructure_env_default() -> MockMicrostructureEnvironment {
 }
 
 pub fn mock_generate_next_mid(feed: MockHftFeed, seed: Int) -> Float {
+    let mut feed = feed;
     feed.tick_count = feed.tick_count + 1;
     let delta_int: Int = ((seed * 13 + feed.tick_count) % 7) - 3;
     let mut delta_f: Float = 0.0;

@@ -9,9 +9,6 @@
 //   2. Process 16-byte message blocks via 26-bit limb radix arithmetic.
 //   3. Reduce modulo 2^130 - 5 with carry propagation.
 //   4. Add s parameter and format 16-byte little-endian tag.
-
-import "std/core/primitives/list.oo";
-
 fn p5_mask(x: Int) -> Int { return x & 4294967295; }
 
 fn p5_le32(b: List[Int], o: Int) -> Int {

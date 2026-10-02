@@ -24,6 +24,7 @@ pub fn ternary_sampler_new(n: Int, h: Int, seed: Int) -> TernarySampler {
 }
 
 pub fn ternary_sample_uniform(sampler: TernarySampler) -> List[Int] {
+    let mut sampler = sampler;
     let mut vec: List[Int] = list_new();
     let mut i: Int = 0;
     while i < sampler.degree_n {

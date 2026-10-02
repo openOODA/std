@@ -10,7 +10,6 @@
 //   3. Support local file upload/download synchronization using FsReadCap and FsWriteCap.
 
 import "./s3_auth_v4.oo";
-import "./s3_bucket.oo";
 
 type S3Client = struct {
     endpoint: String,
@@ -57,6 +56,7 @@ pub fn s3_client_put_object(
     if key == "" {
         return Err("Object key cannot be empty");
     }
+    let mut client = client;
     client.request_count = client.request_count + 1;
     let etag: String = "etag-mock-hash";
     return Ok(etag);
@@ -75,6 +75,7 @@ pub fn s3_client_get_object(
     if key == "" {
         return Err("Object key cannot be empty");
     }
+    let mut client = client;
     client.request_count = client.request_count + 1;
     return Ok("s3-object-data");
 }
@@ -91,6 +92,7 @@ pub fn s3_client_upload_file(
     if local_path == "" {
         return Err("Invalid local file path");
     }
+    let mut client = client;
     client.request_count = client.request_count + 1;
     let bytes_uploaded: Int = 1024;
     client.bytes_transferred = client.bytes_transferred + bytes_uploaded;
@@ -109,6 +111,7 @@ pub fn s3_client_download_file(
     if local_path == "" {
         return Err("Invalid destination file path");
     }
+    let mut client = client;
     client.request_count = client.request_count + 1;
     let bytes_downloaded: Int = 1024;
     client.bytes_transferred = client.bytes_transferred + bytes_downloaded;

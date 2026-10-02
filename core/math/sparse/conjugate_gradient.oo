@@ -8,8 +8,6 @@
 //   1. Extract M^{-1} from the CSR diagonal and refuse a missing or zero pivot.
 //   2. Iterate x += alpha p and r -= alpha A p with z = M^{-1} r.
 //   3. Fail closed on p·Ap = 0 or max_iter without ||r|| < tol.
-
-import "std/core/primitives/result.oo";
 import "std/core/math/sparse/csr_matrix.oo";
 
 fn cg_zeros(n: Int) -> List[Float] {

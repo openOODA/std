@@ -8,7 +8,7 @@
 //   1. shim_marker_config_new: forward ModelConfig construction.
 //   2. shim_marker_metrics_new: forward InferenceMetrics construction.
 //   3. shim_marker_request_new: forward InferenceRequest construction.
-//   4. shim_marker_engine_init: forward InferenceEngine initialization.
+//   4. inference_marker_engine_init: forward InferenceEngine initialization.
 //
 // residual: by-value destub; not a real edge inference runtime.
 
@@ -33,7 +33,7 @@ pub fn shim_marker_request_new() -> InferenceRequest {
     return inference_request_new(1, 5, 1, 50, 100);
 }
 
-pub fn shim_marker_engine_init() -> InferenceEngine {
+pub fn inference_marker_engine_init() -> InferenceEngine {
     let cfg: ModelConfig = model_config_full(1, 64, 10, 0, 0, 8, 100, 256);
     return inference_engine_init(cfg);
 }

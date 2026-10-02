@@ -12,9 +12,6 @@
 // rules.oot 1.4: Pure mathematical data format structure, zero ambient effects.
 // rules.oot 1.7: Under 256 lines.
 // residual: Branchless binary search (Eytzinger layout) lowers via hardware cache layout optimizer.
-
-import "std/core/primitives/result.oo";
-
 pub fn binary_search_lower_bound(xs: List[Int], target: Int) -> Int {
     let mut low: Int = 0;
     let mut high: Int = list_len(xs);

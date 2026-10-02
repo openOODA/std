@@ -11,9 +11,6 @@
 //   4. Test membership with linear probing and PSL-aware early exit.
 //   5. Report current entry count.
 //   6. Remove a key by backward-shifting downstream entries into the freed slot.
-
-import "std/core/primitives/list.oo";
-
 fn fhs_list_set_str(l: List[String], idx: Int, v: String) -> List[String] {
     let n: Int = list_len(l);
     let mut out: List[String] = list_new();

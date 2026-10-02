@@ -29,7 +29,7 @@ pub fn ancient_dna_damage_mapdamage_evaluate(
     threshold: Float,
     scale_factor: Float,
 ) -> AncientDnaDamageMapdamageResult {
-    let raw: Int = state.raw_metric;    let norm: Int = raw * scale_factor;    let sig: Bool = norm >= threshold && state.is_active;    let mut p_val: Float = 0.25;
+    let raw: Float = state.raw_metric;    let norm: Float = raw * scale_factor;    let sig: Bool = norm >= threshold && state.is_active;    let mut p_val: Float = 0.25;
     if sig {
         p_val = 0.001;
     }

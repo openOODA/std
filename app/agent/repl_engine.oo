@@ -1,16 +1,12 @@
 // # Interactive REPL Evaluation Engine
-//
 // Logline: Sovereign incremental evaluation engine maintaining persistent session context across interactive inputs.
-//
 // Setup: FsReadCap validates paths; FsWriteCap writes .ooda-cache/repl/; ProcessCap invokes oodac; TimeCap tracks turns.
-//
 // Beats:
 //   1. Maintain accumulated imports, types, functions, and let bindings in ReplSession.
 //   2. Classify input into meta-commands, declarations, variable bindings, and expressions.
 //   3. Synthesize ephemeral probe harnesses under .ooda-cache/repl/ with variable silencers.
 //   4. Inquire static types without runtime execution via compiler sentinel mismatch.
 //   5. Compile probes with product `oodac build` (LLVM IR + clang + oodar).
-
 import "std/fs/os/fs.oo";
 
 pub type ReplSession = struct { compiler_bin: String, session_id: Int, is_active: Bool, turn_count: Int, imports: List[String], types: List[String], functions: List[String], bindings: List[String], var_names: List[String], var_types: List[String] };
@@ -20,17 +16,14 @@ fn repl_out_ok(txt: String) -> ReplOutput { return ReplOutput { output_text: txt
 fn repl_out_err(msg: String) -> ReplOutput { return ReplOutput { output_text: "", error_msg: msg, is_exit: false, is_error: true }; }
 fn repl_res_err(res: Result[String, String]) -> String { let em: String = match res { Ok(_) => "", Err(e) => e }; return em; }
 fn repl_res_ok(res: Result[String, String]) -> String { let s: String = match res { Ok(v) => v, Err(_) => "" }; return s; }
-
 fn repl_find_compiler(fs_r: &FsReadCap) -> String { return if fs_path_exists(fs_r, "/home/jeryd/.openooda/bin/oodac") { "/home/jeryd/.openooda/bin/oodac" } else if fs_path_exists(fs_r, "oodac/bin/oodac") { "oodac/bin/oodac" } else { "oodac" }; }
 fn repl_temp_path(sess: &ReplSession, kind: String, ext: String) -> String { return ".ooda-cache/repl/" + kind + "_" + sess.session_id.to_string() + "_" + sess.turn_count.to_string() + "." + ext; }
-
 pub fn repl_session_new(fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, time: &TimeCap) -> ReplSession {
     let _mk: Result[Void, String] = fs_mkdir_p(fs_w, ".ooda-cache/repl");
     let mut sid: Int = now_ms(time); let ns: Result[String, String] = sys_exec(proc, "date", "+%N");
     if ns.is_ok() { sid = sid * 10000 + (repl_parse_int(str_trim(repl_res_ok(ns))) % 10000); }
     return ReplSession { compiler_bin: repl_find_compiler(fs_r), session_id: sid, is_active: true, turn_count: 0, imports: list_new(), types: list_new(), functions: list_new(), bindings: list_new(), var_names: list_new(), var_types: list_new() };
 }
-
 pub fn repl_session_active_caps(sess: &ReplSession) -> String { return "Active session capabilities (4 granted):\n  - &FsReadCap    (workspace read confinement)\n  - &FsWriteCap   (cache probe generation)\n  - &ProcessCap   (compiler invocation & execution)\n  - &TimeCap      (monotonic turn timestamps)"; }
 
 pub fn repl_session_active_vars(sess: &ReplSession) -> String {
@@ -122,15 +115,19 @@ fn repl_has_var(text: String, v: String) -> Bool {
     return false;
 }
 
-fn repl_write_probe(sess: &ReplSession, fs_w: &FsWriteCap, file_path: String, is_exec: Bool, expr: String, expr_ty: String, cand: String, cand_var: String) -> Result[Void, String] {
+fn repl_probe_decls(sess: &ReplSession, is_exec: Bool, cand: String) -> String {
     let mut code: String = "// # Ephemeral REPL Probe\n// Logline: Transient execution harness\n// Setup: Ephemeral\n// Beats: 1. run\n";
     if !is_exec { code = code + "type __ReplSentinelType__ = struct { __dummy: Int };\nfn str_slice(s: String, a: Int, b: Int) -> String { return \"\"; }\nfn chars_len(s: String) -> Int { return 0; }\nfn char_at(s: String, i: Int) -> String { return \"\"; }\n"; }
     let mut i: Int = 0; while i < list_len(sess.imports) { code = code + list_get(sess.imports, i) + "\n"; i = i + 1; }
     if str_starts_with(cand, "import ") { code = code + cand + "\n"; }
     i = 0; while i < list_len(sess.types) { code = code + list_get(sess.types, i) + "\n"; i = i + 1; } if str_starts_with(cand, "type ") || str_starts_with(cand, "pub type ") { code = code + cand + "\n"; }
     i = 0; while i < list_len(sess.functions) { code = code + list_get(sess.functions, i) + "\n"; i = i + 1; } if str_starts_with(cand, "fn ") || str_starts_with(cand, "pub fn ") { code = code + cand + "\n"; }
-    code = code + "pub fn main(time: &TimeCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, sys: &ProcessCap, env: &EnvCap, alloc: &AllocCap) {\n";
-    i = 0; while i < list_len(sess.bindings) { code = code + "    { " + list_get(sess.bindings, i) + "\n"; i = i + 1; } if str_starts_with(cand, "let ") { code = code + "    { " + cand + "\n"; }
+    return code;
+}
+
+fn repl_probe_body(sess: &ReplSession, is_exec: Bool, expr: String, expr_ty: String, cand: String, cand_var: String) -> String {
+    let mut code: String = "pub fn main(time: &TimeCap, fs_r: &FsReadCap, fs_w: &FsWriteCap, sys: &ProcessCap, env: &EnvCap, alloc: &AllocCap) {\n";
+    let mut i: Int = 0; while i < list_len(sess.bindings) { code = code + "    { " + list_get(sess.bindings, i) + "\n"; i = i + 1; } if str_starts_with(cand, "let ") { code = code + "    { " + cand + "\n"; }
     let cand_rhs: String = repl_extract_let_rhs(cand);
     i = 0; while i < list_len(sess.var_names) {
         let v: String = list_get(sess.var_names, i);
@@ -148,7 +145,13 @@ fn repl_write_probe(sess: &ReplSession, fs_w: &FsWriteCap, file_path: String, is
     }
     let mut b_count: Int = list_len(sess.bindings) + if str_starts_with(cand, "let ") { 1 } else { 0 };
     while b_count > 0 { code = code + "    }\n"; b_count = b_count - 1; }
-    return fs_write_file(fs_w, file_path, code + "}\n");
+    return code + "}\n";
+}
+
+fn repl_write_probe(sess: &ReplSession, fs_w: &FsWriteCap, file_path: String, is_exec: Bool, expr: String, expr_ty: String, cand: String, cand_var: String) -> Result[Void, String] {
+    let header: String = repl_probe_decls(sess, is_exec, cand);
+    let body: String = repl_probe_body(sess, is_exec, expr, expr_ty, cand, cand_var);
+    return fs_write_file(fs_w, file_path, header + body);
 }
 
 fn repl_inquire_type(sess: &ReplSession, fs_r: &FsReadCap, fs_w: &FsWriteCap, proc: &ProcessCap, expr: String) -> Result[String, String] {

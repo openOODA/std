@@ -31,6 +31,7 @@ pub fn qaoa_graph_new(num_nodes: Int) -> QaoaProblemGraph {
 }
 
 pub fn qaoa_graph_add_edge(graph: QaoaProblemGraph, u: Int, v: Int, weight: Float) {
+    let mut graph = graph;
     let e: QaoaEdge = QaoaEdge { u: u, v: v, weight: weight };
     list_push(graph.edges, e);
     graph.num_edges = graph.num_edges + 1;

@@ -12,9 +12,6 @@
 // rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
 // rules.oot 1.7: Under 256 lines.
 // residual: QSBR epoch tracking lowers to thread quiescence collector.
-
-import "std/core/primitives/list.oo";
-
 type RcuList = struct {
     nodes: List[Int],
     generation: Int

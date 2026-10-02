@@ -66,6 +66,7 @@ pub fn raft_log_last_term(log: RaftLog) -> Int {
 
 /// Append a new command entry to the log and return assigned index.
 pub fn raft_log_append(log: RaftLog, term: Int, command: String) -> Int {
+    let mut log = log;
     let next_idx: Int = raft_log_last_index(log) + 1;
     let entry: RaftLogEntry = raft_log_entry_new(next_idx, term, command);
     let cur_entries: List[RaftLogEntry] = log.entries;
@@ -90,6 +91,7 @@ pub fn raft_log_get(log: RaftLog, index: Int) -> Option[RaftLogEntry] {
 
 /// Truncate all log entries starting from `from_index` inclusive.
 pub fn raft_log_truncate_from(log: RaftLog, from_index: Int) -> Bool {
+    let mut log = log;
     let entry_list: List[RaftLogEntry] = log.entries;
     let n: Int = list_len(entry_list);
     let mut new_entries: List[RaftLogEntry] = list_new();
@@ -107,6 +109,7 @@ pub fn raft_log_truncate_from(log: RaftLog, from_index: Int) -> Bool {
 
 /// Advance commit index up to target index.
 pub fn raft_log_commit_to(log: RaftLog, target_commit: Int) -> Bool {
+    let mut log = log;
     let last_idx: Int = raft_log_last_index(log);
     let mut new_commit: Int = target_commit;
     if new_commit > last_idx {

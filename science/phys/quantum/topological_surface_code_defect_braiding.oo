@@ -44,6 +44,7 @@ pub fn defect_braid_schedule_new(ctrl_id: Int, tgt_id: Int) -> DefectBraidSchedu
 }
 
 pub fn defect_braid_step(sched: DefectBraidSchedule, steps: Int) {
+    let mut sched = sched;
     let cur_steps: Int = sched.num_steps;
     sched.num_steps = cur_steps + steps;
 }

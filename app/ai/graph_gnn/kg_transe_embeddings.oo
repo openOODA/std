@@ -129,6 +129,7 @@ pub fn transe_normalize_entity(
     model: TransEModel,
     entity_id: Int
 ) -> Bool {
+    let mut model = model;
     let cfg: TransEConfig = model.config;
     let dim: Int = cfg.embedding_dim;
     let offset: Int = entity_id * dim;

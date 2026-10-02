@@ -12,9 +12,6 @@
 // rules.oot 1.4: Default-deny for concurrency. Explicit &ThreadCap required.
 // rules.oot 1.7: Under 256 lines.
 // residual: Distributed actor remoting lowers to network transport.
-
-import "std/core/primitives/result.oo";
-
 type ActorCell = struct {
     actor_id: Int,
     status: Int, // 0: Init, 1: Running, 2: Suspended, 3: Stopped, 4: Failed

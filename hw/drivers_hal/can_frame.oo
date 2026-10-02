@@ -3,8 +3,6 @@
 // Logline: Defines a CAN 2.0B frame struct (11-bit or 29-bit identifier, RTR flag, DLC, up to 8 data bytes) with a byte-encoding helper that packs the frame into a deterministic little-endian byte sequence.
 //
 // Setup: Pure value-returning helpers, no IO. The data field is represented as a List[Int] of byte values in 0..255. The encoder returns a Result[String, String] for invalid DLC (must be 0..8).
-
-import "std/core/primitives/str.oo";
 //
 // Beats:
 //   1. Construct a CanFrame with id, is_ext (29-bit if true, 11-bit if false), rtr, dlc, and data bytes.

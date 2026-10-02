@@ -9,8 +9,6 @@
 //   2. Group atomic records into amino acid residues and polypeptide chains.
 //   3. Compute structural center of mass and evaluate crystallographic resolution.
 
-import "./pdb_atom_record.oo";
-
 // -------------------------------------------------------------------
 // PDB Structural Data Structures
 // -------------------------------------------------------------------
@@ -60,6 +58,7 @@ pub fn pdb_residue_new(res_seq: Int, res_name: String, chain_id: String) -> PdbR
 }
 
 pub fn pdb_residue_set_ca(res: PdbResidue, x: Int, y: Int, z: Int) {
+    let mut res = res;
     res.ca_x = x;
     res.ca_y = y;
     res.ca_z = z;

@@ -12,7 +12,7 @@
 //   5. shim_marker_peer_empty: forward peer_identity_empty.
 //   6. shim_marker_config_default: forward mtls_config_default.
 //   7. shim_marker_policy_init: forward mtls_policy_init.
-//   8. shim_marker_engine_init: forward mtls_engine_init.
+//   8. mtls_marker_engine_init: forward mtls_engine_init.
 
 import "std/sec/net/mtls_types.oo";
 import "std/sec/net/mtls_cert.oo";
@@ -55,7 +55,7 @@ pub fn shim_marker_policy_init() -> MtlsSecurityPolicy {
     return mtls_policy_init("pol-1", "TLSv1.3", true, 4, true);
 }
 
-pub fn shim_marker_engine_init() -> MtlsEngine {
+pub fn mtls_marker_engine_init() -> MtlsEngine {
     let pol: MtlsSecurityPolicy = mtls_policy_init("pol-1", "TLSv1.3", true, 4, true);
     return mtls_engine_init("eng-1", pol);
 }

@@ -46,6 +46,7 @@ pub fn molecular_integrals_new(num_orbitals: Int, e_nuc: Float) -> MolecularInte
 }
 
 pub fn molecular_integrals_add_one_body(mol: MolecularIntegrals, p: Int, q: Int, val: Float) {
+    let mut mol = mol;
     let elem: OneElectronIntegral = OneElectronIntegral { p: p, q: q, value: val };
     list_push(mol.one_body_integrals, elem);
     mol.num_one_body = mol.num_one_body + 1;
@@ -59,6 +60,7 @@ pub fn molecular_integrals_add_two_body(
     s: Int,
     val: Float
 ) {
+    let mut mol = mol;
     let elem: TwoElectronIntegral = TwoElectronIntegral {
         p: p,
         q: q,

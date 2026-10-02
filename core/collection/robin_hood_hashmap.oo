@@ -9,10 +9,6 @@
 //   2. Insert via probe that swaps entries when the existing PSL exceeds the new PSL, then continues the displaced entry.
 //   3. Lookup stops probing as soon as the running probe count meets or exceeds the current PSL.
 //   4. Delete by marking the slot empty and backward-shifting any downstream entries with a non-zero PSL.
-
-import "std/core/primitives/list.oo";
-import "std/core/primitives/result.oo";
-
 type RobinHoodMap = struct {
     keys: List[Int],
     values: List[Int],
