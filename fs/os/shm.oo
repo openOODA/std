@@ -10,8 +10,6 @@
 //   3. Map shared memory file descriptors into process address space.
 //   4. Unmap buffers and release file descriptor resources cleanly.
 
-import "std/fs/os/os.oo";
-
 // Protection flags
 pub fn shm_prot_none() -> Int { return 0; }
 pub fn shm_prot_read() -> Int { return 1; }
@@ -161,7 +159,7 @@ pub fn shm_map_buffer(sys: &SysCap, fd: Int, size_bytes: Int, writable: Bool) ->
 
 // High-level: Unmap buffer pointer token
 pub fn shm_unmap_buffer(sys: &SysCap, ptr_tok: String, size_bytes: Int) -> Result[Bool, String] {
-    if !ptr_tok.starts_with("ptr:") {
+    if !str_starts_with(ptr_tok, "ptr:") {
         return Err("ERR\tshm\tinvalid pointer token");
     }
     let addr: Int = parse_ptr_hex(ptr_tok);

@@ -179,13 +179,12 @@ pub fn smiles_molecule_parse(smiles_str: String) -> SmilesMolecule {
                 let cur_idx: Int = list_len(atoms);
                 let atom_obj: Atom = atom_create(symbol, atomic_num, 0, default_v, is_aro, 0, 0);                atoms = list_push(atoms, atom_obj);
                 if last_atom_idx >= 0 {
-                    let mut btype: Bool = next_bond_type;
-
+                    let mut btype: Int = next_bond_type;
                     if is_aro && is_next_bond_aromatic {
-
                         btype = 4;
-
-                    }                    let new_bond: Bool = bond_create(last_atom_idx, cur_idx, btype, is_aro || is_next_bond_aromatic);                    bonds = list_push(bonds, new_bond);
+                    }
+                    let new_bond: Bond = bond_create(last_atom_idx, cur_idx, btype, is_aro || is_next_bond_aromatic);
+                    bonds = list_push(bonds, new_bond);
                 }
                 last_atom_idx = cur_idx;
                 next_bond_type = 1;

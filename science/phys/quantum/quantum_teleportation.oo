@@ -10,10 +10,7 @@
 //   3. Decode classical measurement outcomes and apply conditional Bob X and Z corrections.
 
 import "./qubit_state.oo";
-import "./quantum_register.oo";
-import "./complex_matrix2x2.oo";
 import "./quantum_circuit.oo";
-import "./circuit_runner.oo";
 
 type TeleportationResult = struct {
     input_state: QubitState,
@@ -44,7 +41,7 @@ pub fn simulate_teleportation(initial_q: &QubitState) -> TeleportationResult {
     let b: Complex = qubit_get_beta(initial_q);
 
     // Build circuit to validate construction
-    let circ: QuantumCircuit = build_teleportation_circuit();
+    let _circ: QuantumCircuit = build_teleportation_circuit();
 
     // In ideal teleportation with classical feedforward correction, Bob's reconstructed
     // state matches Alice's input state with unit fidelity.

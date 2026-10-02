@@ -52,6 +52,29 @@ pub fn capability_rights_to_mask(rights_struct: CapabilityRights) -> Int {
     return mask_res;
 }
 
+pub fn capability_rights_diminish(parent_rights: Int, requested_rights: Int) -> Int {
+    let p_r: CapabilityRights = capability_rights_from_mask(parent_rights);
+    let q_r: CapabilityRights = capability_rights_from_mask(requested_rights);
+    let mut res_r: Bool = false;
+    let mut res_w: Bool = false;
+    let mut res_x: Bool = false;
+    let mut res_d: Bool = false;
+    let mut res_v: Bool = false;
+    if p_r.allow_read && q_r.allow_read { res_r = true; }
+    if p_r.allow_write && q_r.allow_write { res_w = true; }
+    if p_r.allow_execute && q_r.allow_execute { res_x = true; }
+    if p_r.allow_delegate && q_r.allow_delegate { res_d = true; }
+    if p_r.allow_revoke && q_r.allow_revoke { res_v = true; }
+    let out_rights: CapabilityRights = CapabilityRights {
+        allow_read: res_r,
+        allow_write: res_w,
+        allow_execute: res_x,
+        allow_delegate: res_d,
+        allow_revoke: res_v
+    };
+    return capability_rights_to_mask(out_rights);
+}
+
 pub fn capability_rights_format_str(rights_struct: CapabilityRights) -> String {
     let mut res: String = "";
     if rights_struct.allow_read {

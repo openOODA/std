@@ -127,12 +127,12 @@ pub fn impulse_solve_contact_2d(
     }
 
     // Restitution velocity bias
-    if v_normal < -cfg.restitution_velocity_threshold {
+    if v_normal < (0.0 - cfg.restitution_velocity_threshold) {
         bias = bias - (c.restitution * v_normal);
     }
 
     // Compute raw normal impulse: - (v_normal - bias) * normal_mass
-    let raw_jn: Float = (- (v_normal - bias)) * c.normal_mass;
+    let raw_jn: Float = (0.0 - (v_normal - bias)) * c.normal_mass;
     let old_jn: Float = c.normal_impulse_acc;
     let mut new_jn: Float = old_jn + raw_jn;
     if new_jn < 0.0 {
@@ -142,13 +142,13 @@ pub fn impulse_solve_contact_2d(
 
     // Relative velocity projected onto tangent
     let v_tangent: Float = (v_rel_x * c.tangent_x) + (v_rel_y * c.tangent_y);
-    let raw_jt: Float = (- v_tangent) * c.tangent_mass;
+    let raw_jt: Float = (0.0 - v_tangent) * c.tangent_mass;
     let max_friction: Float = c.friction * new_jn;
 
     let old_jt: Float = c.tangent_impulse_acc;
     let mut new_jt: Float = old_jt + raw_jt;
-    if new_jt < -max_friction {
-        new_jt = -max_friction;
+    if new_jt < (0.0 - max_friction) {
+        new_jt = 0.0 - max_friction;
     } else if new_jt > max_friction {
         new_jt = max_friction;
     }

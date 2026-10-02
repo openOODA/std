@@ -28,12 +28,12 @@ pub fn watermark_embed_text(
     meta: WatermarkMetadata,
     secret_key: String
 ) -> Result[String, String] {
-    let key_len: Int = secret_key.len();
+    let key_len: Int = chars_len(secret_key);
     if key_len == 0 {
         return Err("WATERMARK_ERR: Secret key cannot be empty");
     }
     let w_id: String = meta.watermark_id;
-    let id_len: Int = w_id.len();
+    let id_len: Int = chars_len(w_id);
     if id_len == 0 {
         return Err("WATERMARK_ERR: Invalid watermark ID");
     }
@@ -52,7 +52,7 @@ pub fn watermark_embed_fragile(
     content: String,
     secret_key: String
 ) -> Result[String, String] {
-    let key_len: Int = secret_key.len();
+    let key_len: Int = chars_len(secret_key);
     if key_len == 0 {
         return Err("WATERMARK_ERR: Secret key required for fragile watermark creation");
     }
@@ -69,7 +69,7 @@ pub fn watermark_embed_robust(
     meta: WatermarkMetadata,
     secret_key: String
 ) -> Result[String, String] {
-    let key_len: Int = secret_key.len();
+    let key_len: Int = chars_len(secret_key);
     if key_len == 0 {
         return Err("WATERMARK_ERR: Secret key required for robust watermark creation");
     }
@@ -96,7 +96,7 @@ pub fn watermark_extract_text(
     watermarked_text: String,
     secret_key: String
 ) -> WatermarkExtractionResult {
-    let t_len: Int = watermarked_text.len();
+    let t_len: Int = chars_len(watermarked_text);
     if t_len == 0 {
         return WatermarkExtractionResult {
             watermark_id: "",
@@ -136,11 +136,11 @@ pub fn watermark_verify_fragile(
     content: String,
     secret_key: String
 ) -> Bool {
-    let c_len: Int = content.len();
+    let c_len: Int = chars_len(content);
     if c_len == 0 {
         return false;
     }
-    let key_len: Int = secret_key.len();
+    let key_len: Int = chars_len(secret_key);
     if key_len == 0 {
         return false;
     }

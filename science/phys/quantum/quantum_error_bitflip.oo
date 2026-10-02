@@ -11,9 +11,6 @@
 
 import "./qubit_state.oo";
 import "./quantum_register.oo";
-import "./complex_matrix2x2.oo";
-import "./quantum_circuit.oo";
-import "./circuit_runner.oo";
 
 type QecBitFlipResult = struct {
     error_qubit: Int,
@@ -21,6 +18,26 @@ type QecBitFlipResult = struct {
     corrected_state: QubitState,
     success: Bool
 };
+
+pub fn apply_x_to_register(reg: &mut QuantumRegister, target: Int) {
+    let targ_mask: Int = int_pow2(target);
+    let n_states: Int = reg.num_states;
+    let old_amps: List[Complex] = reg.amplitudes;
+    let mut new_amps: List[Complex] = list_new();
+    let mut i: Int = 0;
+    while i < n_states {
+        let targ_bit: Int = (i / targ_mask) % 2;
+        let pair_idx: Int = if targ_bit == 0 {
+            i + targ_mask
+        } else {
+            i - targ_mask
+        };
+        let amp: Complex = list_get(old_amps, pair_idx);
+        list_push(new_amps, amp);
+        i = i + 1;
+    }
+    reg.amplitudes = new_amps;
+}
 
 pub fn bitflip_encode(q: &QubitState) -> QuantumRegister {
     let mut reg: QuantumRegister = register_new(3);
@@ -43,8 +60,7 @@ pub fn bitflip_encode(q: &QubitState) -> QuantumRegister {
 
 pub fn bitflip_inject_error(reg: &mut QuantumRegister, flip_qubit: Int) {
     if flip_qubit >= 0 && flip_qubit < 3 {
-        let mx: Matrix2x2 = pauli_x_matrix();
-        apply_matrix_to_register(reg, flip_qubit, &mx);
+        apply_x_to_register(reg, flip_qubit);
     }
 }
 
@@ -85,8 +101,7 @@ pub fn bitflip_detect_syndrome(reg: &QuantumRegister) -> Int {
 
 pub fn bitflip_correct(reg: &mut QuantumRegister, error_qubit: Int) {
     if error_qubit >= 0 && error_qubit < 3 {
-        let mx: Matrix2x2 = pauli_x_matrix();
-        apply_matrix_to_register(reg, error_qubit, &mx);
+        apply_x_to_register(reg, error_qubit);
     }
 }
 

@@ -28,7 +28,6 @@ import "panic_hook_registry.oo";
 import "stopwatch_time.oo";
 import "telemetry_ndjson.oo";
 import "telemetry_sink.oo";
-import "tracer_span.oo";
 import "trace_span.oo";
 import "counterexample_capture.oo";
 
@@ -104,9 +103,9 @@ pub fn diag_mod_telemetry_sink_new(capacity: Int) -> TelemetrySink { return tele
 pub fn diag_mod_telemetry_sink_push(sink: TelemetrySink, event: String) -> TelemetrySink { return telemetry_sink_push(sink, event); }
 
 // Public tracer surface: diag_mod_tracer_*
-pub fn diag_mod_tracer_span_new(trace_id: String, span_id: String, name: String, start_ms: Int) -> TraceSpan { return trace_span_new(trace_id, span_id, name, start_ms); }
-pub fn diag_mod_tracer_span_finish(span: TraceSpan, end_ms: Int) -> TraceSpan { return trace_span_finish(span, end_ms); }
-pub fn diag_mod_tracer_span_duration(span: TraceSpan) -> Int { return trace_span_duration(span); }
+pub fn diag_mod_tracer_span_new(id: Int, name: String, parent_id: Int, depth: Int, start_ts: Int) -> TraceSpan { return trace_span_new(id, name, parent_id, depth, start_ts); }
+pub fn diag_mod_tracer_span_finish(span: &mut TraceSpan, end_ts: Int, status: Int, mem: Int) { trace_span_finish(span, end_ts, status, mem); }
+pub fn diag_mod_tracer_span_duration(span: &TraceSpan) -> Int { return trace_span_duration(span); }
 
 // Public counterexample surface: diag_mod_counterexample_*
 pub fn diag_mod_counterexample_new(name: String, loc: String) -> CounterexampleState { return counterexample_capture_new(name, loc); }

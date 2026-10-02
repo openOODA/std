@@ -75,7 +75,7 @@ pub fn optimizer_param_shift_step(energy_plus: Float, energy_minus: Float) -> Fl
 }
 
 pub fn optimizer_adam_update(
-    state: OptimizerState,
+    state: &mut OptimizerState,
     params: List[Float],
     gradients: List[Float]
 ) -> List[Float] {

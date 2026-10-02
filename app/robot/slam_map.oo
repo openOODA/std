@@ -21,7 +21,7 @@ pub fn slam_update_landmarks(landmarks: List[Landmark], obs: Observation, robot_
     let len: Int = list_len(landmarks);    let mut i: Int = 0;    let mut found: Bool = false;    let mut new_landmarks: List[Landmark] = list_new();
 
     while i < len {
-        let lm: Int = list_get(landmarks, i);        let lm_id = lm.id;
+        let lm: Landmark = list_get(landmarks, i);        let lm_id = lm.id;
         let obs_lm_id: Int = obs.landmark_id;        if lm_id == obs_lm_id {
             found = true;
             let est: Landmark = slam_landmark_global_pos(robot_pose, obs);            let count = lm.observation_count;
@@ -69,7 +69,7 @@ pub fn grid_map_set_cell(map: OccupancyGridMap, cx: Int, cy: Int, prob: Int) -> 
     let len: Int = list_len(map.cells);    let mut i: Int = 0;    let mut found: Bool = false;    let mut new_cells: List[OccupancyCell] = list_new();
     let clamped_prob: Int = clamp_val(prob, 0, 100);
     while i < len {
-        let cell: Int = list_get(map.cells, i);        if cell.x == cx {
+        let cell: OccupancyCell = list_get(map.cells, i);        if cell.x == cx {
             if cell.y == cy {
                 found = true;
                 let updated: OccupancyCell = OccupancyCell {                    x: cx,
@@ -106,7 +106,7 @@ pub fn grid_map_set_cell(map: OccupancyGridMap, cx: Int, cy: Int, prob: Int) -> 
 
 pub fn grid_map_get_cell(map: OccupancyGridMap, cx: Int, cy: Int) -> Int {
     let len: Int = list_len(map.cells);    let mut i: Int = 0;    while i < len {
-        let cell: Int = list_get(map.cells, i);        if cell.x == cx {
+        let cell: OccupancyCell = list_get(map.cells, i);        if cell.x == cx {
             if cell.y == cy {
                 return cell.probability;
             }
@@ -137,8 +137,8 @@ pub fn slam_detect_loop_closure(keyframes: List[Keyframe], current_pose: Pose2D,
 
     let mut i: Int = 0;    // Exclude recent 3 keyframes to prevent immediate false positive loops
     let end_idx: Int = len - 3;    while i < end_idx {
-        let kf: Int = list_get(keyframes, i);        let kf_pose = kf.pose;
-        let dx: Int = current_pose.x - kf_pose.x;        let dy: Int = current_pose.y - kf_pose.y;        let dx2: Int = dx * dx;        let dy2: Int = dy * dy;        let dist_sq: Int = dx2 + dy2;        let dist: Float = slam_isqrt(dist_sq);        if dist <= max_dist_mm {
+        let kf: Keyframe = list_get(keyframes, i);        let kf_pose = kf.pose;
+        let dx: Int = current_pose.x - kf_pose.x;        let dy: Int = current_pose.y - kf_pose.y;        let dx2: Int = dx * dx;        let dy2: Int = dy * dy;        let dist_sq: Int = dx2 + dy2;        let dist: Int = slam_isqrt(dist_sq);        if dist <= max_dist_mm {
             return kf.id;
         }
         i = i + 1;

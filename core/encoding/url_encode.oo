@@ -11,7 +11,6 @@
 // rules.oot 1.4: Pure data module, zero ambient effects.
 // rules.oot 1.7: Under 256 lines.
 
-import "std/core/primitives/result.oo";
 import "std/core/primitives/str.oo";
 import "std/core/primitives/byte.oo";
 import "std/core/encoding/hex.oo";
@@ -111,12 +110,13 @@ pub fn url_get_param(query_string: String, key_name: String) -> Result[String, S
         cur = str_slice(cur, 1, chars_len(cur));
     }
     while chars_len(cur) > 0 {
-        let mut pair: String = cur;
         let amp_pos: Int = str_index_of(cur, "&");
+        let mut pair: String = "";
         if amp_pos >= 0 {
             pair = str_slice(cur, 0, amp_pos);
             cur = str_slice(cur, amp_pos + 1, chars_len(cur));
         } else {
+            pair = str_slice(cur, 0, chars_len(cur));
             cur = "";
         }
         let eq_pos: Int = str_index_of(pair, "=");
@@ -124,10 +124,10 @@ pub fn url_get_param(query_string: String, key_name: String) -> Result[String, S
             let raw_k: String = str_slice(pair, 0, eq_pos);
             let raw_v: String = str_slice(pair, eq_pos + 1, chars_len(pair));
             let k_res: Result[String, String] = url_decode(raw_k);
-            let mut k: String = raw_k;
+            let mut k: String = "";
             match k_res {
                 Ok(val) => { k = val; }
-                Err(e)  => { k = raw_k; }
+                Err(e)  => { k = str_slice(pair, 0, eq_pos); }
             }
             if k == key_name {
                 let v_res: Result[String, String] = url_decode(raw_v);

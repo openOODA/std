@@ -23,6 +23,19 @@ type ChebyshevMoment = struct {
     damping_factor: Float
 };
 
+fn int_to_float_cheb(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 10000 { f = f + 10000.0; count = count - 10000; }
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
 pub fn chebyshev_mps_config_default(num_moments: Int) -> ChebyshevMpsConfig {
     return ChebyshevMpsConfig {
         num_moments: num_moments,
@@ -43,8 +56,8 @@ pub fn chebyshev_rescale_energy(cfg: ChebyshevMpsConfig, e: Float) -> Float {
 }
 
 pub fn jackson_kernel_damping(n: Int, num_moments: Int) -> Float {
-    let num_m_f: Float = (num_moments * 1.0);
-    let n_f: Float = (n * 1.0);
+    let num_m_f: Float = int_to_float_cheb(num_moments);
+    let n_f: Float = int_to_float_cheb(n);
     let n_plus_1: Float = num_m_f + 1.0;
     let ratio: Float = (num_m_f - n_f + 1.0) / n_plus_1;
     let damping: Float = ratio;

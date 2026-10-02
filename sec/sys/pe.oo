@@ -23,7 +23,17 @@
 // Real implementations remain in split modules (check green alone).
 // Shim unit needs OO_LIST_AMBIENT_QUOTA=2147483648 (huge monomorphize).
 
-import "std/sec/sys/pe_stubs.oo";
+import "std/sec/sys/pe_types.oo";
+import "std/sec/sys/pe_ops.oo";
+
+pub fn pe_get_machine_name(machine: Int) -> String {
+    if machine == pe_machine_amd64() { return "AMD64"; }
+    return "UNKNOWN";
+}
+
+pub fn pe_image_do_work(image: &PeImage) -> Int {
+    return image.raw_size;
+}
 
 pub fn shim_marker_dos_magic() -> Int {
     return pe_dos_magic();
@@ -47,8 +57,4 @@ pub fn shim_marker_image_new() -> PeImage {
 
 pub fn shim_marker_machine_name() -> String {
     return pe_get_machine_name(pe_machine_amd64());
-}
-
-pub fn shim_marker_image_do_work(image: &PeImage) -> Int {
-    return pe_image_do_work(image);
 }

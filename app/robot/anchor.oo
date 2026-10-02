@@ -54,8 +54,8 @@ pub fn robot_mod_kin_ops_vec2_add(v1: Vec2, v2: Vec2) -> Vec2 { return vec2_add(
 
 // Public locomotion engine surface: robot_mod_loco_*
 pub fn robot_mod_loco_init(cap: SysCap, config: LocomotionConfig) -> Locomotion { return locomotion_init(cap, config); }
-pub fn robot_mod_loco_start(loco: Locomotion) { return locomotion_start(loco); }
-pub fn robot_mod_loco_stop(loco: Locomotion) { return locomotion_stop(loco); }
+pub fn robot_mod_loco_start(loco: &mut Locomotion) { return locomotion_start(loco); }
+pub fn robot_mod_loco_stop(loco: &mut Locomotion) { return locomotion_stop(loco); }
 
 // Public locomotion ops (diff-drive) surface: robot_mod_diff_*
 pub fn robot_mod_diff_forward(w_left: Float, w_right: Float, wheel_radius: Float, track_width: Float) -> Twist { return diff_drive_forward(w_left, w_right, wheel_radius, track_width); }
@@ -89,8 +89,8 @@ pub fn robot_mod_safety_obstacle_proximity(prox: ObstacleProximity, measured_mm:
 
 // Public safety engine surface: robot_mod_safety_engine_*
 pub fn robot_mod_safety_engine_init(cap: SysCap) -> SafetyMonitor { return safety_monitor_init(cap); }
-pub fn robot_mod_safety_engine_trigger_estop(mon: SafetyMonitor, reason_code: Int, timestamp_ms: Int) { return safety_monitor_trigger_estop(mon, reason_code, timestamp_ms); }
-pub fn robot_mod_safety_engine_reset_estop(mon: SafetyMonitor, sys: SysCap) -> Bool { return safety_monitor_reset_estop(mon, sys); }
+pub fn robot_mod_safety_engine_trigger_estop(mon: &mut SafetyMonitor, reason_code: Int, timestamp_ms: Int) { return safety_monitor_trigger_estop(mon, reason_code, timestamp_ms); }
+pub fn robot_mod_safety_engine_reset_estop(mon: &mut SafetyMonitor, sys: SysCap) -> Bool { return safety_monitor_reset_estop(mon, sys); }
 
 // Public SLAM engine surface: robot_mod_slam_engine_*
 pub fn robot_mod_slam_engine_new() -> SlamState { return slam_engine_new(); }

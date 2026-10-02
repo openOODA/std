@@ -1,6 +1,6 @@
 // # Collision types
 //
-// Logline: ColliderAabb implementedbed off nested Vec3 lists.
+// Logline: Collision geometry and detection primitive types.
 //
 // Setup: Pure .oo standard library module or subsystem.
 //
@@ -8,8 +8,6 @@
 //   1. Execute core data structures and functional algorithms.
 //   2. Enforce invariant constraints and fail-closed Result returns.
 //   3. Export domain interfaces for high-integrity composition.
-//
-// residual: List[struct] implementedbed.
 
 type ColliderAabb = struct {
     min_x: Int,
@@ -26,3 +24,57 @@ pub fn collider_aabb_new(min_x: Int, max_x: Int) -> ColliderAabb {
 pub fn collider_aabb_min_x(b: ColliderAabb) -> Int {
     return b.min_x;
 }
+
+type Vec3 = struct {
+    x: Float,
+    y: Float,
+    z: Float
+};
+
+type Ray = struct {
+    origin: Vec3,
+    dir: Vec3
+};
+
+type Plane = struct {
+    normal: Vec3,
+    dist: Float
+};
+
+type Sphere = struct {
+    centre: Vec3,
+    radius: Float
+};
+
+type AABB = struct {
+    min: Vec3,
+    max: Vec3
+};
+
+type OBB = struct {
+    centre: Vec3,
+    extents: Vec3,
+    axis_x: Vec3,
+    axis_y: Vec3,
+    axis_z: Vec3
+};
+
+type Capsule = struct {
+    a: Vec3,
+    b: Vec3,
+    radius: Float
+};
+
+type RaycastHit = struct {
+    hit: Int,
+    distance: Float,
+    point: Vec3,
+    normal: Vec3
+};
+
+type ContactPoint = struct {
+    has_contact: Int,
+    penetration: Float,
+    point: Vec3,
+    normal: Vec3
+};

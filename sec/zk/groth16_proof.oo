@@ -9,7 +9,8 @@
 //   2. Define Groth16 proving key layout over BN254.
 //   3. Implement prover synthesis and proof generation routines.
 
-import "./bn254_pairing.oo";
+import "./bn254_g1.oo";
+import "./bn254_g2.oo";
 
 type Groth16Proof = struct {
     a_g1: Bn254G1Affine,
@@ -35,8 +36,8 @@ type Groth16ProvingKey = struct {
 };
 
 pub fn groth16_proof_empty(mod_val: Int) -> Groth16Proof {
-    let inf_g1: Bn254G1Affine = bn254_g1_infinity(mod_val);
-    let inf_g2: Bn254G2Affine = bn254_g2_infinity(mod_val);
+    let inf_g1: Bn254G1Affine = bn254_g1_infinity();
+    let inf_g2: Bn254G2Affine = bn254_g2_infinity();
     return Groth16Proof {
         a_g1: inf_g1,
         b_g2: inf_g2,

@@ -61,7 +61,7 @@ pub fn motor_bank_add_servo(bank_in: MotorBank, sv_item: ServoState) -> MotorBan
     };
 }
 
-pub fn motor_bank_emergency_stop(mb: MotorBank) {
+pub fn motor_bank_emergency_stop(mb: &mut MotorBank) {
     let dc_len: Int = list_len(mb.dc_motors);
     let mut idx_i: Int = 0;
     let mut stopped_dc: List[DcMotor] = list_new();
@@ -120,21 +120,21 @@ pub fn motors_init(cap: SysCap) -> Motors {
     };
 }
 
-pub fn motors_start(mot: Motors) {
+pub fn motors_start(mot: &mut Motors) {
     mot.is_active = true;
 }
 
-pub fn motors_stop(mot: Motors) {
+pub fn motors_stop(mot: &mut Motors) {
     mot.is_active = false;
     motor_bank_emergency_stop(&mut mot.bank);
 }
 
-pub fn motors_emergency_stop(mot: Motors) {
+pub fn motors_emergency_stop(mot: &mut Motors) {
     mot.is_active = false;
     motor_bank_emergency_stop(&mut mot.bank);
 }
 
-pub fn motors_step(mot: Motors, dt: Float) {
+pub fn motors_step(mot: &mut Motors, dt: Float) {
     if mot.is_active == false {
         return;
     }

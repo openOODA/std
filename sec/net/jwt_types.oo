@@ -96,6 +96,34 @@ type JwtEngine = struct {
     system_halted: Bool
 };
 
+pub fn jwt_token_create(
+    header: JwtHeader,
+    payload: JwtPayload,
+    raw_token: String,
+    signature: String
+) -> Result[JwtToken, String] {
+    let tok: JwtToken = JwtToken {
+        raw_token: raw_token,
+        header: header,
+        payload: payload,
+        signature: signature,
+        signing_algorithm: header.alg,
+        issued_at: payload.iat,
+        expires_at: payload.exp,
+        is_verified: false,
+        is_revoked: false,
+        is_valid: true
+    };
+    return Ok(tok);
+}
+
+pub fn jwt_token_is_valid(token: JwtToken, current_time: Int, config: JwtConfig) -> Bool {
+    if token.is_valid == false { return false; }
+    if token.is_revoked { return false; }
+    if token.expires_at > 0 && current_time > token.expires_at { return false; }
+    return true;
+}
+
 // Marker so standalone oodac check has a function body.
 pub fn jwt_types_marker() -> Int {
     return 0;

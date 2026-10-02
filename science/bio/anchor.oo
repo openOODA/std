@@ -91,9 +91,9 @@ pub fn bio_mod_central_transcribe(dna_seq: String) -> String { return central_tr
 pub fn bio_mod_central_reverse_transcribe(rna_seq: String) -> String { return central_reverse_transcribe(rna_seq); }
 
 // Public Hodgkin-Huxley surface: bio_mod_hh_*
-pub fn bio_mod_hh_ionic_current(v: Float, m: Float, h: Float, n: Float, gna: Float, gk: Float, gl: Float, ena: Float, ek: Float, el: Float) -> Float { return hh_ionic_current(v, m, h, n, gna, gk, gl, ena, ek, el); }
-pub fn bio_mod_hh_dv_dt(v: Float, m: Float, h: Float, n: Float, gna: Float, gk: Float, gl: Float, ena: Float, ek: Float, el: Float, i_ext: Float, c_m: Float) -> Float { return hh_dv_dt(v, m, h, n, gna, gk, gl, ena, ek, el, i_ext, c_m); }
-pub fn bio_mod_hh_resting_stable(v: Float, threshold: Float) -> Int { return hh_resting_stable(v, threshold); }
+pub fn bio_mod_hh_ionic_current(v: Float, m: Float, h: Float, n: Float, gna: Float, gk: Float, gl: Float, ena: Float, ek: Float, el: Float) -> Result[Float, String] { return hh_ionic_current(v, m, h, n, gna, gk, gl, ena, ek, el); }
+pub fn bio_mod_hh_dv_dt(v: Float, m: Float, h: Float, n: Float, gna: Float, gk: Float, gl: Float, ena: Float, ek: Float, el: Float, i_ext: Float, c_m: Float) -> Result[Float, String] { return hh_dv_dt(v, m, h, n, gna, gk, gl, ena, ek, el, i_ext, c_m); }
+pub fn bio_mod_hh_resting_stable(v_rest: Float, m: Float, h: Float, n: Float, g_na: Float, g_k: Float, g_l: Float, v_na: Float, v_k: Float, v_l: Float) -> Result[Int, String] { return hh_resting_stable(v_rest, m, h, n, g_na, g_k, g_l, v_na, v_k, v_l); }
 
 // Private sibling inventory (DO NOT IMPORT DIRECTLY):
 //   _law files (e.g. beer_lambert_law.oo, chargaff_law.oo, eigen_quasispecies_law.oo, hardy_weinberg_law.oo, mendel_segregation_law.oo, phylogenetic_distance_law.oo)

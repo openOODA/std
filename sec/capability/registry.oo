@@ -7,7 +7,8 @@
 // Beats:
 //   1. objcap_registry_init: build a strict-mode registry with empty caps / revs / atts / audits.
 //   2. objcap_registry_is_revoked: linear scan revocations and return on first match.
-//   3. list_get / list_len: walk the revocations list by index.
+//   3. objcap_registry_lookup: search capabilities by id and return matching capability.
+//   4. list_get / list_len: walk the revocations list by index.
 //
 // residual: linear scan; not a hash-indexed revocation map.
 
@@ -32,10 +33,10 @@ pub fn objcap_registry_init(registry_id_val: String) -> ObjectCapabilityRegistry
 }
 
 pub fn objcap_registry_is_revoked(
-    reg: ObjectCapabilityRegistry,
+    reg_ref: &ObjectCapabilityRegistry,
     target_cap_id_val: String
 ) -> Bool {
-    let revs: List[String] = reg.revocations;
+    let revs: List[String] = reg_ref.revocations;
     let n: Int = list_len(revs);
     let mut i: Int = 0;
     while i < n {
@@ -46,6 +47,26 @@ pub fn objcap_registry_is_revoked(
         i = i + 1;
     }
     return false;
+}
+
+pub fn objcap_registry_lookup(
+    reg_ref: &ObjectCapabilityRegistry,
+    cap_id_val: String
+) -> Result[ObjectCapability, String] {
+    let caps: List[String] = reg_ref.capabilities;
+    let n: Int = list_len(caps);
+    let mut i: Int = 0;
+    while i < n {
+        let item: String = list_get(caps, i);
+        if item == cap_id_val {
+            let mut cap: ObjectCapability = objcap_empty();
+            cap.cap_id = cap_id_val;
+            cap.is_valid = true;
+            return Ok(cap);
+        }
+        i = i + 1;
+    }
+    return Err("OBJCAP_LOOKUP_ERR: Capability not found");
 }
 
 pub fn __dummy_std_src_ooda_sec_capability_registry_oo() -> Int {

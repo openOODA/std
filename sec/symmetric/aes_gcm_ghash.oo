@@ -9,8 +9,6 @@
 //   2. Multiply and XOR 16-byte blocks for GHASH.
 //   3. Hash padded AAD, ciphertext, and 128-bit length block.
 
-import "std/sec/ct/ct_primitives.oo";
-
 pub fn gcm_xor_byte(a: Int, b: Int) -> Int {
     return (a | b) - (a & b);
 }

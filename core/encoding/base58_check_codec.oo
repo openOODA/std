@@ -195,7 +195,9 @@ pub fn base58_check_codec_enc(payload: List[Int]) -> B58Out {
         }
         i = i + 1;
     }
-    let mut buf: List[Int] = payload;
+    let mut buf: List[Int] = list_new();
+    let mut bi: Int = 0;
+    while bi < list_len(payload) { buf = list_push(buf, list_get(payload, bi)); bi = bi + 1; }
     let cs: List[Int] = b58_cs(payload);
     buf = list_push(buf, list_get(cs, 0));
     buf = list_push(buf, list_get(cs, 1));

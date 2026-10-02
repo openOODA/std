@@ -29,7 +29,7 @@ pub fn chem_mod_arrhenius_rate_k(rxn: ArrheniusReaction, temp_k: Float) -> Float
 
 // Public chemical equilibrium surface: chem_mod_equilibrium_*
 pub fn chem_mod_chem_gas_constant() -> Float { return chem_gas_constant(); }
-pub fn chem_mod_chemical_equilibrium_solve(gibbs_kj: Float, temp_k: Float) -> Float { return chemical_equilibrium_solve(gibbs_kj, temp_k); }
+pub fn chem_mod_chemical_equilibrium_solve(k_fwd: Float, k_rev: Float, q_quotient: Float, temp_k: Float) -> EquilibriumState { return chemical_equilibrium_solve(k_fwd, k_rev, q_quotient, temp_k); }
 pub fn chem_mod_vant_hoff_k2(k1: Float, delta_h: Float, t1: Float, t2: Float) -> Float { return vant_hoff_k2(k1, delta_h, t1, t2); }
 pub fn chem_mod_equilibrium_from_gibbs(delta_g_std: Float, temp_k: Float) -> Float { return equilibrium_constant_from_gibbs(delta_g_std, temp_k); }
 
@@ -51,8 +51,8 @@ pub fn chem_mod_hk_kohn_sham_orbital_energy(density_n: Float, hopping_t: Float) 
 
 // Public transition-state-theory surface: chem_mod_tst_*
 pub fn chem_mod_tst_prefactor(temp_k: Float, k_b_jk: Float, h_js: Float) -> Result[Float, String] { return tst_prefactor(temp_k, k_b_jk, h_js); }
-pub fn chem_mod_tst_rate_constant(prefactor: Float, activation_energy: Float, temp_k: Float) -> Result[Float, String] { return tst_rate_constant(prefactor, activation_energy, temp_k); }
-pub fn chem_mod_tst_activation_enthalpy(rate: Float, prefactor: Float, temp_k: Float) -> Result[Float, String] { return tst_activation_enthalpy(rate, prefactor, temp_k); }
+pub fn chem_mod_tst_rate_constant(delta_g_jmol: Float, temp_k: Float, k_b_jk: Float, h_js: Float, r_jmolk: Float) -> Result[Float, String] { return tst_rate_constant(delta_g_jmol, temp_k, k_b_jk, h_js, r_jmolk); }
+pub fn chem_mod_tst_activation_enthalpy(delta_g_jmol: Float, temp_k: Float, delta_s_jmolk: Float) -> Result[Float, String] { return tst_activation_enthalpy(delta_g_jmol, temp_k, delta_s_jmolk); }
 
 // Public Nernst surface: chem_mod_nernst_*
 pub fn chem_mod_nernst_gas_constant() -> Float { return nernst_gas_constant(); }

@@ -55,11 +55,12 @@ pub fn map_get(m: HashMap, key: String) -> Result[String, String] {
     let mut cur: String = m.data + "";
     while chars_len(cur) > 0 {
         let nl_pos: Int = map_find_char(cur, "\n");
-        let mut line: String = cur;
+        let mut line: String = "";
         if nl_pos >= 0 {
             line = str_slice(cur, 0, nl_pos);
             cur = str_slice(cur, nl_pos + 1, chars_len(cur));
         } else {
+            line = str_slice(cur, 0, chars_len(cur));
             cur = "";
         }
         let colon_pos: Int = map_find_char(line, ":");
@@ -87,7 +88,9 @@ pub fn map_insert(mut m: HashMap, key: String, val: String) -> HashMap {
         m = map_remove(m, key);
     }
     let k_len: Int = chars_len(key);
-    m.data = m.data + k_len.to_string() + ":" + key + ":" + val + "\n";
+    let k_len_str: String = k_len.to_string();
+    let entry: String = k_len_str + ":" + key + ":" + val + "\n";
+    m.data = m.data + entry;
     m.size = m.size + 1;
     return m;
 }
@@ -98,11 +101,12 @@ pub fn map_remove(mut m: HashMap, key: String) -> HashMap {
     let mut found: Bool = false;
     while chars_len(cur) > 0 {
         let nl_pos: Int = map_find_char(cur, "\n");
-        let mut line: String = cur;
+        let mut line: String = "";
         if nl_pos >= 0 {
             line = str_slice(cur, 0, nl_pos);
             cur = str_slice(cur, nl_pos + 1, chars_len(cur));
         } else {
+            line = str_slice(cur, 0, chars_len(cur));
             cur = "";
         }
         let colon_pos: Int = map_find_char(line, ":");
@@ -129,11 +133,12 @@ pub fn map_keys(m: HashMap) -> List[String] {
     let mut cur: String = m.data + "";
     while chars_len(cur) > 0 {
         let nl_pos: Int = map_find_char(cur, "\n");
-        let mut line: String = cur;
+        let mut line: String = "";
         if nl_pos >= 0 {
             line = str_slice(cur, 0, nl_pos);
             cur = str_slice(cur, nl_pos + 1, chars_len(cur));
         } else {
+            line = str_slice(cur, 0, chars_len(cur));
             cur = "";
         }
         let colon_pos: Int = map_find_char(line, ":");
@@ -152,11 +157,12 @@ pub fn map_values(m: HashMap) -> List[String] {
     let mut cur: String = m.data + "";
     while chars_len(cur) > 0 {
         let nl_pos: Int = map_find_char(cur, "\n");
-        let mut line: String = cur;
+        let mut line: String = "";
         if nl_pos >= 0 {
             line = str_slice(cur, 0, nl_pos);
             cur = str_slice(cur, nl_pos + 1, chars_len(cur));
         } else {
+            line = str_slice(cur, 0, chars_len(cur));
             cur = "";
         }
         let colon_pos: Int = map_find_char(line, ":");

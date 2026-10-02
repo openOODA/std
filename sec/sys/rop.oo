@@ -2,17 +2,16 @@
 //
 // Logline: Re-exports ROP gadget primitives, chain composition, binary scanner, and chain verification.
 //
-// Setup: Pure module shim importing types, constants, operations, engine, and stubs submodules.
+// Setup: Pure module shim importing types, constants, operations, and engine submodules.
 //
 // Beats:
-//   1. Import ROP types, constants, operations, engine, and stubs companion modules.
+//   1. Import ROP types, constants, operations, and engine companion modules.
 //   2. Re-export public symbols with typed shim markers.
 
 import "std/sec/sys/rop_types.oo";
 import "std/sec/sys/rop_const.oo";
 import "std/sec/sys/rop_ops.oo";
 import "std/sec/sys/rop_engine.oo";
-import "std/sec/sys/rop_stubs.oo";
 
 pub fn shim_marker_gadget_type_pop_reg() -> Int {
     return gadget_type_pop_reg();
@@ -23,21 +22,19 @@ pub fn shim_marker_rop_arch_x86_64() -> Int {
 }
 
 pub fn shim_marker_rop_gadget_create() -> RopGadget {
-    let insts: List[String] = list_new();
-    let bytes: List[Int] = list_new();
-    return rop_gadget_create("g1", 4194304, insts, bytes, 8, 1);
+    return rop_gadget_create(4194304, 8, 1);
 }
 
 pub fn shim_marker_gadget_chain_new() -> GadgetChain {
-    return gadget_chain_new("c1", "x86_64");
+    return gadget_chain_new();
 }
 
-pub fn shim_marker_gadget_scanner_new() -> GadgetScanner {
-    return gadget_scanner_new("s1", "binary", 10);
+pub fn shim_marker_rop_engine_init() -> GadgetChain {
+    return rop_engine_init();
 }
 
-pub fn shim_marker_gadget_scanner_do_work(scanner: &GadgetScanner) -> Int {
-    return gadget_scanner_do_work(scanner);
+pub fn shim_marker_rop_engine_work() -> Int {
+    return rop_engine_work(4194304, 8, 1);
 }
 
 type Large = struct {};

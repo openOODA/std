@@ -48,7 +48,9 @@ fn cc_block(key: List[Int], nonce: List[Int], ctr: Int) -> List[Int] {
     s = list_push(s, cc_le32(nonce, 0));
     s = list_push(s, cc_le32(nonce, 4));
     s = list_push(s, cc_le32(nonce, 8));
-    let start: List[Int] = s;
+    let mut start: List[Int] = list_new();
+    i = 0;
+    while i < 16 { start = list_push(start, list_get(s, i)); i = i + 1; }
     i = 0;
     while i < 10 {
         s = cc_qr(s, 0, 4, 8, 12);
@@ -187,7 +189,9 @@ fn p5_tag(otk: List[Int], aad: List[Int], ct: List[Int]) -> List[Int] {
         i = i + 1;
     }
     h = p5_mul(p5_add_block(h, lens, 0, 16), r);
-    let mut g: List[Int] = h;
+    let mut g: List[Int] = list_new();
+    i = 0;
+    while i < 5 { g = list_push(g, list_get(h, i)); i = i + 1; }
     g = list_set(g, 0, list_get(g, 0) + 5);
     i = 0;
     while i < 4 {

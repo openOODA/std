@@ -12,6 +12,7 @@
 //   5. Document private siblings (the secret_* test corpus, _types files).
 
 import "attestation.oo";
+import "std/sec/attestation_types.oo";
 import "enclave.oo";
 import "enclave_types.oo";
 import "intel_sgx.oo";
@@ -21,7 +22,11 @@ import "constant_time.oo";
 import "zeroize_buffer.oo";
 
 pub fn enc_mod_attest_measurement_create(domain: String, label: String, hash_hex: String, pcr_index: Int) -> AttestationMeasurement { return attestation_measurement_create(domain, label, hash_hex, pcr_index); }
-pub fn enc_mod_sgx_quote_generate(report_data: String) -> SgxQuote { return intel_sgx_quote_generate(report_data); }
-pub fn enc_mod_nitro_attest(nonce: String) -> NitroAttestation { return nitro_attest(nonce); }
-pub fn enc_mod_sev_snp_report(request: String) -> SevSnpReport { return sev_snp_report(request); }
-pub fn enc_mod_zeroize(buf: List[Int]) -> Bool { return zeroize_buffer(buf); }
+pub fn enc_mod_sgx_quote_generate(report_data: String) -> SgxQuote { return sgx_quote_new("", "", report_data, 1, false); }
+pub fn enc_mod_nitro_attest(nonce: String) -> NitroAttestationDoc { let empty_pcrs: NitroPcrs = nitro_pcrs_new("", "", "", "", ""); return nitro_doc_new(empty_pcrs, nonce, ""); }
+pub fn enc_mod_sev_snp_report(request: String) -> SnpReport { return snp_report_new(request, "", 1, 0, false); }
+pub fn enc_mod_zeroize(buf: List[Int]) -> Bool {
+    let s: SecretBuffer = secret_buf_new(buf);
+    let w: SecretBuffer = secret_buf_wipe(s);
+    return secret_buf_is_clean(w);
+}

@@ -75,7 +75,7 @@ pub fn rope_particle_step_verlet(
     }
 
     let dt_sq: Float = dt * dt;
-    let curr_x: Int = p.x;
+    let curr_x: Float = p.x;
     let curr_y: Float = p.y;
     let curr_z: Float = p.z;
 
@@ -99,7 +99,7 @@ pub fn rope_relax_distance_pair(
     rest_length: Float,
     stiffness: Float
 ) -> RopeSegment {
-    let dx: Int = p2.x - p1.x;
+    let dx: Float = p2.x - p1.x;
     let dy: Float = p2.y - p1.y;
     let dz: Float = p2.z - p1.z;
 
@@ -128,11 +128,11 @@ pub fn rope_relax_distance_pair(
     let factor1: Float = (w1 / w_sum) * diff * stiffness;
     let factor2: Float = (w2 / w_sum) * diff * stiffness;
 
-    let mut n1_x: Int = p1.x;
+    let mut n1_x: Float = p1.x;
     let mut n1_y: Float = p1.y;
     let mut n1_z: Float = p1.z;
 
-    let mut n2_x: Int = p2.x;
+    let mut n2_x: Float = p2.x;
     let mut n2_y: Float = p2.y;
     let mut n2_z: Float = p2.z;
 

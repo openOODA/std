@@ -9,8 +9,6 @@
 //   2. Declare violation event records and file locations.
 //   3. Declare deviation justification records.
 
-import "std/sec/cps/misra.oo";
-
 type MisraRule = struct {
     rule_id: String, category: Int, severity: Int, required: Bool,
     description: String, deviation_justification: String
@@ -50,9 +48,20 @@ pub fn misra_config_default() -> MisraConfig {
         fail_closed: true, is_valid: true
     };
 }
+fn misra_rule_make(rule_id_val: String, category_v: Int, severity_v: Int, required_v: Bool, desc_v: String) -> MisraRule {
+    return MisraRule {
+        rule_id: rule_id_val,
+        category: category_v,
+        severity: severity_v,
+        required: required_v,
+        description: desc_v,
+        deviation_justification: ""
+    };
+}
+
 pub fn misra_rule_set_default() -> List[MisraRule] {
     let mut rules: List[MisraRule] = list_new();
-    let r1: MisraRule = misra_rule_create(
+    let r1: MisraRule = misra_rule_make(
         "R1.1",
         misra_category_environment(),
         misra_severity_required(),
@@ -60,7 +69,7 @@ pub fn misra_rule_set_default() -> List[MisraRule] {
         "The compiler shall not be invoked with non-standard language extensions"
     );
     rules = list_push(rules, r1);
-    let r2: MisraRule = misra_rule_create(
+    let r2: MisraRule = misra_rule_make(
         "R2.1",
         misra_category_language_extension(),
         misra_severity_required(),
@@ -68,7 +77,7 @@ pub fn misra_rule_set_default() -> List[MisraRule] {
         "A project shall not contain unreachable code"
     );
     rules = list_push(rules, r2);
-    let r3: MisraRule = misra_rule_create(
+    let r3: MisraRule = misra_rule_make(
         "R5.1",
         misra_category_naming(),
         misra_severity_advisory(),
@@ -76,7 +85,7 @@ pub fn misra_rule_set_default() -> List[MisraRule] {
         "External identifiers shall be distinct"
     );
     rules = list_push(rules, r3);
-    let r4: MisraRule = misra_rule_create(
+    let r4: MisraRule = misra_rule_make(
         "R10.4",
         misra_category_type_safety(),
         misra_severity_required(),
@@ -84,7 +93,7 @@ pub fn misra_rule_set_default() -> List[MisraRule] {
         "The operands of an operator shall not have essential type category other than int"
     );
     rules = list_push(rules, r4);
-    let r5: MisraRule = misra_rule_create(
+    let r5: MisraRule = misra_rule_make(
         "R14.3",
         misra_category_control_flow(),
         misra_severity_required(),
@@ -92,7 +101,7 @@ pub fn misra_rule_set_default() -> List[MisraRule] {
         "Controlling expressions shall not be invariant"
     );
     rules = list_push(rules, r5);
-    let r6: MisraRule = misra_rule_create(
+    let r6: MisraRule = misra_rule_make(
         "R21.6",
         misra_category_environment(),
         misra_severity_required(),

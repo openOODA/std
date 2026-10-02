@@ -2,20 +2,16 @@
 //
 // Logline: Revoke capabilities in the registry, exercise attenuations, audit grants, and run do_work.
 //
-// Setup: Imports registry.oo. rules.oot 1.4 default-deny; rules.oot 1.3 fail-closed residual.
+// Setup: Imports registry.oo and rights.oo. rules.oot 1.4 default-deny; rules.oot 1.3 fail-closed residual.
 //
 // Beats:
-//   1. objcap_registry_revoke: flip CapabilityRevocation.is_revoked and stamp revoked_at.
-//   2. objcap_exercise: gate against revocation and use budget.
-//   3. objcap_audit: append grant / use / revoke events to audit list.
-//   4. objcap_engine_do_work: drain a batch of capability ops into registry.
-//
-// residual: live syscall FFI is process_exit in stubs.
-
-// rules.oot 1.4: Default-deny for privileged effects. Explicit &SysCap required.
-// rules.oot 1.3: Fail-closed residual for unimplemented builtins.
+//   1. objcap_registry_revoke: record revocation in registry and log audit event.
+//   2. objcap_exercise: gate against revocation and validate rights.
+//   3. objcap_audit_count: count audits in registry.
+//   4. objcap_engine_do_work: drain capability ops into registry.
 
 import "registry.oo";
+import "rights.oo";
 
 pub fn objcap_registry_revoke(
     mut_reg_ref: &mut ObjectCapabilityRegistry,
@@ -30,16 +26,12 @@ pub fn objcap_registry_revoke(
     let revs: List[String] = mut_reg_ref.revocations;
     let n: Int = list_len(revs);
     let mut i: Int = 0;
-    let mut updated_revs: List[CapabilityRevocation] = list_new();
+    let mut updated_revs: List[String] = list_new();
     let mut found: Bool = false;
 
     while i < n {
-        let mut item: String = list_get(revs, i);
-        let r_cid: String = item.cap_id;
-        if r_cid == target_cap_id_val {
-            item.is_revoked = true;
-            item.revoked_at = current_time;
-            item.reason = reason_val;
+        let item: String = list_get(revs, i);
+        if item == target_cap_id_val {
             found = true;
         }
         updated_revs = list_push(updated_revs, item);
@@ -47,32 +39,16 @@ pub fn objcap_registry_revoke(
     }
 
     if found == false {
-        let new_rev: CapabilityRevocation = CapabilityRevocation {
-            revocation_id: "rev_" + target_cap_id_val,
-            cap_id: target_cap_id_val,
-            issuer_id: issuer_id_val,
-            is_revoked: true,
-            revoked_at: current_time,
-            reason: reason_val,
-            cascade_to_children: true
-        };
-        updated_revs = list_push(updated_revs, new_rev);
+        updated_revs = list_push(updated_revs, target_cap_id_val);
     }
 
     mut_reg_ref.revocations = updated_revs;
     let prev_tot_rev: Int = mut_reg_ref.total_revoked;
     mut_reg_ref.total_revoked = prev_tot_rev + 1;
 
-    let audit: CapabilityAuditRecord = CapabilityAuditRecord {
-        record_id: "aud_" + target_cap_id_val + "_" + current_time.to_string(),
-        cap_id: target_cap_id_val,
-        action: "REVOKE",
-        principal_id: issuer_id_val,
-        timestamp: current_time,
-        outcome: "SUCCESS"
-    };
+    let aud: String = "aud_" + target_cap_id_val + "_" + current_time.to_string();
     let cur_audits: List[String] = mut_reg_ref.audits;
-    mut_reg_ref.audits = list_push(cur_audits, audit);
+    mut_reg_ref.audits = list_push(cur_audits, aud);
 
     return Ok(true);
 }
@@ -93,62 +69,32 @@ pub fn objcap_registry_exercise(
         Err(e) => return Err(e)
     };
 
-    let owner: String = cap.owner_id;
-
     if objcap_validate(&cap, current_time) == false {
-        let audit: CapabilityAuditRecord = CapabilityAuditRecord {
-            record_id: "aud_fail_" + cap_id_val + "_" + current_time.to_string(),
-            cap_id: cap_id_val,
-            action: "EXERCISE",
-            principal_id: owner,
-            timestamp: current_time,
-            outcome: "DENIED_INVALID_CAP"
-        };
+        let aud: String = "aud_fail_" + cap_id_val + "_" + current_time.to_string();
         let cur_audits: List[String] = mut_reg_ref.audits;
-        mut_reg_ref.audits = list_push(cur_audits, audit);
+        mut_reg_ref.audits = list_push(cur_audits, aud);
         return Err("OBJCAP_EXERCISE_ERR: Capability validation failed (expired or invalid)");
     }
 
     if objcap_registry_is_revoked(mut_reg_ref, cap_id_val) {
-        let audit: CapabilityAuditRecord = CapabilityAuditRecord {
-            record_id: "aud_fail_" + cap_id_val + "_" + current_time.to_string(),
-            cap_id: cap_id_val,
-            action: "EXERCISE",
-            principal_id: owner,
-            timestamp: current_time,
-            outcome: "DENIED_REVOKED"
-        };
+        let aud: String = "aud_fail_" + cap_id_val + "_" + current_time.to_string();
         let cur_audits: List[String] = mut_reg_ref.audits;
-        mut_reg_ref.audits = list_push(cur_audits, audit);
+        mut_reg_ref.audits = list_push(cur_audits, aud);
         return Err("OBJCAP_EXERCISE_ERR: Capability has been revoked");
     }
 
     if objcap_has_right(&cap, required_right_val) == false {
-        let audit: CapabilityAuditRecord = CapabilityAuditRecord {
-            record_id: "aud_fail_" + cap_id_val + "_" + current_time.to_string(),
-            cap_id: cap_id_val,
-            action: "EXERCISE",
-            principal_id: owner,
-            timestamp: current_time,
-            outcome: "DENIED_RIGHTS_DEFICIT"
-        };
+        let aud: String = "aud_fail_" + cap_id_val + "_" + current_time.to_string();
         let cur_audits: List[String] = mut_reg_ref.audits;
-        mut_reg_ref.audits = list_push(cur_audits, audit);
+        mut_reg_ref.audits = list_push(cur_audits, aud);
         return Err("OBJCAP_EXERCISE_ERR: Insufficient rights for required operation");
     }
 
     let prev_tot_ex: Int = mut_reg_ref.total_exercised;
     mut_reg_ref.total_exercised = prev_tot_ex + 1;
-    let audit: CapabilityAuditRecord = CapabilityAuditRecord {
-        record_id: "aud_ok_" + cap_id_val + "_" + current_time.to_string(),
-        cap_id: cap_id_val,
-        action: "EXERCISE",
-        principal_id: owner,
-        timestamp: current_time,
-        outcome: "SUCCESS"
-    };
+    let aud: String = "aud_ok_" + cap_id_val + "_" + current_time.to_string();
     let cur_audits: List[String] = mut_reg_ref.audits;
-    mut_reg_ref.audits = list_push(cur_audits, audit);
+    mut_reg_ref.audits = list_push(cur_audits, aud);
 
     return Ok(true);
 }

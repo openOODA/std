@@ -20,7 +20,9 @@ import "iris_higher_order_separation_principle.oo";
 
 // Public compactness theorem surface: formal_proofs_mod_compactness_*
 pub fn formal_proofs_mod_compactness_subset_sat(
-    ) -> Int { return theory_subset_sat(); }
+    c0: Int, c1: Int, c2: Int, c3: Int,
+    m0: Int, m1: Int, m2: Int, m3: Int
+) -> Int { return theory_subset_sat(c0, c1, c2, c3, m0, m1, m2, m3); }
 pub fn formal_proofs_mod_compactness_all_finite_sat(c0: Int, c1: Int, c2: Int, c3: Int) -> Int { return theory_all_finite_sat(c0, c1, c2, c3); }
 pub fn formal_proofs_mod_compactness_sat(c0: Int, c1: Int, c2: Int, c3: Int) -> Int { return theory_sat(c0, c1, c2, c3); }
 pub fn formal_proofs_mod_compactness_consistent(c0: Int, c1: Int, c2: Int, c3: Int) -> Int { return theory_consistent(c0, c1, c2, c3); }
@@ -50,7 +52,10 @@ pub fn formal_proofs_mod_lean4_tactic_associative(t1: Int, t2: Int, t3: Int) -> 
 // Public HoTT univalence surface: formal_proofs_mod_univalence_*
 pub fn formal_proofs_mod_univalence_is_valid_kind(kind: Int) -> Int { return univalence_is_valid_kind(kind); }
 pub fn formal_proofs_mod_univalence_id_from_equiv(
-    ) -> Int { return univalence_id_from_equiv(); }
+    a0: Int, a1: Int, a2: Int, a3: Int,
+    b0: Int, b1: Int, b2: Int, b3: Int,
+    w: Int
+) -> Int { return univalence_id_from_equiv(a0, a1, a2, a3, b0, b1, b2, b3, w); }
 pub fn formal_proofs_mod_univalence_kind_dependent_elim(kind: Int) -> Int { return univalence_kind_dependent_elim(kind); }
 
 // Public Iris higher-order separation surface: formal_proofs_mod_iris_*

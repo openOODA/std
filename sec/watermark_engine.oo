@@ -17,6 +17,28 @@ import "std/sec/watermark_embed.oo";
 // High-Level Engine Operations & Capability Gating
 // -------------------------------------------------------------------
 
+pub fn watermark_engine_init(
+    engine_id: String,
+    secret_key: String,
+    policy: WatermarkPolicy
+) -> WatermarkEngine {
+    return WatermarkEngine {
+        engine_id: engine_id,
+        secret_key: secret_key,
+        policy: policy,
+        is_active: true,
+        strict_mode: true,
+        embedded_count: 0,
+        detected_count: 0,
+        tampered_count: 0,
+        checksum_acc: 0
+    };
+}
+
+pub fn watermark_engine_get_embedded_count(engine: &WatermarkEngine) -> Int {
+    return engine.embedded_count;
+}
+
 pub fn watermark_engine_embed(
     engine: &mut WatermarkEngine,
     content: String,

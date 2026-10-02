@@ -31,7 +31,6 @@ pub fn rain_attenuation_config_default(freq_ghz: Float, elev_deg: Float) -> Rain
 
 pub fn rain_calc_specific_attenuation_db_km(freq_ghz: Float, rain_rate_mm_h: Float) -> Float {
     // ITU-R P.838 approximation for 10-30 GHz: gamma_R = k * R^alpha
-    let ln10: Float = 2.302585092994046;
     let mut k_val: Float = 0.0188;
     let mut alpha_val: Float = 1.217;
 
@@ -40,7 +39,6 @@ pub fn rain_calc_specific_attenuation_db_km(freq_ghz: Float, rain_rate_mm_h: Flo
         alpha_val = 1.056;
     }
 
-    let log_r: Float = ln(rain_rate_mm_h) / ln10;
     let r_pow_alpha: Float = exp(alpha_val * ln(rain_rate_mm_h));
     return k_val * r_pow_alpha;
 }

@@ -37,8 +37,6 @@ import "bn254_fp6.oo";
 import "bn254_fp12.oo";
 import "bn254_g1.oo";
 import "bn254_g2.oo";
-import "bn254_curve_g1.oo";
-import "bn254_curve_g2.oo";
 import "bn254_pairing.oo";
 import "poseidon_params.oo";
 import "poseidon_sponge.oo";
@@ -63,8 +61,8 @@ import "rollup_account_leaf.oo";
 import "rollup_batch_sequencer.oo";
 import "rollup_state_transition.oo";
 
-pub fn zk_mod_groth16_verify(proof: Groth16Proof, public_inputs: List[Int]) -> Bool { return groth16_verify(proof, public_inputs); }
-pub fn zk_mod_plonk_verify(proof: PlonkProof, public_inputs: List[Int]) -> Bool { return plonk_verify(proof, public_inputs); }
-pub fn zk_mod_bulletproofs_range(commitment: List[Int], proof: BulletproofsRangeProof) -> Bool { return bulletproofs_range_verify(commitment, proof); }
-pub fn zk_mod_bn254_pairing(g1: G1Point, g2: G2Point) -> Fp12 { return bn254_pairing_check(g1, g2); }
-pub fn zk_mod_poseidon_hash(inputs: List[Int]) -> Int { return poseidon_sponge_hash(inputs); }
+pub fn zk_mod_groth16_verify(vk: Groth16VerifyingKey, proof: Groth16Proof, public_inputs: List[Int]) -> Result[Bool, String] { return groth16_verify(vk, proof, public_inputs); }
+pub fn zk_mod_plonk_verify(vk: PlonkVerifyingKey, proof: PlonkProof, public_inputs: List[Int]) -> Result[Bool, String] { return plonk_verify(vk, proof, public_inputs); }
+pub fn zk_mod_bulletproofs_range(prover_inst: BulletproofsRangeProver, proof: BulletproofsRangeProof) -> Bool { return bulletproofs_range_verify(prover_inst, proof); }
+pub fn zk_mod_bn254_pairing(g1: Bn254G1Affine, g2: Bn254G2Affine) -> Bn254Gt { return bn254_pairing(g1, g2); }
+pub fn zk_mod_poseidon_hash(msg: List[Int]) -> PosOut { return poseidon_sponge_hash(msg); }

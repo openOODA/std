@@ -10,8 +10,6 @@
 //   3. Control interest lists (ADD, MOD, DEL) with user data tags.
 //   4. Multiplex incoming I/O events, monotonic timer ticks, and eventfd signals.
 
-import "std/fs/os/os.oo";
-
 // Epoll event flags
 pub fn epoll_in() -> Int { return 1; }
 pub fn epoll_out() -> Int { return 4; }
@@ -186,7 +184,7 @@ fn parse_epoll_events(raw: String) -> List[EventPollItem] {
 }
 
 fn parse_single_event(entry: String) -> EventPollItem {
-    let parts: List[String] = entry.split(":");
+    let parts: List[String] = str_split(entry, ":");
     if list_len(parts) < 3 {
         return EventPollItem { fd: 0 - 1, events: 0, data: 0 };
     }

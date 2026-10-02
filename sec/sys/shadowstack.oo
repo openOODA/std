@@ -2,17 +2,16 @@
 //
 // Logline: Re-exports shadow stack data models, frame operations, epilogue verification, and simulation engine.
 //
-// Setup: Pure module shim importing types, constants, operations, engine, and stubs submodules.
+// Setup: Pure module shim importing types, constants, operations, and engine submodules.
 //
 // Beats:
-//   1. Import shadow stack types, constants, operations, engine, and stubs companion modules.
+//   1. Import shadow stack types, constants, operations, and engine companion modules.
 //   2. Re-export public symbols with typed shim markers.
 
 import "std/sec/sys/shadowstack_types.oo";
 import "std/sec/sys/shadowstack_const.oo";
 import "std/sec/sys/shadowstack_ops.oo";
 import "std/sec/sys/shadowstack_engine.oo";
-import "std/sec/sys/shadowstack_stubs.oo";
 
 pub fn shim_marker_shadowstack_default_max_depth() -> Int {
     return shadowstack_default_max_depth();
@@ -23,23 +22,23 @@ pub fn shim_marker_shadowstack_violation_ret_mismatch() -> Int {
 }
 
 pub fn shim_marker_shadowstack_frame_create() -> ShadowStackFrame {
-    return shadowstack_frame_create(1, 4194304, 8388608);
+    return shadowstack_frame_create(1, 4194304);
 }
 
 pub fn shim_marker_shadowstack_new() -> ShadowStack {
-    return shadowstack_new("ss1", 1024);
+    return shadowstack_new(1024);
 }
 
 pub fn shim_marker_shadowstack_policy_default() -> ShadowStackPolicy {
     return shadowstack_policy_default();
 }
 
-pub fn shim_marker_shadowstack_engine_init() -> ShadowStackEngine {
-    return shadowstack_engine_init("eng1", shadowstack_policy_default());
+pub fn shim_marker_shadowstack_engine_init() -> ShadowStack {
+    return shadowstack_engine_init(1024);
 }
 
-pub fn shim_marker_shadowstack_engine_do_work(engine: &ShadowStackEngine) -> Int {
-    return shadowstack_engine_do_work(engine);
+pub fn shim_marker_shadowstack_engine_work() -> Int {
+    return shadowstack_engine_work(1024, 4194304);
 }
 
 type Large = struct {};

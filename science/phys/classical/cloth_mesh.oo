@@ -90,7 +90,7 @@ pub fn cloth_particle_step(
     let net_ay: Float = cfg.gravity_y + cfg.wind_y;
     let net_az: Float = cfg.wind_z;
 
-    let curr_x: Int = p.x;
+    let curr_x: Float = p.x;
     let curr_y: Float = p.y;
     let curr_z: Float = p.z;
 
@@ -115,7 +115,7 @@ pub fn cloth_solve_constraint(
     p2: ClothParticle,
     c: ClothConstraint
 ) -> ClothPairResult {
-    let dx: Int = p2.x - p1.x;
+    let dx: Float = p2.x - p1.x;
     let dy: Float = p2.y - p1.y;
     let dz: Float = p2.z - p1.z;
 
@@ -136,11 +136,11 @@ pub fn cloth_solve_constraint(
     let f1: Float = (w1 / w_sum) * diff * c.stiffness;
     let f2: Float = (w2 / w_sum) * diff * c.stiffness;
 
-    let mut n1_x: Int = p1.x;
+    let mut n1_x: Float = p1.x;
     let mut n1_y: Float = p1.y;
     let mut n1_z: Float = p1.z;
 
-    let mut n2_x: Int = p2.x;
+    let mut n2_x: Float = p2.x;
     let mut n2_y: Float = p2.y;
     let mut n2_z: Float = p2.z;
 

@@ -17,5 +17,5 @@ pub fn aslr_engine_init(entropy_bits: Int) -> AslrConfig {
 
 pub fn aslr_engine_work(entropy_bits: Int) -> Int {
     let v: AslrConfig = aslr_config_new(entropy_bits);
-    return entropy_bits;
+    return v.entropy_bits;
 }

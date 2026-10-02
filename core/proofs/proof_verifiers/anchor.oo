@@ -28,9 +28,9 @@ pub fn proof_verifiers_mod_cdcl_learned_clause_size(size: Int) -> Int { return c
 // Public kernel checker surface: proof_verifiers_mod_kernel_*
 pub fn proof_verifiers_mod_kernel_is_trusted_primitive(prim_id: Int) -> Int { return kernel_is_trusted_primitive(prim_id); }
 pub fn proof_verifiers_mod_kernel_emit_theorem(s0: Int, s1: Int, s2: Int, s3: Int) -> Int { return kernel_emit_theorem(s0, s1, s2, s3); }
-pub fn proof_verifiers_mod_kernel_sound(s0: Int, s1: Int, s2: Int, s3: Int, n: Int) -> Int { return kernel_sound(s0, s1, s2, s3, n); }
+pub fn proof_verifiers_mod_kernel_sound(s0: Int, s1: Int, s2: Int, s3: Int, f0: Int, f1: Int, f2: Int, f3: Int) -> Int { return kernel_sound(s0, s1, s2, s3, f0, f1, f2, f3); }
 pub fn proof_verifiers_mod_kernel_is_small(n_primitives: Int) -> Int { return kernel_is_small(n_primitives); }
-pub fn proof_verifiers_mod_kernel_trustworthy(n_primitives: Int, audit_score: Int) -> Int { return kernel_trustworthy(n_primitives, audit_score); }
+pub fn proof_verifiers_mod_kernel_trustworthy(n_primitives: Int, s0: Int, s1: Int, s2: Int, s3: Int, f0: Int, f1: Int, f2: Int, f3: Int) -> Int { return kernel_trustworthy(n_primitives, s0, s1, s2, s3, f0, f1, f2, f3); }
 
 // Public MaxSAT surface: proof_verifiers_mod_maxsat_*
 pub fn proof_verifiers_mod_maxsat_abs(x: Int) -> Int { return pvabs(x); }
@@ -42,8 +42,19 @@ pub fn proof_verifiers_mod_maxsat_is_positive_weight(w: Int) -> Int { return max
 // Public SAT/CNF surface: proof_verifiers_mod_cnf_*
 pub fn proof_verifiers_mod_cnf_literal_sat(lit: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_literal_sat(lit, a1, a2, a3); }
 pub fn proof_verifiers_mod_cnf_clause_sat(l1: Int, l2: Int, l3: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_clause_sat(l1, l2, l3, a1, a2, a3); }
-pub fn proof_verifiers_mod_cnf_formula_sat(n_clauses: Int, l1: Int, l2: Int, l3: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_formula_sat(n_clauses, l1, l2, l3, a1, a2, a3); }
-pub fn proof_verifiers_mod_cnf_is_sat(n_vars: Int, n_clauses: Int, l1: Int, l2: Int, l3: Int, a1: Int, a2: Int, a3: Int) -> Int { return cnf_is_sat(n_vars, n_clauses, l1, l2, l3, a1, a2, a3); }
+pub fn proof_verifiers_mod_cnf_formula_sat(
+    l1a: Int, l1b: Int, l1c: Int,
+    l2a: Int, l2b: Int, l2c: Int,
+    l3a: Int, l3b: Int, l3c: Int,
+    l4a: Int, l4b: Int, l4c: Int,
+    a1: Int, a2: Int, a3: Int
+) -> Int { return cnf_formula_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c, a1, a2, a3); }
+pub fn proof_verifiers_mod_cnf_is_sat(
+    l1a: Int, l1b: Int, l1c: Int,
+    l2a: Int, l2b: Int, l2c: Int,
+    l3a: Int, l3b: Int, l3c: Int,
+    l4a: Int, l4b: Int, l4c: Int
+) -> Int { return cnf_is_sat(l1a, l1b, l1c, l2a, l2b, l2c, l3a, l3b, l3c, l4a, l4b, l4c); }
 pub fn proof_verifiers_mod_cnf_unit_propagate(unit_lit: Int) -> Int { return cnf_unit_propagate(unit_lit); }
 
 // Public SMT combination surface: proof_verifiers_mod_smt_*

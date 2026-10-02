@@ -60,6 +60,10 @@ pub fn aes_encrypt(key: String, plain: String) -> String {
     return crypto_aes_encrypt_internal(key, plain);
 }
 
+pub fn aes_encrypt_block(key: String, plain: String) -> String {
+    return aes_encrypt(key, plain);
+}
+
 pub fn aes_decrypt(key: String, cipher_hex: String) -> String {
     if bytes_len(key) != 16 {
         return "";

@@ -11,9 +11,6 @@
 
 import "./qubit_state.oo";
 import "./quantum_register.oo";
-import "./complex_matrix2x2.oo";
-import "./quantum_circuit.oo";
-import "./circuit_runner.oo";
 
 type GroverResult = struct {
     target_index: Int,
@@ -21,6 +18,19 @@ type GroverResult = struct {
     success_prob: Float,
     iterations: Int
 };
+
+fn int_to_float_grover(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 10000 { f = f + 10000.0; count = count - 10000; }
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
 
 pub fn grover_optimal_iterations(num_qubits: Int) -> Int {
     if num_qubits <= 2 {
@@ -33,7 +43,7 @@ pub fn grover_optimal_iterations(num_qubits: Int) -> Int {
         return 3;
     }
     let n_states: Int = int_pow2(num_qubits);
-    let sqrt_n: Float = sqrt(0.0 + n_states);
+    let sqrt_n: Float = sqrt(int_to_float_grover(n_states));
     let r: Float = 0.7853981633974483 * sqrt_n;
     let mut count: Int = 1;
     let mut accum: Float = 1.0;
@@ -66,7 +76,7 @@ pub fn apply_grover_diffusion(reg: &mut QuantumRegister) {
         k = k + 1;
     }
 
-    let n_flt: Float = 0.0 + n_states;
+    let n_flt: Float = int_to_float_grover(n_states);
     let mean_r: Float = sum_r / n_flt;
     let mean_i: Float = sum_i / n_flt;
     let two_mean: Complex = Complex { real: 2.0 * mean_r, imag: 2.0 * mean_i };
@@ -87,7 +97,7 @@ pub fn run_grover_search(num_qubits: Int, marked_target: Int) -> GroverResult {
     let n_states: Int = register_get_num_states(&reg);
 
     // 1. Equal superposition initialization: 1/sqrt(N) for all states
-    let inv_sqrt_n: Float = 1.0 / sqrt(0.0 + n_states);
+    let inv_sqrt_n: Float = 1.0 / sqrt(int_to_float_grover(n_states));
     let mut init_amps: List[Complex] = list_new();
     let mut k: Int = 0;
     while k < n_states {

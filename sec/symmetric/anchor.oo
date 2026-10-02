@@ -37,4 +37,4 @@ pub fn sym_mod_chacha20_xor(key: String, nonce: String, counter: Int, plain: Str
 pub fn sym_mod_chacha20_poly1305_seal(key: String, nonce: String, plain: String, aad: String) -> Result[String, String] { return chacha20_poly1305_seal(key, nonce, plain, aad); }
 pub fn sym_mod_chacha20_poly1305_open(key: String, nonce: String, cipher: String, aad: String) -> Result[String, String] { return chacha20_poly1305_open(key, nonce, cipher, aad); }
 pub fn sym_mod_poly1305_mac(key: String, msg: String) -> String { return poly1305_mac_hex(key, msg); }
-pub fn sym_mod_argon2_hash(password: String, salt: String) -> String { return argon2_hash(password, salt); }
+pub fn sym_mod_argon2_hash(password: String, salt: String) -> String { return argon2_hash_simple(password, salt); }

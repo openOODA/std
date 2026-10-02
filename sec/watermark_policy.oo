@@ -1,16 +1,36 @@
 // # Watermark Policy and Security Policies
 //
-// Logline: standardized onto ./watermark_types.oo Int-floor API.
+// Logline: Security policies for watermark admission, payload bounds, and fail-closed gates.
 //
-// Setup: Companion types standardized; keep fail-closed real calls.
+// Setup: Companion types in watermark_types.oo.
 //
 // Beats:
-//   1. Import standardized companion.
-//   2. Wrap constructor and Int query.
-//   3. Deterministic work helper for prove.
+//   1. Import watermark types.
+//   2. Initialize policy with confidence floor and size bounds.
+//   3. Validate metadata against policy constraints.
 
 import "std/sec/watermark_types.oo";
 
-pub fn watermark_policy_init(algo_id: Int, strength: Int) -> WatermarkMeta {
-    return watermark_meta_new(algo_id, strength);
+pub fn watermark_policy_init(
+    min_confidence: Int,
+    require_encryption: Bool,
+    fail_closed: Bool,
+    max_payload_size: Int
+) -> WatermarkPolicy {
+    return WatermarkPolicy {
+        min_confidence: min_confidence,
+        require_encryption: require_encryption,
+        fail_closed: fail_closed,
+        max_payload_size: max_payload_size
+    };
+}
+
+pub fn watermark_policy_is_allowed(pol: WatermarkPolicy, meta: WatermarkMetadata) -> Bool {
+    if meta.strength < pol.min_confidence {
+        return false;
+    }
+    if chars_len(meta.payload) > pol.max_payload_size {
+        return false;
+    }
+    return true;
 }

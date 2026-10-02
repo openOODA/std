@@ -1,19 +1,57 @@
 // # Watermark types
 //
-// Logline: WatermarkMeta standardized off nested policy lists.
+// Logline: Watermark data structures, policy representations, and hashing utilities.
 //
 // Setup: Pure .oo standard library module or subsystem.
 //
 // Beats:
-//   1. Execute core data structures and functional algorithms.
-//   2. Enforce invariant constraints and fail-closed Result returns.
-//   3. Export domain interfaces for high-integrity composition.
-//
-// residual: List[struct] standardized.
+//   1. Core watermark structures: metadata, policy, engine, extraction result.
+//   2. Type classification constants and string hashing.
+//   3. Invariant constraints and fail-closed Result returns.
 
 type WatermarkMeta = struct {
     algo_id: Int,
     strength: Int
+};
+
+pub type WatermarkMetadata = struct {
+    watermark_id: String,
+    owner: String,
+    secret: String,
+    timestamp: Int,
+    payload: String,
+    algo_id: Int,
+    redundancy: Int,
+    is_valid: Bool,
+    strength: Int
+};
+
+pub type WatermarkPolicy = struct {
+    min_confidence: Int,
+    require_encryption: Bool,
+    fail_closed: Bool,
+    max_payload_size: Int
+};
+
+pub type WatermarkExtractionResult = struct {
+    watermark_id: String,
+    extracted_payload: String,
+    confidence: Int,
+    is_valid: Bool,
+    tamper_detected: Bool,
+    tamper_location: Int
+};
+
+pub type WatermarkEngine = struct {
+    engine_id: String,
+    secret_key: String,
+    policy: WatermarkPolicy,
+    is_active: Bool,
+    strict_mode: Bool,
+    embedded_count: Int,
+    detected_count: Int,
+    tampered_count: Int,
+    checksum_acc: Int
 };
 
 pub fn watermark_meta_new(algo_id: Int, strength: Int) -> WatermarkMeta {
@@ -25,4 +63,52 @@ pub fn watermark_meta_new(algo_id: Int, strength: Int) -> WatermarkMeta {
 
 pub fn watermark_meta_algo(m: WatermarkMeta) -> Int {
     return m.algo_id;
+}
+
+pub fn watermark_type_text() -> Int { return 1; }
+pub fn watermark_type_stego() -> Int { return 2; }
+pub fn watermark_type_fragile() -> Int { return 3; }
+pub fn watermark_type_robust() -> Int { return 4; }
+
+pub fn watermark_calculate_string_hash(s: String) -> Int {
+    let n: Int = chars_len(s);
+    let mut h: Int = 5381;
+    let mut i: Int = 0;
+    while i < n {
+        h = ((h * 33) + byte_at(s, i)) % 1000000007;
+        i = i + 1;
+    }
+    return h;
+}
+
+pub fn watermark_metadata_create(
+    watermark_id: String,
+    owner: String,
+    secret: String,
+    timestamp: Int,
+    payload: String,
+    algo_id: Int,
+    redundancy: Int,
+    is_valid: Bool,
+    strength: Int
+) -> WatermarkMetadata {
+    return WatermarkMetadata {
+        watermark_id: watermark_id,
+        owner: owner,
+        secret: secret,
+        timestamp: timestamp,
+        payload: payload,
+        algo_id: algo_id,
+        redundancy: redundancy,
+        is_valid: is_valid,
+        strength: strength
+    };
+}
+
+pub fn watermark_metadata_to_string(meta: WatermarkMetadata) -> String {
+    return meta.watermark_id + ":" + meta.payload;
+}
+
+pub fn watermark_calculate_checksum(meta: WatermarkMetadata) -> Int {
+    return (meta.timestamp * 31 + meta.algo_id * 17 + meta.strength) % 999983;
 }

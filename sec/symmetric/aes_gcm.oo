@@ -118,3 +118,19 @@ pub fn aes_gcm_decrypt(key: String, nonce: String, ctext: String, tag: String, a
     }
     return gcm_gctr(key, gcm_inc32(j0), ctext);
 }
+
+pub fn aes_gcm_seal(key: String, nonce: String, plain: String, aad: String) -> Result[String, String] {
+    let out: String = aes_gcm_encrypt(key, nonce, plain, aad);
+    if out == "" { return Err("aes_gcm_seal failed"); }
+    return Ok(out);
+}
+
+pub fn aes_gcm_open(key: String, nonce: String, cipher: String, aad: String) -> Result[String, String] {
+    let n: Int = chars_len(cipher);
+    if n < 32 { return Err("aes_gcm_open cipher too short"); }
+    let ct_hex: String = str_slice(cipher, 0, n - 32);
+    let tag_hex: String = str_slice(cipher, n - 32, n);
+    let out: String = aes_gcm_decrypt(key, nonce, gcm_unhex(ct_hex), gcm_unhex(tag_hex), aad);
+    if out == "" { return Err("aes_gcm_open failed"); }
+    return Ok(out);
+}

@@ -45,8 +45,12 @@ pub fn principles_mod_uncertainty_of(value: Float, abs_unc: Float) -> Uncertaint
 pub fn principles_mod_uncertainty_tolerance_k1(u: Uncertainty) -> Float { return uncertainty_tolerance_k1(u); }
 
 // Public zero-ambient-authority cap surface: principles_mod_cap_*
-pub fn principles_mod_cap_is_valid(cap: Int) -> Int { return zero_cap_is_valid(cap); }
-pub fn principles_mod_cap_attenuate(cap: Int) -> Int { return zero_cap_attenuate(cap); }
+pub fn principles_mod_cap_is_valid(token: CapabilityToken, required_permission: Int, current_epoch_ms: Int) -> Bool {
+    return zero_cap_is_valid(token, required_permission, current_epoch_ms);
+}
+pub fn principles_mod_cap_attenuate(parent_token: CapabilityToken, restricted_mask: Int, shorter_expiry_epoch_ms: Int) -> CapabilityToken {
+    return zero_cap_attenuate(parent_token, restricted_mask, shorter_expiry_epoch_ms);
+}
 
 // Private sibling inventory (DO NOT IMPORT DIRECTLY):
 //   _law files (e.g. conservation_invariant_law.oo, stochastic_process_coupling_law.oo, tensor_decomposition_law.oo)

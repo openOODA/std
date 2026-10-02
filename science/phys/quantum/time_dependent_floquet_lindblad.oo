@@ -15,6 +15,19 @@ type FloquetDriveParams = struct {
     drive_frequency_omega: Float
 };
 
+fn int_to_float_floquet(n: Int) -> Float {
+    let mut f: Float = 0.0;
+    let mut count: Int = n;
+    if count < 0 { count = 0 - count; }
+    while count >= 10000 { f = f + 10000.0; count = count - 10000; }
+    while count >= 1000 { f = f + 1000.0; count = count - 1000; }
+    while count >= 100 { f = f + 100.0; count = count - 100; }
+    while count >= 10 { f = f + 10.0; count = count - 10; }
+    while count >= 1 { f = f + 1.0; count = count - 1; }
+    if n < 0 { return 0.0 - f; }
+    return f;
+}
+
 pub fn floquet_params_new(delta: Float, v0: Float, omega: Float) -> FloquetDriveParams {
     return FloquetDriveParams {
         static_detuning_delta: delta,
@@ -33,6 +46,6 @@ pub fn floquet_quasi_energy_splitting(p: FloquetDriveParams) -> Float {
 pub fn floquet_sideband_frequency(p: FloquetDriveParams, harmonic_k: Int) -> Float {
     let eps: Float = floquet_quasi_energy_splitting(p);
     let omega: Float = p.drive_frequency_omega;
-    let k_f: Float = (harmonic_k * 1.0);
+    let k_f: Float = int_to_float_floquet(harmonic_k);
     return eps + (k_f * omega);
 }

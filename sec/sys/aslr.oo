@@ -12,7 +12,6 @@ import "std/sec/sys/aslr_types.oo";
 import "std/sec/sys/aslr_const.oo";
 import "std/sec/sys/aslr_ops.oo";
 import "std/sec/sys/aslr_engine.oo";
-import "std/sec/sys/aslr_stubs.oo";
 
 pub fn shim_marker_aslr_mode_disabled() -> Int {
     return aslr_mode_disabled();
@@ -31,14 +30,14 @@ pub fn shim_marker_aslr_config_default() -> AslrConfig {
 }
 
 pub fn shim_marker_aslr_region_create() -> AslrRegion {
-    return aslr_region_create("text", 4194304, 65536, true, false);
+    return aslr_region_create(4194304, 65536, 1, 0);
 }
 
 pub fn shim_marker_aslr_layout_new() -> AslrLayout {
-    return aslr_layout_new("layout1");
+    return aslr_layout_new();
 }
 
-pub fn shim_marker_aslr_addr_in_range() -> Bool {
+pub fn shim_marker_aslr_addr_in_range() -> Int {
     return aslr_addr_in_range(4194384, 4194304, 65536);
 }
 
@@ -46,16 +45,12 @@ pub fn shim_marker_aslr_compute_entropy() -> Int {
     return aslr_compute_entropy(65536);
 }
 
-pub fn shim_marker_aslr_engine_init() -> AslrEngine {
-    return aslr_engine_init("eng1", aslr_config_default());
+pub fn shim_marker_aslr_engine_init() -> AslrConfig {
+    return aslr_engine_init(28);
 }
 
-pub fn shim_marker_aslr_engine_stats(engine: &AslrEngine) -> Int {
-    return aslr_engine_stats(engine);
-}
-
-pub fn shim_marker_aslr_engine_do_work(engine: &AslrEngine) -> Int {
-    return aslr_engine_do_work(engine);
+pub fn shim_marker_aslr_engine_work() -> Int {
+    return aslr_engine_work(28);
 }
 
 type Large = struct {};

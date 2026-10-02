@@ -100,3 +100,11 @@ pub fn totp_rfc6238_code6(key: String, unix_time: Int) -> Result[String, String]
 pub fn totp_rfc6238_code8(key: String, unix_time: Int) -> Result[String, String] {
     return totp_rfc6238_at(key, unix_time, 8);
 }
+
+pub fn totp_rfc6238(secret: String, time_step: Int) -> String {
+    let r: Result[String, String] = totp_rfc6238_code6(secret, time_step);
+    match r {
+        Ok(c) => { return c; }
+        Err(e) => { return ""; }
+    }
+}

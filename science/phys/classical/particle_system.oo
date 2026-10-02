@@ -173,7 +173,7 @@ pub fn particle_point_step(
     let mut nvz: Float = (p.vz + (az * dt)) * p.damping;
 
     // Position integration
-    let mut nx: Int = p.x + (nvx * dt);
+    let mut nx: Float = p.x + (nvx * dt);
     let mut ny: Float = p.y + (nvy * dt);
     let mut nz: Float = p.z + (nvz * dt);
 
@@ -183,29 +183,29 @@ pub fn particle_point_step(
 
     if nx - rad < sys.bounds_min_x {
         nx = sys.bounds_min_x + rad;
-        nvx = -nvx * rest;
+        nvx = (0.0 - nvx) * rest;
     }
     if nx + rad > sys.bounds_max_x {
         nx = sys.bounds_max_x - rad;
-        nvx = -nvx * rest;
+        nvx = (0.0 - nvx) * rest;
     }
 
     if ny - rad < sys.bounds_min_y {
         ny = sys.bounds_min_y + rad;
-        nvy = -nvy * rest;
+        nvy = (0.0 - nvy) * rest;
     }
     if ny + rad > sys.bounds_max_y {
         ny = sys.bounds_max_y - rad;
-        nvy = -nvy * rest;
+        nvy = (0.0 - nvy) * rest;
     }
 
     if nz - rad < sys.bounds_min_z {
         nz = sys.bounds_min_z + rad;
-        nvz = -nvz * rest;
+        nvz = (0.0 - nvz) * rest;
     }
     if nz + rad > sys.bounds_max_z {
         nz = sys.bounds_max_z - rad;
-        nvz = -nvz * rest;
+        nvz = (0.0 - nvz) * rest;
     }
 
     return ParticlePoint {

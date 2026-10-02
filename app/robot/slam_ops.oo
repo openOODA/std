@@ -164,7 +164,7 @@ pub fn slam_landmark_global_pos(robot_pose: Pose2D, obs: Observation) -> Landmar
 }
 
 pub fn slam_predict_observation(robot_pose: Pose2D, lm: Landmark) -> Observation {
-    let dx: Int = lm.x - robot_pose.x;    let dy: Int = lm.y - robot_pose.y;    let dx2: Int = dx * dx;    let dy2: Int = dy * dy;    let dist_sq: Int = dx2 + dy2;    let range: Float = slam_isqrt(dist_sq);    let global_angle = slam_atan2_mdeg(dy, dx);
+    let dx: Int = lm.x - robot_pose.x;    let dy: Int = lm.y - robot_pose.y;    let dx2: Int = dx * dx;    let dy2: Int = dy * dy;    let dist_sq: Int = dx2 + dy2;    let range: Int = slam_isqrt(dist_sq);    let global_angle = slam_atan2_mdeg(dy, dx);
     let bearing: Int = normalize_angle_mdeg(global_angle - robot_pose.theta_mdeg);
     return Observation {
         landmark_id: lm.id,

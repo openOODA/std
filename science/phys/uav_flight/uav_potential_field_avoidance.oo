@@ -48,7 +48,6 @@ pub fn compute_apf_steering(
 ) -> ApfSteeringResult {
     // 1. Attractive force towards goal: F_att = -k_att * (curr - goal) = k_att * (goal - curr)
     let d_goal: Vector3D = vector3d_sub(goal_pos, curr_pos);
-    let dist_g: Float = vector3d_norm(&d_goal);
     let f_att: Vector3D = vector3d_scale(&d_goal, cfg.k_attractive);
 
     // 2. Repulsive force from obstacle

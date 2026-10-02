@@ -44,3 +44,9 @@ pub fn argon2_verify(
 ) -> Int {
     return 0 - 1;
 }
+
+pub fn argon2_hash_simple(password: String, salt: String) -> String {
+    let cfg: Argon2Config = Argon2Config { t_cost: 3, m_cost: 65536, parallelism: 4, version: 19 };
+    let res: Int = argon2_hash(&cfg, &password, &salt);
+    return res.to_string();
+}
