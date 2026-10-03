@@ -60,29 +60,28 @@ pub fn wui_app_view(model: &WuiModel) -> VNode {
     let mut props: List[VProp] = list_new();
     props = list_push(props, prop_class("app-container"));
 
-    let mut children: List[VNode] = list_new();
+    let mut child_ids: List[Int] = list_new();
+    let empty_ids: List[Int] = list_new();
+
     let mut h1_props: List[VProp] = list_new();
-    let mut h1_ch: List[VNode] = list_new();
-    h1_ch = list_push(h1_ch, h_text(model.title));
-    let header_node: VNode = h_h1(h1_props, h1_ch);
+    let mut header_node: VNode = h_elem("h1", h1_props, empty_ids);
+    header_node.text = model.title;
 
     let count_text: String = "Counter: " + (model.counter).to_string();
     let mut p_props: List[VProp] = list_new();
-    let mut p_ch: List[VNode] = list_new();
-    p_ch = list_push(p_ch, h_text(count_text));
-    let count_node: VNode = h_p(p_props, p_ch);
+    let mut count_node: VNode = h_elem("p", p_props, empty_ids);
+    count_node.text = count_text;
 
     let mut btn_props: List[VProp] = list_new();
     btn_props = list_push(btn_props, prop_on_click("increment"));
-    let mut btn_ch: List[VNode] = list_new();
-    btn_ch = list_push(btn_ch, h_text("+1"));
-    let btn_node: VNode = h_button(btn_props, btn_ch);
+    let mut btn_node: VNode = h_button(btn_props, empty_ids);
+    btn_node.text = "+1";
 
-    children = list_push(children, header_node);
-    children = list_push(children, count_node);
-    children = list_push(children, btn_node);
+    child_ids = list_push(child_ids, 0);
+    child_ids = list_push(child_ids, 1);
+    child_ids = list_push(child_ids, 2);
 
-    return h_div(props, children);
+    return h_div(props, child_ids);
 }
 
 pub fn wui_app_probe() -> Int {

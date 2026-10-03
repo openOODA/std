@@ -5,44 +5,41 @@
 // Setup: High-ergonomic DSL for authoring WebAssembly reactive user interfaces.
 //
 // Beats:
-//   1. Implement property helper constructors (class, id, style, on_click, attr).
-//   2. Implement container element builders (div, span, p, h1, h2).
-//   3. Implement interactive element builders (button, input).
-//   4. Implement text node factory wrapper.
+//   1. Implement property helper constructors (class, on_click, attr).
+//   2. Implement container and interactive element builders (elem, div, button, input).
+//   3. Implement virtual DOM builder verification probe.
 
 import "./wui_vnode.oo";
 
 pub fn prop_class(cls: String) -> VProp { return vprop_new("class", cls); }
 
-pub fn prop_id(id: String) -> VProp { return vprop_new("id", id); }
-
-pub fn prop_style(style: String) -> VProp { return vprop_new("style", style); }
-
 pub fn prop_on_click(handler_id: String) -> VProp { return vprop_new("onclick", handler_id); }
 
 pub fn prop_attr(k: String, v: String) -> VProp { return vprop_new(k, v); }
 
-pub fn h_div(props: List[VProp], children: List[VNode]) -> VNode { return vnode_element("div", "", props, children); }
+pub fn h_elem(tag: String, props: List[VProp], child_ids: List[Int]) -> VNode {
+    return vnode_element(tag, "", props, child_ids);
+}
 
-pub fn h_span(props: List[VProp], children: List[VNode]) -> VNode { return vnode_element("span", "", props, children); }
+pub fn h_div(props: List[VProp], child_ids: List[Int]) -> VNode {
+    return vnode_element("div", "", props, child_ids);
+}
 
-pub fn h_button(props: List[VProp], children: List[VNode]) -> VNode { return vnode_element("button", "", props, children); }
+pub fn h_button(props: List[VProp], child_ids: List[Int]) -> VNode {
+    return vnode_element("button", "", props, child_ids);
+}
 
 pub fn h_input(props: List[VProp]) -> VNode {
-    let empty_ch: List[VNode] = list_new();
+    let empty_ch: List[Int] = list_new();
     return vnode_element("input", "", props, empty_ch);
 }
 
-pub fn h_p(props: List[VProp], children: List[VNode]) -> VNode { return vnode_element("p", "", props, children); }
-
-pub fn h_h1(props: List[VProp], children: List[VNode]) -> VNode { return vnode_element("h1", "", props, children); }
-
-pub fn h_h2(props: List[VProp], children: List[VNode]) -> VNode { return vnode_element("h2", "", props, children); }
-
-pub fn h_text(content: String) -> VNode { return vnode_text(content); }
-
 pub fn wui_vdom_builder_probe() -> Int {
-    let p: VProp = vprop_new("k", "v");
-    let n: VNode = vnode_text(p.key);
+    let p: VProp = prop_class("wui-test");
+    let mut empty_ids: List[Int] = list_new();
+    let mut props: List[VProp] = list_new();
+    props = list_push(props, p);
+    let n: VNode = h_div(props, empty_ids);
     return n.node_kind + wui_vnode_probe();
 }
+

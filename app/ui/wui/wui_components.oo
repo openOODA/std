@@ -7,7 +7,7 @@
 // Beats:
 //   1. Implement wui_button with click action binding and styling classes.
 //   2. Implement wui_text_input with placeholder and value attributes.
-//   3. Implement wui_card with header title and nested children container.
+//   3. Implement wui_card with header title and nested child IDs container.
 //   4. Implement wui_modal conditional pop-up dialog container.
 
 import "./wui_vnode.oo";
@@ -18,9 +18,10 @@ pub fn wui_button(text: String, on_click_action: String) -> VNode {
     props = list_push(props, prop_class("wui-btn"));
     props = list_push(props, prop_on_click(on_click_action));
 
-    let mut ch: List[VNode] = list_new();
-    ch = list_push(ch, h_text(text));
-    return h_button(props, ch);
+    let mut empty_ids: List[Int] = list_new();
+    let mut btn: VNode = h_button(props, empty_ids);
+    btn.text = text;
+    return btn;
 }
 
 pub fn wui_text_input(placeholder: String, value: String) -> VNode {
@@ -31,57 +32,57 @@ pub fn wui_text_input(placeholder: String, value: String) -> VNode {
     return h_input(props);
 }
 
-pub fn wui_card(title: String, children: List[VNode]) -> VNode {
+pub fn wui_card(title: String, child_ids: List[Int]) -> VNode {
     let mut card_props: List[VProp] = list_new();
     card_props = list_push(card_props, prop_class("wui-card"));
 
-    let mut card_children: List[VNode] = list_new();
-    let mut title_props: List[VProp] = list_new();
-    title_props = list_push(title_props, prop_class("wui-card-title"));
-    let mut title_children: List[VNode] = list_new();
-    title_children = list_push(title_children, h_text(title));
-    let title_node: VNode = h_h2(title_props, title_children);
-    card_children = list_push(card_children, title_node);
-
-    let n: Int = list_len(children);
+    let mut card_ch: List[Int] = list_new();
+    let n: Int = list_len(child_ids);
     let mut i: Int = 0;
     while i < n {
-        card_children = list_push(card_children, list_get(children, i));
+        card_ch = list_push(card_ch, list_get(child_ids, i));
         i = i + 1;
     }
-    return h_div(card_props, card_children);
+    let mut card: VNode = h_div(card_props, card_ch);
+    card.text = title;
+    return card;
 }
 
-pub fn wui_modal(title: String, is_open: Bool, content: VNode) -> VNode {
+pub fn wui_modal(title: String, is_open: Bool, content_id: Int) -> VNode {
     if !is_open {
         let empty_p: List[VProp] = list_new();
-        let empty_c: List[VNode] = list_new();
+        let empty_c: List[Int] = list_new();
         return h_div(empty_p, empty_c);
     }
 
     let mut overlay_props: List[VProp] = list_new();
     overlay_props = list_push(overlay_props, prop_class("wui-modal-overlay"));
 
-    let mut modal_children: List[VNode] = list_new();
-    modal_children = list_push(modal_children, content);
-    let card_node: VNode = wui_card(title, modal_children);
-
-    let mut overlay_children: List[VNode] = list_new();
-    overlay_children = list_push(overlay_children, card_node);
-    return h_div(overlay_props, overlay_children);
+    let mut overlay_ch: List[Int] = list_new();
+    if content_id >= 0 {
+        overlay_ch = list_push(overlay_ch, content_id);
+    }
+    let mut modal_node: VNode = h_div(overlay_props, overlay_ch);
+    modal_node.text = title;
+    return modal_node;
 }
 
 pub fn wui_badge(label: String, color_cls: String) -> VNode {
     let mut props: List[VProp] = list_new();
     props = list_push(props, prop_class("wui-badge " + color_cls));
-    let mut ch: List[VNode] = list_new();
-    ch = list_push(ch, h_text(label));
-    return h_span(props, ch);
+    let empty_ch: List[Int] = list_new();
+    let mut badge: VNode = h_elem("span", props, empty_ch);
+    badge.text = label;
+    return badge;
 }
 
 pub fn wui_components_probe() -> Int {
     let btn: VNode = wui_button("Click", "do_it");
     let inp: VNode = wui_text_input("Name", "");
+    let mut empty_c: List[Int] = list_new();
+    let card: VNode = wui_card("Card", empty_c);
+    let modal: VNode = wui_modal("Modal", true, 0);
     let badge: VNode = wui_badge("New", "badge-green");
-    return btn.node_kind + inp.node_kind + badge.node_kind + wui_vdom_builder_probe();
+    return btn.node_kind + inp.node_kind + card.node_kind + modal.node_kind + badge.node_kind + wui_vdom_builder_probe();
 }
+

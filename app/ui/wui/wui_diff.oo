@@ -33,20 +33,83 @@ fn props_equal(a: List[VProp], b: List[VProp]) -> Bool {
     return true;
 }
 
-pub fn vdom_diff(old_node: &VNode, new_node: &VNode, path: String) -> List[Patch] {
+fn diff_reconcile_children(old_arena: &VNodeArena, old_ch: List[Int], new_arena: &VNodeArena, new_ch: List[Int], path: String, count: Int) -> List[Patch] {
     let mut patches: List[Patch] = list_new();
-    let old_tag: String = old_node.tag;
-    let new_tag: String = new_node.tag;
+    let mut i: Int = 0;
+    while i < count {
+        let oc_id: Int = list_get(old_ch, i);
+        let nc_id: Int = list_get(new_ch, i);
+        let child_path: String = path + "." + i.to_string();
+        let sub_patches: List[Patch] = vdom_diff(old_arena, oc_id, new_arena, nc_id, child_path);
+        let n_sub: Int = list_len(sub_patches);
+        let mut k: Int = 0;
+        while k < n_sub {
+            patches = list_push(patches, list_get(sub_patches, k));
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    return patches;
+}
 
-    if old_node.node_kind != new_node.node_kind || !(old_tag == new_tag) {
-        patches = list_push(patches, patch_replace_node(path, *new_node));
+fn diff_remove_children(old_len: Int, new_len: Int, path: String) -> List[Patch] {
+    let mut patches: List[Patch] = list_new();
+    let mut rem_idx: Int = old_len - 1;
+    while rem_idx >= new_len {
+        patches = list_push(patches, patch_remove_child(path, rem_idx));
+        rem_idx = rem_idx - 1;
+    }
+    return patches;
+}
+
+fn diff_append_children(new_arena: &VNodeArena, new_ch: List[Int], old_len: Int, new_len: Int, path: String) -> List[Patch] {
+    let mut patches: List[Patch] = list_new();
+    let mut add_idx: Int = old_len;
+    while add_idx < new_len {
+        let child_id: Int = list_get(new_ch, add_idx);
+        if child_id >= 0 && child_id < list_len(new_arena.nodes) {
+            let child_to_add: VNode = list_get(new_arena.nodes, child_id);
+            patches = list_push(patches, patch_append_child(path, child_to_add));
+        }
+        add_idx = add_idx + 1;
+    }
+    return patches;
+}
+
+fn diff_structural_children(old_arena: &VNodeArena, old_ch: List[Int], new_arena: &VNodeArena, new_ch: List[Int], path: String) -> List[Patch] {
+    let n_old: Int = list_len(old_ch);
+    let n_new: Int = list_len(new_ch);
+    let min_len: Int = if n_old < n_new { n_old } else { n_new };
+    let mut patches: List[Patch] = diff_reconcile_children(old_arena, old_ch, new_arena, new_ch, path, min_len);
+    if n_old > n_new {
+        let p_rem: List[Patch] = diff_remove_children(n_old, n_new, path);
+        let n_rem: Int = list_len(p_rem);
+        let mut r: Int = 0;
+        while r < n_rem { patches = list_push(patches, list_get(p_rem, r)); r = r + 1; }
+    } else if n_new > n_old {
+        let p_add: List[Patch] = diff_append_children(new_arena, new_ch, n_old, n_new, path);
+        let n_add: Int = list_len(p_add);
+        let mut a: Int = 0;
+        while a < n_add { patches = list_push(patches, list_get(p_add, a)); a = a + 1; }
+    }
+    return patches;
+}
+
+pub fn vdom_diff(old_arena: &VNodeArena, old_id: Int, new_arena: &VNodeArena, new_id: Int, path: String) -> List[Patch] {
+    let mut patches: List[Patch] = list_new();
+    if old_id < 0 || old_id >= list_len(old_arena.nodes) || new_id < 0 || new_id >= list_len(new_arena.nodes) {
+        return patches;
+    }
+    let old_node: VNode = list_get(old_arena.nodes, old_id);
+    let new_node: VNode = list_get(new_arena.nodes, new_id);
+
+    if old_node.node_kind != new_node.node_kind || !(old_node.tag == new_node.tag) {
+        patches = list_push(patches, patch_replace_node(path, new_node));
         return patches;
     }
 
     if new_node.node_kind == 2 {
-        let old_txt: String = old_node.text;
-        let new_txt: String = new_node.text;
-        if !(old_txt == new_txt) {
+        if !(old_node.text == new_node.text) {
             patches = list_push(patches, patch_set_text(path, new_node.text));
         }
         return patches;
@@ -56,49 +119,29 @@ pub fn vdom_diff(old_node: &VNode, new_node: &VNode, path: String) -> List[Patch
         patches = list_push(patches, patch_update_props(path, new_node.props));
     }
 
-    let old_ch: List[VNode] = old_node.children;
-    let new_ch: List[VNode] = new_node.children;
-    let n_old: Int = list_len(old_ch);
-    let n_new: Int = list_len(new_ch);
-
-    let min_len: Int = if n_old < n_new { n_old } else { n_new };
-    let mut i: Int = 0;
-    while i < min_len {
-        let oc: VNode = list_get(old_ch, i);
-        let nc: VNode = list_get(new_ch, i);
-        let child_path: String = path + "." + i.to_string();
-        let sub_patches: List[Patch] = vdom_diff(&oc, &nc, child_path);
-        let n_sub: Int = list_len(sub_patches);
-        let mut k: Int = 0;
-        while k < n_sub {
-            patches = list_push(patches, list_get(sub_patches, k));
-            k = k + 1;
-        }
-        i = i + 1;
+    let ch_patches: List[Patch] = diff_structural_children(old_arena, old_node.child_ids, new_arena, new_node.child_ids, path);
+    let n_ch: Int = list_len(ch_patches);
+    let mut j: Int = 0;
+    while j < n_ch {
+        patches = list_push(patches, list_get(ch_patches, j));
+        j = j + 1;
     }
-
-    if n_old > n_new {
-        let mut rem_idx: Int = n_old - 1;
-        while rem_idx >= n_new {
-            patches = list_push(patches, patch_remove_child(path, rem_idx));
-            rem_idx = rem_idx - 1;
-        }
-    } else if n_new > n_old {
-        let mut add_idx: Int = n_old;
-        while add_idx < n_new {
-            let child_to_add: VNode = list_get(new_ch, add_idx);
-            patches = list_push(patches, patch_append_child(path, child_to_add));
-            add_idx = add_idx + 1;
-        }
-    }
-
     return patches;
 }
 
 pub fn wui_diff_probe() -> Int {
     let chk: Int = wui_patch_probe();
-    let n0: VNode = vnode_text("a");
-    let n1: VNode = vnode_text("b");
-    let p: List[Patch] = vdom_diff(&n0, &n1, "root");
+    let mut a0: VNodeArena = vnode_arena_new();
+    let mut n0: List[VNode] = a0.nodes;
+    n0 = list_push(n0, vnode_text("a"));
+    a0.nodes = n0;
+    a0.root_id = 0;
+    let mut a1: VNodeArena = vnode_arena_new();
+    let mut n1: List[VNode] = a1.nodes;
+    n1 = list_push(n1, vnode_text("b"));
+    a1.nodes = n1;
+    a1.root_id = 0;
+    let p: List[Patch] = vdom_diff(&a0, 0, &a1, 0, "root");
     return list_len(p) + chk;
 }
+

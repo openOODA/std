@@ -78,4 +78,20 @@ pub fn vnode_get_prop(node: &VNode, key: String) -> Result[String, String] {
     return Err("ERR\tprop_not_found: " + key);
 }
 
+type VNodeArena = struct {
+    nodes: List[VNode],
+    root_id: Int,
+    next_id: Int
+};
+
+pub fn vnode_arena_new() -> VNodeArena {
+    let empty_nodes: List[VNode] = list_new();
+    return VNodeArena {
+        nodes: empty_nodes,
+        root_id: 0 - 1,
+        next_id: 0
+    };
+}
+
 pub fn wui_vnode_probe() -> Int { return 0; }
+
