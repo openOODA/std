@@ -50,22 +50,10 @@ pub fn s5_get(s: S5W, i: Int) -> W64 {
 
 pub fn s5_compress(w: S5W, data: String, n: Int, total: Int, base: Int) -> S5W {
     let z: W64 = W64 { hi: 0, lo: 0 };
-    let mut w0: W64 = z;
-    let mut w1: W64 = z;
-    let mut w2: W64 = z;
-    let mut w3: W64 = z;
-    let mut w4: W64 = z;
-    let mut w5: W64 = z;
-    let mut w6: W64 = z;
-    let mut w7: W64 = z;
-    let mut w8: W64 = z;
-    let mut w9: W64 = z;
-    let mut w10: W64 = z;
-    let mut w11: W64 = z;
-    let mut w12: W64 = z;
-    let mut w13: W64 = z;
-    let mut w14: W64 = z;
-    let mut w15: W64 = z;
+    let mut w0: W64 = z; let mut w1: W64 = z; let mut w2: W64 = z; let mut w3: W64 = z;
+    let mut w4: W64 = z; let mut w5: W64 = z; let mut w6: W64 = z; let mut w7: W64 = z;
+    let mut w8: W64 = z; let mut w9: W64 = z; let mut w10: W64 = z; let mut w11: W64 = z;
+    let mut w12: W64 = z; let mut w13: W64 = z; let mut w14: W64 = z; let mut w15: W64 = z;
     let mut s: S5W = w;
     let mut t: Int = 0;
     while t < 80 {
@@ -76,22 +64,10 @@ pub fn s5_compress(w: S5W, data: String, n: Int, total: Int, base: Int) -> S5W {
             wt = s5_add(s5_add(s5_sigma1(w14), w9), s5_add(s5_sigma0(w1), w0));
         }
         s = s5_rnd(s, s5_k(t), wt);
-        w0 = w1;
-        w1 = w2;
-        w2 = w3;
-        w3 = w4;
-        w4 = w5;
-        w5 = w6;
-        w6 = w7;
-        w7 = w8;
-        w8 = w9;
-        w9 = w10;
-        w10 = w11;
-        w11 = w12;
-        w12 = w13;
-        w13 = w14;
-        w14 = w15;
-        w15 = wt;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = wt;
         t = t + 1;
     }
     return s;

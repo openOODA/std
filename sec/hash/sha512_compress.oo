@@ -9,7 +9,7 @@
 //   2. s_padb / s_be64: pad a message and read 64-bit big-endian words.
 //   3. s_word: index ShaSt state into a Sha64 word.
 //   4. s_rnd, s_addst, s_compress: 80-round compression with sliding message window.
-//   5. s_hexb, s_hexw: emit 1- and 8-byte lowercase hex.
+//   5. s_hexw: emit 8-byte lowercase hex.
 
 import "./sha512_words.oo";
 import "./sha512_arith.oo";
@@ -108,22 +108,10 @@ fn s_addst(x: ShaSt, y: ShaSt) -> ShaSt {
 
 fn s_compress(st: ShaSt, data: String, base: Int, n: Int, total: Int) -> ShaSt {
     let z: Sha64 = Sha64 { hi: 0, lo: 0 };
-    let mut w0: Sha64 = z;
-    let mut w1: Sha64 = z;
-    let mut w2: Sha64 = z;
-    let mut w3: Sha64 = z;
-    let mut w4: Sha64 = z;
-    let mut w5: Sha64 = z;
-    let mut w6: Sha64 = z;
-    let mut w7: Sha64 = z;
-    let mut w8: Sha64 = z;
-    let mut w9: Sha64 = z;
-    let mut w10: Sha64 = z;
-    let mut w11: Sha64 = z;
-    let mut w12: Sha64 = z;
-    let mut w13: Sha64 = z;
-    let mut w14: Sha64 = z;
-    let mut w15: Sha64 = z;
+    let mut w0: Sha64 = z; let mut w1: Sha64 = z; let mut w2: Sha64 = z; let mut w3: Sha64 = z;
+    let mut w4: Sha64 = z; let mut w5: Sha64 = z; let mut w6: Sha64 = z; let mut w7: Sha64 = z;
+    let mut w8: Sha64 = z; let mut w9: Sha64 = z; let mut w10: Sha64 = z; let mut w11: Sha64 = z;
+    let mut w12: Sha64 = z; let mut w13: Sha64 = z; let mut w14: Sha64 = z; let mut w15: Sha64 = z;
     let mut s: ShaSt = st;
     let mut t: Int = 0;
     while t < 80 {
@@ -134,35 +122,27 @@ fn s_compress(st: ShaSt, data: String, base: Int, n: Int, total: Int) -> ShaSt {
             wt = s_add(s_add(s_sig1(w14), w9), s_add(s_sig0(w1), w0));
         }
         s = s_rnd(s, wt, s_k(t));
-        w0 = w1;
-        w1 = w2;
-        w2 = w3;
-        w3 = w4;
-        w4 = w5;
-        w5 = w6;
-        w6 = w7;
-        w7 = w8;
-        w8 = w9;
-        w9 = w10;
-        w10 = w11;
-        w11 = w12;
-        w12 = w13;
-        w13 = w14;
-        w14 = w15;
-        w15 = wt;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = wt;
         t = t + 1;
     }
     return s_addst(st, s);
 }
 
-fn s_hexb(v: Int) -> String {
-    let hx: String = "0123456789abcdef";
-    let b: Int = v & 255;
-    return char_at(hx, (b >> 4) & 15) + char_at(hx, b & 15);
-}
-
 fn s_hexw(w: Sha64) -> String {
+    let hx: String = "0123456789abcdef";
     let h: Int = w.hi;
     let l: Int = w.lo;
-    return s_hexb(h >> 24) + s_hexb(h >> 16) + s_hexb(h >> 8) + s_hexb(h) + s_hexb(l >> 24) + s_hexb(l >> 16) + s_hexb(l >> 8) + s_hexb(l);
+    let mut out: String = "";
+    out = out + char_at(hx, (h >> 28) & 15) + char_at(hx, (h >> 24) & 15);
+    out = out + char_at(hx, (h >> 20) & 15) + char_at(hx, (h >> 16) & 15);
+    out = out + char_at(hx, (h >> 12) & 15) + char_at(hx, (h >> 8) & 15);
+    out = out + char_at(hx, (h >> 4) & 15) + char_at(hx, h & 15);
+    out = out + char_at(hx, (l >> 28) & 15) + char_at(hx, (l >> 24) & 15);
+    out = out + char_at(hx, (l >> 20) & 15) + char_at(hx, (l >> 16) & 15);
+    out = out + char_at(hx, (l >> 12) & 15) + char_at(hx, (l >> 8) & 15);
+    out = out + char_at(hx, (l >> 4) & 15) + char_at(hx, l & 15);
+    return out;
 }
