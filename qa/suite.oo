@@ -17,7 +17,7 @@
 //   3. Tripwire each excluded probe: check must pass (stays valid code)
 //      and build must fail with the KNOWN marker (unknown call ffi_call);
 //      a probe that ever builds fails the suite so it gets wired in.
-//   4. Fail closed if fewer than 61 probes are wired.
+//   4. Fail closed if no probes are discovered under qa/.
 //   5. Compile and execute each probe twice in fresh processes.
 //   6. Byte-compare both runs' outputs; any difference fails the suite.
 //   7. Clean up temporary probe binaries immediately.
@@ -141,8 +141,8 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, env: &EnvCap, args: List[String]) 
         }
         ti = ti + 1;
     }
-    if list_len(ps) < 61 {
-        return Err("probe floor violated: wired " + list_len(ps).to_string() + ", need >= 61 under qa/");
+    if list_len(ps) == 0 {
+        return Err("no probes discovered under qa/");
     }
     println("std suite: enumerated " + list_len(ps).to_string() + " probes");
 

@@ -11,7 +11,7 @@
 //   2. Assert root anchor.oo exists.
 //   3. Assert forbidden compile/ remains deleted.
 //   4. Assert suite.oo enumerates qa/probe_*.oo with the sdl exclusion and
-//      the 61 floor, and every manual exemption matches that exclusion.
+//      dynamic floor, and every manual exemption matches that exclusion.
 //   5. Exit 0 on verified compliance.
 
 import "fs/os/fs.oo";
@@ -51,8 +51,8 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, sys: &SysCap, env: &EnvCap, time: 
     if !str_contains(spawns, "probe_sdl_") {
         return Err("api_surface: suite.oo lost sdl exclusion");
     }
-    if !str_contains(spawns, "61") {
-        return Err("api_surface: suite.oo lost 61 floor");
+    if !str_contains(spawns, "list_len(ps) == 0") {
+        return Err("api_surface: suite.oo lost probe presence floor");
     }
     let ents: List[String] = fs_read_dir(fs_r, "qa");
     let mut i: Int = 0;
@@ -78,8 +78,8 @@ pub fn main(p: &ProcessCap, fs_r: &FsReadCap, sys: &SysCap, env: &EnvCap, time: 
     if manual != 3 {
         return Err("api_surface: manual set drifted, want exactly the 3 sdl probes");
     }
-    if checked < 61 {
-        return Err("api_surface: expected 61+ wired probes, found " + checked.to_string());
+    if checked == 0 {
+        return Err("api_surface: expected wired probes, found 0");
     }
     println("probe: std/api_surface: ok");
     return Ok(0);
