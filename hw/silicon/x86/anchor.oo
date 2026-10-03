@@ -1,0 +1,18 @@
+// # Silicon x86 Submodule Entry Point
+//
+// Logline: Unified x86 architecture entry door re-exporting encoding and code generation subpackages.
+//
+// Setup: Pure entry door. Re-exports enc and gen subpackages.
+//
+// Beats:
+//   1. Re-export x86 encoding and register architecture.
+//   2. Re-export x86 code generation and ELF linking.
+//   3. Provide intermediate re-export shim for root silicon anchor.
+//   4. Preserve zero cyclic imports.
+
+import "enc/anchor.oo";
+import "gen/anchor.oo";
+
+pub fn x86_codegen_source(src: String) -> List[Int] {
+    return x86_compile_source_shim(src);
+}

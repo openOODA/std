@@ -24,7 +24,7 @@ import "net/ip_cidr_parse.oo";
 // Returns 1 contained, 0 not contained, -1 on parse failure.
 fn nc_contains(cidr_s: String, ip_s: String) -> Int {
     let cr: Result[Cidr4, String] = cidr4_parse(cidr_s);
-    let ir: Result[Ipv4, String] = ipv4_parse(ip_s);
+    let ir: Result[Ipv4, String] = ipv4_parse_result(ip_s);
     if cr.is_err() || ir.is_err() { return 0 - 1; }
     let c: Cidr4 = match cr { Ok(v) => v, Err(_) => Cidr4 { addr: Ipv4 { octets: list_new() }, prefix: 0 } };
     let ip: Ipv4 = match ir { Ok(v) => v, Err(_) => Ipv4 { octets: list_new() } };
@@ -68,19 +68,19 @@ pub fn main() -> Result[Int, String] {
     if cidr4_parse("192.168.1.0").is_ok() {
         return Err("net_cidr: missing slash must be rejected");
     }
-    if cidr4_parse("").is_ok() || ipv4_parse("999.1.1.1").is_ok() {
+    if cidr4_parse("").is_ok() || ipv4_parse_result("999.1.1.1").is_ok() {
         return Err("net_cidr: garbage must be rejected");
     }
     if cidr4_parse_status("10.0.0.0/8").is_err() || cidr4_parse_status("bad").is_ok() {
         return Err("net_cidr: status fn must agree");
     }
-    if ipv6_parse("2001:0db8:0000:0000:0000:0000:0000:0001").is_err() {
+    if ipv6_parse_result("2001:0db8:0000:0000:0000:0000:0000:0001").is_err() {
         return Err("net_cidr: full v6 must parse");
     }
-    if ipv6_parse("::1").is_err() {
+    if ipv6_parse_result("::1").is_err() {
         return Err("net_cidr: ::1 must parse");
     }
-    if ipv6_parse("not-ipv6").is_ok() {
+    if ipv6_parse_result("not-ipv6").is_ok() {
         return Err("net_cidr: v6 garbage must be rejected");
     }
     if cidr6_parse_status("::/0").is_err() || cidr6_parse_status("::/129").is_ok() {

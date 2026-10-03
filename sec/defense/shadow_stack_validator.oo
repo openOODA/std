@@ -16,7 +16,7 @@ type ShadowFrame = struct {
     canary: Int
 };
 
-type ShadowStack = struct {
+type DefenseShadowStack = struct {
     stack_limit: Int,
     frames: List[ShadowFrame],
     depth: Int,
@@ -24,9 +24,9 @@ type ShadowStack = struct {
     is_locked: Bool
 };
 
-pub fn shadow_stack_new(max_depth: Int) -> ShadowStack {
+pub fn defense_shadow_stack_new(max_depth: Int) -> DefenseShadowStack {
     let empty_frames: List[ShadowFrame] = list_new();
-    return ShadowStack {
+    return DefenseShadowStack {
         stack_limit: max_depth,
         frames: empty_frames,
         depth: 0,
@@ -35,13 +35,13 @@ pub fn shadow_stack_new(max_depth: Int) -> ShadowStack {
     };
 }
 
-pub fn shadow_stack_push(
-    stack: ShadowStack,
+pub fn defense_shadow_stack_push(
+    stack: DefenseShadowStack,
     fn_id: Int,
     ret_addr: Int,
     canary_val: Int
 ) -> Bool {
-    let mut stack: ShadowStack = stack;
+    let mut stack: DefenseShadowStack = stack;
     if stack.is_locked || stack.depth >= stack.stack_limit {
         return false;
     }
@@ -57,12 +57,12 @@ pub fn shadow_stack_push(
     return true;
 }
 
-pub fn shadow_stack_validate_and_pop(
-    stack: ShadowStack,
+pub fn defense_shadow_stack_validate_and_pop(
+    stack: DefenseShadowStack,
     primary_ret_addr: Int,
     primary_canary: Int
 ) -> Bool {
-    let mut stack: ShadowStack = stack;
+    let mut stack: DefenseShadowStack = stack;
     if stack.depth <= 0 {
         stack.violations = stack.violations + 1;
         return false;
@@ -86,6 +86,6 @@ pub fn shadow_stack_validate_and_pop(
     return true;
 }
 
-pub fn shadow_stack_is_healthy(stack: ShadowStack) -> Bool {
+pub fn defense_shadow_stack_is_healthy(stack: DefenseShadowStack) -> Bool {
     return (stack.violations == 0) && (stack.is_locked == false);
 }

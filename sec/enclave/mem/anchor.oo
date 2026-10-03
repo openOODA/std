@@ -1,0 +1,21 @@
+// # Enclave Memory Protection Hub
+//
+// Logline: Constant-time comparison, secret zeroization, and cryptographic buffer wipes.
+//
+// Setup: Pure algorithmic operations for memory wiping and constant-time branching.
+//
+// Beats:
+//   1. Re-export constant-time arithmetic and selection primitives.
+//   2. Re-export zeroize buffer allocations and wiping operations.
+//   3. Provide secure memory wiping guarantees for enclaves.
+
+import "constant_time.oo";
+import "zeroize_buffer.oo";
+
+pub fn enclave_mem_probe() -> Int {
+    let buf: List[Int] = list_new();
+    let s: SecretBuffer = secret_buf_new(buf);
+    let w: SecretBuffer = secret_buf_wipe(s);
+    if secret_buf_is_clean(w) { return 0; }
+    return 1;
+}

@@ -54,7 +54,7 @@ pub fn shim_marker_ruleset_new() -> LandlockRuleset {
     return landlock_ruleset_new("default", landlock_access_fs_all(), landlock_access_net_all());
 }
 
-pub fn shim_marker_check_path_prefix() -> Bool {
+pub fn shim_marker_landlock_check_path_prefix() -> Bool {
     return landlock_check_path_prefix("/home", "/home/user/file");
 }
 

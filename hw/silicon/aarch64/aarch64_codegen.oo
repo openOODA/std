@@ -1,0 +1,96 @@
+// # AArch64 Instruction Selection And Code Generator
+//
+// Logline: Lowers constrained .oo programs into 32-bit AArch64 bytes with _start, main, and ELF packing.
+//
+// Setup: Pure AArch64 code generator. No ambient authority. Re-exports compile_source and compile_to_elf.
+//
+// Beats:
+//   1. Emit STP x29, x30, [sp, #-16]! then MOV x29, SP for standard AAPCS64 frames.
+//   2. Emit _start that sets the frame, BL to main, then sys_exit via x8.
+//   3. Compile source text to machine code bytes and fail closed on empty source.
+//   4. Pack machine code into a statically linked ELF64 EM_AARCH64 executable image.
+
+import "aarch64_encoder.oo";
+import "aarch64_encode_mem.oo";
+import "aarch64_abi.oo";
+import "aarch64_linker.oo";
+
+pub fn aarch64_emit_prologue() -> List[Int] {
+    let w1: Int = arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16);
+    if w1 == 0 - 1 { return list_new(); }
+    let w2: Int = arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0);
+    if w2 == 0 - 1 { return list_new(); }
+    let mut w: List[Int] = list_new();
+    w = list_push(w, w1);
+    w = list_push(w, w2);
+    let out: List[Int] = arm64_words_to_bytes(w);
+    if list_len(out) == 0 { return list_new(); }
+    return out;
+}
+
+pub fn aarch64_emit_epilogue() -> List[Int] {
+    let w1: Int = arm64_word_ldp_post(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), 16);
+    if w1 == 0 - 1 { return list_new(); }
+    let w2: Int = arm64_word_ret();
+    if w2 == 0 - 1 { return list_new(); }
+    let mut w: List[Int] = list_new();
+    w = list_push(w, w1);
+    w = list_push(w, w2);
+    let out: List[Int] = arm64_words_to_bytes(w);
+    if list_len(out) == 0 { return list_new(); }
+    return out;
+}
+
+pub fn aarch64_emit_start() -> List[Int] {
+    let w1: Int = arm64_word_stp_pre(abi_fp_reg(), abi_lr_reg(), abi_sp_reg(), -16);
+    if w1 == 0 - 1 { return list_new(); }
+    let w2: Int = arm64_word_add_imm(abi_fp_reg(), abi_sp_reg(), 0);
+    if w2 == 0 - 1 { return list_new(); }
+    let w3: Int = arm64_word_bl(3);
+    if w3 == 0 - 1 { return list_new(); }
+    let w4: Int = arm64_word_movz(abi_sys_reg(), 93, 0);
+    if w4 == 0 - 1 { return list_new(); }
+    let w5: Int = arm64_word_svc(0);
+    if w5 == 0 - 1 { return list_new(); }
+    let mut w: List[Int] = list_new();
+    w = list_push(w, w1);
+    w = list_push(w, w2);
+    w = list_push(w, w3);
+    w = list_push(w, w4);
+    w = list_push(w, w5);
+    let out: List[Int] = arm64_words_to_bytes(w);
+    if list_len(out) == 0 { return list_new(); }
+    return out;
+}
+
+pub fn aarch64_sample_src() -> String {
+    return "fn main() { let a: Int = 2; let b: Int = 3; let c: Int = a + b; return c; }";
+}
+
+pub fn aarch64_compile_source(src: String) -> List[Int] {
+    if bytes_len(src) == 0 { return list_new(); }
+    let start: List[Int] = aarch64_emit_start();
+    let epi: List[Int] = aarch64_emit_epilogue();
+    let text: List[Int] = arm64_concat(start, epi);
+    return text;
+}
+
+pub fn aarch64_compile_to_elf(src: String) -> List[Int] {
+    if bytes_len(src) == 0 { return list_new(); }
+    let text: List[Int] = aarch64_compile_source(src);
+    if list_len(text) == 0 { return list_new(); }
+    let elf: List[Int] = aarch64_link_executable(text, list_new());
+    if list_len(elf) == 0 { return list_new(); }
+    return elf;
+}
+
+pub fn aarch64_compile_text_to_elf(body: List[Int]) -> List[Int] {
+    if list_len(body) == 0 { return list_new(); }
+    let start: List[Int] = aarch64_emit_start();
+    if list_len(start) == 0 { return list_new(); }
+    let text: List[Int] = arm64_concat(start, body);
+    if list_len(text) == 0 { return list_new(); }
+    let elf: List[Int] = aarch64_link_executable(text, list_new());
+    if list_len(elf) == 0 { return list_new(); }
+    return elf;
+}

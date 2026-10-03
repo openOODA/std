@@ -72,7 +72,7 @@ pub fn euler_angular_accel(ixx: Float, iyy: Float, izz: Float, wx: Float, wy: Fl
     return GncVec3 { x: ax, y: ay, z: az };
 }
 
-pub fn quat_derivative(qw: Float, qx: Float, qy: Float, qz: Float, wx: Float, wy: Float, wz: Float) -> GncQuat {
+pub fn gnc_quat_derivative(qw: Float, qx: Float, qy: Float, qz: Float, wx: Float, wy: Float, wz: Float) -> GncQuat {
     let dw: Float = 0.5 * (0.0 - (wx * qx + wy * qy + wz * qz));
     let dx: Float = 0.5 * (wx * qw + wy * qz - wz * qy);
     let dy: Float = 0.5 * (wy * qw + wz * qx - wx * qz);
@@ -136,7 +136,7 @@ pub fn spacecraft_6dof_step(sc: Spacecraft6Dof, force: GncVec3, torque: GncVec3,
     let v_next_z: Float = sc.vz + az * dt;
 
     let k1_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, sc.wx, sc.wy, sc.wz, torque.x, torque.y, torque.z);
-    let k1_q: GncQuat = quat_derivative(sc.qw, sc.qx, sc.qy, sc.qz, sc.wx, sc.wy, sc.wz);
+    let k1_q: GncQuat = gnc_quat_derivative(sc.qw, sc.qx, sc.qy, sc.qz, sc.wx, sc.wy, sc.wz);
 
     let half_dt: Float = dt * 0.5;
     let w_mid1_x: Float = sc.wx + k1_w.x * half_dt;
@@ -151,7 +151,7 @@ pub fn spacecraft_6dof_step(sc: Spacecraft6Dof, force: GncVec3, torque: GncVec3,
     let q_mid1: GncQuat = gnc_quat_normalize(raw_q1);
 
     let k2_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, w_mid1_x, w_mid1_y, w_mid1_z, torque.x, torque.y, torque.z);
-    let k2_q: GncQuat = quat_derivative(q_mid1.w, q_mid1.x, q_mid1.y, q_mid1.z, w_mid1_x, w_mid1_y, w_mid1_z);
+    let k2_q: GncQuat = gnc_quat_derivative(q_mid1.w, q_mid1.x, q_mid1.y, q_mid1.z, w_mid1_x, w_mid1_y, w_mid1_z);
 
     let w_mid2_x: Float = sc.wx + k2_w.x * half_dt;
     let w_mid2_y: Float = sc.wy + k2_w.y * half_dt;
@@ -165,7 +165,7 @@ pub fn spacecraft_6dof_step(sc: Spacecraft6Dof, force: GncVec3, torque: GncVec3,
     let q_mid2: GncQuat = gnc_quat_normalize(raw_q2);
 
     let k3_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, w_mid2_x, w_mid2_y, w_mid2_z, torque.x, torque.y, torque.z);
-    let k3_q: GncQuat = quat_derivative(q_mid2.w, q_mid2.x, q_mid2.y, q_mid2.z, w_mid2_x, w_mid2_y, w_mid2_z);
+    let k3_q: GncQuat = gnc_quat_derivative(q_mid2.w, q_mid2.x, q_mid2.y, q_mid2.z, w_mid2_x, w_mid2_y, w_mid2_z);
 
     let w_end_x: Float = sc.wx + k3_w.x * dt;
     let w_end_y: Float = sc.wy + k3_w.y * dt;
@@ -179,7 +179,7 @@ pub fn spacecraft_6dof_step(sc: Spacecraft6Dof, force: GncVec3, torque: GncVec3,
     let q_end: GncQuat = gnc_quat_normalize(raw_q3);
 
     let k4_w: GncVec3 = euler_angular_accel(i.ixx, i.iyy, i.izz, w_end_x, w_end_y, w_end_z, torque.x, torque.y, torque.z);
-    let k4_q: GncQuat = quat_derivative(q_end.w, q_end.x, q_end.y, q_end.z, w_end_x, w_end_y, w_end_z);
+    let k4_q: GncQuat = gnc_quat_derivative(q_end.w, q_end.x, q_end.y, q_end.z, w_end_x, w_end_y, w_end_z);
 
     let inv6: Float = 0.16666666666666666;
     let w_next_x: Float = sc.wx + dt * inv6 * (k1_w.x + 2.0 * k2_w.x + 2.0 * k3_w.x + k4_w.x);

@@ -31,5 +31,5 @@ pub fn quat_rotate_vector(q: Quaternion, v: Vector3) -> Vector3 {
     let t: Quaternion = quat_multiply(q, p);
     let c: Quaternion = quat_conjugate(q);
     let r: Quaternion = quat_multiply(t, c);
-    return vec3_new(r.x, r.y, r.z);
+    return vector3_new(r.x, r.y, r.z);
 }

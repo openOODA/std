@@ -99,7 +99,7 @@ pub fn quadrotor_dynamics_step(
 
     // Linear velocity derivative: v_dot = [0, 0, -g] + (1/m)*R*[0, 0, T] - (drag/m)*v
     let thrust_body: Vector3D = Vector3D { x: 0.0, y: 0.0, z: ft.thrust_total };
-    let thrust_world: Vector3D = quat_rotate_vector(state.quat, thrust_body);
+    let thrust_world: Vector3D = uav_quat_rotate_vector(state.quat, thrust_body);
 
     let drag_force_x: Float = (0.0 - params.drag_linear) * (state.vel).x;
     let drag_force_y: Float = (0.0 - params.drag_linear) * (state.vel).y;

@@ -11,12 +11,12 @@
 
 import "std/sec/sys/kernel_audit_types.oo";
 
-pub fn kernel_audit_engine_init(perm_mask: Int, action: Int) -> AuditRule {
-    return audit_rule_new(perm_mask, action);
+pub fn kernel_audit_engine_init(perm_mask: Int, action: Int) -> KernelAuditRule {
+    return kernel_audit_rule_new(perm_mask, action);
 }
 
 pub fn kernel_audit_engine_work(perm_mask: Int, action: Int) -> Int {
-    let r: AuditRule = audit_rule_new(perm_mask, action);
+    let r: KernelAuditRule = kernel_audit_rule_new(perm_mask, action);
     return r.perm_mask + r.action;
 }
 

@@ -1,0 +1,64 @@
+// # Unified Open Quantum Systems & Lindblad Master Equations Facade
+//
+// Logline: Master facade re-exporting all 49 open quantum systems, Lindblad master equations, stochastic trajectories, and non-Markovian dynamics submodules.
+//
+// Setup: Pure module shim and unified API importing all companion submodules in quantum_open_systems.
+//
+// Beats:
+//   1. Import 49 modular Lindblad, MCWF, Redfield, Langevin, and Quantum Thermodynamics submodules.
+//   2. Re-export public open quantum configurations, factory constructors, and simulation pipeline shims.
+//   3. Maintain uniform type access and backwards compatibility for openOODA quantum open systems applications.
+
+import "lindblad/anchor.oo";
+import "bath/anchor.oo";
+import "stochastic/anchor.oo";
+import "decoherence/anchor.oo";
+import "quasiprob/anchor.oo";
+import "steady/anchor.oo";
+import "reservoir/anchor.oo";
+import "quantum_open_systems_stubs.oo";
+
+// -------------------------------------------------------------------
+// Unified Open Quantum Systems Runtime Configuration
+// -------------------------------------------------------------------
+
+type OpenQuantumRuntimeConfig = struct {
+    default_time_step_ns: Float,
+    bath_temperature_mk: Float,
+    enable_quantum_jumps: Int,
+    monte_carlo_trajectories: Int
+};
+
+pub fn open_quantum_runtime_default() -> OpenQuantumRuntimeConfig {
+    return OpenQuantumRuntimeConfig {
+        default_time_step_ns: 0.1,
+        bath_temperature_mk: 15.0,
+        enable_quantum_jumps: 1,
+        monte_carlo_trajectories: 500
+    };
+}
+
+// -------------------------------------------------------------------
+// High-Level Facade Convenience Shims
+// -------------------------------------------------------------------
+
+pub fn qos_lindblad_dissipator_default() -> LindbladDissipator2x2 {
+    return lindblad_dissipator_default();
+}
+
+pub fn qos_thermal_reservoir_cryogenic() -> ThermalReservoir {
+    return thermal_reservoir_cryogenic();
+}
+
+pub fn qos_decoherence_times(t1: Float, t_phi: Float) -> DecoherenceTimescales {
+    return decoherence_times_new(t1, t_phi);
+}
+
+pub fn qos_udd_schedule(total_t: Float, n: Int) -> List[Float] {
+    let seq: UddSequence = udd_sequence_new(total_t, n);
+    return udd_schedule_generate(seq);
+}
+
+pub fn qos_gaussian_state_vacuum() -> GaussianState1Mode {
+    return gaussian_state_vacuum();
+}

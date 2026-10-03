@@ -2,38 +2,16 @@
 //
 // Logline: Re-exports the AArch64 and x86 instruction encoder, code generator, and linker surface for the silicon CPU architecture layer.
 //
-// Setup: Pure entry door. Imports private sibling encoders and exposes the public API for both CPU architectures.
+// Setup: Pure entry door. Re-exports AArch64 and x86 architecture submodules.
 //
 // Beats:
-//   1. Import the AArch64 integer ALU encoder, branch/memory encoder, and ABI helpers.
-//   2. Import the AArch64 NEON 128/256-bit vector encoder and constrained lowerer.
-//   3. Import the AArch64 program compiler, linker, and code generator.
-//   4. Import the x86 instruction encoders, ABI helpers, ELF and Mach-O generators.
-//   5. Import the x86 code generator, linker, and peephole optimizer.
-//   6. Re-export both AArch64 and x86 codegen entry points.
+//   1. Re-export AArch64 vector and codegen operations.
+//   2. Re-export x86 instruction encoder and codegen operations.
+//   3. Maintain directory density <= 8 pages.
+//   4. Enforce acyclic import graph.
 
-// ── AArch64 surface ──
-
-import "aarch64_encoder.oo";
-import "aarch64_encode_mem.oo";
-import "aarch64_abi.oo";
-import "aarch64_neon.oo";
-import "aarch64_codegen.oo";
-import "aarch64_linker.oo";
-import "aarch64_program.oo";
-
-// ── x86 surface ──
-
-import "x86_assembler.oo";
-import "x86_encoder.oo";
-import "x86_abi.oo";
-import "x86_codegen.oo";
-import "x86_linker.oo";
-import "x86_regs.oo";
-import "x86_elf.oo";
-import "x86_syscalls.oo";
-import "x86_direct_elf.oo";
-import "x86_peephole.oo";
+import "aarch64/anchor.oo";
+import "x86/anchor.oo";
 
 // ── Sovereign Lattice ── SILICON MOD ──
 
@@ -46,5 +24,5 @@ pub fn silicon_aarch64_codegen(src: String) -> List[Int] {
 }
 
 pub fn silicon_x86_codegen(src: String) -> List[Int] {
-    return x86_compile_source(src);
+    return x86_codegen_source(src);
 }

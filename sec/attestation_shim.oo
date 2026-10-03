@@ -28,11 +28,11 @@ pub fn shim_marker_measurement_verify() -> Bool {
     return attestation_measurement_verify(m, "deadbeef");
 }
 
-pub fn shim_marker_policy_init() -> AttestationPolicy {
+pub fn shim_marker_attestation_policy_init() -> AttestationPolicy {
     return attestation_policy_init("pol-1", true, false, 50, true);
 }
 
-pub fn shim_marker_token_create() -> AttestationToken {
+pub fn shim_marker_attestation_token_create() -> AttestationToken {
     return attestation_token_create("tok1", "sub", "att", "q1", 90, 1000, 3600);
 }
 
@@ -65,7 +65,7 @@ pub fn attestation_marker_engine_init() -> AttestationEngine {
     return attestation_engine_init("eng-1", pol);
 }
 
-pub fn shim_marker_engine_do_work() -> Int {
+pub fn shim_marker_attestation_engine_do_work() -> Int {
     let pol: AttestationPolicy = attestation_policy_init("pol-1", true, false, 50, true);
     let e: AttestationEngine = attestation_engine_init("eng-1", pol);
     return attestation_engine_do_work(&e);

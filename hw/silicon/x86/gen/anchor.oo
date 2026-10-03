@@ -1,0 +1,21 @@
+// # Silicon x86 Code Generation Submodule
+//
+// Logline: x86-64 code generation, Linux syscall tables, direct ELF builder, and peephole optimizer.
+//
+// Setup: Pure compute, no ambient authority. Re-exports x86 code emitter and linker.
+//
+// Beats:
+//   1. Re-export x86 code generator and peephole dead store eliminator.
+//   2. Re-export Linux x86-64 syscall wrappers.
+//   3. Re-export executable ELF header packaging and linker.
+//   4. Expose x86_compile_source_shim.
+
+import "x86_codegen.oo";
+import "x86_linker.oo";
+import "x86_elf.oo";
+import "x86_syscalls.oo";
+import "x86_peephole.oo";
+
+pub fn x86_compile_source_shim(src: String) -> List[Int] {
+    return x86_compile_source(src);
+}

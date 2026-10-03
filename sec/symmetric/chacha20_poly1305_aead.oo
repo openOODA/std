@@ -217,7 +217,7 @@ fn p5_tag(otk: List[Int], aad: List[Int], ct: List[Int]) -> List[Int] {
     f = (f >> 32) + (h3 >> 18) + ((h4 & 16777215) << 8) + cc_le32(otk, 28);
     return cc_put32(tag, cc_mask(f));
 }
-pub fn chacha20_poly1305_seal(key: List[Int], nonce: List[Int], aad: List[Int], pt: List[Int]) -> Result[List[Int], String] {
+pub fn chacha20_poly1305_aead_seal(key: List[Int], nonce: List[Int], aad: List[Int], pt: List[Int]) -> Result[List[Int], String] {
     if list_len(key) != 32 { return Err("chacha20_poly1305 key"); }
     if list_len(nonce) != 12 { return Err("chacha20_poly1305 nonce"); }
     let ct: List[Int] = cc_xor_n(key, nonce, 1, pt);
@@ -230,7 +230,7 @@ pub fn chacha20_poly1305_seal(key: List[Int], nonce: List[Int], aad: List[Int], 
     }
     return Ok(out);
 }
-pub fn chacha20_poly1305_open(key: List[Int], nonce: List[Int], aad: List[Int], msg: List[Int]) -> Result[List[Int], String] {
+pub fn chacha20_poly1305_aead_open(key: List[Int], nonce: List[Int], aad: List[Int], msg: List[Int]) -> Result[List[Int], String] {
     if list_len(key) != 32 { return Err("chacha20_poly1305 key"); }
     if list_len(nonce) != 12 { return Err("chacha20_poly1305 nonce"); }
     if list_len(msg) < 16 { return Err("chacha20_poly1305 short"); }

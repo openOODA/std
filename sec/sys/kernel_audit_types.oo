@@ -11,18 +11,18 @@
 //
 // residual: List[struct] standardized.
 
-type AuditRule = struct {
+type KernelAuditRule = struct {
     perm_mask: Int,
     action: Int
 };
 
-pub fn audit_rule_new(perm_mask: Int, action: Int) -> AuditRule {
-    return AuditRule {
+pub fn kernel_audit_rule_new(perm_mask: Int, action: Int) -> KernelAuditRule {
+    return KernelAuditRule {
         perm_mask: perm_mask,
         action: action
     };
 }
 
-pub fn audit_rule_perm(r: AuditRule) -> Int {
+pub fn kernel_audit_rule_perm(r: KernelAuditRule) -> Int {
     return r.perm_mask;
 }

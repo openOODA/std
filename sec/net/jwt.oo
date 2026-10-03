@@ -35,7 +35,7 @@ import "std/sec/net/jwt_token_config.oo";
 import "std/sec/net/jwt_verify.oo";
 import "std/sec/net/jwt_stubs.oo";
 
-pub fn shim_marker_str_eq() -> Bool {
+pub fn shim_marker_jwt_str_eq() -> Bool {
     return jwt_str_eq("a", "a");
 }
 
@@ -43,7 +43,7 @@ pub fn shim_marker_str_starts_with() -> Bool {
     return jwt_str_starts_with("abc", "ab");
 }
 
-pub fn shim_marker_header_default() -> JwtHeader {
+pub fn shim_marker_jwt_header_default() -> JwtHeader {
     return jwt_header_default();
 }
 
@@ -67,7 +67,7 @@ pub fn shim_marker_payload_has_role(p: JwtPayload) -> Bool {
     return jwt_payload_has_role(p, "admin");
 }
 
-pub fn shim_marker_token_create(h: JwtHeader, p: JwtPayload) -> Result[JwtToken, String] {
+pub fn shim_marker_jwt_token_create(h: JwtHeader, p: JwtPayload) -> Result[JwtToken, String] {
     return jwt_token_create(h, p, "raw.token.sig", "sig");
 }
 
@@ -75,7 +75,7 @@ pub fn shim_marker_token_is_valid(t: JwtToken, c: JwtConfig) -> Bool {
     return jwt_token_is_valid(t, 1000, c);
 }
 
-pub fn shim_marker_config_init() -> Result[JwtConfig, String] {
+pub fn shim_marker_jwt_config_init() -> Result[JwtConfig, String] {
     return jwt_config_init("secret_key_pad", "HS256", "iss", "aud", 3600);
 }
 

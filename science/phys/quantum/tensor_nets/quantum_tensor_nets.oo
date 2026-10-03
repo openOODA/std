@@ -1,0 +1,88 @@
+// # Unified Quantum Many-Body Physics & Tensor Networks Facade
+//
+// Logline: Master facade re-exporting all 49 quantum many-body physics, Matrix Product State (MPS), DMRG, PEPS, MERA, TRG, and tensor network modules.
+//
+// Setup: Pure module shim and unified API importing all companion submodules in quantum_tensor_nets.
+//
+// Beats:
+//   1. Import 49 modular MPS, MPO, DMRG, TEBD, TDVP, PEPS, MERA, TRG, and many-body Hamiltonian submodules.
+//   2. Re-export public quantum tensor network configurations, factory constructors, and algorithm shims.
+//   3. Maintain full backwards compatibility and uniform type access for openOODA quantum applications.
+
+import "mps/anchor.oo";
+import "dmrg/anchor.oo";
+import "time_evo/anchor.oo";
+import "entanglement/anchor.oo";
+import "peps/anchor.oo";
+import "renorm/anchor.oo";
+import "mpo_models/anchor.oo";
+import "symmetry/anchor.oo";
+import "quantum_tensor_nets_stubs.oo";
+
+// -------------------------------------------------------------------
+// Unified Tensor Networks Runtime Configuration
+// -------------------------------------------------------------------
+
+type TensorNetsRuntime = struct {
+    default_max_bond_dim: Int,
+    target_svd_cutoff: Float,
+    enable_gpu_acceleration: Int,
+    krylov_max_subspace: Int
+};
+
+pub fn tensor_nets_runtime_default() -> TensorNetsRuntime {
+    return TensorNetsRuntime {
+        default_max_bond_dim: 128,
+        target_svd_cutoff: 0.00000001,
+        enable_gpu_acceleration: 1,
+        krylov_max_subspace: 20
+    };
+}
+
+// -------------------------------------------------------------------
+// High-Level Facade Convenience Shims
+// -------------------------------------------------------------------
+
+pub fn qtn_mps_zero_state(num_sites: Int, phys_dim: Int) -> MPSState {
+    return mps_product_state_all_zeros(num_sites, phys_dim);
+}
+
+pub fn qtn_mpo_identity(num_sites: Int, phys_dim: Int) -> MPOOperator {
+    return mpo_identity_new(num_sites, phys_dim);
+}
+
+pub fn qtn_heisenberg_xxx_config(num_sites: Int, j: Float) -> HeisenbergConfig {
+    return heisenberg_config_xxx(num_sites, j);
+}
+
+pub fn qtn_fermi_hubbard_config(num_sites: Int, u_over_t: Float) -> FermiHubbardConfig {
+    return fermi_hubbard_config_default(num_sites, u_over_t);
+}
+
+pub fn qtn_bose_hubbard_config(num_sites: Int, n_max: Int, u_val: Float) -> BoseHubbardConfig {
+    return bose_hubbard_config_default(num_sites, n_max, u_val);
+}
+
+pub fn qtn_tfim_config(num_sites: Int, j: Float, hx: Float) -> TfimConfig {
+    return tfim_config_new(num_sites, j, hx);
+}
+
+pub fn qtn_dmrg_single_site_config(num_sites: Int) -> DmrgSingleSiteConfig {
+    return dmrg_single_site_config_default(num_sites);
+}
+
+pub fn qtn_dmrg_two_site_config(num_sites: Int) -> DmrgTwoSiteConfig {
+    return dmrg_two_site_config_default(num_sites);
+}
+
+pub fn qtn_tebd_config(num_sites: Int, dt: Float, total_time: Float) -> TebdConfig {
+    return tebd_config_default(num_sites, dt, total_time);
+}
+
+pub fn qtn_peps_lattice_zero(rows: Int, cols: Int, phys_d: Int) -> PepsLattice2D {
+    return peps_product_state_zero(rows, cols, phys_d);
+}
+
+pub fn qtn_trg_config(chi: Int, temp: Float) -> TrgConfig {
+    return trg_config_default(chi, temp);
+}

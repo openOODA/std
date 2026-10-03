@@ -116,7 +116,7 @@ pub fn landlock_access_to_mask(acc: LandlockAccessFs) -> Int {
     return mask;
 }
 
-pub fn landlock_ruleset_new(abi_ver: Int) -> LandlockRuleset {
+pub fn landlock_policy_ruleset_new(abi_ver: Int) -> LandlockRuleset {
     let empty_rules: List[LandlockPathRule] = list_new();
     let handled_mask: Int = 16383;
     return LandlockRuleset {

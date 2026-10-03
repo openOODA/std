@@ -46,7 +46,7 @@ pub fn shim_marker_hw_feature_intel_ibt() -> Int {
     return cfi_hw_feature_intel_ibt();
 }
 
-pub fn shim_marker_policy_init() -> CfiPolicy {
+pub fn shim_marker_cfi_policy_init() -> CfiPolicy {
     return cfi_policy_init("default", true, true, true);
 }
 
@@ -58,7 +58,7 @@ pub fn shim_marker_call_site_create() -> IndirectCallSite {
     return indirect_call_site_create("s1", 4096, 42, "caller", true);
 }
 
-pub fn shim_marker_engine_do_work(engine: &CfiEngine) -> Int {
+pub fn shim_marker_cfi_engine_do_work(engine: &CfiEngine) -> Int {
     return cfi_engine_do_work(engine);
 }
 

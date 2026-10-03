@@ -7,7 +7,7 @@
 // Beats:
 //   1. mod_pow: modular exponentiation by squaring (square-and-multiply).
 //   2. gcd and modular_inverse via the Extended Euclidean Algorithm; returns 0 when no inverse exists.
-//   3. rsa_keygen/encrypt/decrypt: textbook RSA over small primes (61*53 by default).
+//   3. textbook_rsa_keygen/encrypt/decrypt: textbook RSA over small primes (61*53 by default).
 //   4. merkle_build/root/proof/verify: Merkle tree stored as a flat List[Int] with leaves_n as the header; canonical pair_hash detects tampering.
 //   5. hash_chain: deterministic H^n(seed) where H(x) = (31*x + 17) mod 1000003.
 //   6. hmac_like: H((key XOR n) || message) using pair_hash for combining.
@@ -93,7 +93,7 @@ pub fn modular_inverse(a: Int, m: Int) -> Int {
 }
 
 // RSA key generation: n = p*q, d = e^(-1) mod phi((p-1)*(q-1)).
-pub fn rsa_keygen(p: Int, q: Int, e: Int) -> RsaKey {
+pub fn textbook_rsa_keygen(p: Int, q: Int, e: Int) -> RsaKey {
     let n: Int = p * q;
     let phi: Int = (p - 1) * (q - 1);
     let d: Int = modular_inverse(e, phi);
@@ -101,7 +101,7 @@ pub fn rsa_keygen(p: Int, q: Int, e: Int) -> RsaKey {
 }
 
 // Textbook RSA encryption: c = m^e mod n.
-pub fn rsa_encrypt(m: Int, n: Int, e: Int) -> Int {
+pub fn textbook_rsa_encrypt(m: Int, n: Int, e: Int) -> Int {
     if n <= 1 {
         return 0;
     }
@@ -109,7 +109,7 @@ pub fn rsa_encrypt(m: Int, n: Int, e: Int) -> Int {
 }
 
 // Textbook RSA decryption: m = c^d mod n.
-pub fn rsa_decrypt(c: Int, n: Int, d: Int) -> Int {
+pub fn textbook_rsa_decrypt(c: Int, n: Int, d: Int) -> Int {
     if n <= 1 {
         return 0;
     }

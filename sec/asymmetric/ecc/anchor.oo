@@ -1,0 +1,22 @@
+// # Asymmetric ECC Submodule Hub
+//
+// Logline: Elliptic curve cryptography (Ed25519, Curve25519, ECDSA).
+//
+// Setup: Pure compute, no caps.
+//
+// Beats:
+//   1. Re-export Curve25519 and Ed25519 signatures.
+//   2. Re-export ECDSA verification.
+//   3. Export stable asym_ecc_* wrappers.
+
+import "curve25519.oo";
+import "ed25519.oo";
+import "ed25519_bigint.oo";
+import "ed25519_curve.oo";
+import "ed25519_field.oo";
+import "ed25519_scalarmult_wide.oo";
+import "ecdsa.oo";
+
+pub fn asym_ecc_ed25519_sign_hex(seed_hex: String, msg_hex: String) -> Result[String, String] { return ed25519_sign_hex(seed_hex, msg_hex); }
+pub fn asym_ecc_ed25519_verify_hex(pubkey_hex: String, msg_hex: String, sig_hex: String) -> Bool { return ed25519_verify_hex(pubkey_hex, msg_hex, sig_hex); }
+pub fn asym_ecc_curve25519_diffie_hellman(my_secret: List[Int], their_public: List[Int]) -> List[Int] { return curve25519_diffie_hellman(my_secret, their_public); }

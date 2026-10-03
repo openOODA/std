@@ -10,14 +10,14 @@
 //   3. Parse CIDR strings "addr/n" with prefix in 0..32 or 0..128.
 import "std/net/ip_cidr.oo";
 
-pub fn ipv4_parse(s: String) -> Result[Ipv4, String] {
+pub fn ipv4_parse_result(s: String) -> Result[Ipv4, String] {
     if chars_len(s) == 0 { return Err("ipv4_parse: empty"); }
     let oct: List[Int] = cidr_split4(s);
     if list_len(oct) != 4 { return Err("ipv4_parse: malformed"); }
     return Ok(Ipv4 { octets: oct });
 }
 
-pub fn ipv6_parse(s: String) -> Result[Ipv6, String] {
+pub fn ipv6_parse_result(s: String) -> Result[Ipv6, String] {
     if chars_len(s) == 0 { return Err("ipv6_parse: empty"); }
     let gs: List[Int] = cidr_v6expand(s);
     if list_len(gs) != 8 { return Err("ipv6_parse: bad"); }

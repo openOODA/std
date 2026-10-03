@@ -13,27 +13,12 @@
 //   6. Re-export Ristretto255 group and key management.
 //   7. Document private siblings (sibling _core, _ops, _types, _stubs, _invariants, _law, _theory files).
 
-import "ed25519.oo";
-import "ecdsa.oo";
-import "curve25519.oo";
-import "ristretto255.oo";
-import "ristretto_fp.oo";
-import "ristretto_fp_red.oo";
-import "keys.oo";
-import "keys_engine.oo";
-import "keys_ops.oo";
-import "keys_store.oo";
-import "keys_stubs.oo";
-import "keys_types.oo";
-import "fhe.oo";
-import "fhe_engine.oo";
-import "fhe_ops.oo";
-import "fhe_stubs.oo";
-import "fhe_types.oo";
-import "bls_signature_aggregation_law.oo";
-import "diffie_hellman_principle.oo";
-import "ml_kem_theory.oo";
-import "rsa_oaep_law.oo";
+import "ecc/anchor.oo";
+import "fhe/anchor.oo";
+import "keys/anchor.oo";
+import "pqc/anchor.oo";
+import "ristretto/anchor.oo";
+import "rsa/anchor.oo";
 
 pub fn asym_mod_ed25519_sign_hex(seed_hex: String, msg_hex: String) -> Result[String, String] { return ed25519_sign_hex(seed_hex, msg_hex); }
 pub fn asym_mod_ed25519_verify_hex(pubkey_hex: String, msg_hex: String, sig_hex: String) -> Bool { return ed25519_verify_hex(pubkey_hex, msg_hex, sig_hex); }

@@ -1,50 +1,27 @@
-// # Net Mesh
+// # Net Mesh Submodule Hub -- Zero-Drag
 //
-// Logline: Peer-to-peer mesh + edge inference + OTA + power + open_*
-// fixtures. Phase 3.3 reorg: merged the prior std/net/p2p_mesh/ and
-// std/net/edge/ into a single std/net/mesh/ tree. The p2p_mesh/ subdir
-// carried the chord DHT, gossip, routing table, plus a flat set of open_*
-// fixtures (each prefixed with `open_` for a compiler-acceptance test).
-// The edge/ subdir carried mesh networking, inference, OTA, and power
-// governors. They are now one tree.
+// Logline: Peer-to-peer mesh networking, DHT chord routing, edge inference, OTA updates, and power management.
 //
-// Setup: Domain module under std/net/mesh. Pure compute, no caps.
-//   * Mesh surface (4 files): mesh, mesh_engine, mesh_ops_*, mesh_types.
-//   * Inference surface (6 files): edge inference engine, ops, pipeline, types, analysis, stubs.
-//   * OTA surface (4 files): ota, ota_engine, ota_stubs, ota_types.
-//   * Power surface (5 files): power, power_governor, power_ops, power_stubs, power_types.
-//   * DHT + gossip + routing (3 files): dht_chord, gossip_mesh, routing_table.
-//   * Open_* fixtures (40 files): one-file compiler-acceptance / regression fixtures (each starts with `open_`).
+// Setup: Pure compute domain module under std/net/mesh. Re-exports clean submodule anchors.
 //
 // Beats:
-//   1. Edge stack: mesh, inference, ota, power.
-//   2. P2P stack: dht_chord, gossip_mesh, routing_table.
-//   3. Open_* fixtures: open_actor_restart, open_arena, open_bare_metal, open_ci_add, open_crypto_hmac, etc.
+//   1. Re-export peer-to-peer chord DHT and epidemic gossip routing.
+//   2. Re-export edge neural inference pipeline and analysis operations.
+//   3. Re-export mesh node lifecycle, link state, and packet forwarding.
+//   4. Re-export over-the-air firmware updates and power governance.
+//   5. Maintain strict directory density (<= 8 pages) and zero cyclic imports.
 
-import "dht_chord.oo";
-import "gossip_mesh.oo";
-import "inference.oo";
-import "inference_analysis.oo";
-import "inference_ops.oo";
-import "inference_pipeline.oo";
-import "inference_stubs.oo";
-import "inference_types.oo";
-import "mesh_node.oo";
-import "mesh_engine.oo";
-import "mesh_link.oo";
-import "mesh_ops_link.oo";
-import "mesh_ops_node.oo";
-import "mesh_ops_packet.oo";
-import "mesh_ops_types.oo";
-import "mesh_config.oo";
+import "./p2p/anchor.oo";
+import "./inference/anchor.oo";
+import "./link/anchor.oo";
+import "./node/anchor.oo";
+import "./ota/anchor.oo";
+import "./power/anchor.oo";
 
-import "ota.oo";
-import "ota_engine.oo";
-import "ota_stubs.oo";
-import "ota_types.oo";
-import "power.oo";
-import "power_governor.oo";
-import "power_ops.oo";
-import "power_stubs.oo";
-import "power_types.oo";
-import "routing_table.oo";
+pub fn mesh_mod_node_config(node_id: Int, max_peers: Int, role: Int) -> MeshNodeConfig {
+    return mesh_config_init(node_id, max_peers, role);
+}
+
+pub fn mesh_mod_link_healthy(link: MeshLink) -> Bool {
+    return mesh_link_is_healthy(link);
+}

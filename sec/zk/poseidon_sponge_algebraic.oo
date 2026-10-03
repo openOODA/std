@@ -64,7 +64,7 @@ pub fn poseidon_hash_2(params: &PoseidonParams, left: Int, right: Int) -> Int {
 }
 
 /// Compute Poseidon hash over an arbitrary integer list.
-pub fn poseidon_sponge_hash(params: &PoseidonParams, inputs: List[Int]) -> Int {
+pub fn poseidon_sponge_algebraic_hash(params: &PoseidonParams, inputs: List[Int]) -> Int {
     let n: Int = list_len(inputs);
     if n == 0 {
         return 0;

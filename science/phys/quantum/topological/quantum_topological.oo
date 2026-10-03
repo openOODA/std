@@ -1,0 +1,83 @@
+// # Unified Topological Quantum Computing & Anyons Facade
+//
+// Logline: Master facade re-exporting all 49 topological quantum computing, anyon, Toric Code, Kitaev spin liquid, FQHE, and braid compilation submodules.
+//
+// Setup: Pure module shim and unified API importing all companion submodules in quantum_topological.
+//
+// Beats:
+//   1. Import 49 modular Anyon, Toric Code, Honeycomb, FQHE, Braid, and TQFT submodules.
+//   2. Re-export public topological quantum configurations, factory constructors, and algorithm shims.
+//   3. Maintain full backwards compatibility and uniform type access for openOODA topological quantum applications.
+
+import "anyons/anchor.oo";
+import "toric/anchor.oo";
+import "kitaev/anchor.oo";
+import "fqhe/anchor.oo";
+import "braiding/anchor.oo";
+import "circuits/anchor.oo";
+import "string_net/anchor.oo";
+import "quantum_topological_stubs.oo";
+
+// -------------------------------------------------------------------
+// Unified Topological Quantum Runtime Configuration
+// -------------------------------------------------------------------
+
+type TopologicalRuntime = struct {
+    default_braid_depth: Int,
+    target_anyon_model: Int, // 0: ToricCode, 1: Fibonacci, 2: Ising/Majorana
+    enable_syndrome_tracking: Int,
+    measurement_temperature_mk: Float
+};
+
+pub fn topological_runtime_default() -> TopologicalRuntime {
+    return TopologicalRuntime {
+        default_braid_depth: 4096,
+        target_anyon_model: 1, // Fibonacci universal anyons
+        enable_syndrome_tracking: 1,
+        measurement_temperature_mk: 20.0
+    };
+}
+
+// -------------------------------------------------------------------
+// High-Level Facade Convenience Shims
+// -------------------------------------------------------------------
+
+pub fn qt_fibonacci_f_matrix() -> Matrix2x2 {
+    return fibonacci_f_matrix();
+}
+
+pub fn qt_fibonacci_r_matrix() -> Matrix2x2 {
+    return fibonacci_r_matrix();
+}
+
+pub fn qt_ising_f_matrix() -> Matrix2x2 {
+    return ising_f_matrix();
+}
+
+pub fn qt_ising_r_matrix() -> Matrix2x2 {
+    return ising_r_matrix();
+}
+
+pub fn qt_toric_lattice_create(lx: Int, ly: Int) -> ToricLattice {
+    return toric_lattice_new(lx, ly);
+}
+
+pub fn qt_kitaev_wire_create(sites: Int, mu: Float, t: Float, delta: Float) -> KitaevWireConfig {
+    return kitaev_wire_config_new(sites, mu, t, delta);
+}
+
+pub fn qt_laughlin_state_create(particles: Int, m: Int, b_tesla: Float) -> LaughlinState {
+    return laughlin_state_new(particles, m, b_tesla);
+}
+
+pub fn qt_compile_fibonacci_not() -> CompiledBraid {
+    return compile_fibonacci_not_gate();
+}
+
+pub fn qt_compile_fibonacci_hadamard() -> CompiledBraid {
+    return compile_fibonacci_hadamard_gate();
+}
+
+pub fn qt_topological_memory_create(distance: Int, gap_k: Float, temp_k: Float) -> TopoMemoryConfig {
+    return topo_memory_config_new(distance, gap_k, temp_k);
+}

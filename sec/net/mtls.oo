@@ -19,7 +19,7 @@ import "std/sec/net/mtls_cert.oo";
 import "std/sec/net/mtls_ops.oo";
 import "std/sec/net/mtls_engine.oo";
 
-pub fn shim_marker_checksum() -> Int {
+pub fn shim_marker_mtls_checksum() -> Int {
     return checksum_calculate("abc");
 }
 
@@ -27,7 +27,7 @@ pub fn shim_marker_bytes_eq() -> Bool {
     return bytes_constant_time_eq("ab", "ab");
 }
 
-pub fn shim_marker_str_eq() -> Bool {
+pub fn shim_marker_mtls_str_eq() -> Bool {
     return str_eq("a", "a");
 }
 
@@ -47,11 +47,11 @@ pub fn shim_marker_peer_empty() -> PeerIdentity {
     return peer_identity_empty();
 }
 
-pub fn shim_marker_config_default() -> MtlsConfig {
+pub fn shim_marker_mtls_config_default() -> MtlsConfig {
     return mtls_config_default();
 }
 
-pub fn shim_marker_policy_init() -> MtlsSecurityPolicy {
+pub fn shim_marker_mtls_policy_init() -> MtlsSecurityPolicy {
     return mtls_policy_init("pol-1", "TLSv1.3", true, 4, true);
 }
 

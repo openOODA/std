@@ -70,7 +70,7 @@ pub fn eskf_predict_step(
     let gravity: Vector3D = Vector3D { x: 0.0, y: 0.0, z: (0.0 - 9.80665) };
 
     // Accel rotated to world frame: R * a_body + g
-    let acc_world: Vector3D = quat_rotate_vector(&nom.quat, &unb_acc);
+    let acc_world: Vector3D = uav_quat_rotate_vector(&nom.quat, &unb_acc);
     let acc_tot: Vector3D = vector3d_add(&acc_world, &gravity);
 
     // Propagate nominal position and velocity

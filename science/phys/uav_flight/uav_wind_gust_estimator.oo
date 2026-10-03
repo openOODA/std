@@ -51,7 +51,7 @@ pub fn estimate_wind_vector(
 
     // Commanded thrust vector in world frame
     let thrust_body: Vector3D = Vector3D { x: 0.0, y: 0.0, z: thrust_cmd_n };
-    let thrust_world: Vector3D = quat_rotate_vector(quat, &thrust_body);
+    let thrust_world: Vector3D = uav_quat_rotate_vector(quat, &thrust_body);
 
     // Aerodynamic residual force: F_aero = m * a_world - T_world
     let fa_x: Float = (m * accel_world.x) - thrust_world.x;

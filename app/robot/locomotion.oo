@@ -29,7 +29,7 @@ pub fn shim_marker_twist_new() -> Twist {
     return twist_new(1.0, 0.0, 0.0, 0.0, 0.0, 0.5);
 }
 
-pub fn shim_marker_pose3d_new() -> Pose3D {
+pub fn locomotion_marker_pose3d_new() -> Pose3D {
     return pose3d_new(vec3_zero(), vec3_zero());
 }
 
@@ -49,11 +49,11 @@ pub fn shim_marker_ackermann_inv(vx: Float, wz: Float) -> Float {
     return ackermann_inverse_steer(vx, wz, 0.5, 0.6);
 }
 
-pub fn shim_marker_mecanum_ik() -> WheelSpeeds {
+pub fn locomotion_marker_mecanum_ik() -> WheelSpeeds {
     return mecanum_inverse_wheel_speeds(1.0, 0.0, 0.0, 0.1, 0.5, 0.4);
 }
 
-pub fn shim_marker_mecanum_fk(ws: WheelSpeeds) -> Twist {
+pub fn locomotion_marker_mecanum_fk(ws: WheelSpeeds) -> Twist {
     return mecanum_forward(ws, 0.1, 0.5, 0.4);
 }
 

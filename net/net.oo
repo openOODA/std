@@ -57,12 +57,12 @@ pub fn net_tcp_bind(bind: &BindCap, port: Int) -> Result[String, String] {
 }
 
 // UDP port binding under UdpCap.
-pub fn net_udp_bind(udp: &UdpCap, port: Int) -> Result[String, String] {
+pub fn net_udp_bind(udp: &UdpCap, port: Int) -> Result[Int, String] {
     return bind_udp(udp, port);
 }
 
 // TLS connection under TcpCap (current) + TlsCap attenuated child (http.oo:76).
-pub fn net_tls_connect(tcp: &TcpCap, host: String, port: Int) -> Result[String, String] {
+pub fn net_tls_connect(tcp: &TcpCap, host: String, port: Int) -> Result[Int, String] {
     if chars_len(host) == 0 {
         return Err("NET_ERR: empty host name");
     }

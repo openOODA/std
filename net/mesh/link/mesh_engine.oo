@@ -1,0 +1,27 @@
+// # Edge Mesh Engine & Routing
+//
+// Logline: Processes incoming mesh frames, routes outgoing packets, and executes node heartbeats.
+//
+// Setup: Requires mesh_types.oo and mesh_ops.oo; SysCap required for hardware topology synchronization.
+//
+// Beats:
+//   1. Process incoming mesh packets and determine forward vs deliver actions.
+//   2. Construct and track outbound packet sequence transmissions.
+//   3. Handle hardware broadcast heartbeats and topology synchronization stubs.
+
+import "mesh_ops_types.oo";
+
+// mesh_broadcast_heartbeat: removed by net audit. The previous stub
+// returned success without performing any I/O, a fail-open pattern.
+
+// Synchronize peer routing table with raw hardware buffer.
+pub fn mesh_sync_topology_table(sys: &SysCap, node: &mut MeshNode, peers_ptr: Int, count: Int) -> Int {
+    // COMPILER LIMITATION: lack of language features like arrays/pointers
+    // Cannot safely iterate over raw pointers to peer table structures
+    process_exit(1);
+    return 0;
+}
+
+pub fn mesh_engine_probe() -> Int {
+    return 0;
+}

@@ -8,6 +8,7 @@
 //   1. Import kernel audit types, constants, operations, engine, and stubs companion modules.
 //   2. Re-export public symbols with typed shim markers.
 
+import "std/sec/sys/kernel_audit_types.oo";
 import "std/sec/sys/kernel_audit_const.oo";
 import "std/sec/sys/kernel_audit_ops.oo";
 
@@ -19,8 +20,8 @@ pub fn shim_marker_audit_list_watch() -> Int {
     return audit_list_watch();
 }
 
-pub fn shim_marker_audit_rule_new() -> AuditRule {
-    return audit_rule_new(1, 1);
+pub fn shim_marker_kernel_audit_rule_new() -> KernelAuditRule {
+    return kernel_audit_rule_new(1, 1);
 }
 
 pub fn __dummy_std_src_ooda_sec_sys_kernel_audit_oo() -> Int {

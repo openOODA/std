@@ -19,7 +19,7 @@ pub fn audit_open_netlink(sys: &SysCap) -> Result[Int, String] {
     return Err("Unimplemented: NETLINK_AUDIT socket open requires host syscall FFI lowering");
 }
 
-pub fn audit_send_rule(sys: &SysCap, rule: &AuditRule) -> Result[Bool, String] {
+pub fn kernel_audit_send_rule(sys: &SysCap, rule: &KernelAuditRule) -> Result[Bool, String] {
     // COMPILER LIMITATION: openOODA lacks NETLINK_AUDIT rule-add message marshaling (AUDIT_ADD_RULE).
     return Err("Unimplemented: NETLINK_AUDIT rule addition requires audit-rule netlink marshaling FFI");
 }

@@ -12,7 +12,7 @@
 //   5. Reassemble scheme + "://" + host + optional ":port" + path + optional "?query" + optional "#fragment".
 import "std/net/url_parser.oo";
 
-pub fn url_parse(s: String) -> Result[Url, String] {
+pub fn url_parse_full(s: String) -> Result[Url, String] {
     if chars_len(s) == 0 {
         return Err("url_parse: empty input");
     }

@@ -67,7 +67,7 @@ pub fn security_defense_module_count() -> Int {
 }
 
 pub fn security_defense_landlock_ruleset_default() -> LandlockRuleset {
-    return landlock_ruleset_new(3);
+    return landlock_policy_ruleset_new(3);
 }
 
 pub fn security_defense_seccomp_filter_default() -> SeccompFilter {
@@ -79,8 +79,8 @@ pub fn security_defense_sandbox_profile_default() -> SandboxProfile {
     return sandbox_profile_rootless_default("default_sandbox");
 }
 
-pub fn security_defense_shadow_stack_default() -> ShadowStack {
-    return shadow_stack_new(1024);
+pub fn security_defense_shadow_stack_default() -> DefenseShadowStack {
+    return defense_shadow_stack_new(1024);
 }
 
 pub fn security_defense_forward_cfi_default() -> ForwardCfiTable {

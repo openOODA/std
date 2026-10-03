@@ -18,8 +18,7 @@ import "enclave_types.oo";
 import "intel_sgx.oo";
 import "nitro.oo";
 import "sev_snp.oo";
-import "constant_time.oo";
-import "zeroize_buffer.oo";
+import "mem/anchor.oo";
 
 pub fn enc_mod_attest_measurement_create(domain: String, label: String, hash_hex: String, pcr_index: Int) -> AttestationMeasurement { return attestation_measurement_create(domain, label, hash_hex, pcr_index); }
 pub fn enc_mod_sgx_quote_generate(report_data: String) -> SgxQuote { return sgx_quote_new("", "", report_data, 1, false); }

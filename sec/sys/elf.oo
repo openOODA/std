@@ -26,7 +26,7 @@ pub fn shim_marker_class64() -> Int {
     return elf_class_64();
 }
 
-pub fn shim_marker_header_default() -> ElfHeader {
+pub fn shim_marker_elf_header_default() -> ElfHeader {
     return elf_header_default();
 }
 
@@ -34,6 +34,6 @@ pub fn shim_marker_file_new() -> ElfFile {
     return elf_file_new("a.out");
 }
 
-pub fn shim_marker_do_work(f: &ElfFile) -> Int {
+pub fn shim_marker_elf_do_work(f: &ElfFile) -> Int {
     return elf_file_do_work(f);
 }

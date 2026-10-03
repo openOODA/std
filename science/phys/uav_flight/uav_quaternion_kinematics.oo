@@ -83,7 +83,7 @@ pub fn quat_multiply(q1: Quaternion, q2: Quaternion) -> Quaternion {
     return Quaternion { w: rw, x: rx, y: ry, z: rz };
 }
 
-pub fn quat_rotate_vector(q: Quaternion, v: Vector3D) -> Vector3D {
+pub fn uav_quat_rotate_vector(q: Quaternion, v: Vector3D) -> Vector3D {
     let qv: Quaternion = Quaternion { w: 0.0, x: v.x, y: v.y, z: v.z };
     let q_conj: Quaternion = quat_conjugate(q);
     let q_tmp: Quaternion = quat_multiply(q, qv);

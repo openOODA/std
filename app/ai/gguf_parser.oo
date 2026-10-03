@@ -127,7 +127,7 @@ pub fn gguf_type_size(tensor_type: Int, numel: Int) -> Int {
     return numel * 4;
 }
 
-pub fn gguf_parse_header(cap: &FsReadCap, data: String) -> Result[GgufHeader, String] {
+pub fn gguf_parse_header_cap(cap: &FsReadCap, data: String) -> Result[GgufHeader, String] {
     if chars_len(data) < 24 {
         return Err("Data too short for GGUF header");
     }

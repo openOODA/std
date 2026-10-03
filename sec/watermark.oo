@@ -48,11 +48,11 @@ pub fn shim_marker_metadata_to_string(meta: WatermarkMetadata) -> String {
     return watermark_metadata_to_string(meta);
 }
 
-pub fn shim_marker_checksum(meta: WatermarkMetadata) -> Int {
+pub fn shim_marker_watermark_checksum(meta: WatermarkMetadata) -> Int {
     return watermark_calculate_checksum(meta);
 }
 
-pub fn shim_marker_policy_init() -> WatermarkPolicy {
+pub fn shim_marker_watermark_policy_init() -> WatermarkPolicy {
     return watermark_policy_init(50, true, true, 256);
 }
 
@@ -100,7 +100,7 @@ pub fn shim_marker_engine_extract(engine: &mut WatermarkEngine) -> Result[Waterm
     return watermark_engine_extract(engine, "watermarked content long");
 }
 
-pub fn shim_marker_do_work(engine: &WatermarkEngine) -> Int {
+pub fn shim_marker_watermark_do_work(engine: &WatermarkEngine) -> Int {
     return watermark_do_work(engine);
 }
 

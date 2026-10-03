@@ -1,0 +1,18 @@
+// # Silicon AArch64 Hardware Architecture
+//
+// Logline: AArch64 instruction encoder, memory addressing, NEON vector lowerer, and ELF program compiler.
+//
+// Setup: Pure compute, no ambient authority. Re-exports ARM64 backend code generation primitives.
+//
+// Beats:
+//   1. Re-export AArch64 integer ALU and memory encoders.
+//   2. Re-export AAPCS64 ABI layout helpers.
+//   3. Re-export NEON vector operations.
+//   4. Re-export code generator, program builder, and ELF linker.
+
+import "aarch64_encoder.oo";
+import "aarch64_encode_mem.oo";
+import "aarch64_abi.oo";
+import "aarch64_neon.oo";
+import "aarch64_codegen.oo";
+import "aarch64_linker.oo";
