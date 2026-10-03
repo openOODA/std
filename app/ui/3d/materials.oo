@@ -37,7 +37,7 @@ pub fn color_blend(col_a: Color, col_b: Color, t: Int) -> Color {
 
 pub fn material_default() -> Material {
     return Material {
-        albedo: color_white(),
+        albedo: material_color_white(),
         roughness: 128,
         metallic: 0
     };
@@ -45,7 +45,7 @@ pub fn material_default() -> Material {
 
 pub fn material_mirror() -> Material {
     return Material {
-        albedo: color_white(),
+        albedo: material_color_white(),
         roughness: 0,
         metallic: 255
     };
@@ -53,7 +53,7 @@ pub fn material_mirror() -> Material {
 
 pub fn material_matte_black() -> Material {
     return Material {
-        albedo: color_black(),
+        albedo: material_color_black(),
         roughness: 255,
         metallic: 0
     };
@@ -72,11 +72,11 @@ pub fn material_blend(mat_a: Material, mat_b: Material, t: Int) -> Material {
 }
 
 pub fn shim_marker_color_white() -> Color {
-    return color_white();
+    return material_color_white();
 }
 
 pub fn shim_marker_color_black() -> Color {
-    return color_black();
+    return material_color_black();
 }
 
 pub fn shim_marker_material_default() -> Material {
@@ -88,7 +88,7 @@ pub fn shim_marker_material_mirror() -> Material {
 }
 
 pub fn shim_marker_color_blend() -> Color {
-    return color_blend(color_black(), color_white(), 128);
+    return color_blend(material_color_black(), material_color_white(), 128);
 }
 
 pub fn shim_marker_material_blend() -> Material {

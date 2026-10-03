@@ -5,7 +5,7 @@
 // Setup: Pure Int channel structs.
 //
 // Beats:
-//   1. color_new / color_red / color_black.
+//   1. color_new / material_color_red / material_color_black.
 // residual: PBR Material nested structs destubbed; this is Color only.
 
 type Color = struct {
@@ -24,22 +24,22 @@ pub fn color_new(rv: Int, gv: Int, bv: Int, av: Int) -> Color {
     };
 }
 
-pub fn color_black() -> Color {
+pub fn material_color_black() -> Color {
     return Color { r: 0, g: 0, b: 0, a: 255 };
 }
 
-pub fn color_white() -> Color {
+pub fn material_color_white() -> Color {
     return Color { r: 255, g: 255, b: 255, a: 255 };
 }
 
-pub fn color_red() -> Color {
+pub fn material_color_red() -> Color {
     return Color { r: 255, g: 0, b: 0, a: 255 };
 }
 
-pub fn color_green() -> Color {
+pub fn material_color_green() -> Color {
     return Color { r: 0, g: 255, b: 0, a: 255 };
 }
 
-pub fn color_blue() -> Color {
+pub fn material_color_blue() -> Color {
     return Color { r: 0, g: 0, b: 255, a: 255 };
 }

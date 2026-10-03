@@ -104,7 +104,7 @@ pub fn url_build_query(keys: List[String], values: List[String]) -> String {
     return out;
 }
 
-pub fn url_get_param(query_string: String, key_name: String) -> Result[String, String] {
+pub fn url_query_get_param(query_string: String, key_name: String) -> Result[String, String] {
     let mut cur: String = query_string;
     if chars_len(cur) > 0 && char_at(cur, 0) == "?" {
         cur = str_slice(cur, 1, chars_len(cur));
@@ -135,5 +135,5 @@ pub fn url_get_param(query_string: String, key_name: String) -> Result[String, S
             }
         }
     }
-    return Err("ERR\turl_get_param\tnot_found");
+    return Err("ERR\turl_query_get_param\tnot_found");
 }

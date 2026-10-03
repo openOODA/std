@@ -68,7 +68,7 @@ pub fn http_request_add_header(req: HttpRequest, key: String, val: String) -> Ht
     };
 }
 
-pub fn http_request_get_header(req: &HttpRequest, key: String) -> Result[String, String] {
+pub fn waf_http_request_get_header(req: &HttpRequest, key: String) -> Result[String, String] {
     let keys: List[String] = req.headers_keys;
     let vals: List[String] = req.headers_vals;
     let k_len: Int = list_len(keys);

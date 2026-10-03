@@ -2,12 +2,22 @@
 //
 // Logline: Multi-factor authentication gating, TOTP/SMS challenge verification, and password hashing helpers.
 //
-// Setup: Imports auth_types.oo for AuthUser structure.
+// Setup: Imports auth_types.oo for AuthPolicy and UserCredentials.
 //
 // Beats:
 //   1. Manage user MFA enrollment and verification state.
 //   2. Generate cryptographic authentication tokens and session identifiers.
 //   3. Compute password hashes and salt validations.
 
-import ./auth_types.oo;
+import "./auth_types.oo";
 
+pub fn auth_mfa_is_required(policy: &AuthPolicy) -> Bool {
+    return policy.require_mfa;
+}
+
+pub fn auth_mfa_verify_code(expected: Int, provided: Int) -> Bool {
+    if expected == 0 {
+        return false;
+    }
+    return expected == provided;
+}

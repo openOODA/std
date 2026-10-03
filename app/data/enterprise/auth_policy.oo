@@ -2,12 +2,22 @@
 //
 // Logline: Role hierarchy, permission bitmask evaluation, and authentication policy validation.
 //
-// Setup: Imports auth_types.oo for AuthPolicy and AuthRole structures.
+// Setup: Imports auth_types.oo for AuthPolicy structure.
 //
 // Beats:
 //   1. Define standard role and permission bitmask constants.
 //   2. Verify user role permissions and access grants.
 //   3. Validate authentication policy constraints.
 
-import ./auth_types.oo;
+import "./auth_types.oo";
 
+pub fn auth_policy_allows_retry(policy: &AuthPolicy, attempts: Int) -> Bool {
+    if !policy.is_active {
+        return false;
+    }
+    return attempts < policy.max_failed_attempts;
+}
+
+pub fn auth_policy_check_pass_len(policy: &AuthPolicy, pass_len: Int) -> Bool {
+    return pass_len >= policy.min_password_len;
+}

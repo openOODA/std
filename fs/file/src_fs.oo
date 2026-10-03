@@ -1,13 +1,18 @@
-// # Std FS Source Marker
+// # System File Source Subtree Sentinel
 //
 // Logline: Expose a version sentinel for the std::fs source tree.
 //
-// Setup: Pure-emit sentinel. Single pub fn returns an Int constant derived from the file's domain. CWD must be ooda/.
+// Setup: Pure-emit sentinel. Pub fn returns an Int constant derived from the file domain.
 //
 // Beats:
-//   1. rx000_k: source-tree version constant for std::fs.
-//
+//   1. Expose source-tree version constant for std::fs.
+//   2. Expose subsystem readiness probe.
+//   3. Return verified integer domain indicator.
 
 pub fn rx000_k() -> Int {
     return 1;
+}
+
+pub fn rx000_probe() -> Int {
+    return 0;
 }

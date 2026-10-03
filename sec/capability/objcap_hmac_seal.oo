@@ -1,14 +1,20 @@
-// # HMAC object-capability seal
+// # HMAC Object-Capability Seal
 //
-// Logline: Seal a capability payload string with HMAC-SHA256.
+// Logline: Seal a capability payload string with HMAC-SHA256 authentication tag.
 //
-// Setup: OPEN-37/38. Wraps crypto_hmac_sha256_internal. No .len(). Not kernel object caps.
+// Setup: OPEN-37/38. Wraps crypto_hmac_sha256_internal for object capability integrity.
 //
 // Beats:
 //   1. Take a secret key and a capability string (uri + rights).
 //   2. Return the HMAC-SHA256 hex digest.
 //   3. Attenuation and tamper are different payloads and different seals.
+//   4. Verify validity by comparing generated seal against target signature.
 
 pub fn objcap_hmac_seal(key: String, payload: String) -> String {
     return crypto_hmac_sha256_internal(key, payload);
+}
+
+pub fn objcap_hmac_verify(key: String, payload: String, expected: String) -> Bool {
+    let actual: String = crypto_hmac_sha256_internal(key, payload);
+    return actual == expected;
 }

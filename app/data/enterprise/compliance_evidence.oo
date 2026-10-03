@@ -2,12 +2,19 @@
 //
 // Logline: Obligation satisfaction verification, evidence artifact attachment, and evidence validity checks.
 //
-// Setup: Imports compliance_types.oo for ComplianceObligation and ComplianceEvidence structures.
+// Setup: Imports compliance_types.oo for ComplianceRequirement structures.
 //
 // Beats:
 //   1. Track regulatory obligation fulfillment states.
 //   2. Bind audit evidence artifacts and verification proofs.
 //   3. Validate evidence freshness and cryptographic signatures.
 
-import ./compliance_types.oo;
+import "./compliance_types.oo";
 
+pub fn compliance_evidence_is_passed(req: &ComplianceRequirement) -> Bool {
+    return req.is_passed;
+}
+
+pub fn compliance_evidence_is_mandatory(req: &ComplianceRequirement) -> Bool {
+    return req.is_mandatory;
+}

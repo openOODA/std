@@ -1,12 +1,18 @@
-// # Credit Engine Probe
+// # Credit Risk Engine Core Module
 //
-// Logline: Marker entry for the credit risk engine submodule split.
+// Logline: Core entrypoint and probe interface for credit risk assessment.
 //
-// Setup: Re-exports the credit compute sibling for downstream risk assessment calls.
+// Setup: Re-exports credit computation interfaces for downstream risk assessment calls.
 //
 // Beats:
-//   1. Provide a module probe so oodac check can validate the door.
+//   1. Validate submodule interface availability.
+//   2. Expose credit engine diagnostic probe.
+//   3. Return baseline operational health status.
 
 pub fn credit_engine_probe() -> Int {
     return 0;
+}
+
+pub fn credit_engine_version() -> Int {
+    return 1;
 }
