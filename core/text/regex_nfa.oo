@@ -83,14 +83,40 @@ fn nfa_class_end(pattern: String, open_idx: Int) -> Int {
 
 fn nfa_in_class(class: String, ch: String, fold: Bool) -> Bool {
     let n: Int = chars_len(class);
-    let mut i: Int = 0;
-    while i < n {
-        if fold_eq(char_at(class, i), ch, fold) {
-            return true;
-        }
-        i = i + 1;
+    let mut start: Int = 0;
+    let mut neg: Bool = false;
+    if n > 0 && char_at(class, 0) == "^" {
+        neg = true;
+        start = 1;
     }
-    return false;
+    let needle: Int = if fold { ord(char_to_lower(ch)) } else { ord(ch) };
+    let mut hit: Bool = false;
+    let mut i: Int = start;
+    while i < n && !hit {
+        let c: String = char_at(class, i);
+        let leading_dash: Bool = c == "-" && i == start;
+        if !leading_dash && i + 2 < n && char_at(class, i + 1) == "-" {
+            let mut lo: Int = ord(c);
+            let mut hi: Int = ord(char_at(class, i + 2));
+            if fold {
+                lo = ord(char_to_lower(c));
+                hi = ord(char_to_lower(char_at(class, i + 2)));
+            }
+            if needle >= lo && needle <= hi {
+                hit = true;
+            }
+            i = i + 3;
+        } else {
+            if fold_eq(c, ch, fold) {
+                hit = true;
+            }
+            i = i + 1;
+        }
+    }
+    if neg {
+        return !hit;
+    }
+    return hit;
 }
 
 fn nfa_atom_end(pattern: String, p_idx: Int) -> Int {
