@@ -22,6 +22,13 @@ type Regex = struct {
     is_valid: Bool
 };
 
+fn match_first_case(re: Regex, text: String) -> MatchResult {
+    if re.case_sensitive {
+        return match_pattern_first(text, re.pattern);
+    }
+    return match_pattern_first_ci(text, re.pattern);
+}
+
 pub fn regex_compile(pattern: String) -> Result[Regex, String] {
     let valid_r: Result[Bool, String] = regex_validate_syntax(pattern);
     match valid_r {
@@ -59,7 +66,10 @@ pub fn regex_is_match(re: Regex, text: String) -> Bool {
     if !is_v {
         return false;
     }
-    return nfa_simulate(re.pattern, text);
+    if re.case_sensitive {
+        return nfa_simulate(re.pattern, text);
+    }
+    return nfa_simulate_ci(re.pattern, text);
 }
 
 pub fn regex_find(re: Regex, text: String) -> Result[String, String] {
@@ -67,7 +77,7 @@ pub fn regex_find(re: Regex, text: String) -> Result[String, String] {
     if !is_v {
         return Err("ERR\tregex_find\tinvalid_regex");
     }
-    let m: MatchResult = match_pattern_first(text, re.pattern);
+    let m: MatchResult = match_first_case(re, text);
     let is_m: Bool = m.matched;
     if is_m {
         let m_text: String = m.matched_text;
@@ -81,7 +91,7 @@ pub fn regex_find_span(re: Regex, text: String) -> RegexSpan {
     if !is_v {
         return regex_span_empty();
     }
-    let m: MatchResult = match_pattern_first(text, re.pattern);
+    let m: MatchResult = match_first_case(re, text);
     let is_m: Bool = m.matched;
     if is_m {
         return regex_span_new(m.start, m.end, m.matched_text);
@@ -94,7 +104,7 @@ pub fn regex_replace(re: Regex, text: String, replacement: String) -> String {
     if !is_v {
         return text;
     }
-    let m: MatchResult = match_pattern_first(text, re.pattern);
+    let m: MatchResult = match_first_case(re, text);
     let is_m: Bool = m.matched;
     if !is_m {
         return text;
@@ -113,7 +123,7 @@ pub fn regex_replace_all(re: Regex, text: String, replacement: String) -> String
     let mut cur: String = text;
     let mut cont: Bool = true;
     while chars_len(cur) > 0 && cont {
-        let m: MatchResult = match_pattern_first(cur, re.pattern);
+        let m: MatchResult = match_first_case(re, cur);
         let is_m: Bool = m.matched;
         if !is_m {
             out = out + cur;
@@ -148,7 +158,7 @@ pub fn regex_split(re: Regex, text: String) -> List[String] {
     let mut cur: String = text;
     let mut cont: Bool = true;
     while chars_len(cur) > 0 && cont {
-        let m: MatchResult = match_pattern_first(cur, re.pattern);
+        let m: MatchResult = match_first_case(re, cur);
         let is_m: Bool = m.matched;
         if !is_m {
             out = list_push(out, cur);
