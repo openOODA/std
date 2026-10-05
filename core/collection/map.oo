@@ -1,0 +1,41 @@
+// # Standard Consolidated Map Collection
+//
+// Logline: Consolidated associative dictionary mapping keys to values with collision resolution.
+//
+// Setup: Pure collection module wrapping hash map associative operations.
+//
+// Beats:
+//   1. Construct empty map and check size.
+//   2. Insert and update key-value pairs.
+//   3. Safe value lookup by key with Result semantics.
+//   4. Membership testing and map clearance.
+
+import "hash_map.oo";
+
+pub fn col_map_new() -> IntMap {
+    return hash_map_new();
+}
+
+pub fn col_map_len(m: IntMap) -> Int {
+    return hash_map_len(m);
+}
+
+pub fn col_map_is_empty(m: IntMap) -> Bool {
+    return hash_map_is_empty(m);
+}
+
+pub fn col_map_clear() -> IntMap {
+    return hash_map_clear();
+}
+
+pub fn col_map_insert(m: IntMap, key: Int, val: Int) -> IntMap {
+    return hash_map_insert(m, key, val);
+}
+
+pub fn col_map_get(m: IntMap, key: Int) -> Result[Int, String] {
+    return hash_map_get(m, key);
+}
+
+pub fn col_map_contains(m: IntMap, key: Int) -> Bool {
+    return hash_map_contains(m, key);
+}

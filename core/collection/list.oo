@@ -1,0 +1,46 @@
+// # Standard Consolidated List Collection
+//
+// Logline: General list container providing safe bounds-checked indexing, emptiness queries, and linear operations.
+//
+// Setup: Pure collection sequence functions wrapping standard list primitives.
+//
+// Beats:
+//   1. Construct empty list and check size.
+//   2. Query element by index with bounds checking.
+//   3. Push elements and verify length.
+//   4. Search element presence linearly.
+
+pub fn col_list_empty() -> List[Int] {
+    return list_new();
+}
+
+pub fn col_list_len(xs: List[Int]) -> Int {
+    return list_len(xs);
+}
+
+pub fn col_list_is_empty(xs: List[Int]) -> Bool {
+    return list_len(xs) == 0;
+}
+
+pub fn col_list_push(xs: List[Int], val: Int) -> List[Int] {
+    return list_push(xs, val);
+}
+
+pub fn col_list_get(xs: List[Int], idx: Int) -> Option[Int] {
+    if idx < 0 || idx >= list_len(xs) {
+        return None;
+    }
+    return Some(list_get(xs, idx));
+}
+
+pub fn col_list_contains(xs: List[Int], val: Int) -> Bool {
+    let n: Int = list_len(xs);
+    let mut i: Int = 0;
+    while i < n {
+        if list_get(xs, i) == val {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
