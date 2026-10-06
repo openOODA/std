@@ -110,7 +110,7 @@ pub fn cube_face_color(f: Int) -> QoiRgba {
     return qoi_rgba_new(50, 200, 200, 255);
 }
 
-fn cube_spin_pt(p: CubePt, deg: Int, dist: Int) -> CubePt {
+pub fn cube_spin_pt(p: CubePt, deg: Int, dist: Int) -> CubePt {
     let cb_r: RotXZ = spin_rot_xz(p.x, p.z, deg);
     return CubePt { x: spin_f2i(cb_r.ox), y: p.y, z: spin_f2i(cb_r.oz) + dist };
 }

@@ -8,7 +8,7 @@
 //   1. Parse the status line "HTTP/1.1 200 OK" into version, status code, and reason phrase.
 //   2. Parse header lines until the empty line and store the remainder as the body.
 //   3. Reassemble the response with the parsed headers and body.
-import "std/net/http_resp.oo";
+import "./http_resp.oo";
 
 pub fn http_resp_parse(s: String) -> Result[HttpResponse, String] {
     if chars_len(s) == 0 {

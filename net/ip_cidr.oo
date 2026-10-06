@@ -34,7 +34,7 @@ fn cidr_hex_v(b: Int) -> Int {
     return 0 - 1;
 }
 
-fn cidr_uint(s: String) -> Int {
+pub fn cidr_uint(s: String) -> Int {
     let n: Int = chars_len(s);
     if n == 0 { return 0 - 1; }
     let mut acc: Int = 0;
@@ -63,7 +63,7 @@ fn cidr_hgroup(s: String) -> Int {
     return acc;
 }
 
-fn cidr_split4(s: String) -> List[Int] {
+pub fn cidr_split4(s: String) -> List[Int] {
     let n: Int = chars_len(s);
     let d1: Int = str_index_of(s, ".");
     if d1 <= 0 { return list_new(); }
@@ -131,7 +131,7 @@ fn cidr_v6count(s: String) -> Int {
     return count;
 }
 
-fn cidr_v6expand(s: String) -> List[Int] {
+pub fn cidr_v6expand(s: String) -> List[Int] {
     let dbl: Int = str_index_of(s, "::");
     if dbl < 0 { return cidr_v6collect(s); }
     let left: String = str_slice(s, 0, dbl);

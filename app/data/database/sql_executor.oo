@@ -72,7 +72,7 @@ pub fn db_table_create(table_name: String) -> DbTable {
     };
 }
 
-fn db_result_none() -> DbQueryResult {
+pub fn db_result_none() -> DbQueryResult {
     let no_rows: List[DbRow] = list_new();
     return DbQueryResult {
         rows_affected: 0,
@@ -83,7 +83,7 @@ fn db_result_none() -> DbQueryResult {
     };
 }
 
-fn db_result_fail(msg: String) -> DbQueryResult {
+pub fn db_result_fail(msg: String) -> DbQueryResult {
     let no_rows: List[DbRow] = list_new();
     return DbQueryResult {
         rows_affected: 0,
@@ -120,7 +120,7 @@ fn sql_field_val(row: DbRow, field: String) -> String {
 
 /// True when the row satisfies every predicate in the box. Unknown fields
 /// match nothing (fail closed); predicate ops reuse sql_row_matches_filters.
-fn sql_where_scan(row: DbRow, wb: SqlWhereBox) -> Bool {
+pub fn sql_where_scan(row: DbRow, wb: SqlWhereBox) -> Bool {
     let n: Int = list_len(wb.ops);
     let mut i: Int = 0;
     while i < n {
@@ -137,7 +137,7 @@ fn sql_where_scan(row: DbRow, wb: SqlWhereBox) -> Bool {
     return true;
 }
 
-fn sql_apply_sets(row: DbRow, cols: List[String], vals: List[String]) -> DbRow {
+pub fn sql_apply_sets(row: DbRow, cols: List[String], vals: List[String]) -> DbRow {
     let mut name: String = row.name;
     let mut role: String = row.role;
     let mut i: Int = 0;
@@ -156,7 +156,7 @@ fn sql_apply_sets(row: DbRow, cols: List[String], vals: List[String]) -> DbRow {
 
 /// INSERT column lookup. Unknown columns and length mismatch refuse: real
 /// stores reject unknown columns instead of guessing.
-fn sql_insert_field(cols: List[String], vals: List[String], want: String) -> Result[String, String] {
+pub fn sql_insert_field(cols: List[String], vals: List[String], want: String) -> Result[String, String] {
     if list_len(cols) != list_len(vals) {
         return Err("ERR\tsql_executor\tcolumns/values length mismatch");
     }

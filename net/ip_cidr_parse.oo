@@ -8,7 +8,7 @@
 //   1. Parse "a.b.c.d" into a four-octet Ipv4 and reject out-of-range octets.
 //   2. Parse an IPv6 string with optional "::" shorthand and leading zeros.
 //   3. Parse CIDR strings "addr/n" with prefix in 0..32 or 0..128.
-import "std/net/ip_cidr.oo";
+import "./ip_cidr.oo";
 
 pub fn ipv4_parse_result(s: String) -> Result[Ipv4, String] {
     if chars_len(s) == 0 { return Err("ipv4_parse: empty"); }

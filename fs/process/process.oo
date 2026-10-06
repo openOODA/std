@@ -54,11 +54,11 @@ pub fn process_prctl(sys: &SysCap, option: Int) -> Result[String, String] {
 // Honesty probe: residual spawn Err; real exec Ok for true; syscall residual Err.
 pub fn process_test_main(p: &ProcessCap, sys: &SysCap) {
     let s: Result[String, String] = process_spawn(p, "true");
-    assert_eq!(s.is_err(), true);
+    if !s.is_err() { process_exit(1); }
     let e: Result[String, String] = process_exec(p, "true");
-    assert_eq!(e.is_ok(), true);
+    if !e.is_ok() { process_exit(1); }
     let ep: Result[String, String] = process_epoll_create(sys, 0);
-    assert_eq!(ep.is_err(), true);
+    if !ep.is_err() { process_exit(1); }
 }
 
 pub fn process_probe() -> Int {

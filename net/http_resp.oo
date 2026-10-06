@@ -62,7 +62,7 @@ fn http_resp_name_eq(a: String, b: String) -> Bool {
     return http_resp_lower(a) == http_resp_lower(b);
 }
 
-fn http_resp_parse_digits(s: String) -> Int {
+pub fn http_resp_parse_digits(s: String) -> Int {
     let n: Int = chars_len(s);
     if n == 0 { return 0 - 1; }
     let mut acc: Int = 0;
